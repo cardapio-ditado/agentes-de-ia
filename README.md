@@ -13,7 +13,7 @@ Stack: **Node + TypeScript**, **Claude** (`claude-opus-5`) e **Supabase** (Postg
 
 | Módulo | Estado |
 |---|---|
-| Schema completo no Supabase (16 tabelas, RLS, triggers, índices) | ✅ aplicado |
+| Schema completo no Supabase (15 tabelas, RLS, triggers, índices) | ✅ aplicado |
 | Runtime do agente: histórico, ferramentas, telemetria de tokens | ✅ |
 | Ferramentas de domínio (programação, informações, reserva) | ✅ |
 | Módulo de aprovação de reservas + trilha de auditoria | ✅ (CLI) |
