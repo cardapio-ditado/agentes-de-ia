@@ -8,9 +8,12 @@
     "node": ">=20"
   },
   "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/src/server.js",
     "chat": "tsx src/cli.ts",
     "aprovar": "tsx scripts/aprovar.ts",
     "seed": "tsx scripts/seed.ts",
+    "criar-chave": "tsx scripts/criar-chave.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },

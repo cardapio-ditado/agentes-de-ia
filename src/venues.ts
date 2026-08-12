@@ -73,6 +73,71 @@ export async function findVenueBySlug(slug: string): Promise<Venue> {
   return data[0]!;
 }
 
+/** Busca o estabelecimento dentro de uma organização — o escopo da chave de API. */
+export async function findVenueBySlugInOrg(orgId: string, slug: string): Promise<Venue> {
+  const { data, error } = await db()
+    .from("venues")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao buscar o estabelecimento: ${error.message}`);
+  if (!data) throw new Error(`Estabelecimento "${slug}" não encontrado nesta organização.`);
+  return data;
+}
+
+export async function listVenuesInOrg(orgId: string): Promise<Venue[]> {
+  const { data, error } = await db()
+    .from("venues")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(`Falha ao listar estabelecimentos: ${error.message}`);
+  return data ?? [];
+}
+
+/** Programação completa do estabelecimento, para a tela de gestão. */
+export async function listAllEvents(venueId: string): Promise<VenueEvent[]> {
+  const { data, error } = await db()
+    .from("venue_events")
+    .select("*")
+    .eq("venue_id", venueId)
+    .order("starts_at", { ascending: true });
+
+  if (error) throw new Error(`Falha ao carregar a programação: ${error.message}`);
+  return data ?? [];
+}
+
+export async function createVenueEvent(
+  row: TablesInsert<"venue_events">,
+): Promise<VenueEvent> {
+  const { data, error } = await db().from("venue_events").insert(row).select().single();
+  if (error) throw new Error(`Falha ao criar o evento: ${error.message}`);
+  return data;
+}
+
+/** O `venue_id` no filtro impede apagar evento de outro estabelecimento. */
+export async function deleteVenueEvent(eventId: string, venueId: string): Promise<void> {
+  const { error } = await db()
+    .from("venue_events")
+    .delete()
+    .eq("id", eventId)
+    .eq("venue_id", venueId);
+
+  if (error) throw new Error(`Falha ao remover o evento: ${error.message}`);
+}
+
+/** Reserva + estabelecimento, para conferir se pertence à organização da chave. */
+export async function getReservationWithVenue(
+  reservationId: string,
+): Promise<{ reservation: Reservation; venue: Venue } | null> {
+  const reservation = await getReservation(reservationId);
+  if (!reservation) return null;
+  return { reservation, venue: await getVenue(reservation.venue_id) };
+}
+
 /** Programação a partir de agora, opcionalmente filtrada por tipo. */
 export async function listUpcomingEvents(params: {
   venueId: string;

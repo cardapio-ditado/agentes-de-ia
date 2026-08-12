@@ -19,6 +19,19 @@ export async function getAgentBySlug(slug: string): Promise<Agent> {
   return data;
 }
 
+/** Agentes habilitados de uma organização — o escopo da chave de API. */
+export async function listAgentsInOrg(orgId: string): Promise<Agent[]> {
+  const { data, error } = await db()
+    .from("agents")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("enabled", true)
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(`Falha ao listar agentes: ${error.message}`);
+  return data ?? [];
+}
+
 /**
  * Retorna a conversa aberta do interlocutor no canal, criando uma se não existir.
  * Sem `externalId` (ex.: execução avulsa via CLI), sempre cria uma conversa nova.

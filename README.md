@@ -16,13 +16,10 @@ Stack: **Node + TypeScript**, **Claude** (`claude-opus-5`) e **Supabase** (Postg
 | Schema completo no Supabase (15 tabelas, RLS, triggers, índices) | ✅ aplicado |
 | Runtime do agente: histórico, ferramentas, telemetria de tokens | ✅ |
 | Ferramentas de domínio (programação, informações, reserva) | ✅ |
-| Módulo de aprovação de reservas + trilha de auditoria | ✅ (CLI) |
-| Seed com estabelecimento e agente de exemplo | ✅ |
-| API HTTP (`/runs`, `/agents`), streaming SSE, UI web | ⬜ próximo passo |
-| Auth, API keys, billing, embeddings, editor visual | ⬜ backlog do PRD |
-
-O que existe hoje é o **núcleo**: o modelo de dados e o motor de execução do agente.
-As camadas de API e UI descritas no PRD se apoiam nele sem precisar remexer no schema.
+| Módulo de aprovação de reservas + trilha de auditoria | ✅ |
+| API HTTP com autenticação por chave e streaming SSE | ✅ |
+| Painel web: fila de aprovação, programação e chat de teste | ✅ |
+| Billing, embeddings/vector DB, editor visual de fluxo, SSO | ⬜ backlog do PRD |
 
 ---
 
@@ -32,16 +29,56 @@ As camadas de API e UI descritas no PRD se apoiam nele sem precisar remexer no s
 npm install
 cp .env.example .env      # preencha ANTHROPIC_API_KEY e SUPABASE_SERVICE_ROLE_KEY
 npm run seed              # cria org, estabelecimento e o agente recepcionista
-npm run chat -- --agent recepcionista --venue ditado-popular
+npm run criar-chave       # gera a chave de API (aparece uma única vez)
+npm run dev               # sobe API + painel em http://localhost:3000
 ```
 
-Fila de aprovação:
+Abra `http://localhost:3000`, cole a chave e o painel carrega.
+
+Sem interface, pela linha de comando:
 
 ```bash
+npm run chat -- --agent recepcionista --venue ditado-popular
+
 npm run aprovar -- --venue ditado-popular              # lista pendentes
 npm run aprovar -- --aprovar <protocolo>
 npm run aprovar -- --recusar <protocolo> --motivo "casa lotada nesse horário"
 ```
+
+---
+
+## API
+
+Toda rota sob `/v1` exige `Authorization: Bearer <chave>`. Respostas seguem
+`{ success, data }` ou `{ success: false, error: { code, message } }`, e cada
+requisição devolve um `x-trace-id` para correlacionar com o log.
+
+| Rota | Escopo | O que faz |
+|---|---|---|
+| `POST /v1/runs` | `runs:write` | Executa o agente. Com `?stream=true` (ou `Accept: text/event-stream`) devolve SSE |
+| `GET /v1/agents` | `runs:write` | Agentes da organização |
+| `GET /v1/venues` | `reservations:read` | Estabelecimentos |
+| `GET /v1/venues/:slug/reservations` | `reservations:read` | Fila de aprovação |
+| `POST /v1/reservations/:id/approve` | `reservations:write` | Aprova |
+| `POST /v1/reservations/:id/reject` | `reservations:write` | Recusa (exige `motivo`) |
+| `GET \| POST /v1/venues/:slug/events` | leitura \| escrita | Programação |
+| `DELETE /v1/events/:id?venue=<slug>` | `reservations:write` | Remove item |
+| `GET /v1/venues/:slug/info` | `reservations:read` | Base de conhecimento |
+| `GET /health` | público | Health check |
+
+Eventos do stream: `text_delta`, `tool_use`, `tool_result`, `done`, `error`.
+
+```bash
+curl -N http://localhost:3000/v1/runs?stream=true \
+  -H "Authorization: Bearer sk_ditado_..." \
+  -H "content-type: application/json" \
+  -d '{"agent":"recepcionista","venue":"ditado-popular","input":"tem show sexta?"}'
+```
+
+Chaves de API são guardadas **apenas como SHA-256** — a chave crua aparece uma
+única vez, na criação. Todo acesso é escopado pela organização da chave: pedir
+uma reserva de outra organização devolve `404`, não `403`, para não revelar
+que ela existe.
 
 ---
 
@@ -126,7 +163,9 @@ ferramenta recusa, em vez de gravar silenciosamente no fuso errado.
 
 ```
 src/
+  server.ts           API HTTP + painel estático (zero dependências)
   agent.ts            loop de execução: modelo → ferramentas → persistência
+  apikeys.ts          criação e validação de chaves (só o hash é guardado)
   repository.ts       agentes, conversas, mensagens, eventos
   venues.ts           estabelecimentos, programação, reservas, aprovação
   supabase.ts         cliente service_role (nunca no navegador)
@@ -134,18 +173,26 @@ src/
   cli.ts              chat de teste
   database.types.ts   tipos gerados do schema
   tools/              ferramentas do agente
+public/               painel web (HTML/CSS/JS, sem build step)
 scripts/
   seed.ts             dados de exemplo
-  aprovar.ts          módulo de aprovação
+  aprovar.ts          aprovação pela linha de comando
+  criar-chave.ts      gera chave de API
 supabase/migrations/  SQL versionado
 ```
+
+O painel é JS puro de propósito: nada de build step para uma tela operacional de
+três abas. Quando a interface crescer para o que o PRD descreve — designer visual
+de agentes, métricas, replays — aí sim vale trocar por React.
 
 ---
 
 ## Próximos passos sugeridos
 
-1. **API HTTP** — `POST /runs` com streaming SSE, autenticação por `api_keys`
-2. **Tela de aprovação** — a lógica já está em `src/venues.ts`; falta a UI
-3. **Notificação ao cliente** — disparar WhatsApp na aprovação/recusa (o `webhooks` já existe)
-4. **Canal WhatsApp** — webhook de entrada chamando `runAgent` com `channel: "whatsapp"`
-5. **Painel de uso** — `messages` já grava tokens e latência por execução
+1. **Notificar o cliente** — disparar WhatsApp/e-mail na aprovação ou recusa
+   (a tabela `webhooks` e o histórico de entregas já existem)
+2. **Canal WhatsApp** — webhook de entrada chamando `runAgent` com `channel: "whatsapp"`
+3. **Rate limiting por chave** — os headers `X-RateLimit-*` do PRD ainda não são emitidos
+4. **Painel de uso** — `messages` já grava tokens, latência e custo por execução
+5. **Login de usuário** — hoje o painel autentica por chave de API; com Supabase Auth
+   dá para usar `org_members` e criar policies de RLS por usuário

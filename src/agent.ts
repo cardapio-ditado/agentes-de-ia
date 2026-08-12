@@ -37,6 +37,8 @@ export interface RunAgentParams {
   externalId?: string;
   /** Slug do estabelecimento atendido. Necessário para as ferramentas de restaurante. */
   venueSlug?: string;
+  /** Recebe os eventos conforme acontecem. Omitir roda sem streaming. */
+  onEvent?: (evento: AgentStreamEvent) => void;
 }
 
 export interface RunAgentResult {
@@ -45,12 +47,19 @@ export interface RunAgentResult {
   stopReason: string | null;
 }
 
+/** Eventos emitidos durante a execução, para streaming ao cliente. */
+export type AgentStreamEvent =
+  | { type: "text_delta"; text: string }
+  | { type: "tool_use"; name: string }
+  | { type: "tool_result"; name: string; isError: boolean }
+  | { type: "done"; conversationId: string; text: string };
+
 /**
  * Executa um turno completo do agente: carrega histórico, chama o modelo,
  * executa as ferramentas que ele pedir e persiste tudo.
  */
 export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> {
-  const { agentSlug, userMessage, channel = "api", externalId, venueSlug } = params;
+  const { agentSlug, userMessage, channel = "api", externalId, venueSlug, onEvent } = params;
 
   const agent = await getAgentBySlug(agentSlug);
   const venue = venueSlug ? await findVenueBySlug(venueSlug) : null;
@@ -84,9 +93,13 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
 
   for (let iteracao = 0; iteracao < MAX_ITERACOES; iteracao++) {
     const inicio = Date.now();
-    const response = await anthropic().messages.create(
-      buildRequest(agent, messages, tools),
-    );
+    // Sempre em streaming: com max_tokens alto a requisição não-streaming
+    // estoura o timeout HTTP do SDK.
+    const stream = anthropic().messages.stream(buildRequest(agent, messages, tools));
+    if (onEvent) {
+      stream.on("text", (delta) => onEvent({ type: "text_delta", text: delta }));
+    }
+    const response = await stream.finalMessage();
     const latencia = Date.now() - inicio;
     stopReason = response.stop_reason;
 
@@ -115,11 +128,9 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
         event: "modelo_recusou",
         payload: { stop_reason: response.stop_reason },
       });
-      return {
-        conversationId: conversation.id,
-        text: "O modelo recusou esta solicitação por política de uso.",
-        stopReason,
-      };
+      const recusa = "O modelo recusou esta solicitação por política de uso.";
+      onEvent?.({ type: "done", conversationId: conversation.id, text: recusa });
+      return { conversationId: conversation.id, text: recusa, stopReason };
     }
 
     // Ferramenta do lado do servidor atingiu o limite de iterações: reenviar retoma.
@@ -131,6 +142,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
 
     if (toolUses.length === 0) {
       textoFinal = extractText(response.content);
+      onEvent?.({ type: "done", conversationId: conversation.id, text: textoFinal });
       if (response.stop_reason === "max_tokens") {
         await logEvent({
           agentId: agent.id,
@@ -145,14 +157,19 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
 
     const resultados: Anthropic.ToolResultBlockParam[] = [];
     for (const toolUse of toolUses) {
-      resultados.push(
-        await executeTool({
-          toolUse,
-          tools,
-          messageId: assistantMessage.id,
-          ctx: toolContext,
-        }),
-      );
+      onEvent?.({ type: "tool_use", name: toolUse.name });
+      const resultado = await executeTool({
+        toolUse,
+        tools,
+        messageId: assistantMessage.id,
+        ctx: toolContext,
+      });
+      onEvent?.({
+        type: "tool_result",
+        name: toolUse.name,
+        isError: resultado.is_error === true,
+      });
+      resultados.push(resultado);
     }
 
     // Todos os resultados vão numa única mensagem — separá-los ensina o modelo

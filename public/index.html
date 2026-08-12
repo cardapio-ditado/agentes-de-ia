@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel — Agentes de IA</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- Tela de acesso -->
+    <section id="tela-acesso" class="acesso">
+      <form id="form-acesso" class="cartao-acesso">
+        <h1>Painel de Agentes</h1>
+        <p class="muted">
+          Informe a chave de API da sua organização. Ela fica só neste navegador.
+        </p>
+        <label for="campo-chave">Chave de API</label>
+        <input
+          id="campo-chave"
+          type="password"
+          autocomplete="off"
+          placeholder="sk_ditado_..."
+          required
+        />
+        <button type="submit" class="btn btn-primario">Entrar</button>
+        <p id="erro-acesso" class="erro" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <!-- Painel -->
+    <div id="painel" hidden>
+      <header class="topo">
+        <div class="marca">
+          <span class="ponto" aria-hidden="true"></span>
+          <strong>Agentes de IA</strong>
+        </div>
+        <div class="topo-acoes">
+          <label class="sr-only" for="seletor-venue">Estabelecimento</label>
+          <select id="seletor-venue"></select>
+          <button id="btn-sair" class="btn btn-fantasma" type="button">Sair</button>
+        </div>
+      </header>
+
+      <nav class="abas" role="tablist">
+        <button class="aba" role="tab" data-aba="reservas" aria-selected="true">
+          Reservas <span id="contador-reservas" class="badge" hidden>0</span>
+        </button>
+        <button class="aba" role="tab" data-aba="programacao" aria-selected="false">
+          Programação
+        </button>
+        <button class="aba" role="tab" data-aba="chat" aria-selected="false">
+          Testar agente
+        </button>
+      </nav>
+
+      <main>
+        <!-- Reservas -->
+        <section id="painel-reservas" class="painel-aba" role="tabpanel">
+          <div class="cabecalho-secao">
+            <h2>Fila de aprovação</h2>
+            <button id="btn-recarregar" class="btn btn-fantasma" type="button">
+              Recarregar
+            </button>
+          </div>
+          <div id="lista-reservas" class="lista"></div>
+        </section>
+
+        <!-- Programação -->
+        <section id="painel-programacao" class="painel-aba" role="tabpanel" hidden>
+          <div class="cabecalho-secao">
+            <h2>Programação</h2>
+          </div>
+
+          <form id="form-evento" class="cartao formulario">
+            <h3>Novo item</h3>
+            <div class="grade">
+              <div class="campo">
+                <label for="ev-titulo">Título</label>
+                <input id="ev-titulo" required placeholder="Samba de Raiz — Grupo X" />
+              </div>
+              <div class="campo">
+                <label for="ev-tipo">Tipo</label>
+                <select id="ev-tipo">
+                  <option value="musica">Música</option>
+                  <option value="jogo">Jogo</option>
+                  <option value="promocao">Promoção</option>
+                  <option value="evento">Evento</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+              <div class="campo">
+                <label for="ev-data">Data e hora</label>
+                <input id="ev-data" type="datetime-local" required />
+              </div>
+              <div class="campo">
+                <label for="ev-couvert">Couvert (R$)</label>
+                <input id="ev-couvert" type="number" min="0" step="0.01" placeholder="0" />
+              </div>
+              <div class="campo campo-largo">
+                <label for="ev-descricao">Descrição</label>
+                <input id="ev-descricao" placeholder="Roda de samba na área externa" />
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primario">Adicionar</button>
+          </form>
+
+          <div id="lista-eventos" class="lista"></div>
+        </section>
+
+        <!-- Chat -->
+        <section id="painel-chat" class="painel-aba" role="tabpanel" hidden>
+          <div class="cabecalho-secao">
+            <h2>Testar agente</h2>
+            <select id="seletor-agente"></select>
+          </div>
+          <div id="chat" class="chat" aria-live="polite"></div>
+          <form id="form-chat" class="linha-chat">
+            <label class="sr-only" for="campo-mensagem">Mensagem</label>
+            <input
+              id="campo-mensagem"
+              placeholder="Oi, queria reservar uma mesa pra sexta…"
+              autocomplete="off"
+              required
+            />
+            <button type="submit" class="btn btn-primario">Enviar</button>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <div id="avisos" class="avisos" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
