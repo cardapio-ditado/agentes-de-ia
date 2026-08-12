@@ -6,6 +6,9 @@ dist/
 .env.*
 !.env.example
 
+# Sessão do WhatsApp (Baileys) — são credenciais do número pareado
+.whatsapp/
+
 # Logs e temporários
 *.log
 npm-debug.log*

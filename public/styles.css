@@ -256,6 +256,55 @@ label { display: block; font-size: 0.82rem; font-weight: 500; margin-bottom: 0.3
   letter-spacing: 0.02em;
 }
 
+/* ---------- WhatsApp ---------- */
+.ponto-status {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  vertical-align: middle;
+}
+
+.ponto-status[data-status="conectado"] { background: var(--sucesso); }
+.ponto-status[data-status="aguardando_qr"],
+.ponto-status[data-status="conectando"] { background: #f59e0b; }
+.ponto-status[data-status="desconectado"] { background: var(--muted); }
+
+.alerta {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+  font-size: 0.9rem;
+}
+
+.area-qr {
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  min-height: 220px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  background: var(--fundo);
+  border-radius: var(--raio);
+}
+
+.area-qr img {
+  width: 260px;
+  max-width: 100%;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.passos {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: left;
+}
+
 /* ---------- Chat ---------- */
 .chat {
   min-height: 300px;

@@ -63,21 +63,46 @@ export interface ResultadoEnvio {
   erro?: string;
 }
 
+export type EnvioWhatsapp = (telefone: string, corpo: string) => Promise<ResultadoEnvio>;
+
+let provedorWhatsapp: EnvioWhatsapp | null = null;
+
 /**
- * Provedor ativo, decidido pelo ambiente.
+ * O conector Baileys se registra aqui ao conectar.
  *
- * Sem credenciais de WhatsApp, cai no `console`: a mensagem é registrada no
- * banco e impressa no log em vez de sumir silenciosamente.
+ * A inversão existe para evitar ciclo de import: o conector já depende deste
+ * módulo (e do agente), então este módulo não pode depender dele.
+ */
+export function registrarProvedorWhatsapp(envio: EnvioWhatsapp | null): void {
+  provedorWhatsapp = envio;
+}
+
+function temCloudApi(): boolean {
+  return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+}
+
+/**
+ * Provedor ativo, na ordem: Baileys conectado, depois Cloud API da Meta.
+ *
+ * Sem nenhum dos dois, cai no `console`: a mensagem é registrada no banco e
+ * impressa no log em vez de sumir silenciosamente.
  */
 export function canalAtivo(): "whatsapp" | "console" {
-  return process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID
-    ? "whatsapp"
-    : "console";
+  return provedorWhatsapp || temCloudApi() ? "whatsapp" : "console";
 }
 
 async function enviarPorConsole(destino: string, corpo: string): Promise<ResultadoEnvio> {
   console.log(`\n--- notificação para ${destino} ---\n${corpo}\n---\n`);
   return { enviado: true, providerId: "console" };
+}
+
+/** Baileys quando conectado; senão, Cloud API da Meta. */
+async function enviarPorWhatsapp(destino: string, corpo: string): Promise<ResultadoEnvio> {
+  if (provedorWhatsapp) return await provedorWhatsapp(destino, corpo);
+  if (!temCloudApi()) {
+    return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado." };
+  }
+  return await enviarPelaCloudApi(destino, corpo);
 }
 
 /**
@@ -87,7 +112,7 @@ async function enviarPorConsole(destino: string, corpo: string): Promise<Resulta
  * do cliente. Fora dela a Meta exige template aprovado — o envio falha e a
  * notificação fica registrada como `failed` para reenvio ou contato manual.
  */
-async function enviarPorWhatsapp(destino: string, corpo: string): Promise<ResultadoEnvio> {
+async function enviarPelaCloudApi(destino: string, corpo: string): Promise<ResultadoEnvio> {
   const token = process.env.WHATSAPP_TOKEN!;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
   const versao = process.env.WHATSAPP_API_VERSION ?? "v21.0";

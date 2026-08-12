@@ -14,6 +14,7 @@
     "aprovar": "tsx scripts/aprovar.ts",
     "seed": "tsx scripts/seed.ts",
     "criar-chave": "tsx scripts/criar-chave.ts",
+    "whatsapp": "tsx scripts/whatsapp.ts",
     "reenviar-notificacoes": "tsx scripts/reenviar-notificacoes.ts",
     "test": "tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit",
@@ -22,10 +23,13 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
     "@supabase/supabase-js": "^2.112.0",
-    "dotenv": "^17.4.0"
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "dotenv": "^17.4.0",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/qrcode": "^1.5.6",
     "tsx": "^4.23.0",
     "typescript": "^5.9.0"
   }

@@ -85,7 +85,7 @@ async function iniciar() {
   $("#tela-acesso").hidden = true;
   $("#painel").hidden = false;
 
-  await Promise.all([carregarReservas(), carregarEventos()]);
+  await Promise.all([carregarReservas(), carregarEventos(), atualizarWhatsapp()]);
 }
 
 $("#seletor-venue").addEventListener("change", async (evento) => {
@@ -304,6 +304,93 @@ $("#form-evento").addEventListener("submit", async (evento) => {
     botao.disabled = false;
   }
 });
+
+// ============================================================
+// WhatsApp (Baileys)
+// ============================================================
+let timerWhatsapp = null;
+
+$("#btn-conectar-wa").addEventListener("click", async () => {
+  const botao = $("#btn-conectar-wa");
+  botao.disabled = true;
+  try {
+    await api("/whatsapp/conectar", {
+      method: "POST",
+      body: JSON.stringify({ venue: estado.venue, agent: estado.agente }),
+    });
+    avisar("Conector iniciado. O QR aparece em instantes.", "sucesso");
+    acompanharWhatsapp();
+  } catch (e) {
+    avisar(e.message, "erro");
+  } finally {
+    botao.disabled = false;
+  }
+});
+
+$("#btn-desconectar-wa").addEventListener("click", async () => {
+  try {
+    await api("/whatsapp/desconectar", { method: "POST" });
+    avisar("WhatsApp desconectado.", "sucesso");
+    await atualizarWhatsapp();
+  } catch (e) {
+    avisar(e.message, "erro");
+  }
+});
+
+async function atualizarWhatsapp() {
+  let estadoWa;
+  try {
+    estadoWa = await api("/whatsapp/status");
+  } catch {
+    return null; // sem chave ou servidor reiniciando: tenta de novo no próximo ciclo
+  }
+
+  const rotulos = {
+    conectado: "conectado",
+    aguardando_qr: "aguardando leitura do QR",
+    conectando: "conectando…",
+    desconectado: "desconectado",
+  };
+
+  $("#status-whatsapp").textContent = rotulos[estadoWa.status] ?? estadoWa.status;
+  $("#ponto-whatsapp").dataset.status = estadoWa.status;
+
+  const area = $("#area-qr");
+  if (estadoWa.qr) {
+    area.innerHTML = `
+      <img src="${estadoWa.qr}" alt="QR Code para parear o WhatsApp" />
+      <ol class="passos">
+        <li>Abra o WhatsApp no celular do restaurante</li>
+        <li>Toque em <strong>Aparelhos conectados</strong></li>
+        <li>Toque em <strong>Conectar aparelho</strong> e aponte para o código</li>
+      </ol>`;
+  } else if (estadoWa.status === "conectado") {
+    area.innerHTML = `
+      <p><strong>Conectado</strong>${
+        estadoWa.telefone ? ` como <code>${escapar(estadoWa.telefone)}</code>` : ""
+      }</p>
+      <p class="muted">O agente já responde as mensagens que chegarem neste número.</p>`;
+  } else {
+    area.innerHTML = `<p class="muted">${
+      estadoWa.ultimoErro
+        ? `Última falha: ${escapar(estadoWa.ultimoErro)}`
+        : "Clique em conectar para gerar o QR de pareamento."
+    }</p>`;
+  }
+  return estadoWa;
+}
+
+/** Enquanto não parear, o QR muda a cada ~20s — vale acompanhar de perto. */
+function acompanharWhatsapp() {
+  clearInterval(timerWhatsapp);
+  timerWhatsapp = setInterval(async () => {
+    const estadoWa = await atualizarWhatsapp();
+    if (estadoWa?.status === "conectado" || estadoWa?.status === "desconectado") {
+      clearInterval(timerWhatsapp);
+      timerWhatsapp = null;
+    }
+  }, 3000);
+}
 
 // ============================================================
 // Chat com streaming (SSE sobre fetch — EventSource não faz POST)

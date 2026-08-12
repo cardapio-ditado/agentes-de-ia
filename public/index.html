@@ -48,6 +48,9 @@
         <button class="aba" role="tab" data-aba="programacao" aria-selected="false">
           Programação
         </button>
+        <button class="aba" role="tab" data-aba="whatsapp" aria-selected="false">
+          WhatsApp <span id="ponto-whatsapp" class="ponto-status" aria-hidden="true"></span>
+        </button>
         <button class="aba" role="tab" data-aba="chat" aria-selected="false">
           Testar agente
         </button>
@@ -105,6 +108,34 @@
           </form>
 
           <div id="lista-eventos" class="lista"></div>
+        </section>
+
+        <!-- WhatsApp -->
+        <section id="painel-whatsapp" class="painel-aba" role="tabpanel" hidden>
+          <div class="cabecalho-secao">
+            <h2>Conexão WhatsApp</h2>
+            <span id="status-whatsapp" class="etiqueta">—</span>
+          </div>
+
+          <div class="cartao alerta">
+            <strong>Conexão não oficial.</strong> O Baileys usa o protocolo do
+            WhatsApp&nbsp;Web, fora dos termos de uso da Meta. O número pode ser
+            banido — use um chip separado do número principal da casa.
+          </div>
+
+          <div class="cartao">
+            <div id="area-qr" class="area-qr">
+              <p class="muted">Clique em conectar para gerar o QR de pareamento.</p>
+            </div>
+            <div class="reserva-acoes">
+              <button id="btn-conectar-wa" class="btn btn-primario" type="button">
+                Conectar
+              </button>
+              <button id="btn-desconectar-wa" class="btn btn-perigo" type="button">
+                Desconectar
+              </button>
+            </div>
+          </div>
         </section>
 
         <!-- Chat -->

@@ -7,6 +7,7 @@ import { authenticateApiKey, hasScope, type ApiKey } from "./apikeys.js";
 import { listAgentsInOrg } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { listNotificationsForReservation } from "./notifications.js";
+import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whatsapp.js";
 import {
   createVenueEvent,
   deleteVenueEvent,
@@ -276,6 +277,36 @@ async function roteasApi(
       throw erro(404, "not_found", "Reserva não encontrada.");
     }
     return ok(res, await listNotificationsForReservation(encontrado.reservation.id));
+  }
+
+  // ---- WhatsApp (Baileys) ----
+  if (p[0] === "whatsapp" && p.length === 2) {
+    const chave = await exigirChave(req, "reservations:write");
+
+    if (metodo === "GET" && p[1] === "status") {
+      return ok(res, estadoWhatsapp());
+    }
+
+    if (metodo === "POST" && p[1] === "conectar") {
+      const corpo = await lerJson(req);
+      const venueSlug = texto(corpo, "venue");
+      const agentSlug = texto(corpo, "agent");
+
+      // O conector responde por esta organização: confira antes de subir.
+      await findVenueBySlugInOrg(chave.org_id, venueSlug);
+      const agentes = await listAgentsInOrg(chave.org_id);
+      if (!agentes.some((a) => a.slug === agentSlug)) {
+        throw erro(404, "not_found", `Agente "${agentSlug}" não encontrado nesta organização.`);
+      }
+
+      await iniciarWhatsapp({ agentSlug, venueSlug });
+      return ok(res, estadoWhatsapp());
+    }
+
+    if (metodo === "POST" && p[1] === "desconectar") {
+      await pararWhatsapp();
+      return ok(res, estadoWhatsapp());
+    }
   }
 
   throw erro(404, "not_found", `Rota ${metodo} /v1/${p.join("/")} não existe.`);

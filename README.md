@@ -13,13 +13,14 @@ Stack: **Node + TypeScript**, **Claude** (`claude-opus-5`) e **Supabase** (Postg
 
 | Módulo | Estado |
 |---|---|
-| Schema completo no Supabase (15 tabelas, RLS, triggers, índices) | ✅ aplicado |
+| Schema completo no Supabase (16 tabelas, RLS, triggers, índices) | ✅ aplicado |
 | Runtime do agente: histórico, ferramentas, telemetria de tokens | ✅ |
 | Ferramentas de domínio (programação, informações, reserva) | ✅ |
 | Módulo de aprovação de reservas + trilha de auditoria | ✅ |
 | API HTTP com autenticação por chave e streaming SSE | ✅ |
 | Painel web: fila de aprovação, programação e chat de teste | ✅ |
-| Notificação ao cliente (WhatsApp) + webhooks assinados | ✅ |
+| Notificação ao cliente + webhooks assinados | ✅ |
+| Canal WhatsApp de entrada e saída (Baileys, não oficial) | ✅ |
 | Billing, embeddings/vector DB, editor visual de fluxo, SSO | ⬜ backlog do PRD |
 
 ---
@@ -121,16 +122,44 @@ O painel e a linha de comando dizem se o cliente foi realmente avisado. Aprovaç
 e aviso são etapas separadas de propósito: **a decisão nunca é desfeita porque a
 mensagem falhou.**
 
-**Canal.** Com `WHATSAPP_TOKEN` e `WHATSAPP_PHONE_NUMBER_ID` no `.env`, envia pela
-WhatsApp Cloud API. Sem eles, cai no canal `console`: grava no banco e imprime no
-log, em vez de sumir silenciosamente.
+**Canal**, nesta ordem: Baileys conectado → Cloud API da Meta → `console`
+(grava no banco e imprime no log, em vez de sumir silenciosamente).
 
-> ⚠️ A Meta só aceita mensagem livre dentro de **24h** desde a última mensagem do
-> cliente. Fora dessa janela é preciso um template aprovado — ainda não
-> implementado. Aprovações demoradas vão falhar por esse motivo e ficar
-> registradas para contato manual.
+> ⚠️ Na **Cloud API**, a Meta só aceita mensagem livre dentro de 24h desde a
+> última mensagem do cliente; fora disso exige template aprovado, ainda não
+> implementado. O Baileys não tem essa restrição.
 
-### Webhooks
+---
+
+## WhatsApp (Baileys)
+
+O agente atende pelo WhatsApp do restaurante: cliente manda mensagem, o agente
+responde, coleta a reserva e envia para aprovação. As confirmações saem pelo
+mesmo número.
+
+```bash
+npm run whatsapp -- --agent recepcionista --venue ditado-popular
+```
+
+Ou pelo painel, aba **WhatsApp** → Conectar → leia o QR com o celular da casa
+(Aparelhos conectados → Conectar aparelho). A sessão fica em `.whatsapp/`
+(fora do git) e reconecta sozinha depois de quedas.
+
+> ⚠️ **Baileys não é oficial.** Usa o protocolo do WhatsApp Web, fora dos termos
+> de uso da Meta, e o número pode ser banido. **Use um chip separado do número
+> principal da casa** — um ban derruba o canal de atendimento inteiro. A
+> alternativa oficial é a Cloud API, com aprovação da Meta e a janela de 24h.
+
+O conector ignora grupos, status e mensagens anteriores à conexão — sem esse
+corte, ao parear o agente responderia conversas de dias atrás como se fossem
+novas. Mensagens que não são texto recebem um pedido para escrever.
+
+A pasta `.whatsapp/` contém **credenciais do número pareado**: quem a copia
+assume a sessão. Trate como segredo.
+
+---
+
+## Webhooks
 
 Eventos publicados: `reservation.created`, `reservation.approved`,
 `reservation.rejected`. Cada entrega é assinada:
@@ -150,7 +179,7 @@ sozinho. Tudo fica em `webhook_deliveries`.
 
 **Plataforma**
 `organizations`, `org_members` (RBAC), `api_keys` (só o hash da chave),
-`webhooks`, `webhook_deliveries`
+`webhooks`, `webhook_deliveries`, `notifications`
 
 **Agentes**
 `agents` (prompt, modelo, effort, ferramentas), `conversations`, `messages`
@@ -214,6 +243,7 @@ src/
   supabase.ts           cliente service_role (nunca no navegador)
   config.ts             validação das variáveis de ambiente
   cli.ts                chat de teste
+  channels/whatsapp.ts  conector Baileys: pareamento, atendimento e envio
   database.types.ts     tipos gerados do schema
   tools/                ferramentas do agente
 public/                 painel web (HTML/CSS/JS, sem build step)
@@ -221,6 +251,7 @@ scripts/
   seed.ts               dados de exemplo
   aprovar.ts            aprovação pela linha de comando
   criar-chave.ts        gera chave de API
+  whatsapp.ts           sobe o conector sozinho
   reenviar-notificacoes.ts
 supabase/migrations/    SQL versionado
 ```
@@ -239,9 +270,9 @@ de agentes, métricas, replays — aí sim vale trocar por React.
 
 ## Próximos passos sugeridos
 
-1. **Canal WhatsApp de entrada** — webhook da Meta chamando `runAgent` com
-   `channel: "whatsapp"`. Fecha o ciclo: hoje o agente responde, mas só por API
-2. **Templates aprovados da Meta** — para avisar fora da janela de 24h
+1. **Múltiplos números** — hoje o conector Baileys é um por processo; uma rede
+   com várias casas precisa de uma sessão por estabelecimento
+2. **Templates aprovados da Meta** — só importa se migrar para a Cloud API
 3. **Reenvio automático de webhooks** — entregas com `delivered_at` nulo ainda
    não são reprocessadas por nenhum worker
 4. **Rate limiting por chave** — os headers `X-RateLimit-*` do PRD ainda não são emitidos
