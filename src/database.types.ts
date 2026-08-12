@@ -220,6 +220,57 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          attempts: number
+          body: string
+          channel: string
+          created_at: string
+          destination: string
+          error: string | null
+          id: string
+          provider_id: string | null
+          reservation_id: string | null
+          sent_at: string | null
+          status: string
+          template: string
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          attempts?: number
+          body: string
+          channel?: string
+          created_at?: string
+          destination: string
+          error?: string | null
+          id?: string
+          provider_id?: string | null
+          reservation_id?: string | null
+          sent_at?: string | null
+          status?: string
+          template: string
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          attempts?: number
+          body?: string
+          channel?: string
+          created_at?: string
+          destination?: string
+          error?: string | null
+          id?: string
+          provider_id?: string | null
+          reservation_id?: string | null
+          sent_at?: string | null
+          status?: string
+          template?: string
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: []
+      }
       org_members: {
         Row: {
           created_at: string

@@ -8,6 +8,7 @@ import {
   type Venue,
   type VenueEvent,
 } from "../venues.js";
+import { publicarReservaCriada } from "../reservationFlow.js";
 import type { AgentTool, ToolContext } from "./types.js";
 
 const TIPOS_DE_EVENTO = ["musica", "jogo", "promocao", "evento", "outro"] as const;
@@ -268,6 +269,10 @@ const registrarReserva: AgentTool = {
       source_channel: ctx.channel,
       status: "pending",
     });
+
+    // Avisa as integrações que há reserva na fila. Sem await: o cliente não
+    // deve esperar por sistema de terceiros no meio da conversa.
+    publicarReservaCriada(reserva, venue);
 
     return [
       `Pedido de reserva registrado e enviado para aprovação.`,

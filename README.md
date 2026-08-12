@@ -19,6 +19,7 @@ Stack: **Node + TypeScript**, **Claude** (`claude-opus-5`) e **Supabase** (Postg
 | Módulo de aprovação de reservas + trilha de auditoria | ✅ |
 | API HTTP com autenticação por chave e streaming SSE | ✅ |
 | Painel web: fila de aprovação, programação e chat de teste | ✅ |
+| Notificação ao cliente (WhatsApp) + webhooks assinados | ✅ |
 | Billing, embeddings/vector DB, editor visual de fluxo, SSO | ⬜ backlog do PRD |
 
 ---
@@ -106,6 +107,45 @@ Validações antes de gravar (configuráveis em `venues.settings`):
 
 ---
 
+## Notificação ao cliente
+
+Aprovar ou recusar dispara a mensagem para o cliente. A notificação é **gravada
+antes de sair**, então uma falha do provedor não some com a mensagem — ela fica
+como `failed` e pode ser reenviada:
+
+```bash
+npm run reenviar-notificacoes    # ideal em cron, a cada poucos minutos
+```
+
+O painel e a linha de comando dizem se o cliente foi realmente avisado. Aprovação
+e aviso são etapas separadas de propósito: **a decisão nunca é desfeita porque a
+mensagem falhou.**
+
+**Canal.** Com `WHATSAPP_TOKEN` e `WHATSAPP_PHONE_NUMBER_ID` no `.env`, envia pela
+WhatsApp Cloud API. Sem eles, cai no canal `console`: grava no banco e imprime no
+log, em vez de sumir silenciosamente.
+
+> ⚠️ A Meta só aceita mensagem livre dentro de **24h** desde a última mensagem do
+> cliente. Fora dessa janela é preciso um template aprovado — ainda não
+> implementado. Aprovações demoradas vão falhar por esse motivo e ficar
+> registradas para contato manual.
+
+### Webhooks
+
+Eventos publicados: `reservation.created`, `reservation.approved`,
+`reservation.rejected`. Cada entrega é assinada:
+
+```
+x-webhook-signature: t=<timestamp>,v1=<hmac-sha256 de "timestamp.corpo">
+```
+
+O timestamp entra no conteúdo assinado para que uma entrega capturada não possa
+ser reenviada depois. Retentativas: até 5, com backoff exponencial (1s, 2s, 4s,
+8s). **`4xx` não é repetido** — erro de payload ou configuração não melhora
+sozinho. Tudo fica em `webhook_deliveries`.
+
+---
+
 ## Schema
 
 **Plataforma**
@@ -163,22 +203,32 @@ ferramenta recusa, em vez de gravar silenciosamente no fuso errado.
 
 ```
 src/
-  server.ts           API HTTP + painel estático (zero dependências)
-  agent.ts            loop de execução: modelo → ferramentas → persistência
-  apikeys.ts          criação e validação de chaves (só o hash é guardado)
-  repository.ts       agentes, conversas, mensagens, eventos
-  venues.ts           estabelecimentos, programação, reservas, aprovação
-  supabase.ts         cliente service_role (nunca no navegador)
-  config.ts           validação das variáveis de ambiente
-  cli.ts              chat de teste
-  database.types.ts   tipos gerados do schema
-  tools/              ferramentas do agente
-public/               painel web (HTML/CSS/JS, sem build step)
+  server.ts             API HTTP + painel estático (zero dependências)
+  agent.ts              loop de execução: modelo → ferramentas → persistência
+  apikeys.ts            criação e validação de chaves (só o hash é guardado)
+  reservationFlow.ts    decidir reserva: grava, avisa o cliente, publica evento
+  notifications.ts      templates, provedores e fila de mensagens
+  webhooks.ts           entrega assinada com retentativa
+  repository.ts         agentes, conversas, mensagens, eventos
+  venues.ts             estabelecimentos, programação, reservas, aprovação
+  supabase.ts           cliente service_role (nunca no navegador)
+  config.ts             validação das variáveis de ambiente
+  cli.ts                chat de teste
+  database.types.ts     tipos gerados do schema
+  tools/                ferramentas do agente
+public/                 painel web (HTML/CSS/JS, sem build step)
 scripts/
-  seed.ts             dados de exemplo
-  aprovar.ts          aprovação pela linha de comando
-  criar-chave.ts      gera chave de API
-supabase/migrations/  SQL versionado
+  seed.ts               dados de exemplo
+  aprovar.ts            aprovação pela linha de comando
+  criar-chave.ts        gera chave de API
+  reenviar-notificacoes.ts
+supabase/migrations/    SQL versionado
+```
+
+Testes com o runner nativo do Node (`node:test`), sem framework:
+
+```bash
+npm test
 ```
 
 O painel é JS puro de propósito: nada de build step para uma tela operacional de
@@ -189,10 +239,12 @@ de agentes, métricas, replays — aí sim vale trocar por React.
 
 ## Próximos passos sugeridos
 
-1. **Notificar o cliente** — disparar WhatsApp/e-mail na aprovação ou recusa
-   (a tabela `webhooks` e o histórico de entregas já existem)
-2. **Canal WhatsApp** — webhook de entrada chamando `runAgent` com `channel: "whatsapp"`
-3. **Rate limiting por chave** — os headers `X-RateLimit-*` do PRD ainda não são emitidos
-4. **Painel de uso** — `messages` já grava tokens, latência e custo por execução
-5. **Login de usuário** — hoje o painel autentica por chave de API; com Supabase Auth
+1. **Canal WhatsApp de entrada** — webhook da Meta chamando `runAgent` com
+   `channel: "whatsapp"`. Fecha o ciclo: hoje o agente responde, mas só por API
+2. **Templates aprovados da Meta** — para avisar fora da janela de 24h
+3. **Reenvio automático de webhooks** — entregas com `delivered_at` nulo ainda
+   não são reprocessadas por nenhum worker
+4. **Rate limiting por chave** — os headers `X-RateLimit-*` do PRD ainda não são emitidos
+5. **Painel de uso** — `messages` já grava tokens, latência e custo por execução
+6. **Login de usuário** — hoje o painel autentica por chave de API; com Supabase Auth
    dá para usar `org_members` e criar policies de RLS por usuário

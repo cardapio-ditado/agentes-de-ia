@@ -1,9 +1,9 @@
 import { parseArgs } from "node:util";
+import { decidirReserva } from "../src/reservationFlow.js";
 import {
   findVenueBySlug,
   getReservation,
   listPendingReservations,
-  reviewReservation,
   type Reservation,
   type Venue,
 } from "../src/venues.js";
@@ -81,7 +81,11 @@ async function decidir(
   const antes = await getReservation(protocolo);
   if (!antes) throw new Error(`Reserva ${protocolo} não encontrada.`);
 
-  const reserva = await reviewReservation({ reservationId: protocolo, status, reason: motivo });
+  const { reserva, notificacao } = await decidirReserva({
+    reservationId: protocolo,
+    status,
+    motivo,
+  });
   const rotulo = status === "approved" ? "APROVADA" : "RECUSADA";
 
   console.log(`\nReserva ${rotulo}`);
@@ -89,7 +93,16 @@ async function decidir(
   console.log(`  ${new Date(reserva.reserved_for).toISOString()}`);
   console.log(`  Contato: ${reserva.customer_phone}`);
   if (motivo) console.log(`  Motivo: ${motivo}`);
-  console.log(`\nAvise o cliente pelo canal de origem (${reserva.source_channel}).\n`);
+
+  if (!notificacao) {
+    console.log(`\n  Cliente NÃO avisado: a notificação não foi registrada.`);
+  } else if (notificacao.status === "sent") {
+    console.log(`\n  Cliente avisado por ${notificacao.channel}.`);
+  } else {
+    console.log(`\n  Cliente NÃO avisado (${notificacao.error ?? "erro desconhecido"}).`);
+    console.log(`  Reenvie com: npm run reenviar-notificacoes`);
+  }
+  console.log("");
 }
 
 function descrever(reserva: Reservation, venue: Venue): string {

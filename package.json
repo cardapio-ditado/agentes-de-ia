@@ -14,8 +14,10 @@
     "aprovar": "tsx scripts/aprovar.ts",
     "seed": "tsx scripts/seed.ts",
     "criar-chave": "tsx scripts/criar-chave.ts",
+    "reenviar-notificacoes": "tsx scripts/reenviar-notificacoes.ts",
+    "test": "tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

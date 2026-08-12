@@ -5,6 +5,8 @@ import { extname, join, normalize, resolve } from "node:path";
 import { runAgent, type AgentStreamEvent } from "./agent.js";
 import { authenticateApiKey, hasScope, type ApiKey } from "./apikeys.js";
 import { listAgentsInOrg } from "./repository.js";
+import { decidirReserva } from "./reservationFlow.js";
+import { listNotificationsForReservation } from "./notifications.js";
 import {
   createVenueEvent,
   deleteVenueEvent,
@@ -14,7 +16,6 @@ import {
   listPendingReservations,
   listVenueInfo,
   listVenuesInOrg,
-  reviewReservation,
 } from "./venues.js";
 
 const PORTA = Number(process.env.PORT ?? 3000);
@@ -248,16 +249,33 @@ async function roteasApi(
     }
 
     try {
-      const reserva = await reviewReservation({
+      const { reserva, notificacao } = await decidirReserva({
         reservationId: encontrado.reservation.id,
         status: acao === "approve" ? "approved" : "rejected",
-        reason: motivo,
+        motivo,
+        venue: encontrado.venue,
       });
-      return ok(res, reserva);
+      return ok(res, {
+        ...reserva,
+        // O painel mostra se o cliente foi realmente avisado.
+        notificacao: notificacao
+          ? { status: notificacao.status, canal: notificacao.channel, erro: notificacao.error }
+          : null,
+      });
     } catch (e) {
       // reviewReservation só atualiza quando ainda está pendente.
       throw erro(409, "conflict", e instanceof Error ? e.message : "Conflito ao decidir.");
     }
+  }
+
+  // GET /v1/reservations/:id/notifications
+  if (metodo === "GET" && p[0] === "reservations" && p[2] === "notifications" && p.length === 3) {
+    const chave = await exigirChave(req, "reservations:read");
+    const encontrado = await getReservationWithVenue(p[1]!);
+    if (!encontrado || encontrado.venue.org_id !== chave.org_id) {
+      throw erro(404, "not_found", "Reserva não encontrada.");
+    }
+    return ok(res, await listNotificationsForReservation(encontrado.reservation.id));
   }
 
   throw erro(404, "not_found", `Rota ${metodo} /v1/${p.join("/")} não existe.`);

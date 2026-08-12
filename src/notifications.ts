@@ -1,0 +1,236 @@
+import { db } from "./supabase.js";
+import type { Tables } from "./database.types.js";
+import type { Reservation, Venue } from "./venues.js";
+
+export type Notification = Tables<"notifications">;
+
+const MAX_TENTATIVAS = 4;
+
+// ============================================================
+// Mensagens
+// ============================================================
+export type Template = "reserva_aprovada" | "reserva_recusada";
+
+function formatarQuando(reserva: Reservation, venue: Venue): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: venue.timezone,
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(new Date(reserva.reserved_for));
+}
+
+/** Primeiro nome — mais natural em mensagem curta que o nome completo. */
+function primeiroNome(nome: string): string {
+  return nome.trim().split(/\s+/)[0] ?? nome;
+}
+
+export function montarMensagem(
+  template: Template,
+  reserva: Reservation,
+  venue: Venue,
+): string {
+  const nome = primeiroNome(reserva.customer_name);
+  const quando = formatarQuando(reserva, venue);
+  const pessoas = `${reserva.party_size} pessoa${reserva.party_size > 1 ? "s" : ""}`;
+
+  if (template === "reserva_aprovada") {
+    const linhas = [
+      `Olá, ${nome}! Sua reserva no ${venue.name} está confirmada.`,
+      ``,
+      `${quando} — ${pessoas}`,
+    ];
+    if (reserva.area_preference) linhas.push(`Área: ${reserva.area_preference}`);
+    linhas.push(``, `Se precisar alterar ou cancelar, é só responder por aqui.`);
+    if (venue.phone) linhas.push(`Telefone: ${venue.phone}`);
+    return linhas.join("\n");
+  }
+
+  const linhas = [
+    `Olá, ${nome}. Infelizmente não conseguimos confirmar sua reserva no ${venue.name} para ${quando}.`,
+  ];
+  if (reserva.review_reason) linhas.push(``, `Motivo: ${reserva.review_reason}`);
+  linhas.push(``, `Podemos tentar outro horário? É só responder por aqui.`);
+  if (venue.phone) linhas.push(`Telefone: ${venue.phone}`);
+  return linhas.join("\n");
+}
+
+// ============================================================
+// Provedores
+// ============================================================
+export interface ResultadoEnvio {
+  enviado: boolean;
+  providerId?: string;
+  erro?: string;
+}
+
+/**
+ * Provedor ativo, decidido pelo ambiente.
+ *
+ * Sem credenciais de WhatsApp, cai no `console`: a mensagem é registrada no
+ * banco e impressa no log em vez de sumir silenciosamente.
+ */
+export function canalAtivo(): "whatsapp" | "console" {
+  return process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID
+    ? "whatsapp"
+    : "console";
+}
+
+async function enviarPorConsole(destino: string, corpo: string): Promise<ResultadoEnvio> {
+  console.log(`\n--- notificação para ${destino} ---\n${corpo}\n---\n`);
+  return { enviado: true, providerId: "console" };
+}
+
+/**
+ * WhatsApp Cloud API (Meta).
+ *
+ * Mensagem livre só é aceita dentro da janela de 24h desde a última mensagem
+ * do cliente. Fora dela a Meta exige template aprovado — o envio falha e a
+ * notificação fica registrada como `failed` para reenvio ou contato manual.
+ */
+async function enviarPorWhatsapp(destino: string, corpo: string): Promise<ResultadoEnvio> {
+  const token = process.env.WHATSAPP_TOKEN!;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+  const versao = process.env.WHATSAPP_API_VERSION ?? "v21.0";
+
+  const telefone = normalizarTelefone(destino);
+  if (!telefone) return { enviado: false, erro: `Telefone inválido: "${destino}".` };
+
+  try {
+    const resposta = await fetch(
+      `https://graph.facebook.com/${versao}/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: telefone,
+          type: "text",
+          text: { body: corpo },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+
+    const dados = (await resposta.json().catch(() => null)) as
+      | { messages?: { id?: string }[]; error?: { message?: string } }
+      | null;
+
+    if (!resposta.ok) {
+      return {
+        enviado: false,
+        erro: dados?.error?.message ?? `HTTP ${resposta.status} da API do WhatsApp.`,
+      };
+    }
+    return { enviado: true, providerId: dados?.messages?.[0]?.id };
+  } catch (e) {
+    return { enviado: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Formato E.164 sem "+", assumindo Brasil quando o país não vem no número. */
+export function normalizarTelefone(bruto: string): string | null {
+  const digitos = bruto.replace(/\D/g, "");
+  if (digitos.length === 10 || digitos.length === 11) return `55${digitos}`;
+  if (digitos.length === 12 || digitos.length === 13) return digitos;
+  return null;
+}
+
+// ============================================================
+// Fila
+// ============================================================
+
+/**
+ * Registra a notificação e tenta enviar na hora.
+ *
+ * Nunca lança: uma falha de envio não pode desfazer a aprovação já gravada.
+ * O que não sair fica como `failed` e o worker de reenvio cuida depois.
+ */
+export async function notificarCliente(params: {
+  template: Template;
+  reserva: Reservation;
+  venue: Venue;
+}): Promise<Notification | null> {
+  const { template, reserva, venue } = params;
+  const corpo = montarMensagem(template, reserva, venue);
+  const canal = canalAtivo();
+
+  const { data: notificacao, error } = await db()
+    .from("notifications")
+    .insert({
+      venue_id: venue.id,
+      reservation_id: reserva.id,
+      channel: canal,
+      destination: reserva.customer_phone,
+      template,
+      body: corpo,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`[notifications] não registrou a notificação: ${error.message}`);
+    return null;
+  }
+
+  return await tentarEnviar(notificacao);
+}
+
+/** Tenta enviar uma notificação já registrada e atualiza o resultado. */
+export async function tentarEnviar(notificacao: Notification): Promise<Notification> {
+  const resultado =
+    notificacao.channel === "whatsapp"
+      ? await enviarPorWhatsapp(notificacao.destination, notificacao.body)
+      : await enviarPorConsole(notificacao.destination, notificacao.body);
+
+  const { data, error } = await db()
+    .from("notifications")
+    .update({
+      status: resultado.enviado ? "sent" : "failed",
+      attempts: notificacao.attempts + 1,
+      error: resultado.erro ?? null,
+      provider_id: resultado.providerId ?? null,
+      sent_at: resultado.enviado ? new Date().toISOString() : null,
+    })
+    .eq("id", notificacao.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`[notifications] não atualizou o status: ${error.message}`);
+    return notificacao;
+  }
+  if (!resultado.enviado) {
+    console.error(`[notifications] ${notificacao.id} falhou: ${resultado.erro}`);
+  }
+  return data;
+}
+
+/** Notificações que ainda merecem uma nova tentativa. */
+export async function listPendingNotifications(limite = 50): Promise<Notification[]> {
+  const { data, error } = await db()
+    .from("notifications")
+    .select("*")
+    .in("status", ["pending", "failed"])
+    .lt("attempts", MAX_TENTATIVAS)
+    .order("created_at", { ascending: true })
+    .limit(limite);
+
+  if (error) throw new Error(`Falha ao listar notificações: ${error.message}`);
+  return data ?? [];
+}
+
+export async function listNotificationsForReservation(
+  reservationId: string,
+): Promise<Notification[]> {
+  const { data, error } = await db()
+    .from("notifications")
+    .select("*")
+    .eq("reservation_id", reservationId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(`Falha ao listar notificações: ${error.message}`);
+  return data ?? [];
+}

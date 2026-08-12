@@ -190,11 +190,23 @@ async function decidir(reserva, botao) {
   for (const b of botoes) b.disabled = true;
 
   try {
-    await api(`/reservations/${reserva.id}/${acao}`, {
+    const resultado = await api(`/reservations/${reserva.id}/${acao}`, {
       method: "POST",
       body: JSON.stringify({ motivo }),
     });
-    avisar(acao === "approve" ? "Reserva aprovada." : "Reserva recusada.", "sucesso");
+
+    const decisao = acao === "approve" ? "Reserva aprovada" : "Reserva recusada";
+    const notificacao = resultado.notificacao;
+
+    if (notificacao?.status === "sent") {
+      avisar(`${decisao}. Cliente avisado por ${notificacao.canal}.`, "sucesso");
+    } else {
+      // A decisão está gravada; só o aviso ao cliente falhou.
+      avisar(
+        `${decisao}, mas o cliente NÃO foi avisado: ${notificacao?.erro ?? "erro desconhecido"}`,
+        "erro",
+      );
+    }
     await carregarReservas();
   } catch (e) {
     avisar(e.message, "erro");

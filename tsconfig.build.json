@@ -1,0 +1,6 @@
+// Build de produção: mesma configuração, sem os testes.
+// `npm run typecheck` continua usando o tsconfig.json e cobre os testes também.
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}
