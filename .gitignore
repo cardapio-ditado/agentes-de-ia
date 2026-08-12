@@ -1,0 +1,13 @@
+node_modules/
+dist/
+
+# Segredos — nunca commitar
+.env
+.env.*
+!.env.example
+
+# Logs e temporários
+*.log
+npm-debug.log*
+.DS_Store
+.supabase/
