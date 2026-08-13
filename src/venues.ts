@@ -162,6 +162,107 @@ export async function listUpcomingEvents(params: {
   return data ?? [];
 }
 
+const DIAS_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"];
+
+export interface DadosVenue {
+  name?: string;
+  description?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  email?: string | null;
+  capacity?: number | null;
+  timezone?: string;
+  opening_hours?: Record<string, string>;
+}
+
+/**
+ * Atualiza os dados cadastrais do estabelecimento.
+ *
+ * `opening_hours` é um mapa dia → texto livre ("18h às 00h", "fechado") —
+ * texto porque bar tem horário que não cabe em hora de abrir/fechar: "só
+ * eventos", "até o último cliente". O agente lê como está.
+ */
+export async function updateVenue(
+  orgId: string,
+  slug: string,
+  dados: DadosVenue,
+): Promise<Venue> {
+  const mudancas: Partial<TablesInsert<"venues">> = {};
+
+  if (dados.name !== undefined) {
+    if (!dados.name.trim()) throw new Error("O nome não pode ficar vazio.");
+    mudancas.name = dados.name.trim();
+  }
+  if (dados.description !== undefined) mudancas.description = dados.description?.trim() || null;
+  if (dados.address !== undefined) mudancas.address = dados.address?.trim() || null;
+  if (dados.phone !== undefined) mudancas.phone = dados.phone?.trim() || null;
+  if (dados.whatsapp !== undefined) mudancas.whatsapp = dados.whatsapp?.trim() || null;
+  if (dados.email !== undefined) mudancas.email = dados.email?.trim() || null;
+  if (dados.timezone !== undefined) mudancas.timezone = dados.timezone;
+  if (dados.capacity !== undefined) {
+    if (dados.capacity !== null && (!Number.isInteger(dados.capacity) || dados.capacity <= 0)) {
+      throw new Error("Capacidade precisa ser um número inteiro positivo.");
+    }
+    mudancas.capacity = dados.capacity;
+  }
+  if (dados.opening_hours !== undefined) {
+    const horarios: Record<string, string> = {};
+    for (const dia of DIAS_SEMANA) {
+      const valor = dados.opening_hours[dia];
+      if (typeof valor === "string" && valor.trim()) horarios[dia] = valor.trim();
+    }
+    mudancas.opening_hours = horarios as Json;
+  }
+  if (Object.keys(mudancas).length === 0) throw new Error("Nada para atualizar.");
+
+  const { data, error } = await db()
+    .from("venues")
+    .update(mudancas)
+    .eq("org_id", orgId)
+    .eq("slug", slug)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao atualizar o estabelecimento: ${error.message}`);
+  if (!data) throw new Error(`Estabelecimento "${slug}" não encontrado.`);
+  return data;
+}
+
+export async function createVenueInfo(params: {
+  venueId: string;
+  topic: string;
+  content: string;
+}): Promise<VenueInfo> {
+  const topic = params.topic.trim();
+  const content = params.content.trim();
+  if (!topic) throw new Error("A informação precisa de um tópico (ex.: Estacionamento).");
+  if (!content) throw new Error("O conteúdo não pode ficar vazio.");
+
+  // upsert: o par (venue_id, topic) é único — reescrever um tópico atualiza.
+  const { data, error } = await db()
+    .from("venue_info")
+    .upsert(
+      { venue_id: params.venueId, topic, content, active: true },
+      { onConflict: "venue_id,topic" },
+    )
+    .select()
+    .single();
+
+  if (error) throw new Error(`Falha ao salvar a informação: ${error.message}`);
+  return data;
+}
+
+export async function deleteVenueInfo(infoId: string, venueId: string): Promise<void> {
+  const { error } = await db()
+    .from("venue_info")
+    .delete()
+    .eq("id", infoId)
+    .eq("venue_id", venueId);
+
+  if (error) throw new Error(`Falha ao remover a informação: ${error.message}`);
+}
+
 export async function listVenueInfo(venueId: string): Promise<VenueInfo[]> {
   const { data, error } = await db()
     .from("venue_info")

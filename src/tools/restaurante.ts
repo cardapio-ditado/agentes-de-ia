@@ -164,8 +164,23 @@ const informacoesDoRestaurante: AgentTool = {
     if (venue.capacity) linhas.push(`Capacidade: ${venue.capacity} lugares`);
 
     const horarios = venue.opening_hours;
-    if (horarios && typeof horarios === "object" && Object.keys(horarios).length > 0) {
-      linhas.push(`Horário de funcionamento: ${JSON.stringify(horarios)}`);
+    if (horarios && typeof horarios === "object" && !Array.isArray(horarios)) {
+      const NOMES: Record<string, string> = {
+        seg: "Segunda",
+        ter: "Terça",
+        qua: "Quarta",
+        qui: "Quinta",
+        sex: "Sexta",
+        sab: "Sábado",
+        dom: "Domingo",
+      };
+      const dias = Object.entries(horarios).filter(([, v]) => typeof v === "string" && v);
+      if (dias.length > 0) {
+        linhas.push("Horário de funcionamento:");
+        for (const [dia, valor] of dias) {
+          linhas.push(`  ${NOMES[dia] ?? dia}: ${valor as string}`);
+        }
+      }
     }
     for (const info of infos) {
       linhas.push(`${info.topic}: ${info.content}`);

@@ -7,6 +7,7 @@ import { programacao } from "./pages/programacao.js";
 import { canais } from "./pages/canais.js";
 import { agentes } from "./pages/agentes.js";
 import { agente } from "./pages/agente.js";
+import { empresa } from "./pages/empresa.js";
 import { organizacao } from "./pages/organizacao.js";
 
 /**
@@ -20,11 +21,12 @@ const PAGINAS = [
   { id: "painel", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
   { id: "conversas", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "Atendimentos do agente" },
   { id: "reservas", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
-  { id: "programacao", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e informações da casa" },
+  { id: "programacao", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
+  { id: "empresa", rotulo: "Empresa", icone: ICONES.organizacao, render: empresa, subtitulo: "Endereço, horários e informações da casa" },
   { id: "agentes", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
   { id: "canais", rotulo: "Canais", icone: ICONES.canais, render: canais, subtitulo: "Por onde o agente atende" },
   { id: "agente", rotulo: "Testar agente", icone: ICONES.raio, render: agente, subtitulo: "Converse como se fosse um cliente" },
-  { id: "organizacao", rotulo: "Organização", icone: ICONES.organizacao, render: organizacao, subtitulo: "Estabelecimentos, agentes e chaves" },
+  { id: "organizacao", rotulo: "Organização", icone: ICONES.pessoa, render: organizacao, subtitulo: "Estabelecimentos, agentes e chaves" },
 ];
 
 const app = document.getElementById("app");

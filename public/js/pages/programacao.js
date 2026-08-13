@@ -9,10 +9,9 @@ const TIPOS = [
   ["outro", "Outro"],
 ];
 
-/** Programação e base de conhecimento: é daqui que o agente tira o que contar. */
+/** Agenda do estabelecimento: é daqui que o agente tira o que contar. */
 export async function programacao(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
-  const infos = el("div", { classe: "lista" });
 
   const campos = {
     titulo: el("input", { required: true, placeholder: "Samba de Raiz — Grupo X" }),
@@ -49,19 +48,10 @@ export async function programacao(raiz, ctx) {
         ]),
         lista,
       ]),
-      el("section", {}, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Informações da casa" }),
-            el("p", { classe: "muted", texto: "Estacionamento, wi-fi, pagamento, política de pets." }),
-          ]),
-        ]),
-        infos,
-      ]),
     ]),
   );
 
-  await Promise.all([carregarEventos(), carregarInfos()]);
+  await carregarEventos();
 
   async function carregarEventos() {
     limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
@@ -110,23 +100,6 @@ export async function programacao(raiz, ctx) {
               },
             }),
           ]),
-        ]),
-      );
-    }
-  }
-
-  async function carregarInfos() {
-    limpar(infos);
-    const dados = await get(`/v1/venues/${ctx.venue}/info`);
-    if (dados.length === 0) {
-      infos.append(vazio("Nenhuma informação cadastrada"));
-      return;
-    }
-    for (const i of dados) {
-      infos.append(
-        el("article", { classe: "cartao" }, [
-          el("h3", { texto: i.topic }),
-          el("p", { classe: "muted", texto: i.content }),
         ]),
       );
     }

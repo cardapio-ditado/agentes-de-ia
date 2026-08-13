@@ -30,13 +30,17 @@ import {
 } from "./training.js";
 import {
   createVenueEvent,
+  createVenueInfo,
   deleteVenueEvent,
+  deleteVenueInfo,
   findVenueBySlugInOrg,
   getReservationWithVenue,
   listAllEvents,
   listPendingReservations,
   listVenueInfo,
   listVenuesInOrg,
+  updateVenue,
+  type DadosVenue,
 } from "./venues.js";
 
 /**
@@ -335,6 +339,40 @@ async function roteasApi(
     return ok(res, venues.map((v) => ({ slug: v.slug, name: v.name, timezone: v.timezone })));
   }
 
+  // GET | PATCH /v1/venues/:slug — dados cadastrais completos e edição
+  if (p[0] === "venues" && p.length === 2) {
+    const escopo = metodo === "GET" ? "reservations:read" : "reservations:write";
+    const chave = await exigirChave(req, escopo);
+    const venue = await findVenueBySlugInOrg(chave.org_id, p[1]!);
+
+    if (metodo === "GET") {
+      return ok(res, {
+        slug: venue.slug,
+        name: venue.name,
+        description: venue.description,
+        address: venue.address,
+        phone: venue.phone,
+        whatsapp: venue.whatsapp,
+        email: venue.email,
+        capacity: venue.capacity,
+        timezone: venue.timezone,
+        opening_hours: venue.opening_hours ?? {},
+      });
+    }
+
+    if (metodo === "PATCH") {
+      const corpo = await lerJson(req);
+      // O slug identifica a rota e a chave do painel; não muda por aqui.
+      delete (corpo as Record<string, unknown>).slug;
+      try {
+        const atualizado = await updateVenue(chave.org_id, venue.slug, corpo as DadosVenue);
+        return ok(res, { slug: atualizado.slug, name: atualizado.name });
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+      }
+    }
+  }
+
   // /v1/venues/:slug/...
   if (p[0] === "venues" && p.length >= 3) {
     const slug = p[1]!;
@@ -378,6 +416,31 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await listVenueInfo(venue.id));
+    }
+
+    // POST /v1/venues/:slug/info — cria ou atualiza um tópico (upsert)
+    if (metodo === "POST" && recurso === "info" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      try {
+        const info = await createVenueInfo({
+          venueId: venue.id,
+          topic: texto(corpo, "topic"),
+          content: texto(corpo, "content"),
+        });
+        return ok(res, info, 201);
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+      }
+    }
+
+    // DELETE /v1/venues/:slug/info/:id
+    if (metodo === "DELETE" && recurso === "info" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await deleteVenueInfo(p[3]!, venue.id);
+      return ok(res, { removido: true });
     }
 
     // GET /v1/venues/:slug/conversations?canal=&status=&humanas=1
