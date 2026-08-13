@@ -17,6 +17,7 @@ import { listNotificationsForReservation } from "./notifications.js";
 import {
   atendimentoDe,
   definirAtendimento,
+  definirStatusConversa,
   getConversationInOrg,
   listConversations,
   metricasDoVenue,
@@ -37,6 +38,7 @@ import {
   getReservationWithVenue,
   listAllEvents,
   listPendingReservations,
+  listUpcomingApproved,
   listVenueInfo,
   listVenuesInOrg,
   mapsUrl,
@@ -380,9 +382,14 @@ async function roteasApi(
     const slug = p[1]!;
     const recurso = p[2]!;
 
+    // GET /v1/venues/:slug/reservations — pendentes; ?status=approved traz as
+    // confirmadas que ainda vão acontecer
     if (metodo === "GET" && recurso === "reservations") {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      if (url.searchParams.get("status") === "approved") {
+        return ok(res, await listUpcomingApproved(venue.id));
+      }
       return ok(res, await listPendingReservations(venue.id));
     }
 
@@ -499,6 +506,16 @@ async function roteasApi(
           em: m.created_at,
         })),
       });
+    }
+
+    // POST /v1/conversations/:id/close — encerra ({"reabrir":true} reabre)
+    if (metodo === "POST" && p[2] === "close" && p.length === 3) {
+      const corpo = await lerJson(req);
+      const atualizada = await definirStatusConversa({
+        conversationId: conversa.id,
+        status: corpo.reabrir === true ? "open" : "closed",
+      });
+      return ok(res, { status: atualizada.status });
     }
 
     // POST /v1/conversations/:id/takeover — assumir ou devolver ao agente

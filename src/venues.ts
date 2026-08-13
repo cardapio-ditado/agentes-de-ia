@@ -327,6 +327,26 @@ export async function listPendingReservations(venueId: string): Promise<Reservat
   return data ?? [];
 }
 
+/**
+ * Reservas confirmadas que ainda vão acontecer — o mapa de mesas do dia.
+ *
+ * A janela começa 6 horas atrás: a reserva de hoje às 20h continua na lista
+ * durante a noite inteira, em vez de sumir no minuto seguinte ao horário.
+ */
+export async function listUpcomingApproved(venueId: string): Promise<Reservation[]> {
+  const corte = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db()
+    .from("reservations")
+    .select("*")
+    .eq("venue_id", venueId)
+    .eq("status", "approved")
+    .gte("reserved_for", corte)
+    .order("reserved_for", { ascending: true });
+
+  if (error) throw new Error(`Falha ao carregar as reservas confirmadas: ${error.message}`);
+  return data ?? [];
+}
+
 export async function getReservation(reservationId: string): Promise<Reservation | null> {
   const { data, error } = await db()
     .from("reservations")

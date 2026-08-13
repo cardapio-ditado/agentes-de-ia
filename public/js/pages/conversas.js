@@ -160,14 +160,30 @@ export async function conversas(raiz, ctx) {
       onclick: alternar,
     });
 
+    const encerrada = c.status === "closed";
+    const btnEncerrar = el("button", {
+      classe: encerrada ? "btn btn-peq" : "btn btn-perigo btn-peq",
+      type: "button",
+      texto: encerrada ? "Reabrir" : "Encerrar",
+      title: encerrada
+        ? "Volta a aparecer entre as abertas."
+        : "Marca como resolvida. Se o cliente escrever de novo, reabre sozinha.",
+      onclick: encerrar,
+    });
+
     limpar(painelThread).append(
       el("div", { classe: "thread-topo" }, [
         el("div", { style: "min-width:0;flex:1" }, [
           el("h2", { texto: c.titulo || c.contato || "Conversa" }),
           el("p", { classe: "muted", texto: `${c.canal} · ${c.mensagens.length} mensagens` }),
         ]),
-        assumida ? etiqueta("você está respondendo", "etiqueta-alerta") : etiqueta("agente ativo", "etiqueta-ok"),
+        encerrada
+          ? etiqueta("encerrada")
+          : assumida
+            ? etiqueta("você está respondendo", "etiqueta-alerta")
+            : etiqueta("agente ativo", "etiqueta-ok"),
         btnAssumir,
+        btnEncerrar,
       ]),
       corpo,
       el("div", { classe: "thread-rodape" }, [
@@ -183,6 +199,22 @@ export async function conversas(raiz, ctx) {
     );
 
     corpo.scrollTop = corpo.scrollHeight;
+
+    async function encerrar() {
+      btnEncerrar.disabled = true;
+      try {
+        await post(`/v1/conversations/${id}/close`, { reabrir: encerrada });
+        avisar(
+          encerrada ? "Conversa reaberta." : "Conversa encerrada e devolvida ao agente.",
+          "ok",
+        );
+        await carregarLista();
+        await abrir(id);
+      } catch (e) {
+        avisar(e.message, "erro");
+        btnEncerrar.disabled = false;
+      }
+    }
 
     async function alternar() {
       btnAssumir.disabled = true;

@@ -215,6 +215,44 @@ export async function definirAtendimento(params: {
 }
 
 /**
+ * Encerra ou reabre a conversa.
+ *
+ * Encerrar significa "atendimento resolvido": a conversa sai da lista de
+ * abertas e o atendimento volta para o agente — quem encerrou não pode
+ * continuar dono de uma conversa que acabou. Se o cliente escrever de novo,
+ * `getOrCreateConversation` reabre sozinha.
+ */
+export async function definirStatusConversa(params: {
+  conversationId: string;
+  status: "open" | "closed";
+}): Promise<Conversation> {
+  const mudancas: { status: string; metadata?: Json } = { status: params.status };
+
+  if (params.status === "closed") {
+    const { data: atual } = await db()
+      .from("conversations")
+      .select("metadata")
+      .eq("id", params.conversationId)
+      .maybeSingle();
+    const meta = { ...((atual?.metadata ?? {}) as Record<string, Json>) };
+    meta.atendimento_por = "agente";
+    meta.assumido_em = null;
+    meta.assumido_por = null;
+    mudancas.metadata = meta;
+  }
+
+  const { data, error } = await db()
+    .from("conversations")
+    .update(mudancas)
+    .eq("id", params.conversationId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Falha ao mudar o status da conversa: ${error.message}`);
+  return data;
+}
+
+/**
  * Conta se o agente deve responder nesta conversa.
  *
  * O conector do WhatsApp chama isto antes de acionar o modelo: uma pessoa que

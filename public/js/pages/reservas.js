@@ -9,6 +9,7 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
  */
 export async function reservas(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
+  const listaConfirmadas = el("div", { classe: "lista" });
 
   raiz.append(
     el("section", { classe: "pilha" }, [
@@ -25,6 +26,17 @@ export async function reservas(raiz, ctx) {
         }),
       ]),
       lista,
+
+      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
+        el("div", {}, [
+          el("h2", { texto: "Confirmadas — próximas" }),
+          el("p", {
+            classe: "muted",
+            texto: "O que a casa tem para receber: reservas aprovadas que ainda vão acontecer.",
+          }),
+        ]),
+      ]),
+      listaConfirmadas,
     ]),
   );
 
@@ -32,17 +44,47 @@ export async function reservas(raiz, ctx) {
 
   async function carregar() {
     limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
-    const pendentes = await get(`/v1/venues/${ctx.venue}/reservations`);
-    limpar(lista);
+    limpar(listaConfirmadas);
 
+    const [pendentes, confirmadas] = await Promise.all([
+      get(`/v1/venues/${ctx.venue}/reservations`),
+      get(`/v1/venues/${ctx.venue}/reservations?status=approved`),
+    ]);
+
+    limpar(lista);
     if (pendentes.length === 0) {
       lista.append(vazio("Nenhuma reserva na fila", "Tudo decidido por aqui."));
       ctx.atualizarContador("reservas", 0);
-      return;
+    } else {
+      ctx.atualizarContador("reservas", pendentes.length);
+      for (const r of pendentes) lista.append(cartaoReserva(r));
     }
-    ctx.atualizarContador("reservas", pendentes.length);
 
-    for (const r of pendentes) lista.append(cartaoReserva(r));
+    if (confirmadas.length === 0) {
+      listaConfirmadas.append(vazio("Nenhuma reserva confirmada por vir"));
+    } else {
+      for (const r of confirmadas) listaConfirmadas.append(cartaoConfirmada(r));
+    }
+  }
+
+  /** Cartão de leitura: a decisão já foi tomada, aqui é o mapa do serviço. */
+  function cartaoConfirmada(r) {
+    return el("article", { classe: "cartao" }, [
+      el("div", { classe: "cabecalho-secao" }, [
+        el("div", {}, [
+          el("h3", { texto: r.customer_name }),
+          el("p", { classe: "muted", texto: r.customer_phone }),
+        ]),
+        el("div", { style: "display:flex;gap:6px" }, [
+          etiqueta(`${r.party_size} pessoas`, "etiqueta-info"),
+          etiqueta("confirmada", "etiqueta-ok"),
+        ]),
+      ]),
+      linha("Para", dataHora(r.reserved_for)),
+      r.area_preference ? linha("Área", r.area_preference) : null,
+      r.occasion ? linha("Ocasião", r.occasion) : null,
+      r.notes ? linha("Observações", r.notes) : null,
+    ]);
   }
 
   function cartaoReserva(r) {

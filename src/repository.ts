@@ -178,7 +178,21 @@ export async function getOrCreateConversation(params: {
       .maybeSingle();
 
     if (error) throw new Error(`Falha ao buscar a conversa: ${error.message}`);
-    if (data) return data;
+    if (data) {
+      // Cliente escreveu numa conversa encerrada: reabre — para ele a conversa
+      // nunca deixou de existir.
+      if (data.status === "closed") {
+        const { data: reaberta, error: erroReabrir } = await db()
+          .from("conversations")
+          .update({ status: "open" })
+          .eq("id", data.id)
+          .select()
+          .single();
+        if (erroReabrir) throw new Error(`Falha ao reabrir a conversa: ${erroReabrir.message}`);
+        return reaberta;
+      }
+      return data;
+    }
   }
 
   const { data, error } = await db()
