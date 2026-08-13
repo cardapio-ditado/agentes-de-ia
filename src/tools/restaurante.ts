@@ -270,9 +270,8 @@ const registrarReserva: AgentTool = {
       status: "pending",
     });
 
-    // Avisa as integrações que há reserva na fila. Sem await: o cliente não
-    // deve esperar por sistema de terceiros no meio da conversa.
-    publicarReservaCriada(reserva, venue);
+    // Avisa as integrações que há reserva na fila.
+    await publicarReservaCriada(reserva, venue);
 
     return [
       `Pedido de reserva registrado e enviado para aprovação.`,

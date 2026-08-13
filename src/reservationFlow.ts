@@ -10,6 +10,21 @@ export interface DecisaoResultado {
 }
 
 /**
+ * Em serverless, a função congela assim que a resposta sai — trabalho
+ * disparado sem `await` simplesmente não termina. Num servidor de verdade,
+ * não esperar é melhor: quem aprovou não fica preso a um sistema de terceiros.
+ */
+const SERVERLESS = Boolean(process.env.VERCEL ?? process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+async function publicar(promessa: Promise<void>): Promise<void> {
+  if (SERVERLESS) {
+    await promessa;
+    return;
+  }
+  void promessa;
+}
+
+/**
  * Decisão sobre uma reserva: grava, avisa o cliente e publica o evento.
  *
  * Ponto único usado pelo painel, pela API e pela linha de comando — a ordem
@@ -39,20 +54,26 @@ export async function decidirReserva(params: {
     venue,
   });
 
-  // 3. Publica para integrações. Sem await: são até 5 tentativas com backoff,
-  // e quem aprovou não deve esperar por um sistema de terceiros.
-  void dispatchWebhooks(
-    venue.org_id,
-    params.status === "approved" ? "reservation.approved" : "reservation.rejected",
-    payloadDaReserva(reserva, venue),
+  // 3. Publica para integrações.
+  await publicar(
+    dispatchWebhooks(
+      venue.org_id,
+      params.status === "approved" ? "reservation.approved" : "reservation.rejected",
+      payloadDaReserva(reserva, venue),
+    ),
   );
 
   return { reserva, notificacao };
 }
 
 /** Publica que uma reserva entrou na fila. Chamado quando o agente registra. */
-export function publicarReservaCriada(reserva: Reservation, venue: Venue): void {
-  void dispatchWebhooks(venue.org_id, "reservation.created", payloadDaReserva(reserva, venue));
+export async function publicarReservaCriada(
+  reserva: Reservation,
+  venue: Venue,
+): Promise<void> {
+  await publicar(
+    dispatchWebhooks(venue.org_id, "reservation.created", payloadDaReserva(reserva, venue)),
+  );
 }
 
 function payloadDaReserva(reserva: Reservation, venue: Venue): Record<string, Json> {

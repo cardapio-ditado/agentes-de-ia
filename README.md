@@ -175,6 +175,57 @@ sozinho. Tudo fica em `webhook_deliveries`.
 
 ---
 
+## Deploy
+
+O projeto tem duas metades com necessidades diferentes de infraestrutura.
+
+| Parte | Onde roda | Por quê |
+|---|---|---|
+| Painel + API | **Vercel** | Estático no CDN, API como função serverless |
+| Conector WhatsApp | **Host sempre ligado** | Railway, Render, Fly.io ou VPS |
+| Banco | **Supabase** | Já é externo |
+
+### Por que o WhatsApp não vai para a Vercel
+
+O Baileys mantém um WebSocket aberto com o WhatsApp e grava a sessão em disco.
+Funções serverless são efêmeras, sem estado e morrem em segundos — não é questão
+de configuração, é incompatível por natureza. Rode `npm run whatsapp` num host
+que fica ligado, com volume persistente para `.whatsapp/`.
+
+### Vercel
+
+`api/index.ts` é o ponto de entrada; `vercel.json` manda `/v1/*` e `/health`
+para lá, e o CDN serve `public/`. Variáveis a configurar no projeto:
+
+```
+ANTHROPIC_API_KEY
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+O mesmo roteamento (`src/app.ts`) serve os dois destinos: `src/server.ts` monta
+um servidor Node de verdade para local, VPS e container.
+
+> ⚠️ **`SUPABASE_SERVICE_ROLE_KEY` ignora RLS.** Configure só como variável de
+> ambiente do servidor. Nunca em variável exposta ao navegador.
+
+**Uma diferença de comportamento em serverless:** a função congela assim que a
+resposta sai, então trabalho disparado sem `await` não termina. O código detecta
+`VERCEL` e passa a aguardar a entrega dos webhooks; num servidor comum ele não
+espera, para quem aprovou não ficar preso a um sistema de terceiros.
+
+### Host do conector WhatsApp
+
+```bash
+npm run build
+npm run whatsapp -- --agent recepcionista --venue ditado-popular
+```
+
+Precisa das mesmas variáveis, mais um volume persistente em `.whatsapp/` — sem
+ele, cada reinício exige parear o QR de novo.
+
+---
+
 ## Schema
 
 **Plataforma**
@@ -232,7 +283,8 @@ ferramenta recusa, em vez de gravar silenciosamente no fuso errado.
 
 ```
 src/
-  server.ts             API HTTP + painel estático (zero dependências)
+  app.ts                roteamento da API (compartilhado)
+  server.ts             servidor Node: local, VPS, container
   agent.ts              loop de execução: modelo → ferramentas → persistência
   apikeys.ts            criação e validação de chaves (só o hash é guardado)
   reservationFlow.ts    decidir reserva: grava, avisa o cliente, publica evento
@@ -246,6 +298,7 @@ src/
   channels/whatsapp.ts  conector Baileys: pareamento, atendimento e envio
   database.types.ts     tipos gerados do schema
   tools/                ferramentas do agente
+api/index.ts            ponto de entrada da Vercel
 public/                 painel web (HTML/CSS/JS, sem build step)
 scripts/
   seed.ts               dados de exemplo
