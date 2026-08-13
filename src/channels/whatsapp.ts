@@ -33,6 +33,9 @@ interface EstadoConector {
   telefone: string | null;
   ultimoErro: string | null;
   iniciadoEm: number;
+  /** Qual agente e estabelecimento este número está atendendo agora. */
+  agentSlug: string | null;
+  venueSlug: string | null;
 }
 
 const estado: EstadoConector = {
@@ -41,6 +44,8 @@ const estado: EstadoConector = {
   telefone: null,
   ultimoErro: null,
   iniciadoEm: 0,
+  agentSlug: null,
+  venueSlug: null,
 };
 
 let socket: WASocket | null = null;
@@ -66,6 +71,8 @@ export async function iniciarWhatsapp(opcoes: OpcoesWhatsapp): Promise<void> {
 
   estado.status = "conectando";
   estado.iniciadoEm = Date.now();
+  estado.agentSlug = opcoes.agentSlug;
+  estado.venueSlug = opcoes.venueSlug;
 
   socket = makeWASocket({
     auth: state,
@@ -257,5 +264,7 @@ export async function pararWhatsapp(): Promise<void> {
   socket = null;
   estado.status = "desconectado";
   estado.qr = null;
+  estado.agentSlug = null;
+  estado.venueSlug = null;
   registrarProvedorWhatsapp(null);
 }

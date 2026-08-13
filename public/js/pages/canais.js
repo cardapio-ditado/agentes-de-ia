@@ -19,6 +19,15 @@ export async function canais(raiz, ctx) {
   let timer = null;
   const area = el("div", {});
 
+  // A lista completa (inclusive pausados) é o que existe para escolher —
+  // o vínculo é sempre explícito, nunca "o primeiro da lista" por baixo dos panos.
+  const agentes = await get("/v1/agents?all=1");
+  const seletorAgente = el(
+    "select",
+    { classe: "select", id: "seletor-agente-wa" },
+    agentes.map((a) => el("option", { value: a.slug, texto: a.name })),
+  );
+
   raiz.append(
     el("div", { classe: "pilha" }, [
       el("section", { classe: "cartao alerta" }, [
@@ -32,6 +41,16 @@ export async function canais(raiz, ctx) {
       area,
     ]),
   );
+
+  if (agentes.length === 0) {
+    limpar(area).append(
+      vazio(
+        "Nenhum agente cadastrado",
+        'Crie um em "Agentes" antes de conectar o WhatsApp — a conexão precisa de alguém para responder.',
+      ),
+    );
+    return;
+  }
 
   // A tela some quando o usuário troca de página: sem isto o timer continuaria
   // batendo na API para sempre.
@@ -53,6 +72,17 @@ export async function canais(raiz, ctx) {
 
   function desenharConectado(estado) {
     const [rotulo, variante] = ROTULOS[estado.status] ?? [estado.status, ""];
+    const ligado = estado.status === "conectado" || estado.status === "conectando";
+
+    // Já tem vínculo (ligado ou reconectando sozinho)? O seletor mostra quem
+    // está atendendo de verdade, não um palpite — e trava, porque trocar de
+    // agente exige desconectar primeiro.
+    if (estado.agentSlug && agentes.some((a) => a.slug === estado.agentSlug)) {
+      seletorAgente.value = estado.agentSlug;
+    }
+    seletorAgente.disabled = ligado;
+
+    const agenteAtual = agentes.find((a) => a.slug === estado.agentSlug);
 
     limpar(area).append(
       el("section", { classe: "cartao" }, [
@@ -61,7 +91,9 @@ export async function canais(raiz, ctx) {
             el("h2", { texto: "WhatsApp" }),
             el("p", {
               classe: "muted",
-              texto: estado.telefone ? `Conectado como ${estado.telefone}` : "Nenhum número pareado",
+              texto: estado.telefone
+                ? `Conectado como ${estado.telefone}${agenteAtual ? ` · atendido por ${agenteAtual.name}` : ""}`
+                : "Nenhum número pareado",
             }),
           ]),
           etiqueta(rotulo, variante),
@@ -77,23 +109,37 @@ export async function canais(raiz, ctx) {
                 texto:
                   estado.status === "conectado"
                     ? "Número pareado. O agente já responde por aqui."
-                    : "Clique em conectar para gerar o QR de pareamento.",
+                    : "Escolha o agente e clique em conectar para gerar o QR de pareamento.",
               }),
             ]),
+
+        el("div", { classe: "campo", style: "max-width:320px;margin-top:10px" }, [
+          el("label", { for: "seletor-agente-wa", texto: "Agente que atende por este número" }),
+          seletorAgente,
+          ligado
+            ? el("p", {
+                classe: "muted",
+                texto: "Desconecte para trocar de agente.",
+              })
+            : null,
+        ]),
 
         el("div", { classe: "reserva-acoes" }, [
           el("button", {
             classe: "btn btn-primario",
             type: "button",
             texto: "Conectar",
+            disabled: ligado,
             onclick: async (e) => {
               e.target.disabled = true;
               try {
-                await post("/v1/whatsapp/conectar", { venue: ctx.venue, agent: ctx.agente });
-                avisar("Conector iniciado. O QR aparece em instantes.", "ok");
+                await post("/v1/whatsapp/conectar", {
+                  venue: ctx.venue,
+                  agent: seletorAgente.value,
+                });
+                avisar(`Conector iniciado com ${seletorAgente.selectedOptions[0].text}. O QR aparece em instantes.`, "ok");
               } catch (err) {
                 avisar(err.message, "erro");
-              } finally {
                 e.target.disabled = false;
               }
             },
