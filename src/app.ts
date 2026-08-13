@@ -4,7 +4,14 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { runAgent, type AgentStreamEvent } from "./agent.js";
 import { authenticateApiKey, hasScope, type ApiKey } from "./apikeys.js";
-import { listAgentsInOrg } from "./repository.js";
+import {
+  createAgent,
+  getAgentInOrg,
+  listAgentsInOrg,
+  listAllAgentsInOrg,
+  updateAgent,
+  type DadosAgente,
+} from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { listNotificationsForReservation } from "./notifications.js";
 import {
@@ -191,10 +198,13 @@ async function roteasApi(
     return await executarAgente(req, res, chave, url);
   }
 
-  // GET /v1/agents
+  // GET /v1/agents — todos com ?all=1 (painel), só habilitados sem (execução)
   if (metodo === "GET" && p[0] === "agents" && p.length === 1) {
     const chave = await exigirChave(req, "runs:write");
-    const agentes = await listAgentsInOrg(chave.org_id);
+    const agentes =
+      url.searchParams.get("all") === "1"
+        ? await listAllAgentsInOrg(chave.org_id)
+        : await listAgentsInOrg(chave.org_id);
     return ok(
       res,
       agentes.map((a) => ({
@@ -206,6 +216,45 @@ async function roteasApi(
         enabled: a.enabled,
       })),
     );
+  }
+
+  // POST /v1/agents — cria um agente
+  if (metodo === "POST" && p[0] === "agents" && p.length === 1) {
+    const chave = await exigirChave(req, "runs:write");
+    const corpo = await lerJson(req);
+    try {
+      const agente = await createAgent(chave.org_id, corpo as DadosAgente);
+      return ok(res, agente, 201);
+    } catch (e) {
+      throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+    }
+  }
+
+  // GET | PATCH /v1/agents/:slug — detalhe (com o prompt) e edição
+  if (p[0] === "agents" && p.length === 2) {
+    const chave = await exigirChave(req, "runs:write");
+    const slug = p[1]!;
+
+    if (metodo === "GET") {
+      const agente = await getAgentInOrg(chave.org_id, slug);
+      if (!agente) throw erro(404, "not_found", `Agente "${slug}" não encontrado.`);
+      return ok(res, agente);
+    }
+
+    if (metodo === "PATCH") {
+      const corpo = await lerJson(req);
+      // O slug identifica a rota; trocá-lo aqui quebraria conversas e o
+      // conector do WhatsApp que apontam para ele.
+      delete (corpo as Record<string, unknown>).slug;
+      try {
+        return ok(res, await updateAgent(chave.org_id, slug, corpo as DadosAgente));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Dados inválidos.";
+        throw msg.includes("não encontrado")
+          ? erro(404, "not_found", msg)
+          : erro(400, "invalid_request", msg);
+      }
+    }
   }
 
   // GET /v1/venues

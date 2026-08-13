@@ -1,34 +1,49 @@
 /* ============================================================
-   Sistema visual — tokens
-   Um tema claro completo no :root, e só as trocas no escuro.
+   Brasa — sistema visual
+   Paleta do guia de marca: Carvão #221714 · Vinho #7D1128 ·
+   Fogo #C1121F · Brasa #FF6B35 · Âmbar #F4A100 · Creme #FFF8F0.
+   Tema claro completo no :root; o escuro (base carvão) só troca tokens.
    ============================================================ */
 :root {
-  --fundo: #f6f7f9;
+  --fundo: #fff8f0; /* Creme */
   --superficie: #ffffff;
-  --superficie-2: #f1f3f6;
-  --borda: #e3e6ec;
-  --borda-forte: #d2d7e0;
-  --texto: #171a20;
-  --texto-2: #5c6474;
-  --texto-3: #8b93a3;
+  --superficie-2: #faefe2;
+  --borda: #f0e2d2;
+  --borda-forte: #e2cdb6;
+  --texto: #221714; /* Carvão */
+  --texto-2: #6b5a50;
+  --texto-3: #9b8878;
 
-  --marca: #c2410c;
-  --marca-forte: #9a3412;
-  --marca-suave: #fff2e9;
-  --marca-borda: #fcd9c0;
+  --marca: #ff6b35; /* Brasa */
+  --marca-forte: #c1121f; /* Fogo */
+  --marca-suave: #ffefe6;
+  --marca-borda: #ffd2bc;
 
-  --ok: #047857;
-  --ok-suave: #e7f6f0;
-  --alerta: #b45309;
-  --alerta-suave: #fdf3e2;
-  --perigo: #be123c;
-  --perigo-suave: #fdeef1;
-  --info: #1d4ed8;
-  --info-suave: #eaf0fe;
+  --ambar: #f4a100;
+  --vinho: #7d1128;
+
+  /* O guia reserva Fogo para CTAs fortes; Brasa pura sob texto branco não
+     tem contraste suficiente para botão. */
+  --cta: #c1121f;
+  --cta-hover: #7d1128;
+  --cta-texto: #fff8f0;
+
+  --ok: #1a7a4a;
+  --ok-suave: #e9f5ee;
+  --alerta: #a86b00;
+  --alerta-suave: #fdf3dd;
+  --perigo: #c1121f; /* Fogo */
+  --perigo-suave: #fdecec;
+  --info: #7d1128; /* Vinho */
+  --info-suave: #f9eaee;
+
+  --fonte-ui: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fonte-display: "Fraunces", Georgia, "Times New Roman", serif;
 
   --raio: 10px;
   --raio-g: 14px;
-  --sombra: 0 1px 2px rgba(16, 20, 30, 0.05), 0 4px 12px rgba(16, 20, 30, 0.05);
+  --sombra: 0 1px 2px rgba(34, 23, 20, 0.05), 0 4px 12px rgba(34, 23, 20, 0.06);
   --lateral-l: 248px;
   --lateral-min: 68px;
 }
@@ -39,30 +54,38 @@
 
 [data-tema="escuro"] {
   color-scheme: dark;
-  --fundo: #0d1016;
-  --superficie: #151922;
-  --superficie-2: #1c212c;
-  --borda: #262c39;
-  --borda-forte: #333b4b;
-  --texto: #e9ecf2;
-  --texto-2: #a2abbd;
-  --texto-3: #737d91;
+  --fundo: #191110; /* Carvão aprofundado */
+  --superficie: #221714; /* Carvão */
+  --superficie-2: #2d201b;
+  --borda: #3a2a23;
+  --borda-forte: #4d382e;
+  --texto: #fff8f0; /* Creme */
+  --texto-2: #c9b4a6;
+  --texto-3: #937f70;
 
-  --marca: #fb923c;
-  --marca-forte: #fdba74;
-  --marca-suave: #2a1a10;
-  --marca-borda: #4a2c17;
+  --marca: #ff6b35; /* Brasa segura contraste no carvão */
+  --marca-forte: #ff8f5e;
+  --marca-suave: #382015;
+  --marca-borda: #5c3520;
 
-  --ok: #34d399;
-  --ok-suave: #10241d;
-  --alerta: #fbbf24;
-  --alerta-suave: #2a2110;
-  --perigo: #fb7185;
-  --perigo-suave: #2b1219;
-  --info: #93b4fd;
-  --info-suave: #131c30;
+  --ambar: #f4a100;
+  --vinho: #b34d63;
 
-  --sombra: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
+  /* No carvão o contraste inverte: Brasa vira fundo de CTA com texto carvão. */
+  --cta: #ff6b35;
+  --cta-hover: #ff8f5e;
+  --cta-texto: #221714;
+
+  --ok: #4ecb8d;
+  --ok-suave: #16281f;
+  --alerta: #f4a100;
+  --alerta-suave: #2e2412;
+  --perigo: #ff5a64;
+  --perigo-suave: #331418;
+  --info: #e0899b;
+  --info-suave: #2e1a20;
+
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -73,26 +96,28 @@ body {
   margin: 0;
   background: var(--fundo);
   color: var(--texto);
-  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  font: 15px/1.55 var(--fonte-ui);
   -webkit-font-smoothing: antialiased;
 }
 
+/* Títulos na serifada da marca; o corpo fica na Manrope. */
 h1,
 h2,
 h3 {
   margin: 0;
   line-height: 1.25;
   letter-spacing: -0.01em;
+  font-family: var(--fonte-display);
+  font-weight: 600;
 }
 h1 {
-  font-size: 20px;
+  font-size: 21px;
 }
 h2 {
-  font-size: 16px;
+  font-size: 17px;
 }
 h3 {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .muted {
@@ -157,9 +182,25 @@ h3 {
   height: 32px;
   flex: none;
   border-radius: 9px;
-  background: var(--marca);
-  color: #fff;
-  font-size: 15px;
+  /* Gradiente do guia: Brasa → Âmbar, como no ícone de app */
+  background: linear-gradient(135deg, var(--marca), var(--ambar));
+  color: #fff8f0;
+}
+.marca-icone svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Wordmark na serifada da marca, como no guia */
+.wordmark {
+  font-family: var(--fonte-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0;
 }
 .marca-texto {
   min-width: 0;
@@ -182,8 +223,15 @@ h3 {
   margin-bottom: 6px;
 }
 .marca-grande .marca-icone {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
+}
+.marca-grande .marca-icone svg {
+  width: 22px;
+  height: 22px;
+}
+.marca-grande .wordmark {
+  font-size: 22px;
 }
 
 /* ============ Layout ============ */
@@ -265,8 +313,8 @@ h3 {
 }
 .nav-contador {
   margin-left: auto;
-  background: var(--marca);
-  color: #fff;
+  background: var(--cta);
+  color: var(--cta-texto);
   font-size: 11px;
   font-weight: 700;
   padding: 1px 7px;
@@ -343,13 +391,13 @@ h3 {
   cursor: not-allowed;
 }
 .btn-primario {
-  background: var(--marca);
-  border-color: var(--marca);
-  color: #fff;
+  background: var(--cta);
+  border-color: var(--cta);
+  color: var(--cta-texto);
 }
 .btn-primario:hover {
-  background: var(--marca-forte);
-  border-color: var(--marca-forte);
+  background: var(--cta-hover);
+  border-color: var(--cta-hover);
 }
 .btn-perigo {
   color: var(--perigo);

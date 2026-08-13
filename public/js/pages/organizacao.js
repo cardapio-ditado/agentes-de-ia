@@ -33,38 +33,12 @@ export async function organizacao(raiz, ctx) {
             ),
       ]),
 
-      el("section", {}, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Agentes" }),
-            el("p", { classe: "muted", texto: "Personalidade, modelo e esforço de raciocínio." }),
-          ]),
-        ]),
-        agentes.length === 0
-          ? vazio("Nenhum agente habilitado")
-          : el(
-              "div",
-              { classe: "lista" },
-              agentes.map((a) =>
-                el("article", { classe: "cartao" }, [
-                  el("div", { classe: "cabecalho-secao" }, [
-                    el("div", { style: "min-width:0" }, [
-                      el("h3", { texto: a.name }),
-                      el("p", { classe: "muted", texto: a.description ?? "" }),
-                    ]),
-                    etiqueta(a.enabled ? "ativo" : "desativado", a.enabled ? "etiqueta-ok" : ""),
-                  ]),
-                  el("div", { classe: "linha-dado" }, [
-                    el("span", { texto: "Modelo" }),
-                    el("strong", { texto: a.model }),
-                  ]),
-                  el("div", { classe: "linha-dado" }, [
-                    el("span", { texto: "Esforço de raciocínio" }),
-                    el("strong", { texto: a.effort }),
-                  ]),
-                ]),
-              ),
-            ),
+      el("section", { classe: "cartao" }, [
+        el("h2", { texto: "Agentes" }),
+        el("p", {
+          classe: "muted",
+          texto: `${agentes.length} agente(s) habilitado(s). A criação e a edição ficam na seção Agentes, na barra lateral.`,
+        }),
       ]),
 
       el("section", { classe: "cartao" }, [

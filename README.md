@@ -58,7 +58,10 @@ requisição devolve um `x-trace-id` para correlacionar com o log.
 | Rota | Escopo | O que faz |
 |---|---|---|
 | `POST /v1/runs` | `runs:write` | Executa o agente. Com `?stream=true` (ou `Accept: text/event-stream`) devolve SSE |
-| `GET /v1/agents` | `runs:write` | Agentes da organização |
+| `GET /v1/agents` | `runs:write` | Agentes habilitados (`?all=1` inclui os pausados) |
+| `POST /v1/agents` | `runs:write` | Cria um agente |
+| `GET /v1/agents/:slug` | `runs:write` | Detalhe, incluindo o system prompt |
+| `PATCH /v1/agents/:slug` | `runs:write` | Edita nome, prompt, modelo, esforço, ativo. O slug não muda |
 | `GET /v1/venues` | `reservations:read` | Estabelecimentos |
 | `GET /v1/venues/:slug/reservations` | `reservations:read` | Fila de aprovação |
 | `POST /v1/reservations/:id/approve` | `reservations:write` | Aprova |

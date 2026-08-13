@@ -32,6 +32,129 @@ export async function listAgentsInOrg(orgId: string): Promise<Agent[]> {
   return data ?? [];
 }
 
+/** Todos os agentes da organização, inclusive os desligados — para o painel. */
+export async function listAllAgentsInOrg(orgId: string): Promise<Agent[]> {
+  const { data, error } = await db()
+    .from("agents")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(`Falha ao listar agentes: ${error.message}`);
+  return data ?? [];
+}
+
+/** Um agente da organização, ligado ou não. Null quando não é dela. */
+export async function getAgentInOrg(orgId: string, slug: string): Promise<Agent | null> {
+  const { data, error } = await db()
+    .from("agents")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao carregar o agente "${slug}": ${error.message}`);
+  return data;
+}
+
+const SLUG_VALIDO = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
+const MODELOS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"];
+const ESFORCOS = ["low", "medium", "high", "xhigh", "max"];
+
+export interface DadosAgente {
+  slug?: string;
+  name?: string;
+  description?: string | null;
+  system_prompt?: string;
+  model?: string;
+  effort?: string;
+  max_tokens?: number;
+  enabled?: boolean;
+}
+
+/** Valida o que veio do painel. Lança com mensagem legível para a tela. */
+function validarAgente(dados: DadosAgente, criando: boolean): void {
+  if (criando || dados.slug !== undefined) {
+    if (!dados.slug || !SLUG_VALIDO.test(dados.slug)) {
+      throw new Error(
+        'O identificador precisa ter de 3 a 64 caracteres, só letras minúsculas, números e hífens (ex.: "recepcionista").',
+      );
+    }
+  }
+  if (criando && !dados.name?.trim()) throw new Error("O agente precisa de um nome.");
+  if (dados.model !== undefined && !MODELOS.includes(dados.model)) {
+    throw new Error(`Modelo inválido. Opções: ${MODELOS.join(", ")}.`);
+  }
+  if (dados.effort !== undefined && !ESFORCOS.includes(dados.effort)) {
+    throw new Error(`Esforço inválido. Opções: ${ESFORCOS.join(", ")}.`);
+  }
+  if (
+    dados.max_tokens !== undefined &&
+    (!Number.isInteger(dados.max_tokens) || dados.max_tokens < 256 || dados.max_tokens > 64000)
+  ) {
+    throw new Error("max_tokens precisa ser um inteiro entre 256 e 64000.");
+  }
+}
+
+export async function createAgent(orgId: string, dados: DadosAgente): Promise<Agent> {
+  validarAgente(dados, true);
+
+  const { data, error } = await db()
+    .from("agents")
+    .insert({
+      org_id: orgId,
+      slug: dados.slug!,
+      name: dados.name!.trim(),
+      description: dados.description?.trim() || null,
+      system_prompt: dados.system_prompt ?? "",
+      model: dados.model ?? "claude-opus-5",
+      effort: dados.effort ?? "high",
+      max_tokens: dados.max_tokens ?? 16000,
+      enabled: dados.enabled ?? true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    // 23505 é violação de unique — o slug é único no sistema inteiro.
+    if (error.code === "23505") {
+      throw new Error(`Já existe um agente com o identificador "${dados.slug}".`);
+    }
+    throw new Error(`Falha ao criar o agente: ${error.message}`);
+  }
+  return data;
+}
+
+export async function updateAgent(
+  orgId: string,
+  slug: string,
+  dados: DadosAgente,
+): Promise<Agent> {
+  validarAgente(dados, false);
+
+  const mudancas: Partial<TablesInsert<"agents">> = {};
+  if (dados.name !== undefined) mudancas.name = dados.name.trim();
+  if (dados.description !== undefined) mudancas.description = dados.description?.trim() || null;
+  if (dados.system_prompt !== undefined) mudancas.system_prompt = dados.system_prompt;
+  if (dados.model !== undefined) mudancas.model = dados.model;
+  if (dados.effort !== undefined) mudancas.effort = dados.effort;
+  if (dados.max_tokens !== undefined) mudancas.max_tokens = dados.max_tokens;
+  if (dados.enabled !== undefined) mudancas.enabled = dados.enabled;
+  if (Object.keys(mudancas).length === 0) throw new Error("Nada para atualizar.");
+
+  const { data, error } = await db()
+    .from("agents")
+    .update(mudancas)
+    .eq("org_id", orgId)
+    .eq("slug", slug)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao atualizar o agente: ${error.message}`);
+  if (!data) throw new Error(`Agente "${slug}" não encontrado nesta organização.`);
+  return data;
+}
+
 /**
  * Retorna a conversa aberta do interlocutor no canal, criando uma se não existir.
  * Sem `externalId` (ex.: execução avulsa via CLI), sempre cria uma conversa nova.
