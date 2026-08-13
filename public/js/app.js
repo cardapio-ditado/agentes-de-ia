@@ -161,7 +161,36 @@ async function irPara(id) {
 addEventListener("hashchange", () => irPara(location.hash.slice(1)));
 
 // ============ Acesso ============
+
+/**
+ * Acende as brasas da tela de login.
+ *
+ * Cada fagulha sai com tamanho, posição, ritmo e atraso sorteados — brasa de
+ * verdade não sobe em fila. Roda uma vez; o CSS cuida do resto.
+ */
+function acenderBrasas() {
+  const caixa = document.querySelector(".brasas");
+  if (!caixa || caixa.childElementCount > 0) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const QUANTAS = 16;
+  for (let i = 0; i < QUANTAS; i++) {
+    const f = document.createElement("span");
+    f.className = "fagulha";
+    // Maioria miúda, algumas graúdas — como numa churrasqueira.
+    const tamanho = Math.random() < 0.3 ? 10 + Math.random() * 8 : 4 + Math.random() * 6;
+    f.style.width = `${tamanho.toFixed(1)}px`;
+    f.style.height = `${tamanho.toFixed(1)}px`;
+    f.style.left = `${(2 + Math.random() * 96).toFixed(1)}%`;
+    // Grande sobe mais devagar: peso.
+    f.style.animationDuration = `${(14 - tamanho * 0.4 + Math.random() * 4).toFixed(1)}s`;
+    f.style.animationDelay = `${(Math.random() * 10).toFixed(1)}s`;
+    caixa.append(f);
+  }
+}
+
 function pedirChave(mensagem) {
+  acenderBrasas();
   app.hidden = true;
   telaAcesso.hidden = false;
   const erro = document.getElementById("erro-acesso");

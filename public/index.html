@@ -12,7 +12,7 @@
     />
     <!-- ?v= força o navegador a buscar a versão nova a cada release visual.
          Bump manual: mudou CSS ou JS, soma 1 aqui e no script lá embaixo. -->
-    <link rel="stylesheet" href="/styles.css?v=8" />
+    <link rel="stylesheet" href="/styles.css?v=9" />
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>"
@@ -20,41 +20,27 @@
   </head>
   <body>
     <!-- ============ Acesso ============
-         A capa do guia da marca em forma de tela: metade carvão com o brilho
-         de brasa e o wordmark; metade creme com o formulário. -->
+         A capa do guia da marca em tela cheia: carvão, brasas subindo e o
+         formulário integrado no escuro. As fagulhas nascem via JS, cada uma
+         com tamanho e ritmo próprios. -->
     <section id="tela-acesso" class="acesso" hidden>
-      <div class="acesso-capa" aria-hidden="true">
-        <div class="brasas">
-          <span class="fagulha f1"></span>
-          <span class="fagulha f2"></span>
-          <span class="fagulha f3"></span>
-          <span class="fagulha f4"></span>
-          <span class="fagulha f5"></span>
-        </div>
-        <div class="capa-conteudo">
-          <p class="capa-rotulo">Agentes de IA · Bares &amp; Restaurantes</p>
-          <div class="capa-logo">
-            <span class="marca-icone capa-chama">
-              <svg viewBox="0 0 24 24">
-                <path
-                  d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"
-                />
-              </svg>
-            </span>
-            <span class="capa-wordmark">Brasa</span>
-          </div>
-          <p class="capa-tagline">A brasa que move<br />seu bar e restaurante.</p>
-        </div>
-        <p class="capa-rodape">Tech for bars &amp; restaurants</p>
-      </div>
+      <div class="brasas" aria-hidden="true"></div>
 
-      <div class="acesso-form">
+      <div class="acesso-conteudo">
+        <p class="capa-rotulo">Agentes de IA · Bares &amp; Restaurantes</p>
+        <div class="capa-logo">
+          <span class="marca-icone capa-chama" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"
+              />
+            </svg>
+          </span>
+          <span class="capa-wordmark">Brasa</span>
+        </div>
+        <p class="capa-tagline">A brasa que move seu bar e restaurante.</p>
+
         <form id="form-acesso" class="cartao-acesso">
-          <h1 class="acesso-titulo">Entrar</h1>
-          <p class="muted">
-            Cole a chave de acesso da sua organização. Ela fica salva neste
-            navegador — você só faz isso uma vez.
-          </p>
           <label for="campo-chave">Chave de acesso</label>
           <input
             id="campo-chave"
@@ -63,12 +49,13 @@
             placeholder="sk_ditado_..."
             required
           />
-          <button type="submit" class="btn btn-primario btn-bloco">
-            Entrar no painel
-          </button>
+          <button type="submit" class="btn-fogo">Entrar no painel</button>
+          <p class="acesso-nota">Fica salva neste navegador — você só faz isso uma vez.</p>
           <p id="erro-acesso" class="erro" role="alert" hidden></p>
         </form>
       </div>
+
+      <p class="capa-rodape">Tech for bars &amp; restaurants</p>
     </section>
 
     <!-- ============ Aplicação ============ -->
@@ -155,6 +142,6 @@
 
     <div id="avisos" class="avisos" aria-live="polite"></div>
 
-    <script type="module" src="/js/app.js?v=8"></script>
+    <script type="module" src="/js/app.js?v=9"></script>
   </body>
 </html>

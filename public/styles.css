@@ -149,33 +149,33 @@ h3 {
 }
 
 /* ============ Acesso ============
-   A capa do guia: carvão #221714 com brilho de brasa subindo, wordmark em
-   Fraunces, tagline em itálico — e o formulário respirando no creme. */
+   Tela cheia em carvão: o brilho da churrasqueira embaixo, brasas subindo
+   e o formulário integrado no escuro — sem quadro branco. */
 .acesso {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(380px, 5fr) minmax(360px, 4fr);
-}
-
-.acesso-capa {
   position: relative;
   overflow: hidden;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 48px;
+  padding: 40px 24px 64px;
   background:
-    radial-gradient(760px 560px at 78% 18%, rgba(255, 107, 53, 0.32), transparent 65%),
-    radial-gradient(560px 480px at 15% 95%, rgba(244, 161, 0, 0.16), transparent 70%),
-    #221714;
+    radial-gradient(120% 55% at 50% 108%, rgba(255, 107, 53, 0.38), rgba(193, 18, 31, 0.14) 45%, transparent 72%),
+    radial-gradient(700px 480px at 82% 6%, rgba(244, 161, 0, 0.1), transparent 65%),
+    #1c1210;
   color: #fff8f0;
 }
-.capa-conteudo {
+
+.acesso-conteudo {
   position: relative;
+  z-index: 1;
   display: grid;
-  gap: 18px;
-  max-width: 480px;
-  margin: 0 auto;
+  justify-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
   animation: subir 0.45s ease both;
 }
 .capa-rotulo {
@@ -195,7 +195,7 @@ h3 {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(255, 107, 53, 0.35);
+  box-shadow: 0 8px 34px rgba(255, 107, 53, 0.45);
 }
 .capa-chama svg {
   width: 30px;
@@ -204,30 +204,95 @@ h3 {
 .capa-wordmark {
   font-family: var(--fonte-display);
   font-weight: 700;
-  font-size: 56px;
+  font-size: 58px;
   line-height: 1;
-  letter-spacing: -0.01em;
 }
 .capa-tagline {
-  margin: 0;
+  margin: 0 0 14px;
   font-family: var(--fonte-display);
   font-style: italic;
   font-weight: 500;
-  font-size: 24px;
-  line-height: 1.35;
-  color: color-mix(in srgb, #fff8f0 82%, transparent);
+  font-size: 20px;
+  color: rgba(255, 248, 240, 0.8);
 }
 .capa-rodape {
-  position: relative;
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  z-index: 1;
   margin: 0;
   text-align: center;
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255, 248, 240, 0.45);
+  color: rgba(255, 248, 240, 0.35);
 }
 
-/* Fagulhas subindo devagar — a brasa viva da capa. */
+/* Formulário no escuro: vidro sutil, foco em âmbar. */
+.cartao-acesso {
+  width: 100%;
+  display: grid;
+  gap: 9px;
+  text-align: left;
+  padding: 22px;
+  border-radius: 18px;
+  background: rgba(255, 248, 240, 0.05);
+  border: 1px solid rgba(255, 248, 240, 0.12);
+  backdrop-filter: blur(6px);
+}
+.cartao-acesso label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 248, 240, 0.85);
+}
+.cartao-acesso input {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 248, 240, 0.18);
+  color: #fff8f0;
+}
+.cartao-acesso input::placeholder {
+  color: rgba(255, 248, 240, 0.35);
+}
+.cartao-acesso input:focus {
+  outline: 2px solid rgba(255, 107, 53, 0.55);
+  outline-offset: 1px;
+  border-color: var(--marca);
+}
+.btn-fogo {
+  margin-top: 6px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ff6b35, #c1121f);
+  color: #fff8f0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(255, 107, 53, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.btn-fogo:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 30px rgba(255, 107, 53, 0.5);
+}
+.btn-fogo:active {
+  transform: scale(0.98);
+}
+.acesso-nota {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(255, 248, 240, 0.5);
+}
+.acesso .erro {
+  color: #ff9aa2;
+}
+
+/* Brasas de verdade: núcleo claro, halo laranja, subida com deriva e
+   apagamento — tamanhos e ritmos sorteados no JS. */
 .brasas {
   position: absolute;
   inset: 0;
@@ -235,85 +300,46 @@ h3 {
 }
 .fagulha {
   position: absolute;
-  bottom: -12px;
-  width: 6px;
-  height: 6px;
+  bottom: -24px;
   border-radius: 50%;
-  background: var(--marca);
-  filter: blur(1px);
+  background: radial-gradient(circle at 35% 35%, #ffe9c4 0%, #ffb066 35%, #ff6b35 70%, rgba(255, 107, 53, 0) 100%);
+  box-shadow: 0 0 14px 3px rgba(255, 140, 66, 0.5);
   opacity: 0;
-  animation: fagulhar 9s linear infinite;
+  animation: fagulhar linear infinite;
 }
-.f1 { left: 18%; animation-delay: 0s; }
-.f2 { left: 38%; width: 4px; height: 4px; background: var(--ambar); animation-delay: 2.2s; animation-duration: 11s; }
-.f3 { left: 58%; animation-delay: 4.5s; }
-.f4 { left: 74%; width: 5px; height: 5px; background: var(--ambar); animation-delay: 1.2s; animation-duration: 13s; }
-.f5 { left: 88%; width: 4px; height: 4px; animation-delay: 6s; animation-duration: 10s; }
 
 @keyframes fagulhar {
   0% {
-    transform: translateY(0) translateX(0);
+    transform: translate3d(0, 0, 0) scale(1);
     opacity: 0;
   }
-  8% {
-    opacity: 0.85;
+  6% {
+    opacity: 1;
   }
-  60% {
-    opacity: 0.5;
+  30% {
+    transform: translate3d(18px, -28vh, 0) scale(0.92);
+    opacity: 0.95;
+  }
+  55% {
+    transform: translate3d(-14px, -52vh, 0) scale(0.8);
+    opacity: 0.75;
+  }
+  80% {
+    transform: translate3d(14px, -76vh, 0) scale(0.62);
+    opacity: 0.45;
   }
   100% {
-    transform: translateY(-88vh) translateX(26px);
+    transform: translate3d(-8px, -100vh, 0) scale(0.4);
     opacity: 0;
   }
 }
 
-.acesso-form {
-  display: grid;
-  place-items: center;
-  padding: 40px 28px;
-  background:
-    radial-gradient(600px 400px at 85% -5%, color-mix(in srgb, var(--marca) 8%, transparent), transparent 70%),
-    var(--fundo);
-}
-.cartao-acesso {
-  width: 100%;
-  max-width: 380px;
-  display: grid;
-  gap: 10px;
-  animation: subir 0.45s ease 0.1s both;
-}
-.acesso-titulo {
-  font-size: 30px;
-}
-.cartao-acesso label {
-  font-size: 13px;
-  font-weight: 600;
-  margin-top: 10px;
-}
-.cartao-acesso input {
-  padding: 11px 13px;
-}
-.cartao-acesso .btn-bloco {
-  padding: 11px;
-  margin-top: 12px;
-}
-
-@media (max-width: 860px) {
-  .acesso {
-    grid-template-columns: 1fr;
-  }
-  .acesso-capa {
-    min-height: 40vh;
-    padding: 36px 24px;
-  }
+@media (max-width: 480px) {
   .capa-wordmark {
-    font-size: 42px;
+    font-size: 44px;
   }
   .capa-tagline {
-    font-size: 19px;
-  }
-  .capa-rodape {
-    display: none;
+    font-size: 17px;
   }
 }
 
