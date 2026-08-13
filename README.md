@@ -62,6 +62,10 @@ requisição devolve um `x-trace-id` para correlacionar com o log.
 | `POST /v1/agents` | `runs:write` | Cria um agente |
 | `GET /v1/agents/:slug` | `runs:write` | Detalhe, incluindo o system prompt |
 | `PATCH /v1/agents/:slug` | `runs:write` | Edita nome, prompt, modelo, esforço, ativo. O slug não muda |
+| `GET /v1/agents/:slug/training` | `runs:write` | Lista o treinamento do agente |
+| `POST /v1/agents/:slug/training` | `runs:write` | Adiciona texto digitado (JSON: `titulo`, `conteudo`) |
+| `POST /v1/agents/:slug/training/upload` | `runs:write` | Adiciona um arquivo. Corpo é o arquivo cru (sem base64); metadados na URL: `?titulo=&nome_arquivo=&media_type=` |
+| `DELETE /v1/agents/:slug/training/:id` | `runs:write` | Remove um item de treinamento |
 | `GET /v1/venues` | `reservations:read` | Estabelecimentos |
 | `GET /v1/venues/:slug/reservations` | `reservations:read` | Fila de aprovação |
 | `POST /v1/reservations/:id/approve` | `reservations:write` | Aprova |
@@ -272,6 +276,33 @@ Migrações versionadas em `supabase/migrations/`. Após qualquer mudança:
 ```bash
 npx supabase gen types typescript --project-id tittvjdrtuzsresheore > src/database.types.ts
 ```
+
+---
+
+## Treinamento do agente
+
+Cada agente acumula uma base de conhecimento em `agents.config.training`
+(jsonb) — texto digitado ou arquivo, entra no prompt como um bloco cacheável
+próprio. Quatro caminhos, cada um com o tratamento certo para o formato:
+
+| Formato | Como é lido |
+|---|---|
+| PDF, imagem (JPEG/PNG/WebP/GIF) | Enviado ao Claude na hora do upload, que transcreve fielmente — o que fica salvo é o texto, não o arquivo |
+| Word (`.docx`) | Extraído localmente com `mammoth` — a API do Claude não aceita `.docx` como bloco de documento (só PDF), então isso não tem como passar pelo modelo |
+| Excel (`.xlsx`, `.xls`) | Extraído localmente com `exceljs`, uma aba por seção, em formato de tabela |
+| `.txt`, `.md`, `.csv` | Decodificado direto, sem passar por nada |
+
+O upload de arquivo (`POST /v1/agents/:slug/training/upload`) manda o arquivo
+**cru** no corpo da requisição — nunca em base64 dentro de um JSON. Base64
+infla o arquivo em ~33%, e ficar perto do teto de tamanho de corpo de um
+proxy na frente (Vercel incluso) é a causa mais provável de um PDF ser aceito
+pela tela e falhar no servidor com um erro de "JSON inválido": o corpo chega
+truncado e o `JSON.parse` quebra no meio. Mandar o arquivo puro evita a
+inflação inteira.
+
+`exceljs` foi escolhido em vez do pacote `xlsx` (SheetJS) porque a versão do
+`xlsx` publicada no npm tem uma vulnerabilidade alta sem correção disponível
+(prototype pollution + ReDoS). `exceljs` não tem esse problema.
 
 ---
 

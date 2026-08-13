@@ -9,5 +9,11 @@
   "rewrites": [
     { "source": "/v1/:caminho*", "destination": "/api" },
     { "source": "/health", "destination": "/api" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    }
   ]
 }

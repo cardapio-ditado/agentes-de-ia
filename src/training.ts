@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import ExcelJS from "exceljs";
+import mammoth from "mammoth";
 import { randomUUID } from "node:crypto";
 import { anthropicConfig } from "./config.js";
 import { db } from "./supabase.js";
@@ -33,6 +35,14 @@ const MAX_CONTEUDO = 30_000;
 const TIPOS_DOCUMENTO = ["application/pdf"];
 const TIPOS_TEXTO = ["text/plain", "text/markdown", "text/csv"];
 const TIPOS_IMAGEM = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const TIPOS_WORD = ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+const TIPOS_EXCEL = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+];
+
+/** Bytes crus por item — sem o custo de base64, cabe mais antes do limite da Vercel. */
+export const LIMITE_ARQUIVO_BYTES = 20_000_000;
 
 let cachedClient: Anthropic | undefined;
 function anthropic(): Anthropic {
@@ -87,17 +97,21 @@ async function salvar(agent: Agent, itens: ItemTreinamento[]): Promise<void> {
 }
 
 /**
- * Extrai o texto útil de um documento ou imagem usando o Claude.
+ * Extrai o texto útil de um documento (PDF) ou imagem usando o Claude.
+ *
+ * A conversão para base64 acontece aqui dentro, na hora de falar com a API —
+ * o cliente manda o arquivo cru, sem o custo de ~33% do base64 na rede.
  *
  * O prompt pede transcrição fiel, não resumo: cardápio com preço errado por
  * causa de um resumo criativo é pior do que nenhum treinamento.
  */
-async function extrair(params: {
+async function extrairComModelo(params: {
   mediaType: string;
-  dadosBase64: string;
+  arquivo: Buffer;
   titulo: string;
 }): Promise<string> {
-  const { mediaType, dadosBase64, titulo } = params;
+  const { mediaType, arquivo, titulo } = params;
+  const dadosBase64 = arquivo.toString("base64");
 
   const instrucao =
     `Extraia o conteúdo deste material ("${titulo}") para a base de conhecimento ` +
@@ -142,6 +156,46 @@ async function extrair(params: {
   return texto.slice(0, MAX_CONTEUDO);
 }
 
+/**
+ * Extrai o texto de um .docx diretamente — sem passar pelo modelo.
+ *
+ * A API do Claude não aceita Word como bloco de documento (só PDF); mammoth
+ * lê o XML do próprio arquivo. Mais rápido, mais barato e mais fiel do que
+ * pedir pro modelo "ler" um formato que ele não processa nativamente.
+ */
+async function extrairDocx(arquivo: Buffer): Promise<string> {
+  const { value } = await mammoth.extractRawText({ buffer: arquivo });
+  const texto = value.trim();
+  if (!texto) throw new Error("Não encontrei texto neste .docx — ele pode ser só imagens.");
+  return texto.slice(0, MAX_CONTEUDO);
+}
+
+/** Extrai as planilhas de um .xlsx/.xls como texto em CSV, uma seção por aba. */
+async function extrairPlanilha(arquivo: Buffer): Promise<string> {
+  const livro = new ExcelJS.Workbook();
+  // exceljs declara um `Buffer` global próprio (`extends ArrayBuffer`) que se
+  // funde com o Buffer real do Node e quebra sob @types/node novo — o cast
+  // para o Buffer do pacote não escapa da mistura, então aqui vale o any:
+  // o valor é um Buffer de verdade, só a declaração de tipo é que está errada.
+  await livro.xlsx.load(arquivo as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  const secoes: string[] = [];
+  livro.eachSheet((aba) => {
+    const linhas: string[] = [];
+    aba.eachRow((linha) => {
+      const celulas = (linha.values as ExcelJS.CellValue[])
+        .slice(1) // values[0] é sempre vazio — ExcelJS indexa colunas a partir de 1
+        .map((v) => (v === null || v === undefined ? "" : String(v)));
+      linhas.push(celulas.join(", "));
+    });
+    if (linhas.length > 0) secoes.push(`## ${aba.name}\n\n${linhas.join("\n")}`);
+  });
+
+  const texto = secoes.join("\n\n").trim();
+  if (!texto) throw new Error("Não encontrei dados nesta planilha.");
+  return texto.slice(0, MAX_CONTEUDO);
+}
+
 export async function addTrainingText(params: {
   agent: Agent;
   titulo: string;
@@ -167,28 +221,42 @@ export async function addTrainingFile(params: {
   titulo: string;
   nomeArquivo: string;
   mediaType: string;
-  dadosBase64: string;
+  /** Bytes crus do arquivo — nunca base64: o cliente manda o arquivo como veio. */
+  arquivo: Buffer;
 }): Promise<ItemTreinamento> {
-  const { agent, titulo, nomeArquivo, mediaType, dadosBase64 } = params;
+  const { agent, titulo, nomeArquivo, mediaType, arquivo } = params;
+
+  if (arquivo.byteLength > LIMITE_ARQUIVO_BYTES) {
+    throw new Error(
+      `Arquivo de ${(arquivo.byteLength / 1_000_000).toFixed(1)} MB acima do limite de ` +
+        `${LIMITE_ARQUIVO_BYTES / 1_000_000} MB. Divida o material ou comprima o arquivo.`,
+    );
+  }
 
   let conteudo: string;
   let kind: ItemTreinamento["kind"];
 
   if (TIPOS_TEXTO.includes(mediaType)) {
-    // Arquivo de texto não precisa do modelo: decodifica e pronto.
+    // Texto puro não precisa do modelo nem de biblioteca: decodifica e pronto.
     kind = "documento";
-    conteudo = Buffer.from(dadosBase64, "base64").toString("utf8").trim().slice(0, MAX_CONTEUDO);
+    conteudo = arquivo.toString("utf8").trim().slice(0, MAX_CONTEUDO);
     if (!conteudo) throw new Error("O arquivo está vazio.");
+  } else if (TIPOS_WORD.includes(mediaType)) {
+    kind = "documento";
+    conteudo = await extrairDocx(arquivo);
+  } else if (TIPOS_EXCEL.includes(mediaType)) {
+    kind = "documento";
+    conteudo = await extrairPlanilha(arquivo);
   } else if (TIPOS_DOCUMENTO.includes(mediaType)) {
     kind = "documento";
-    conteudo = await extrair({ mediaType, dadosBase64, titulo });
+    conteudo = await extrairComModelo({ mediaType, arquivo, titulo });
   } else if (TIPOS_IMAGEM.includes(mediaType)) {
     kind = "imagem";
-    conteudo = await extrair({ mediaType, dadosBase64, titulo });
+    conteudo = await extrairComModelo({ mediaType, arquivo, titulo });
   } else {
     throw new Error(
-      `Tipo "${mediaType}" não aceito. Envie PDF, imagem (JPEG/PNG/WebP/GIF), .txt, .md ou .csv. ` +
-        "Word e Excel: exporte como PDF antes de subir.",
+      `Tipo "${mediaType}" não aceito. Envie PDF, Word (.docx), Excel (.xlsx/.xls), ` +
+        "imagem (JPEG/PNG/WebP/GIF), .txt, .md ou .csv.",
     );
   }
 

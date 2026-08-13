@@ -1,4 +1,4 @@
-import { api, del, get, post } from "../api.js";
+import { api, del, get, post, postArquivo } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 const MODELOS = [
@@ -262,7 +262,7 @@ export async function agentes(raiz, ctx) {
 
     const inputArquivo = el("input", {
       type: "file",
-      accept: ".pdf,.txt,.md,.csv,image/jpeg,image/png,image/webp,image/gif",
+      accept: ".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,image/jpeg,image/png,image/webp,image/gif",
     });
 
     const btnTexto = el("button", {
@@ -297,11 +297,11 @@ export async function agentes(raiz, ctx) {
           el("div", {}, [btnTexto]),
         ]),
         el("div", { classe: "campo" }, [
-          el("label", { texto: "Subir arquivo (PDF, imagem, .txt, .md, .csv)" }),
+          el("label", { texto: "Subir arquivo (PDF, Word, Excel, imagem, .txt, .md, .csv)" }),
           inputArquivo,
           el("p", {
             classe: "muted",
-            texto: "Word/Excel: exporte como PDF antes. Máx. 10 MB. A leitura leva alguns segundos.",
+            texto: "Máx. 20 MB. PDF e imagem passam pelo agente para ler; Word e Excel são lidos direto — mais rápido.",
           }),
           el("div", {}, [btnArquivo]),
         ]),
@@ -380,43 +380,39 @@ export async function agentes(raiz, ctx) {
       }
     }
 
+    /** Extensão → media type, para quando o navegador não informa o tipo. */
+    const TIPO_POR_EXTENSAO = {
+      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ".xls": "application/vnd.ms-excel",
+      ".md": "text/markdown",
+      ".csv": "text/csv",
+    };
+
     async function enviarArquivo() {
       const arquivo = inputArquivo.files?.[0];
       if (!arquivo) {
         avisar("Escolha um arquivo primeiro.", "erro");
         return;
       }
-      if (arquivo.size > 10 * 1024 * 1024) {
-        avisar("Arquivo acima de 10 MB. Divida ou comprima antes de subir.", "erro");
+      if (arquivo.size > 20 * 1024 * 1024) {
+        avisar("Arquivo acima de 20 MB. Divida ou comprima antes de subir.", "erro");
         return;
       }
 
       btnArquivo.disabled = true;
-      btnArquivo.textContent = "Lendo o arquivo…";
+      btnArquivo.textContent = "Enviando…";
       try {
-        const base64 = await new Promise((resolver, rejeitar) => {
-          const leitor = new FileReader();
-          // readAsDataURL devolve "data:tipo;base64,...." — só a cauda importa.
-          leitor.onload = () => resolver(String(leitor.result).split(",")[1] ?? "");
-          leitor.onerror = () => rejeitar(new Error("Falha ao ler o arquivo."));
-          leitor.readAsDataURL(arquivo);
-        });
+        const extensao = arquivo.name.slice(arquivo.name.lastIndexOf(".")).toLowerCase();
+        const tipo = arquivo.type || TIPO_POR_EXTENSAO[extensao] || "text/plain";
 
-        // Extensões de texto às vezes chegam sem type do sistema.
-        const tipo =
-          arquivo.type ||
-          (arquivo.name.endsWith(".md")
-            ? "text/markdown"
-            : arquivo.name.endsWith(".csv")
-              ? "text/csv"
-              : "text/plain");
-
-        await post(`/v1/agents/${slug}/training`, {
+        // O arquivo vai cru no corpo — sem base64, sem JSON — direto pro fetch.
+        const busca = new URLSearchParams({
           titulo: titulo.value.trim(),
           nome_arquivo: arquivo.name,
           media_type: tipo,
-          dados_base64: base64,
         });
+        await postArquivo(`/v1/agents/${slug}/training/upload?${busca}`, arquivo);
         avisar("Arquivo processado e adicionado ao conhecimento.", "ok");
         inputArquivo.value = "";
         titulo.value = "";

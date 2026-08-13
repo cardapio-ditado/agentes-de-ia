@@ -26,6 +26,7 @@ import {
 import {
   addTrainingFile,
   addTrainingText,
+  LIMITE_ARQUIVO_BYTES,
   listTraining,
   removeTraining,
 } from "./training.js";
@@ -163,6 +164,30 @@ async function lerJson(
   }
 }
 
+/**
+ * Lê o corpo bruto da requisição — sem JSON, sem base64.
+ *
+ * Usado para upload de arquivo: mandar o arquivo cru custa ~25% menos bytes
+ * na rede do que embrulhar em base64 dentro de um JSON, o que dá mais folga
+ * sob qualquer limite de tamanho de corpo imposto por um proxy na frente.
+ */
+async function lerBinario(req: IncomingMessage, limite: number): Promise<Buffer> {
+  const partes: Buffer[] = [];
+  let bytes = 0;
+  for await (const parte of req) {
+    bytes += (parte as Buffer).length;
+    if (bytes > limite) {
+      throw erro(
+        413,
+        "request_too_large",
+        `Arquivo acima de ${Math.round(limite / 1_000_000)} MB.`,
+      );
+    }
+    partes.push(parte as Buffer);
+  }
+  return Buffer.concat(partes);
+}
+
 function texto(corpo: Record<string, unknown>, campo: string): string {
   const valor = corpo[campo];
   if (typeof valor !== "string" || valor.trim() === "") {
@@ -271,25 +296,42 @@ async function roteasApi(
       );
     }
 
-    // POST /v1/agents/:slug/training — texto digitado ou arquivo em base64
+    // POST /v1/agents/:slug/training — texto digitado (JSON)
     if (metodo === "POST" && p.length === 3) {
-      // 15 MB dá folga para um PDF de cardápio; base64 infla ~33%.
-      const corpo = await lerJson(req, 15_000_000);
+      const corpo = await lerJson(req);
       try {
-        if (corpo.dados_base64) {
-          const item = await addTrainingFile({
-            agent: agente,
-            titulo: textoOpcional(corpo, "titulo") ?? "",
-            nomeArquivo: texto(corpo, "nome_arquivo"),
-            mediaType: texto(corpo, "media_type"),
-            dadosBase64: texto(corpo, "dados_base64"),
-          });
-          return ok(res, { id: item.id, titulo: item.titulo, tamanho: item.conteudo.length }, 201);
-        }
         const item = await addTrainingText({
           agent: agente,
           titulo: texto(corpo, "titulo"),
           conteudo: texto(corpo, "conteudo"),
+        });
+        return ok(res, { id: item.id, titulo: item.titulo, tamanho: item.conteudo.length }, 201);
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Falha no treinamento.");
+      }
+    }
+
+    // POST /v1/agents/:slug/training/upload — arquivo cru no corpo, metadados
+    // na query string. Sem JSON e sem base64: o arquivo trafega do jeito que é,
+    // ~25% mais leve do que embrulhado em base64 dentro de um JSON — o que
+    // importa sob qualquer limite de tamanho de corpo imposto por um proxy.
+    if (metodo === "POST" && p[3] === "upload" && p.length === 4) {
+      const nomeArquivo = url.searchParams.get("nome_arquivo");
+      const mediaType = url.searchParams.get("media_type");
+      if (!nomeArquivo || !mediaType) {
+        throw erro(400, "invalid_request", 'Informe "nome_arquivo" e "media_type" na URL.');
+      }
+      const arquivo = await lerBinario(req, LIMITE_ARQUIVO_BYTES);
+      if (arquivo.byteLength === 0) {
+        throw erro(400, "invalid_request", "O arquivo chegou vazio — tente enviar de novo.");
+      }
+      try {
+        const item = await addTrainingFile({
+          agent: agente,
+          titulo: url.searchParams.get("titulo") ?? "",
+          nomeArquivo,
+          mediaType,
+          arquivo,
         });
         return ok(res, { id: item.id, titulo: item.titulo, tamanho: item.conteudo.length }, 201);
       } catch (e) {
@@ -740,6 +782,11 @@ async function servirEstatico(res: ServerResponse, caminho: string): Promise<voi
     res.writeHead(200, {
       "content-type": TIPOS[extname(alvo)] ?? "application/octet-stream",
       "content-length": conteudo.length,
+      // no-cache (não no-store): o navegador pode guardar, mas revalida a
+      // cada uso. Sem isto, um módulo JS importado por outro (api.js, as
+      // telas em pages/) fica preso em cache até o usuário limpar na mão —
+      // só o arquivo referenciado direto no HTML seria atualizado.
+      "cache-control": "no-cache",
     });
     res.end(conteudo);
   } catch {

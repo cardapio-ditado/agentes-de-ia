@@ -31,10 +31,13 @@ export class ErroApi extends Error {
 
 export async function api(caminho, opcoes = {}) {
   const chave = chaveSalva();
+  // Corpo texto (JSON.stringify) leva content-type json; corpo binário
+  // (File/Blob) deixa o navegador decidir — forçar json quebraria o upload.
+  const corpoJson = typeof opcoes.body === "string";
   const resposta = await fetch(caminho, {
     ...opcoes,
     headers: {
-      ...(opcoes.body ? { "content-type": "application/json" } : {}),
+      ...(corpoJson ? { "content-type": "application/json" } : {}),
       ...(chave ? { authorization: `Bearer ${chave}` } : {}),
       ...opcoes.headers,
     },
@@ -58,6 +61,16 @@ export const get = (caminho) => api(caminho);
 export const post = (caminho, corpo) =>
   api(caminho, { method: "POST", body: JSON.stringify(corpo ?? {}) });
 export const del = (caminho) => api(caminho, { method: "DELETE" });
+
+/**
+ * Envia um arquivo cru no corpo da requisição — sem base64, sem JSON.
+ *
+ * Um PDF em base64 fica ~33% maior; embrulhado num JSON, mais um pouco.
+ * Mandar o `File` direto como corpo do fetch evita as duas coisas — o
+ * navegador já faz streaming dele sozinho.
+ */
+export const postArquivo = (caminho, arquivo) =>
+  api(caminho, { method: "POST", body: arquivo });
 
 /**
  * Executa o agente com streaming.
