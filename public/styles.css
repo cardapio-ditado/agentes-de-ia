@@ -148,33 +148,173 @@ h3 {
   border: 0;
 }
 
-/* ============ Acesso ============ */
+/* ============ Acesso ============
+   A capa do guia: carvão #221714 com brilho de brasa subindo, wordmark em
+   Fraunces, tagline em itálico — e o formulário respirando no creme. */
 .acesso {
   min-height: 100vh;
   display: grid;
-  place-items: center;
-  padding: 24px;
+  grid-template-columns: minmax(380px, 5fr) minmax(360px, 4fr);
+}
+
+.acesso-capa {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px;
   background:
-    radial-gradient(900px 460px at 20% -10%, color-mix(in srgb, var(--marca) 14%, transparent), transparent 70%),
-    radial-gradient(700px 420px at 90% 110%, color-mix(in srgb, var(--ambar) 12%, transparent), transparent 70%),
+    radial-gradient(760px 560px at 78% 18%, rgba(255, 107, 53, 0.32), transparent 65%),
+    radial-gradient(560px 480px at 15% 95%, rgba(244, 161, 0, 0.16), transparent 70%),
+    #221714;
+  color: #fff8f0;
+}
+.capa-conteudo {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  max-width: 480px;
+  margin: 0 auto;
+  animation: subir 0.45s ease both;
+}
+.capa-rotulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ambar);
+}
+.capa-logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.capa-chama {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(255, 107, 53, 0.35);
+}
+.capa-chama svg {
+  width: 30px;
+  height: 30px;
+}
+.capa-wordmark {
+  font-family: var(--fonte-display);
+  font-weight: 700;
+  font-size: 56px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.capa-tagline {
+  margin: 0;
+  font-family: var(--fonte-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.35;
+  color: color-mix(in srgb, #fff8f0 82%, transparent);
+}
+.capa-rodape {
+  position: relative;
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 248, 240, 0.45);
+}
+
+/* Fagulhas subindo devagar — a brasa viva da capa. */
+.brasas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.fagulha {
+  position: absolute;
+  bottom: -12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--marca);
+  filter: blur(1px);
+  opacity: 0;
+  animation: fagulhar 9s linear infinite;
+}
+.f1 { left: 18%; animation-delay: 0s; }
+.f2 { left: 38%; width: 4px; height: 4px; background: var(--ambar); animation-delay: 2.2s; animation-duration: 11s; }
+.f3 { left: 58%; animation-delay: 4.5s; }
+.f4 { left: 74%; width: 5px; height: 5px; background: var(--ambar); animation-delay: 1.2s; animation-duration: 13s; }
+.f5 { left: 88%; width: 4px; height: 4px; animation-delay: 6s; animation-duration: 10s; }
+
+@keyframes fagulhar {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.85;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-88vh) translateX(26px);
+    opacity: 0;
+  }
+}
+
+.acesso-form {
+  display: grid;
+  place-items: center;
+  padding: 40px 28px;
+  background:
+    radial-gradient(600px 400px at 85% -5%, color-mix(in srgb, var(--marca) 8%, transparent), transparent 70%),
     var(--fundo);
 }
 .cartao-acesso {
   width: 100%;
-  max-width: 390px;
-  background: var(--superficie);
-  border: 1px solid var(--borda);
-  border-radius: 18px;
-  padding: 32px;
-  box-shadow: var(--sombra);
+  max-width: 380px;
   display: grid;
   gap: 10px;
-  animation: subir 0.35s ease both;
+  animation: subir 0.45s ease 0.1s both;
+}
+.acesso-titulo {
+  font-size: 30px;
 }
 .cartao-acesso label {
   font-size: 13px;
   font-weight: 600;
-  margin-top: 6px;
+  margin-top: 10px;
+}
+.cartao-acesso input {
+  padding: 11px 13px;
+}
+.cartao-acesso .btn-bloco {
+  padding: 11px;
+  margin-top: 12px;
+}
+
+@media (max-width: 860px) {
+  .acesso {
+    grid-template-columns: 1fr;
+  }
+  .acesso-capa {
+    min-height: 40vh;
+    padding: 36px 24px;
+  }
+  .capa-wordmark {
+    font-size: 42px;
+  }
+  .capa-tagline {
+    font-size: 19px;
+  }
+  .capa-rodape {
+    display: none;
+  }
 }
 
 /* ============ Marca ============ */

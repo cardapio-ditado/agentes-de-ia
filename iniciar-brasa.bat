@@ -26,10 +26,14 @@ if not exist .env (
   exit /b 1
 )
 
-if not exist node_modules (
-  echo Primeira execucao: instalando dependencias...
-  call npm install || (pause & exit /b 1)
+where git >nul 2>nul
+if not errorlevel 1 (
+  echo Buscando atualizacoes...
+  git pull --ff-only 2>nul || echo [aviso] Nao consegui atualizar agora; seguindo com a versao local.
 )
+
+echo Conferindo dependencias...
+call npm install --no-audit --no-fund || (pause & exit /b 1)
 
 echo.
 echo Painel local: http://localhost:3000  (abrindo no navegador)

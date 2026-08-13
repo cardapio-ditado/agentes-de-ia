@@ -58,14 +58,17 @@ painel da Vercel, porque os dois leem o mesmo banco.
 - Desconectar o número: painel → Canais → Desconectar (ou apague a pasta
   `.whatsapp/` com o processo parado).
 
-## Atualizar quando eu avisar que tem coisa nova
+## Atualizar quando tem coisa nova
+
+O `iniciar-brasa.bat` **se atualiza sozinho**: toda vez que abre, ele baixa a
+versão mais recente antes de ligar. Fechou e abriu = atualizado.
+
+Se quiser atualizar na mão (ou se o automático avisar que não conseguiu):
 
 ```
 cd %USERPROFILE%\Documents\agentes-de-ia
 git pull
 ```
-
-E duplo clique no `iniciar-brasa.bat` de novo.
 
 ## Se algo der errado
 
