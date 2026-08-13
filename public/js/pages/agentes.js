@@ -1,5 +1,5 @@
-import { api, get, post } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { api, del, get, post } from "../api.js";
+import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 const MODELOS = [
   ["claude-opus-5", "Opus 5 — o mais capaz"],
@@ -212,6 +212,9 @@ export async function agentes(raiz, ctx) {
       form,
     );
 
+    // Treinamento só existe depois que o agente existe.
+    if (!criando) conteudo.append(secaoTreinamento(slug));
+
     async function salvar(e) {
       e.preventDefault();
       btnSalvar.disabled = true;
@@ -237,6 +240,192 @@ export async function agentes(raiz, ctx) {
       } catch (err) {
         avisar(err.message, "erro");
         btnSalvar.disabled = false;
+      }
+    }
+  }
+
+  /**
+   * Treinamento: digitar texto ou subir arquivo (PDF, imagem, .txt/.md/.csv).
+   *
+   * O arquivo vira texto na hora do upload — o Claude lê PDF e imagem — e o
+   * agente passa a usar tudo isso nas respostas seguintes.
+   */
+  function secaoTreinamento(slug) {
+    const lista = el("div", { classe: "lista", style: "margin-top:12px" });
+
+    const titulo = el("input", { placeholder: "Ex.: Cardápio de drinks" });
+    const textoLivre = el("textarea", {
+      rows: 4,
+      placeholder:
+        "Digite o conhecimento aqui. Ex.: Happy hour de terça a sexta, 17h às 20h, chope em dobro…",
+    });
+
+    const inputArquivo = el("input", {
+      type: "file",
+      accept: ".pdf,.txt,.md,.csv,image/jpeg,image/png,image/webp,image/gif",
+    });
+
+    const btnTexto = el("button", {
+      classe: "btn btn-primario btn-peq",
+      type: "button",
+      texto: "Adicionar texto",
+      onclick: enviarTexto,
+    });
+    const btnArquivo = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Enviar arquivo",
+      onclick: enviarArquivo,
+    });
+
+    const secao = el("section", { classe: "cartao", style: "margin-top:16px" }, [
+      el("div", { classe: "cabecalho-secao" }, [
+        el("div", {}, [
+          el("h3", { texto: "Treinamento" }),
+          el("p", {
+            classe: "muted",
+            texto:
+              "Tudo aqui vira conhecimento do agente: cardápio, regras da casa, promoções. PDF e imagem são lidos e transcritos na hora.",
+          }),
+        ]),
+      ]),
+      el("div", { classe: "grade-2" }, [
+        el("div", { classe: "campo" }, [
+          el("label", { texto: "Digitar conhecimento" }),
+          titulo,
+          textoLivre,
+          el("div", {}, [btnTexto]),
+        ]),
+        el("div", { classe: "campo" }, [
+          el("label", { texto: "Subir arquivo (PDF, imagem, .txt, .md, .csv)" }),
+          inputArquivo,
+          el("p", {
+            classe: "muted",
+            texto: "Word/Excel: exporte como PDF antes. Máx. 10 MB. A leitura leva alguns segundos.",
+          }),
+          el("div", {}, [btnArquivo]),
+        ]),
+      ]),
+      lista,
+    ]);
+
+    void carregar();
+    return secao;
+
+    async function carregar() {
+      limpar(lista);
+      const itens = await get(`/v1/agents/${slug}/training`);
+      if (itens.length === 0) {
+        lista.append(vazio("Nenhum treinamento ainda", "O agente só sabe o que o prompt e a Programação dizem."));
+        return;
+      }
+      for (const i of itens) {
+        lista.append(
+          el("article", { classe: "cartao" }, [
+            el("div", { classe: "cabecalho-secao" }, [
+              el("div", { style: "min-width:0" }, [
+                el("h3", { texto: i.titulo }),
+                el("p", {
+                  classe: "muted",
+                  texto: `${i.arquivo ?? "texto digitado"} · ${Math.round(i.tamanho / 100) / 10} mil caracteres · ${dataHora(i.criado_em)}`,
+                }),
+              ]),
+              el("div", { style: "display:flex;gap:6px;align-items:center" }, [
+                etiqueta(
+                  i.kind === "imagem" ? "imagem" : i.kind === "documento" ? "documento" : "texto",
+                  "etiqueta-info",
+                ),
+                el("button", {
+                  classe: "btn btn-perigo btn-peq",
+                  type: "button",
+                  texto: "Remover",
+                  onclick: async (e) => {
+                    e.target.disabled = true;
+                    try {
+                      await del(`/v1/agents/${slug}/training/${i.id}`);
+                      avisar("Treinamento removido.", "ok");
+                      await carregar();
+                    } catch (err) {
+                      avisar(err.message, "erro");
+                      e.target.disabled = false;
+                    }
+                  },
+                }),
+              ]),
+            ]),
+          ]),
+        );
+      }
+    }
+
+    async function enviarTexto() {
+      if (!titulo.value.trim() || !textoLivre.value.trim()) {
+        avisar("Preencha o título e o conteúdo.", "erro");
+        return;
+      }
+      btnTexto.disabled = true;
+      try {
+        await post(`/v1/agents/${slug}/training`, {
+          titulo: titulo.value.trim(),
+          conteudo: textoLivre.value.trim(),
+        });
+        avisar("Conhecimento adicionado.", "ok");
+        titulo.value = "";
+        textoLivre.value = "";
+        await carregar();
+      } catch (e) {
+        avisar(e.message, "erro");
+      } finally {
+        btnTexto.disabled = false;
+      }
+    }
+
+    async function enviarArquivo() {
+      const arquivo = inputArquivo.files?.[0];
+      if (!arquivo) {
+        avisar("Escolha um arquivo primeiro.", "erro");
+        return;
+      }
+      if (arquivo.size > 10 * 1024 * 1024) {
+        avisar("Arquivo acima de 10 MB. Divida ou comprima antes de subir.", "erro");
+        return;
+      }
+
+      btnArquivo.disabled = true;
+      btnArquivo.textContent = "Lendo o arquivo…";
+      try {
+        const base64 = await new Promise((resolver, rejeitar) => {
+          const leitor = new FileReader();
+          // readAsDataURL devolve "data:tipo;base64,...." — só a cauda importa.
+          leitor.onload = () => resolver(String(leitor.result).split(",")[1] ?? "");
+          leitor.onerror = () => rejeitar(new Error("Falha ao ler o arquivo."));
+          leitor.readAsDataURL(arquivo);
+        });
+
+        // Extensões de texto às vezes chegam sem type do sistema.
+        const tipo =
+          arquivo.type ||
+          (arquivo.name.endsWith(".md")
+            ? "text/markdown"
+            : arquivo.name.endsWith(".csv")
+              ? "text/csv"
+              : "text/plain");
+
+        await post(`/v1/agents/${slug}/training`, {
+          titulo: titulo.value.trim(),
+          nome_arquivo: arquivo.name,
+          media_type: tipo,
+          dados_base64: base64,
+        });
+        avisar("Arquivo processado e adicionado ao conhecimento.", "ok");
+        inputArquivo.value = "";
+        titulo.value = "";
+        await carregar();
+      } catch (e) {
+        avisar(e.message, "erro");
+      } finally {
+        btnArquivo.disabled = false;
+        btnArquivo.textContent = "Enviar arquivo";
       }
     }
   }

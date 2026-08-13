@@ -153,7 +153,22 @@ async function aoReceberMensagem(
 
   const texto = extrairTexto(mensagem.message);
   if (!texto) {
-    await responder(jid, "Por enquanto consigo ler só mensagens de texto. Pode escrever?");
+    // Resposta específica por tipo: "não entendi" genérico soa quebrado.
+    // Áudio ainda não é transcrito — a API do Claude não recebe áudio; quando
+    // houver um provedor de transcrição configurado, este é o ponto de entrada.
+    if (mensagem.message?.audioMessage) {
+      await responder(
+        jid,
+        "Recebi seu áudio! Por enquanto ainda não consigo ouvir mensagens de voz — pode escrever? Prometo que respondo rapidinho. 😊",
+      );
+    } else if (mensagem.message?.imageMessage || mensagem.message?.videoMessage) {
+      await responder(
+        jid,
+        "Recebi sua mídia! Consigo te ajudar melhor por texto — me conta o que você precisa?",
+      );
+    } else {
+      await responder(jid, "Por enquanto consigo ler só mensagens de texto. Pode escrever?");
+    }
     return;
   }
 

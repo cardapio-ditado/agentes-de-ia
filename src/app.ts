@@ -23,6 +23,12 @@ import {
   registrarMensagemHumana,
 } from "./inbox.js";
 import {
+  addTrainingFile,
+  addTrainingText,
+  listTraining,
+  removeTraining,
+} from "./training.js";
+import {
   createVenueEvent,
   deleteVenueEvent,
   findVenueBySlugInOrg,
@@ -120,13 +126,20 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<ApiKey
   return apiKey;
 }
 
-async function lerJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function lerJson(
+  req: IncomingMessage,
+  limite = 1_000_000,
+): Promise<Record<string, unknown>> {
   const partes: Buffer[] = [];
   let bytes = 0;
   for await (const parte of req) {
     bytes += (parte as Buffer).length;
-    if (bytes > 1_000_000) {
-      throw erro(413, "request_too_large", "Corpo da requisição acima de 1 MB.");
+    if (bytes > limite) {
+      throw erro(
+        413,
+        "request_too_large",
+        `Corpo da requisição acima de ${Math.round(limite / 1_000_000)} MB.`,
+      );
     }
     partes.push(parte as Buffer);
   }
@@ -227,6 +240,64 @@ async function roteasApi(
       return ok(res, agente, 201);
     } catch (e) {
       throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+    }
+  }
+
+  // ---- Treinamento do agente ----
+  if (p[0] === "agents" && p[2] === "training") {
+    const chave = await exigirChave(req, "runs:write");
+    const agente = await getAgentInOrg(chave.org_id, p[1]!);
+    if (!agente) throw erro(404, "not_found", `Agente "${p[1]}" não encontrado.`);
+
+    // GET /v1/agents/:slug/training
+    if (metodo === "GET" && p.length === 3) {
+      return ok(
+        res,
+        listTraining(agente).map((i) => ({
+          id: i.id,
+          kind: i.kind,
+          titulo: i.titulo,
+          arquivo: i.arquivo,
+          tamanho: i.conteudo.length,
+          criado_em: i.criado_em,
+        })),
+      );
+    }
+
+    // POST /v1/agents/:slug/training — texto digitado ou arquivo em base64
+    if (metodo === "POST" && p.length === 3) {
+      // 15 MB dá folga para um PDF de cardápio; base64 infla ~33%.
+      const corpo = await lerJson(req, 15_000_000);
+      try {
+        if (corpo.dados_base64) {
+          const item = await addTrainingFile({
+            agent: agente,
+            titulo: textoOpcional(corpo, "titulo") ?? "",
+            nomeArquivo: texto(corpo, "nome_arquivo"),
+            mediaType: texto(corpo, "media_type"),
+            dadosBase64: texto(corpo, "dados_base64"),
+          });
+          return ok(res, { id: item.id, titulo: item.titulo, tamanho: item.conteudo.length }, 201);
+        }
+        const item = await addTrainingText({
+          agent: agente,
+          titulo: texto(corpo, "titulo"),
+          conteudo: texto(corpo, "conteudo"),
+        });
+        return ok(res, { id: item.id, titulo: item.titulo, tamanho: item.conteudo.length }, 201);
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Falha no treinamento.");
+      }
+    }
+
+    // DELETE /v1/agents/:slug/training/:id
+    if (metodo === "DELETE" && p.length === 4) {
+      try {
+        await removeTraining(agente, p[3]!);
+        return ok(res, { removido: true });
+      } catch (e) {
+        throw erro(404, "not_found", e instanceof Error ? e.message : "Item não encontrado.");
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicConfig } from "./config.js";
+import { blocoDeConhecimento } from "./training.js";
 import {
   getAgentBySlug,
   getOrCreateConversation,
@@ -200,20 +201,26 @@ function buildRequest(
   messages: Anthropic.MessageParam[],
   tools: AgentTool[],
 ): Anthropic.MessageCreateParamsNonStreaming {
+  // Prompt e base de conhecimento em blocos separados, o cache no último:
+  // um breakpoint cobre o prefixo inteiro, e editar o treinamento não obriga
+  // a mexer no prompt (nem o contrário).
+  const blocos: Anthropic.TextBlockParam[] = [];
+  if (agent.system_prompt) {
+    blocos.push({ type: "text", text: agent.system_prompt });
+  }
+  const conhecimento = blocoDeConhecimento(agent);
+  if (conhecimento) {
+    blocos.push({ type: "text", text: conhecimento });
+  }
+  if (blocos.length > 0) {
+    blocos[blocos.length - 1]!.cache_control = { type: "ephemeral" };
+  }
+
   const request: Anthropic.MessageCreateParamsNonStreaming = {
     model: agent.model,
     max_tokens: agent.max_tokens,
     messages,
-    // O prompt fica em bloco próprio com cache: é a parte estável do prefixo.
-    system: agent.system_prompt
-      ? [
-          {
-            type: "text",
-            text: agent.system_prompt,
-            cache_control: { type: "ephemeral" },
-          },
-        ]
-      : undefined,
+    system: blocos.length > 0 ? blocos : undefined,
     thinking: { type: "adaptive" },
     output_config: { effort: agent.effort as Anthropic.OutputConfig["effort"] },
   };

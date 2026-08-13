@@ -148,19 +148,21 @@ h3 {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(1000px 500px at 50% -10%, var(--marca-suave), transparent 70%),
+    radial-gradient(900px 460px at 20% -10%, color-mix(in srgb, var(--marca) 14%, transparent), transparent 70%),
+    radial-gradient(700px 420px at 90% 110%, color-mix(in srgb, var(--ambar) 12%, transparent), transparent 70%),
     var(--fundo);
 }
 .cartao-acesso {
   width: 100%;
-  max-width: 380px;
+  max-width: 390px;
   background: var(--superficie);
   border: 1px solid var(--borda);
-  border-radius: var(--raio-g);
-  padding: 28px;
+  border-radius: 18px;
+  padding: 32px;
   box-shadow: var(--sombra);
   display: grid;
   gap: 10px;
+  animation: subir 0.35s ease both;
 }
 .cartao-acesso label {
   font-size: 13px;
@@ -882,6 +884,71 @@ textarea:focus {
 
 .cortina {
   display: none;
+}
+
+/* ============ Movimento ============ */
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Conteúdo de cada tela entra suave; troca de página fica perceptível sem atrasar. */
+.pagina > * {
+  animation: subir 0.25s ease both;
+}
+
+.btn,
+.btn-icone,
+.nav-item,
+.conversa-item,
+.aba {
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.btn-primario:hover:not(:disabled) {
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--cta) 30%, transparent);
+}
+
+.cartao,
+.indicador {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.indicador:hover {
+  border-color: var(--marca-borda);
+  transform: translateY(-1px);
+}
+
+.aviso {
+  animation: subir 0.2s ease both;
+}
+
+.barra-tronco {
+  transition: height 0.4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ============ Responsivo ============ */
