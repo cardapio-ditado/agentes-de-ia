@@ -178,6 +178,13 @@ export async function agentes(raiz, ctx) {
           campos.description,
         ]),
         el("div", { classe: "campo campo-largo" }, [
+          el("p", {
+            classe: "muted",
+            texto:
+              "Todo agente já vem com as ferramentas da casa: consultar data/hora, informações do estabelecimento, programação, registrar e consultar reservas.",
+          }),
+        ]),
+        el("div", { classe: "campo campo-largo" }, [
           el("label", { texto: "Personalidade e regras (system prompt)" }),
           campos.system_prompt,
           el("p", {

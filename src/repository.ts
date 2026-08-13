@@ -1,4 +1,5 @@
 import { db } from "./supabase.js";
+import { FERRAMENTAS_PADRAO } from "./tools/index.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 
 export type Agent = Tables<"agents">;
@@ -111,6 +112,9 @@ export async function createAgent(orgId: string, dados: DadosAgente): Promise<Ag
       effort: dados.effort ?? "high",
       max_tokens: dados.max_tokens ?? 16000,
       enabled: dados.enabled ?? true,
+      // Ferramentas explícitas no banco: quem ler o registro vê o que o
+      // agente pode fazer, sem depender do padrão implícito do código.
+      config: { tools: FERRAMENTAS_PADRAO },
     })
     .select()
     .single();

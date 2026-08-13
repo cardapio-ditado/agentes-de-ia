@@ -320,8 +320,14 @@ As descrições dizem **quando** chamar cada uma, não só o que fazem — é o 
 influencia o modelo a acionar a ferramenta certa na hora certa.
 
 Para adicionar uma ferramenta: implemente `AgentTool` em `src/tools/`, registre em
-`src/tools/index.ts` e habilite no `config.tools` do agente. Uma ferramenta só existe
-para o agente se estiver listada lá — habilitar é sempre explícito.
+`src/tools/index.ts` e liste no `config.tools` do agente.
+
+`config.tools` **ausente** significa o conjunto padrão completo — um agente
+criado pelo painel já nasce sabendo trabalhar. Um **array explícito** (mesmo
+vazio) é respeitado à risca: restringir é escolha deliberada de quem edita o
+banco. A regra antiga ("ausente = nenhuma") produzia o pior bug possível num
+atendente: sem `registrar_reserva`, o modelo improvisava a confirmação de uma
+reserva que nunca existiu.
 
 Datas usam ISO 8601 **com offset** (`2026-08-15T20:00:00-04:00`). Sem offset a
 ferramenta recusa, em vez de gravar silenciosamente no fuso errado.
