@@ -15,6 +15,7 @@ import {
 import { decidirReserva } from "./reservationFlow.js";
 import { listNotificationsForReservation } from "./notifications.js";
 import {
+  apagarConversa,
   atendimentoDe,
   definirAtendimento,
   definirStatusConversa,
@@ -548,6 +549,12 @@ async function roteasApi(
           em: m.created_at,
         })),
       });
+    }
+
+    // DELETE /v1/conversations/:id — apaga o histórico; reservas sobrevivem
+    if (metodo === "DELETE" && p.length === 2) {
+      await apagarConversa(conversa.id);
+      return ok(res, { apagada: true });
     }
 
     // POST /v1/conversations/:id/close — encerra ({"reabrir":true} reabre)

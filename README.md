@@ -78,6 +78,8 @@ requisição devolve um `x-trace-id` para correlacionar com o log.
 | `GET /v1/conversations/:id` | `reservations:read` | Conversa com o histórico |
 | `POST /v1/conversations/:id/takeover` | `reservations:write` | Assume o atendimento (`{"devolver":true}` devolve ao agente) |
 | `POST /v1/conversations/:id/messages` | `reservations:write` | Resposta escrita por uma pessoa |
+| `POST /v1/conversations/:id/close` | `reservations:write` | Encerra (`{"reabrir":true}` reabre); mensagem nova do cliente reabre sozinha |
+| `DELETE /v1/conversations/:id` | `reservations:write` | Apaga a conversa e o histórico. Reservas sobrevivem com o vínculo anulado |
 | `GET /health` | público | Health check |
 
 Eventos do stream: `text_delta`, `tool_use`, `tool_result`, `done`, `error`.

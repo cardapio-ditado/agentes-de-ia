@@ -253,6 +253,18 @@ export async function definirStatusConversa(params: {
 }
 
 /**
+ * Apaga a conversa e todo o seu rastro.
+ *
+ * Mensagens, chamadas de ferramenta e eventos caem em cascata (FK). Reservas
+ * sobrevivem com o vínculo anulado — apagar um chat de teste não pode sumir
+ * com uma mesa marcada.
+ */
+export async function apagarConversa(conversationId: string): Promise<void> {
+  const { error } = await db().from("conversations").delete().eq("id", conversationId);
+  if (error) throw new Error(`Falha ao apagar a conversa: ${error.message}`);
+}
+
+/**
  * Conta se o agente deve responder nesta conversa.
  *
  * O conector do WhatsApp chama isto antes de acionar o modelo: uma pessoa que

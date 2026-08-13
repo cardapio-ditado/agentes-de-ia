@@ -1,4 +1,4 @@
-import { get, post } from "../api.js";
+import { del, get, post } from "../api.js";
 import { avisar, dataHora, desde, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
@@ -171,6 +171,14 @@ export async function conversas(raiz, ctx) {
       onclick: encerrar,
     });
 
+    const btnApagar = el("button", {
+      classe: "btn btn-perigo btn-peq",
+      type: "button",
+      texto: "Apagar",
+      title: "Apaga a conversa e o histórico para sempre. Reservas já feitas não são afetadas.",
+      onclick: apagar,
+    });
+
     limpar(painelThread).append(
       el("div", { classe: "thread-topo" }, [
         el("div", { style: "min-width:0;flex:1" }, [
@@ -184,6 +192,7 @@ export async function conversas(raiz, ctx) {
             : etiqueta("agente ativo", "etiqueta-ok"),
         btnAssumir,
         btnEncerrar,
+        btnApagar,
       ]),
       corpo,
       el("div", { classe: "thread-rodape" }, [
@@ -199,6 +208,26 @@ export async function conversas(raiz, ctx) {
     );
 
     corpo.scrollTop = corpo.scrollHeight;
+
+    async function apagar() {
+      const nome = c.titulo || c.contato || "esta conversa";
+      // confirm nativo basta: apagar histórico é raro e irreversível — o
+      // atrito extra aqui é proteção, não burocracia.
+      if (!window.confirm(`Apagar ${nome} para sempre? O histórico não volta. Reservas já registradas continuam existindo.`)) {
+        return;
+      }
+      btnApagar.disabled = true;
+      try {
+        await del(`/v1/conversations/${id}`);
+        avisar("Conversa apagada. Se o cliente escrever de novo, começa do zero.", "ok");
+        selecionada = null;
+        vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o agente.");
+        await carregarLista();
+      } catch (e) {
+        avisar(e.message, "erro");
+        btnApagar.disabled = false;
+      }
+    }
 
     async function encerrar() {
       btnEncerrar.disabled = true;
