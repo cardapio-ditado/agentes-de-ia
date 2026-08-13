@@ -195,7 +195,17 @@ que fica ligado, com volume persistente para `.whatsapp/`.
 ### Vercel
 
 `api/index.ts` é o ponto de entrada; `vercel.json` manda `/v1/*` e `/health`
-para lá, e o CDN serve `public/`. Variáveis a configurar no projeto:
+para lá, e o CDN serve `public/`.
+
+`vercel.json` fixa `"framework": null` de propósito. Sem isso a Vercel detecta
+sozinha um preset de Node.js, elege `src/app.ts` como entrada da aplicação e
+ignora `api/`. Como `src/app.ts` é um módulo de roteamento — exporta
+`criarHandler`, não um handler pronto — a função sobe sem `export default`
+válido e todas as rotas respondem `FUNCTION_INVOCATION_FAILED`. Com `null` o
+projeto usa o preset "Other", que é o modelo que este repositório assume:
+`public/` no CDN e `api/index.ts` como única função.
+
+Variáveis a configurar no projeto:
 
 ```
 ANTHROPIC_API_KEY
