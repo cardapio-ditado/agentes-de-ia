@@ -7,7 +7,6 @@ import { authenticateApiKey, hasScope, type ApiKey } from "./apikeys.js";
 import { listAgentsInOrg } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { listNotificationsForReservation } from "./notifications.js";
-import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whatsapp.js";
 import {
   createVenueEvent,
   deleteVenueEvent,
@@ -31,6 +30,30 @@ import {
 // Relativo ao cwd, não ao módulo: compilado, este arquivo vive em dist/src/,
 // e um caminho relativo ao módulo apontaria para dist/public (inexistente).
 const PUBLIC_DIR = resolve(process.cwd(), "public");
+
+// ============================================================
+// Conector WhatsApp — registrado, não importado
+// ============================================================
+
+/**
+ * Interface mínima do conector, para este módulo não importar o Baileys.
+ *
+ * Importar direto arrastaria 9 MB de dependência para dentro da função
+ * serverless, que nunca conseguiria usá-la: o Baileys precisa de WebSocket
+ * aberto e de disco. Quem roda num servidor de verdade registra o conector;
+ * na Vercel ele fica nulo e as rotas respondem 501.
+ */
+export interface ConectorWhatsapp {
+  estado(): unknown;
+  iniciar(opcoes: { agentSlug: string; venueSlug: string }): Promise<void>;
+  parar(): Promise<void>;
+}
+
+let conectorWhatsapp: ConectorWhatsapp | null = null;
+
+export function registrarConectorWhatsapp(conector: ConectorWhatsapp | null): void {
+  conectorWhatsapp = conector;
+}
 
 // ============================================================
 // Envelope de resposta (padrão do PRD)
@@ -294,8 +317,17 @@ async function roteasApi(
   if (p[0] === "whatsapp" && p.length === 2) {
     const chave = await exigirChave(req, "reservations:write");
 
+    if (!conectorWhatsapp) {
+      throw erro(
+        501,
+        "not_implemented",
+        "O conector do WhatsApp não roda neste ambiente. Ele precisa de um " +
+          "host sempre ligado, com WebSocket e disco — não funciona em serverless.",
+      );
+    }
+
     if (metodo === "GET" && p[1] === "status") {
-      return ok(res, estadoWhatsapp());
+      return ok(res, conectorWhatsapp.estado());
     }
 
     if (metodo === "POST" && p[1] === "conectar") {
@@ -310,13 +342,13 @@ async function roteasApi(
         throw erro(404, "not_found", `Agente "${agentSlug}" não encontrado nesta organização.`);
       }
 
-      await iniciarWhatsapp({ agentSlug, venueSlug });
-      return ok(res, estadoWhatsapp());
+      await conectorWhatsapp.iniciar({ agentSlug, venueSlug });
+      return ok(res, conectorWhatsapp.estado());
     }
 
     if (metodo === "POST" && p[1] === "desconectar") {
-      await pararWhatsapp();
-      return ok(res, estadoWhatsapp());
+      await conectorWhatsapp.parar();
+      return ok(res, conectorWhatsapp.estado());
     }
   }
 
