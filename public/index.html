@@ -3,16 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Painel — Agentes de IA</title>
+    <title>Agentes de IA</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>"
+    />
   </head>
   <body>
-    <!-- Tela de acesso -->
-    <section id="tela-acesso" class="acesso">
+    <!-- ============ Acesso ============ -->
+    <section id="tela-acesso" class="acesso" hidden>
       <form id="form-acesso" class="cartao-acesso">
-        <h1>Painel de Agentes</h1>
+        <div class="marca marca-grande">
+          <span class="marca-icone" aria-hidden="true">◈</span>
+          <div>
+            <strong>Agentes de IA</strong>
+            <small>Ditado Popular</small>
+          </div>
+        </div>
         <p class="muted">
-          Informe a chave de API da sua organização. Ela fica só neste navegador.
+          Informe a chave de API da sua organização. Ela fica salva só neste
+          navegador.
         </p>
         <label for="campo-chave">Chave de API</label>
         <input
@@ -22,144 +33,89 @@
           placeholder="sk_ditado_..."
           required
         />
-        <button type="submit" class="btn btn-primario">Entrar</button>
+        <button type="submit" class="btn btn-primario btn-bloco">Entrar</button>
         <p id="erro-acesso" class="erro" role="alert" hidden></p>
       </form>
     </section>
 
-    <!-- Painel -->
-    <div id="painel" hidden>
-      <header class="topo">
-        <div class="marca">
-          <span class="ponto" aria-hidden="true"></span>
-          <strong>Agentes de IA</strong>
+    <!-- ============ Aplicação ============ -->
+    <div id="app" class="app" hidden>
+      <!-- Barra lateral -->
+      <aside class="lateral" id="lateral">
+        <div class="lateral-topo">
+          <div class="marca">
+            <span class="marca-icone" aria-hidden="true">◈</span>
+            <div class="marca-texto">
+              <strong>Agentes de IA</strong>
+              <small id="marca-org">—</small>
+            </div>
+          </div>
+          <button
+            id="btn-recolher"
+            class="btn-icone"
+            type="button"
+            title="Recolher menu"
+            aria-label="Recolher menu"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
         </div>
-        <div class="topo-acoes">
-          <label class="sr-only" for="seletor-venue">Estabelecimento</label>
-          <select id="seletor-venue"></select>
-          <button id="btn-sair" class="btn btn-fantasma" type="button">Sair</button>
+
+        <nav class="nav" id="nav" aria-label="Seções"></nav>
+
+        <div class="lateral-rodape">
+          <button id="btn-tema" class="nav-item" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"
+              />
+            </svg>
+            <span class="nav-rotulo">Tema</span>
+          </button>
+          <button id="btn-sair" class="nav-item" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+            </svg>
+            <span class="nav-rotulo">Sair</span>
+          </button>
         </div>
-      </header>
+      </aside>
 
-      <nav class="abas" role="tablist">
-        <button class="aba" role="tab" data-aba="reservas" aria-selected="true">
-          Reservas <span id="contador-reservas" class="badge" hidden>0</span>
-        </button>
-        <button class="aba" role="tab" data-aba="programacao" aria-selected="false">
-          Programação
-        </button>
-        <button class="aba" role="tab" data-aba="whatsapp" aria-selected="false">
-          WhatsApp <span id="ponto-whatsapp" class="ponto-status" aria-hidden="true"></span>
-        </button>
-        <button class="aba" role="tab" data-aba="chat" aria-selected="false">
-          Testar agente
-        </button>
-      </nav>
+      <!-- Conteúdo -->
+      <div class="conteudo">
+        <header class="topo">
+          <button
+            id="btn-menu"
+            class="btn-icone apenas-movel"
+            type="button"
+            aria-label="Abrir menu"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
 
-      <main>
-        <!-- Reservas -->
-        <section id="painel-reservas" class="painel-aba" role="tabpanel">
-          <div class="cabecalho-secao">
-            <h2>Fila de aprovação</h2>
-            <button id="btn-recarregar" class="btn btn-fantasma" type="button">
-              Recarregar
-            </button>
-          </div>
-          <div id="lista-reservas" class="lista"></div>
-        </section>
-
-        <!-- Programação -->
-        <section id="painel-programacao" class="painel-aba" role="tabpanel" hidden>
-          <div class="cabecalho-secao">
-            <h2>Programação</h2>
+          <div class="topo-titulo">
+            <h1 id="titulo-pagina">Painel</h1>
+            <p id="subtitulo-pagina" class="muted"></p>
           </div>
 
-          <form id="form-evento" class="cartao formulario">
-            <h3>Novo item</h3>
-            <div class="grade">
-              <div class="campo">
-                <label for="ev-titulo">Título</label>
-                <input id="ev-titulo" required placeholder="Samba de Raiz — Grupo X" />
-              </div>
-              <div class="campo">
-                <label for="ev-tipo">Tipo</label>
-                <select id="ev-tipo">
-                  <option value="musica">Música</option>
-                  <option value="jogo">Jogo</option>
-                  <option value="promocao">Promoção</option>
-                  <option value="evento">Evento</option>
-                  <option value="outro">Outro</option>
-                </select>
-              </div>
-              <div class="campo">
-                <label for="ev-data">Data e hora</label>
-                <input id="ev-data" type="datetime-local" required />
-              </div>
-              <div class="campo">
-                <label for="ev-couvert">Couvert (R$)</label>
-                <input id="ev-couvert" type="number" min="0" step="0.01" placeholder="0" />
-              </div>
-              <div class="campo campo-largo">
-                <label for="ev-descricao">Descrição</label>
-                <input id="ev-descricao" placeholder="Roda de samba na área externa" />
-              </div>
-            </div>
-            <button type="submit" class="btn btn-primario">Adicionar</button>
-          </form>
-
-          <div id="lista-eventos" class="lista"></div>
-        </section>
-
-        <!-- WhatsApp -->
-        <section id="painel-whatsapp" class="painel-aba" role="tabpanel" hidden>
-          <div class="cabecalho-secao">
-            <h2>Conexão WhatsApp</h2>
-            <span id="status-whatsapp" class="etiqueta">—</span>
+          <div class="topo-acoes">
+            <label class="sr-only" for="seletor-venue">Estabelecimento</label>
+            <select id="seletor-venue" class="select"></select>
           </div>
+        </header>
 
-          <div class="cartao alerta">
-            <strong>Conexão não oficial.</strong> O Baileys usa o protocolo do
-            WhatsApp&nbsp;Web, fora dos termos de uso da Meta. O número pode ser
-            banido — use um chip separado do número principal da casa.
-          </div>
+        <main id="pagina" class="pagina" tabindex="-1"></main>
+      </div>
 
-          <div class="cartao">
-            <div id="area-qr" class="area-qr">
-              <p class="muted">Clique em conectar para gerar o QR de pareamento.</p>
-            </div>
-            <div class="reserva-acoes">
-              <button id="btn-conectar-wa" class="btn btn-primario" type="button">
-                Conectar
-              </button>
-              <button id="btn-desconectar-wa" class="btn btn-perigo" type="button">
-                Desconectar
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Chat -->
-        <section id="painel-chat" class="painel-aba" role="tabpanel" hidden>
-          <div class="cabecalho-secao">
-            <h2>Testar agente</h2>
-            <select id="seletor-agente"></select>
-          </div>
-          <div id="chat" class="chat" aria-live="polite"></div>
-          <form id="form-chat" class="linha-chat">
-            <label class="sr-only" for="campo-mensagem">Mensagem</label>
-            <input
-              id="campo-mensagem"
-              placeholder="Oi, queria reservar uma mesa pra sexta…"
-              autocomplete="off"
-              required
-            />
-            <button type="submit" class="btn btn-primario">Enviar</button>
-          </form>
-        </section>
-      </main>
+      <div id="cortina" class="cortina" hidden></div>
     </div>
 
     <div id="avisos" class="avisos" aria-live="polite"></div>
-    <script type="module" src="/app.js"></script>
+
+    <script type="module" src="/js/app.js"></script>
   </body>
 </html>

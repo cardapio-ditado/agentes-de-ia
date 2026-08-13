@@ -8,6 +8,14 @@ import { listAgentsInOrg } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { listNotificationsForReservation } from "./notifications.js";
 import {
+  atendimentoDe,
+  definirAtendimento,
+  getConversationInOrg,
+  listConversations,
+  metricasDoVenue,
+  registrarMensagemHumana,
+} from "./inbox.js";
+import {
   createVenueEvent,
   deleteVenueEvent,
   findVenueBySlugInOrg,
@@ -250,6 +258,98 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await listVenueInfo(venue.id));
+    }
+
+    // GET /v1/venues/:slug/conversations?canal=&status=&humanas=1
+    if (metodo === "GET" && recurso === "conversations") {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await listConversations({
+          venueId: venue.id,
+          canal: url.searchParams.get("canal"),
+          status: url.searchParams.get("status"),
+          apenasHumanas: url.searchParams.get("humanas") === "1",
+        }),
+      );
+    }
+
+    // GET /v1/venues/:slug/metrics — números do painel
+    if (metodo === "GET" && recurso === "metrics") {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await metricasDoVenue(venue.id));
+    }
+  }
+
+  // ---- Conversas ----
+  if (p[0] === "conversations" && p.length >= 2) {
+    const escopo = metodo === "GET" ? "reservations:read" : "reservations:write";
+    const chave = await exigirChave(req, escopo);
+
+    const encontrado = await getConversationInOrg(p[1]!, chave.org_id);
+    if (!encontrado) throw erro(404, "not_found", "Conversa não encontrada.");
+    const { conversa, mensagens } = encontrado;
+
+    // GET /v1/conversations/:id — conversa com o histórico
+    if (metodo === "GET" && p.length === 2) {
+      return ok(res, {
+        id: conversa.id,
+        titulo: conversa.title,
+        canal: conversa.channel,
+        status: conversa.status,
+        contato: conversa.external_id,
+        atendimento: atendimentoDe(conversa),
+        mensagens: mensagens.map((m) => ({
+          id: m.id,
+          papel: m.role,
+          texto: m.content,
+          // Marca posta por registrarMensagemHumana: separa o que a pessoa
+          // escreveu do que o agente respondeu.
+          origem:
+            m.blocks && typeof m.blocks === "object" && !Array.isArray(m.blocks)
+              ? ((m.blocks as Record<string, unknown>).origem ?? null)
+              : null,
+          em: m.created_at,
+        })),
+      });
+    }
+
+    // POST /v1/conversations/:id/takeover — assumir ou devolver ao agente
+    if (metodo === "POST" && p[2] === "takeover" && p.length === 3) {
+      const corpo = await lerJson(req);
+      const devolver = corpo.devolver === true;
+      const atualizada = await definirAtendimento({
+        conversationId: conversa.id,
+        por: devolver ? "agente" : "humano",
+        quem: textoOpcional(corpo, "quem") ?? chave.name,
+      });
+      return ok(res, atendimentoDe(atualizada));
+    }
+
+    // POST /v1/conversations/:id/messages — resposta escrita por uma pessoa
+    if (metodo === "POST" && p[2] === "messages" && p.length === 3) {
+      const corpo = await lerJson(req);
+      const texto_ = texto(corpo, "texto").trim();
+      if (!texto_) throw erro(400, "invalid_request", "A mensagem não pode ser vazia.");
+
+      // Enquanto o agente responde, uma resposta manual sairia junto com a dele
+      // e o cliente receberia duas vozes na mesma conversa.
+      if (atendimentoDe(conversa).por !== "humano") {
+        throw erro(
+          409,
+          "conflict",
+          "Assuma o atendimento antes de responder — o agente ainda está respondendo esta conversa.",
+        );
+      }
+
+      const msg = await registrarMensagemHumana({
+        conversationId: conversa.id,
+        texto: texto_,
+        autor: textoOpcional(corpo, "autor") ?? chave.name,
+      });
+      return ok(res, { id: msg.id, em: msg.created_at }, 201);
     }
   }
 

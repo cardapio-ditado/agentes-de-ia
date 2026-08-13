@@ -66,6 +66,11 @@ requisição devolve um `x-trace-id` para correlacionar com o log.
 | `GET \| POST /v1/venues/:slug/events` | leitura \| escrita | Programação |
 | `DELETE /v1/events/:id?venue=<slug>` | `reservations:write` | Remove item |
 | `GET /v1/venues/:slug/info` | `reservations:read` | Base de conhecimento |
+| `GET /v1/venues/:slug/conversations` | `reservations:read` | Caixa de entrada. Filtros: `?canal=`, `?status=`, `?humanas=1` |
+| `GET /v1/venues/:slug/metrics` | `reservations:read` | Números do painel |
+| `GET /v1/conversations/:id` | `reservations:read` | Conversa com o histórico |
+| `POST /v1/conversations/:id/takeover` | `reservations:write` | Assume o atendimento (`{"devolver":true}` devolve ao agente) |
+| `POST /v1/conversations/:id/messages` | `reservations:write` | Resposta escrita por uma pessoa |
 | `GET /health` | público | Health check |
 
 Eventos do stream: `text_delta`, `tool_use`, `tool_result`, `done`, `error`.
@@ -301,6 +306,7 @@ src/
   notifications.ts      templates, provedores e fila de mensagens
   webhooks.ts           entrega assinada com retentativa
   repository.ts         agentes, conversas, mensagens, eventos
+  inbox.ts              caixa de entrada, atendimento humano e números do painel
   venues.ts             estabelecimentos, programação, reservas, aprovação
   supabase.ts           cliente service_role (nunca no navegador)
   config.ts             validação das variáveis de ambiente
@@ -309,7 +315,13 @@ src/
   database.types.ts     tipos gerados do schema
   tools/                ferramentas do agente
 api/index.ts            ponto de entrada da Vercel
-public/                 painel web (HTML/CSS/JS, sem build step)
+public/
+  index.html            casca do painel: barra lateral e cabeçalho
+  styles.css            tokens de tema (claro/escuro) e componentes
+  js/app.js             roteamento por hash, estado e navegação
+  js/api.js             cliente HTTP e leitura do SSE
+  js/ui.js              helpers de elemento, ícones e formatação
+  js/pages/             uma tela por arquivo
 scripts/
   seed.ts               dados de exemplo
   aprovar.ts            aprovação pela linha de comando
@@ -325,9 +337,14 @@ Testes com o runner nativo do Node (`node:test`), sem framework:
 npm test
 ```
 
-O painel é JS puro de propósito: nada de build step para uma tela operacional de
-três abas. Quando a interface crescer para o que o PRD descreve — designer visual
-de agentes, métricas, replays — aí sim vale trocar por React.
+O painel é JS puro de propósito: módulos ES nativos, sem bundler e sem build
+step. Cada tela é uma função `(raiz, ctx)` que desenha dentro do `<main>`; o
+roteador troca de tela pelo hash da URL. Todo texto vindo do banco entra por
+`textContent`, nunca por `innerHTML` — nome de cliente e mensagem de WhatsApp
+são dados de fora e não podem injetar marcação.
+
+Quando chegar a hora do designer visual de agentes e dos replays de conversa,
+aí sim vale trocar por React.
 
 ---
 
