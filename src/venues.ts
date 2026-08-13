@@ -174,6 +174,16 @@ export interface DadosVenue {
   capacity?: number | null;
   timezone?: string;
   opening_hours?: Record<string, string>;
+  /** Link do Google Maps que o agente manda ao cliente. Vive em settings. */
+  maps_url?: string | null;
+}
+
+/** Link do Maps guardado em settings, validado ao salvar. */
+export function mapsUrl(venue: Venue): string | null {
+  const settings = venue.settings;
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return null;
+  const valor = (settings as Record<string, Json | undefined>).maps_url;
+  return typeof valor === "string" && valor ? valor : null;
 }
 
 /**
@@ -213,6 +223,22 @@ export async function updateVenue(
       if (typeof valor === "string" && valor.trim()) horarios[dia] = valor.trim();
     }
     mudancas.opening_hours = horarios as Json;
+  }
+  if (dados.maps_url !== undefined) {
+    const url = dados.maps_url?.trim() || null;
+    if (url && !/^https:\/\/(www\.google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|maps\.google\.[a-z.]+)/.test(url)) {
+      throw new Error(
+        "O link precisa ser do Google Maps (google.com/maps ou maps.app.goo.gl). " +
+          'Use o botão "Compartilhar" no Maps e cole o link aqui.',
+      );
+    }
+    // settings guarda outras chaves (regras de reserva): mesclar, não substituir.
+    const atual = await findVenueBySlugInOrg(orgId, slug);
+    const settings = {
+      ...((atual.settings ?? {}) as Record<string, unknown>),
+      maps_url: url,
+    };
+    mudancas.settings = settings as Json;
   }
   if (Object.keys(mudancas).length === 0) throw new Error("Nada para atualizar.");
 

@@ -43,7 +43,29 @@ export async function empresa(raiz, ctx) {
       min: "1",
       placeholder: "120",
     }),
+    maps_url: el("input", {
+      value: dados.maps_url ?? "",
+      placeholder: "https://maps.app.goo.gl/…  (Maps → Compartilhar → Copiar link)",
+    }),
   };
+
+  // Mapa incorporado: usa o endereço digitado — atualiza ao salvar.
+  const areaMapa = el("div", {});
+  function desenharMapa() {
+    limpar(areaMapa);
+    const endereco = campos.address.value.trim();
+    if (!endereco) return;
+    areaMapa.append(
+      el("iframe", {
+        src: `https://maps.google.com/maps?q=${encodeURIComponent(endereco)}&z=16&output=embed`,
+        style:
+          "width:100%;height:260px;border:1px solid var(--borda);border-radius:12px;margin-top:10px",
+        loading: "lazy",
+        referrerpolicy: "no-referrer-when-downgrade",
+        title: "Localização no mapa",
+      }),
+    );
+  }
 
   const horarios = {};
   for (const [chave] of DIAS) {
@@ -70,6 +92,11 @@ export async function empresa(raiz, ctx) {
       el("div", { classe: "campo campo-largo" }, [
         el("label", { texto: "Endereço" }),
         campos.address,
+      ]),
+      el("div", { classe: "campo campo-largo" }, [
+        el("label", { texto: "Link do Google Maps (o agente envia ao cliente)" }),
+        campos.maps_url,
+        areaMapa,
       ]),
       el("div", { classe: "campo campo-largo" }, [
         el("label", { texto: "Descrição curta" }),
@@ -124,6 +151,7 @@ export async function empresa(raiz, ctx) {
     ]),
   );
 
+  desenharMapa();
   await carregarInfos();
 
   async function salvar(e) {
@@ -146,10 +174,12 @@ export async function empresa(raiz, ctx) {
           whatsapp: campos.whatsapp.value.trim() || null,
           email: campos.email.value.trim() || null,
           capacity: campos.capacity.value ? Number(campos.capacity.value) : null,
+          maps_url: campos.maps_url.value.trim() || null,
           opening_hours,
         }),
       });
       avisar("Dados salvos. O agente já responde com as informações novas.", "ok");
+      desenharMapa();
     } catch (err) {
       avisar(err.message, "erro");
     } finally {

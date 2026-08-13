@@ -76,18 +76,17 @@ document.getElementById("btn-tema").addEventListener("click", () => {
 const RECOLHIDA = "agentes.lateral";
 if (localStorage.getItem(RECOLHIDA) === "1") app.setAttribute("data-recolhida", "1");
 
+// Um único botão alterna nos dois sentidos — recolhida ficava sem volta antes.
 document.getElementById("btn-recolher").addEventListener("click", () => {
-  app.setAttribute("data-recolhida", "1");
-  localStorage.setItem(RECOLHIDA, "1");
+  const recolhida = app.hasAttribute("data-recolhida");
+  if (recolhida) app.removeAttribute("data-recolhida");
+  else app.setAttribute("data-recolhida", "1");
+  localStorage.setItem(RECOLHIDA, recolhida ? "0" : "1");
 });
 
 document.getElementById("btn-menu").addEventListener("click", () => {
-  // No celular a lateral vira gaveta; no desktop, o botão a expande de volta.
-  if (matchMedia("(max-width: 820px)").matches) app.setAttribute("data-menu", "1");
-  else {
-    app.removeAttribute("data-recolhida");
-    localStorage.setItem(RECOLHIDA, "0");
-  }
+  // No celular a lateral vira gaveta por cima do conteúdo.
+  app.setAttribute("data-menu", "1");
 });
 
 document.getElementById("cortina").addEventListener("click", () => app.removeAttribute("data-menu"));
@@ -104,7 +103,8 @@ function montarNav() {
     nav.append(
       el(
         "a",
-        { classe: "nav-item", href: `#${p.id}`, "data-pagina": p.id },
+        // title vira tooltip — é como se sabe o que é cada ícone na lateral recolhida.
+        { classe: "nav-item", href: `#${p.id}`, "data-pagina": p.id, title: p.rotulo },
         [
           icone(p.icone),
           el("span", { classe: "nav-rotulo", texto: p.rotulo }),

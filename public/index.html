@@ -12,7 +12,7 @@
     />
     <!-- ?v= força o navegador a buscar a versão nova a cada release visual.
          Bump manual: mudou CSS ou JS, soma 1 aqui e no script lá embaixo. -->
-    <link rel="stylesheet" href="/styles.css?v=5" />
+    <link rel="stylesheet" href="/styles.css?v=6" />
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>"
@@ -86,7 +86,7 @@
         <nav class="nav" id="nav" aria-label="Seções"></nav>
 
         <div class="lateral-rodape">
-          <button id="btn-tema" class="nav-item" type="button">
+          <button id="btn-tema" class="nav-item" type="button" title="Tema claro/escuro">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"
@@ -94,7 +94,7 @@
             </svg>
             <span class="nav-rotulo">Tema</span>
           </button>
-          <button id="btn-sair" class="nav-item" type="button">
+          <button id="btn-sair" class="nav-item" type="button" title="Sair">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
             </svg>
@@ -136,6 +136,6 @@
 
     <div id="avisos" class="avisos" aria-live="polite"></div>
 
-    <script type="module" src="/js/app.js?v=5"></script>
+    <script type="module" src="/js/app.js?v=6"></script>
   </body>
 </html>

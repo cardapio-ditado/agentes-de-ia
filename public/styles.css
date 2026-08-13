@@ -92,6 +92,13 @@
   box-sizing: border-box;
 }
 
+/* O atributo hidden perde para qualquer display definido em classe (grid,
+   flex). Sem esta regra, a tela de acesso e o painel apareciam empilhados,
+   um rolando embaixo do outro. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--fundo);
@@ -328,10 +335,19 @@ h3 {
   display: none;
 }
 .app[data-recolhida="1"] .lateral-topo {
-  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
 }
-.app[data-recolhida="1"] #btn-recolher {
-  display: none;
+/* Recolhida, a seta vira para fora: o mesmo botão expande de volta. */
+#btn-recolher svg {
+  transition: transform 0.18s ease;
+}
+.app[data-recolhida="1"] #btn-recolher svg {
+  transform: rotate(180deg);
+}
+.app[data-recolhida="1"] .nav-item {
+  justify-content: center;
+  padding: 11px;
 }
 
 /* ============ Conteúdo ============ */

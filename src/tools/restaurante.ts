@@ -4,6 +4,7 @@ import {
   getVenue,
   listUpcomingEvents,
   listVenueInfo,
+  mapsUrl,
   venueSettings,
   type Venue,
   type VenueEvent,
@@ -159,6 +160,12 @@ const informacoesDoRestaurante: AgentTool = {
     const linhas = [`Nome: ${venue.name}`];
     if (venue.description) linhas.push(`Descrição: ${venue.description}`);
     if (venue.address) linhas.push(`Endereço: ${venue.address}`);
+    const maps = mapsUrl(venue);
+    if (maps) {
+      linhas.push(
+        `Localização no Google Maps: ${maps} (envie este link quando o cliente pedir a localização ou perguntar como chegar)`,
+      );
+    }
     if (venue.phone) linhas.push(`Telefone: ${venue.phone}`);
     if (venue.whatsapp) linhas.push(`WhatsApp: ${venue.whatsapp}`);
     if (venue.capacity) linhas.push(`Capacidade: ${venue.capacity} lugares`);

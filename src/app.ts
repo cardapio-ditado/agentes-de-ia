@@ -39,6 +39,7 @@ import {
   listPendingReservations,
   listVenueInfo,
   listVenuesInOrg,
+  mapsUrl,
   updateVenue,
   type DadosVenue,
 } from "./venues.js";
@@ -357,6 +358,7 @@ async function roteasApi(
         capacity: venue.capacity,
         timezone: venue.timezone,
         opening_hours: venue.opening_hours ?? {},
+        maps_url: mapsUrl(venue),
       });
     }
 
