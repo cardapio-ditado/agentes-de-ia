@@ -31,6 +31,7 @@ import {
   listTraining,
   removeTraining,
 } from "./training.js";
+import { versaoDoCodigo } from "./version.js";
 import {
   createVenueEvent,
   createVenueInfo,
@@ -217,7 +218,7 @@ async function rotear(
   const partes = caminho.split("/").filter(Boolean);
 
   if (metodo === "GET" && caminho === "/health") {
-    return ok(res, { status: "ok", trace_id: traceId });
+    return ok(res, { status: "ok", versao: versaoDoCodigo(), trace_id: traceId });
   }
 
   // Tudo sob /v1 exige chave de API.
@@ -678,7 +679,8 @@ async function roteasApi(
     }
 
     if (metodo === "GET" && p[1] === "status") {
-      return ok(res, conectorWhatsapp.estado());
+      const estado = conectorWhatsapp.estado() as Record<string, unknown>;
+      return ok(res, { ...estado, versao: versaoDoCodigo() });
     }
 
     if (metodo === "POST" && p[1] === "conectar") {

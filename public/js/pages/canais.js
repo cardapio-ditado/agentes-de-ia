@@ -95,6 +95,12 @@ export async function canais(raiz, ctx) {
                 ? `Conectado como ${estado.telefone}${agenteAtual ? ` · atendido por ${agenteAtual.name}` : ""}`
                 : "Nenhum número pareado",
             }),
+            el("p", {
+              classe: "muted",
+              // A pergunta certa quando o site e o PC divergem: que código
+              // roda AQUI? Compare com a versão mais nova no GitHub.
+              texto: `Versão do sistema neste computador: ${estado.versao ?? "desconhecida"}`,
+            }),
           ]),
           etiqueta(rotulo, variante),
         ]),

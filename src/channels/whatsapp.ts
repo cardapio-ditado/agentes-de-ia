@@ -10,7 +10,12 @@ import { toDataURL } from "qrcode";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
-import { normalizarTelefone, registrarProvedorWhatsapp } from "../notifications.js";
+import {
+  listPendingNotifications,
+  normalizarTelefone,
+  registrarProvedorWhatsapp,
+  tentarEnviar,
+} from "../notifications.js";
 
 /**
  * Conector WhatsApp via Baileys (protocolo do WhatsApp Web).
@@ -115,6 +120,7 @@ async function aoAtualizarConexao(
     estado.telefone = socket?.user?.id?.split(":")[0] ?? null;
     // A partir daqui as notificações de reserva saem por este número.
     registrarProvedorWhatsapp(enviarPeloWhatsapp);
+    iniciarFilaDeNotificacoes();
     console.log(`[whatsapp] conectado como ${estado.telefone ?? "?"}`);
   }
 
@@ -124,8 +130,9 @@ async function aoAtualizarConexao(
 
     estado.status = "desconectado";
     estado.ultimoErro = lastDisconnect?.error?.message ?? null;
-    // Sem conexão, as notificações voltam para a Cloud API ou para o console.
+    // Sem conexão, as notificações voltam para a fila até reconectar.
     registrarProvedorWhatsapp(null);
+    pararFilaDeNotificacoes();
 
     if (parando) return;
 
@@ -267,4 +274,52 @@ export async function pararWhatsapp(): Promise<void> {
   estado.agentSlug = null;
   estado.venueSlug = null;
   registrarProvedorWhatsapp(null);
+  pararFilaDeNotificacoes();
+}
+
+// ============================================================
+// Fila de notificações
+// ============================================================
+
+let timerFila: ReturnType<typeof setInterval> | null = null;
+let processandoFila = false;
+
+/**
+ * Entrega o que outros processos deixaram na fila.
+ *
+ * Aprovar uma reserva pelo painel na Vercel registra a notificação como
+ * `pending` — lá não existe WhatsApp conectado. Este processo, que tem o
+ * número pareado, varre a fila a cada 15s e envia. É o que faz a aprovação
+ * feita de qualquer lugar chegar no cliente.
+ */
+function iniciarFilaDeNotificacoes(): void {
+  if (timerFila) return;
+  timerFila = setInterval(() => void processarFila(), 15_000);
+  // Primeira varredura imediata: se algo ficou pendente enquanto o conector
+  // estava fora, o cliente não espera os 15s.
+  void processarFila();
+}
+
+function pararFilaDeNotificacoes(): void {
+  if (timerFila) clearInterval(timerFila);
+  timerFila = null;
+}
+
+async function processarFila(): Promise<void> {
+  if (processandoFila || estado.status !== "conectado") return;
+  processandoFila = true;
+  try {
+    const pendentes = await listPendingNotifications();
+    for (const notificacao of pendentes) {
+      if (notificacao.channel !== "whatsapp") continue;
+      const resultado = await tentarEnviar(notificacao);
+      if (resultado.status === "sent") {
+        console.log(`[whatsapp] notificação ${notificacao.id} entregue pela fila.`);
+      }
+    }
+  } catch (e) {
+    console.error("[whatsapp] falha ao processar a fila de notificações:", e);
+  } finally {
+    processandoFila = false;
+  }
 }

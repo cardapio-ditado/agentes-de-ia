@@ -35,12 +35,13 @@ export function montarMensagem(
 
   if (template === "reserva_aprovada") {
     const linhas = [
-      `Olá, ${nome}! Sua reserva no ${venue.name} está confirmada.`,
+      `Olá, ${nome}! Sua reserva no ${venue.name} está confirmada. ✅`,
       ``,
       `${quando} — ${pessoas}`,
     ];
     if (reserva.area_preference) linhas.push(`Área: ${reserva.area_preference}`);
-    linhas.push(``, `Se precisar alterar ou cancelar, é só responder por aqui.`);
+    linhas.push(``, `Está tudo certo — te aguardamos! 🥂`);
+    linhas.push(`Se precisar alterar ou cancelar, é só responder por aqui.`);
     if (venue.phone) linhas.push(`Telefone: ${venue.phone}`);
     return linhas.join("\n");
   }
@@ -180,14 +181,18 @@ export async function notificarCliente(params: {
 }): Promise<Notification | null> {
   const { template, reserva, venue } = params;
   const corpo = montarMensagem(template, reserva, venue);
-  const canal = canalAtivo();
 
+  // O canal do cliente é sempre WhatsApp. O processo que aprovou pode não
+  // ter provedor nenhum (aprovação pelo painel na Vercel, onde o Baileys não
+  // roda) — nesse caso a notificação NÃO é "enviada" para um console que
+  // ninguém lê: fica `pending` na fila, e o conector do WhatsApp, onde
+  // estiver rodando, entrega em segundos.
   const { data: notificacao, error } = await db()
     .from("notifications")
     .insert({
       venue_id: venue.id,
       reservation_id: reserva.id,
-      channel: canal,
+      channel: "whatsapp",
       destination: reserva.customer_phone,
       template,
       body: corpo,
@@ -198,6 +203,14 @@ export async function notificarCliente(params: {
   if (error) {
     console.error(`[notifications] não registrou a notificação: ${error.message}`);
     return null;
+  }
+
+  if (canalAtivo() === "console") {
+    console.log(
+      `[notifications] sem provedor de WhatsApp neste processo — ` +
+        `notificação ${notificacao.id} aguardando o conector na fila.`,
+    );
+    return notificacao;
   }
 
   return await tentarEnviar(notificacao);

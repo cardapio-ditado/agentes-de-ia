@@ -135,12 +135,17 @@ export async function reservas(raiz, ctx) {
         });
 
         // A decisão fica gravada mesmo se a mensagem não sair; por isso o aviso
-        // distingue os dois casos em vez de dizer só "pronto".
+        // distingue os três casos em vez de dizer só "pronto".
         const n = res.notificacao;
         if (!n) {
           avisar("Decisão registrada. Nenhuma notificação foi disparada.", "ok");
         } else if (n.status === "sent") {
-          avisar(`Decisão registrada e cliente avisado por ${n.canal}.`, "ok");
+          avisar("Decisão registrada e cliente avisado no WhatsApp.", "ok");
+        } else if (n.status === "pending") {
+          avisar(
+            "Decisão registrada. A mensagem entra na fila e o WhatsApp do bar envia em segundos.",
+            "ok",
+          );
         } else {
           avisar(`Decisão registrada, mas o aviso ao cliente falhou: ${n.erro ?? n.status}.`, "erro");
         }
