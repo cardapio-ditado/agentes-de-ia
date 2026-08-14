@@ -31,6 +31,8 @@ export async function canais(raiz, ctx) {
     agentes.map((a) => el("option", { value: a.slug, texto: a.name })),
   );
 
+  const areaInstagram = el("div", {});
+
   raiz.append(
     el("div", { classe: "pilha" }, [
       el("section", { classe: "cartao alerta" }, [
@@ -42,8 +44,55 @@ export async function canais(raiz, ctx) {
         }),
       ]),
       area,
+      areaInstagram,
     ]),
   );
+
+  void desenharInstagram();
+
+  async function desenharInstagram() {
+    let estado;
+    try {
+      estado = await get("/v1/instagram/status");
+    } catch {
+      return; // API antiga sem a rota: o cartão simplesmente não aparece.
+    }
+
+    limpar(areaInstagram).append(
+      el("section", { classe: "cartao" }, [
+        el("div", { classe: "cabecalho-secao" }, [
+          el("div", {}, [
+            el("h2", { texto: "Instagram" }),
+            el("p", {
+              classe: "muted",
+              texto: estado.configurado
+                ? `DMs atendidos por "${estado.agente}" · canal oficial da Meta, direto na nuvem — nenhum computador precisa ficar ligado.`
+                : "Canal oficial da Meta: o cliente manda DM e o agente responde. Roda direto na nuvem, sem QR e sem computador ligado.",
+            }),
+          ]),
+          etiqueta(
+            estado.configurado ? "Ativo" : "Não configurado",
+            estado.configurado ? "etiqueta-ok" : "",
+          ),
+        ]),
+        estado.configurado
+          ? null
+          : el("div", {}, [
+              el("p", { classe: "muted", texto: "Para ativar, falta configurar no servidor:" }),
+              el(
+                "ul",
+                { classe: "muted", style: "padding-left:18px;line-height:1.8" },
+                estado.faltando.map((v) => el("li", { texto: v })),
+              ),
+              el("p", {
+                classe: "muted",
+                texto:
+                  "Essas chaves vêm do app em developers.facebook.com (produto Instagram > mensagens). Configure-as nas variáveis de ambiente da Vercel e o cartão vira \"Ativo\" sozinho.",
+              }),
+            ]),
+      ]),
+    );
+  }
 
   if (agentes.length === 0) {
     limpar(area).append(

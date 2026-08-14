@@ -31,6 +31,12 @@ import {
   listTraining,
   removeTraining,
 } from "./training.js";
+import {
+  assinaturaValida,
+  estadoInstagram,
+  processarWebhookInstagram,
+  verificarWebhook,
+} from "./channels/instagram.js";
 import { criarComandoPonte, lerEstadoPonte } from "./ponteWhatsapp.js";
 import { versaoDoCodigo } from "./version.js";
 import {
@@ -763,6 +769,46 @@ async function roteasApi(
       throw erro(404, "not_found", "Reserva não encontrada.");
     }
     return ok(res, await listNotificationsForReservation(encontrado.reservation.id));
+  }
+
+  // ---- Instagram (API oficial da Meta) ----
+  // O webhook NÃO usa chave de API: quem chama é a Meta. A segurança é o
+  // verify token (GET de verificação) e a assinatura HMAC do corpo (POST).
+  if (p[0] === "instagram" && p[1] === "webhook" && p.length === 2) {
+    if (metodo === "GET") {
+      const challenge = verificarWebhook(url.searchParams);
+      if (challenge === null) {
+        throw erro(403, "forbidden", "Verificação do webhook recusada.");
+      }
+      // A Meta espera o challenge cru, sem envelope JSON.
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end(challenge);
+      return;
+    }
+
+    if (metodo === "POST") {
+      const bruto = await lerBinario(req, 1_000_000);
+      const assinatura = req.headers["x-hub-signature-256"];
+      if (!assinaturaValida(bruto, Array.isArray(assinatura) ? assinatura[0] : assinatura)) {
+        throw erro(403, "forbidden", "Assinatura do webhook inválida.");
+      }
+      let corpo: unknown;
+      try {
+        corpo = JSON.parse(bruto.toString("utf8"));
+      } catch {
+        throw erro(400, "invalid_request", "Corpo do webhook não é JSON.");
+      }
+      // Processa antes de responder: em serverless, o trabalho morre junto
+      // com a resposta. O agente responde em segundos; a Meta espera.
+      await processarWebhookInstagram(corpo as Parameters<typeof processarWebhookInstagram>[0]);
+      return ok(res, { recebido: true });
+    }
+  }
+
+  // GET /v1/instagram/status — configuração do canal, para a aba Canais
+  if (metodo === "GET" && p[0] === "instagram" && p[1] === "status" && p.length === 2) {
+    await exigirChave(req, "reservations:write");
+    return ok(res, estadoInstagram());
   }
 
   // ---- WhatsApp (Baileys) ----
