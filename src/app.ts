@@ -564,7 +564,7 @@ async function roteasApi(
     if (metodo === "GET" && recurso === "metrics") {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      return ok(res, await metricasDoVenue(venue.id));
+      return ok(res, await metricasDoVenue(venue.id, venue.timezone));
     }
   }
 

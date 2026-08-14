@@ -93,7 +93,11 @@ export function indicador({ rotulo, valor, nota, iconePath, destaque }) {
 
 // ============ Formatação ============
 
+// Fixo no fuso da casa, não no fuso de quem está com o painel aberto — sem
+// isso, checar do celular em outro fuso mostraria hora errada. Só há um
+// estabelecimento hoje; se isso mudar, isto precisa virar por-venue.
 const DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Cuiaba",
   day: "2-digit",
   month: "2-digit",
   hour: "2-digit",

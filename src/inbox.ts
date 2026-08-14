@@ -346,7 +346,17 @@ async function total(
   return count ?? 0;
 }
 
-export async function metricasDoVenue(venueId: string): Promise<Metricas> {
+/** Dia em YYYY-MM-DD no fuso da casa — não no UTC do timestamp gravado. */
+function diaLocal(iso: string, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+export async function metricasDoVenue(venueId: string, timezone: string): Promise<Metricas> {
   const agora = new Date();
   const seteDias = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const contagem = { count: "exact", head: true } as const;
@@ -442,16 +452,17 @@ export async function metricasDoVenue(venueId: string): Promise<Metricas> {
       tokens.entrada += m.input_tokens ?? 0;
       tokens.saida += m.output_tokens ?? 0;
       tokens.cache_lido += m.cache_read_tokens ?? 0;
-      const dia = m.created_at.slice(0, 10);
+      const dia = diaLocal(m.created_at, timezone);
       porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
     }
   }
 
   // Sete dias sempre presentes, mesmo os vazios: um gráfico com buracos mente
-  // sobre o movimento.
+  // sobre o movimento. Em dia local: uma mensagem de quinta às 22h (Cuiabá)
+  // não pode cair no balde de sexta só porque em UTC já virou o dia.
   const serie: Array<{ dia: string; mensagens: number }> = [];
   for (let i = 6; i >= 0; i -= 1) {
-    const d = new Date(agora.getTime() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const d = diaLocal(new Date(agora.getTime() - i * 24 * 60 * 60 * 1000).toISOString(), timezone);
     serie.push({ dia: d, mensagens: porDia.get(d) ?? 0 });
   }
 

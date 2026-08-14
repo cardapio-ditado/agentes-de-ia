@@ -96,7 +96,9 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     const inicio = Date.now();
     // Sempre em streaming: com max_tokens alto a requisição não-streaming
     // estoura o timeout HTTP do SDK.
-    const stream = anthropic().messages.stream(buildRequest(agent, messages, tools));
+    const stream = anthropic().messages.stream(
+      buildRequest(agent, messages, tools, venue?.timezone ?? "America/Cuiaba"),
+    );
     if (onEvent) {
       stream.on("text", (delta) => onEvent({ type: "text_delta", text: delta }));
     }
@@ -196,10 +198,32 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
   );
 }
 
+/**
+ * "Agora é ..." no fuso da casa — sem isso o modelo só tem o conhecimento de
+ * treinamento, que não sabe (nem podia saber) que dia é hoje.
+ */
+function contextoDeAgora(timezone: string): string {
+  const data = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: timezone,
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
+  return (
+    `Data e hora atuais: ${data} (fuso ${timezone}). ` +
+    "Use isso para calcular \"hoje\", \"amanhã\", dias da semana e qualquer data relativa — " +
+    "nunca o seu conhecimento de treinamento, que não sabe que dia é agora."
+  );
+}
+
 function buildRequest(
   agent: Agent,
   messages: Anthropic.MessageParam[],
   tools: AgentTool[],
+  timezone: string,
 ): Anthropic.MessageCreateParamsNonStreaming {
   // Prompt e base de conhecimento em blocos separados, o cache no último:
   // um breakpoint cobre o prefixo inteiro, e editar o treinamento não obriga
@@ -215,6 +239,9 @@ function buildRequest(
   if (blocos.length > 0) {
     blocos[blocos.length - 1]!.cache_control = { type: "ephemeral" };
   }
+  // Fora do prefixo em cache: muda a cada minuto, e não pode invalidar o
+  // cache do prompt + treinamento a cada chamada.
+  blocos.push({ type: "text", text: contextoDeAgora(timezone) });
 
   const request: Anthropic.MessageCreateParamsNonStreaming = {
     model: agent.model,
