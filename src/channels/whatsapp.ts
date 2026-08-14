@@ -186,10 +186,12 @@ async function aoReceberMensagem(
     return;
   }
 
-  // Só para o log ficar legível — quem identifica a conversa de volta é o jid
-  // inteiro, guardado abaixo.
-  const telefoneExibicao = jid.split("@")[0] ?? jid;
-  console.log(`[whatsapp] ${telefoneExibicao}: ${texto.slice(0, 80)}`);
+  // Em contas migradas para LID, o jid é um id interno ilegível — o número
+  // de verdade vem em remoteJidAlt. O nome vem do perfil (pushName).
+  const nomePerfil = mensagem.pushName?.trim() || null;
+  const telefoneReal = extrairTelefone(jid, mensagem.key.remoteJidAlt);
+  const telefoneExibicao = telefoneReal ?? jid.split("@")[0] ?? jid;
+  console.log(`[whatsapp] ${nomePerfil ?? "?"} (${telefoneExibicao}): ${texto.slice(0, 80)}`);
 
   try {
     await socket?.sendPresenceUpdate("composing", jid);
@@ -203,6 +205,8 @@ async function aoReceberMensagem(
       // reconstruir a partir do número de telefone pode apontar para um jid
       // que o WhatsApp não resolve (ver enviarPeloWhatsapp mais abaixo).
       externalId: jid,
+      // A inbox mostra isto no lugar do id técnico.
+      contato: { nome: nomePerfil, telefone: telefoneReal },
     });
     await responder(jid, resultado.text || "Desculpe, não consegui responder agora.");
   } catch (e) {
@@ -249,13 +253,35 @@ async function responder(jid: string, texto: string): Promise<void> {
 }
 
 /**
+ * Telefone legível (+5565...) a partir dos jids da mensagem.
+ *
+ * Só um jid de número de verdade serve ("@s.whatsapp.net") — o "@lid" é
+ * id interno, não telefone. Sem nenhum dos dois, devolve null e a inbox
+ * fica só com o nome do perfil.
+ */
+function extrairTelefone(jid: string, jidAlt: string | null | undefined): string | null {
+  for (const candidato of [jid, jidAlt]) {
+    if (candidato?.endsWith("@s.whatsapp.net")) {
+      const digitos = candidato.split("@")[0]?.split(":")[0]?.replace(/\D/g, "");
+      if (digitos) return `+${digitos}`;
+    }
+  }
+  return null;
+}
+
+/**
  * Um jid pronto (com "@...") já é roteável — veio de uma conversa real.
  * Reconstruir a partir de um número de telefone só funciona para contas
  * clássicas; contas migradas para LID não resolvem por aí (o WhatsApp
  * aceita o envio sem erro, mas a mensagem não chega a lugar nenhum).
+ *
+ * Dígitos demais para ser telefone (14+) são um LID gravado sem o sufixo —
+ * conversas registradas antes da correção do endereço. Remontamos o "@lid".
  */
 function paraJid(destino: string): string | null {
   if (destino.includes("@")) return destino;
+  const digitos = destino.replace(/\D/g, "");
+  if (digitos.length >= 14) return `${digitos}@lid`;
   const telefone = normalizarTelefone(destino);
   return telefone ? `${telefone}@s.whatsapp.net` : null;
 }

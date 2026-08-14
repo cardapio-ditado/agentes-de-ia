@@ -215,6 +215,33 @@ export async function getOrCreateConversation(params: {
   return data;
 }
 
+/**
+ * Grava quem é o interlocutor: nome do perfil e telefone legível.
+ *
+ * O `external_id` é o endereço técnico do canal (pode ser um jid @lid,
+ * ilegível); título e `metadata.contato` são o que uma pessoa vê na caixa
+ * de entrada. Só toca no banco quando algo de fato mudou.
+ */
+export async function atualizarContatoConversa(
+  conversa: Conversation,
+  contato: { nome?: string | null; telefone?: string | null },
+): Promise<void> {
+  const meta = (conversa.metadata ?? {}) as Record<string, unknown>;
+  const nome = contato.nome?.trim() || null;
+  const telefone = contato.telefone?.trim() || null;
+
+  const mudancas: { title?: string; metadata?: Json } = {};
+  if (nome && conversa.title !== nome) mudancas.title = nome;
+  if (telefone && meta.contato !== telefone) {
+    mudancas.metadata = { ...meta, contato: telefone } as Json;
+  }
+  if (Object.keys(mudancas).length === 0) return;
+
+  const { error } = await db().from("conversations").update(mudancas).eq("id", conversa.id);
+  // Falhar aqui não pode derrubar o atendimento — é só cosmética da inbox.
+  if (error) console.error(`[repository] não atualizou o contato: ${error.message}`);
+}
+
 /** Histórico da conversa em ordem cronológica. */
 export async function listMessages(conversationId: string): Promise<Message[]> {
   const { data, error } = await db()

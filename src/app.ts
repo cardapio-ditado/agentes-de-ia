@@ -579,12 +579,16 @@ async function roteasApi(
 
     // GET /v1/conversations/:id — conversa com o histórico
     if (metodo === "GET" && p.length === 2) {
+      const metaConversa = (conversa.metadata ?? {}) as Record<string, unknown>;
       return ok(res, {
         id: conversa.id,
         titulo: conversa.title,
         canal: conversa.channel,
         status: conversa.status,
-        contato: conversa.external_id,
+        // O telefone legível gravado pelo canal; o external_id é o endereço
+        // técnico (pode ser um id interno do WhatsApp, ilegível).
+        contato:
+          typeof metaConversa.contato === "string" ? metaConversa.contato : conversa.external_id,
         atendimento: atendimentoDe(conversa),
         mensagens: mensagens.map((m) => ({
           id: m.id,

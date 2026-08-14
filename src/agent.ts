@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropicConfig } from "./config.js";
 import { blocoDeConhecimento } from "./training.js";
 import {
+  atualizarContatoConversa,
   getAgentBySlug,
   getOrCreateConversation,
   insertMessage,
@@ -38,6 +39,8 @@ export interface RunAgentParams {
   externalId?: string;
   /** Slug do estabelecimento atendido. Necessário para as ferramentas de restaurante. */
   venueSlug?: string;
+  /** Nome de perfil e telefone legível do interlocutor, quando o canal os conhece. */
+  contato?: { nome?: string | null; telefone?: string | null };
   /** Recebe os eventos conforme acontecem. Omitir roda sem streaming. */
   onEvent?: (evento: AgentStreamEvent) => void;
 }
@@ -60,7 +63,7 @@ export type AgentStreamEvent =
  * executa as ferramentas que ele pedir e persiste tudo.
  */
 export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> {
-  const { agentSlug, userMessage, channel = "api", externalId, venueSlug, onEvent } = params;
+  const { agentSlug, userMessage, channel = "api", externalId, venueSlug, contato, onEvent } = params;
 
   const agent = await getAgentBySlug(agentSlug);
   const venue = venueSlug ? await findVenueBySlug(venueSlug) : null;
@@ -70,6 +73,9 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     externalId,
     venueId: venue?.id ?? null,
   });
+  // Nome e telefone na inbox em vez do id técnico do canal. Antes da resposta
+  // do modelo: a conversa já aparece identificada enquanto o agente digita.
+  if (contato) await atualizarContatoConversa(conversation, contato);
 
   const toolContext: ToolContext = {
     agentId: agent.id,

@@ -82,6 +82,8 @@ export async function conversas(raiz, ctx) {
 
     for (const c of lista) {
       const nome = c.titulo || c.contato || "Sem identificação";
+      // Nome E telefone quando os dois existem — identifica sem abrir.
+      const rotulo = c.titulo && c.contato ? `${c.titulo} · ${c.contato}` : nome;
       const previa = c.ultima_mensagem?.texto ?? "—";
 
       itens.append(
@@ -95,7 +97,7 @@ export async function conversas(raiz, ctx) {
           },
           [
             el("div", { classe: "conversa-linha" }, [
-              el("span", { classe: "conversa-nome", texto: nome }),
+              el("span", { classe: "conversa-nome", texto: rotulo }),
               c.atendimento.por === "humano" ? etiqueta("você", "etiqueta-alerta") : null,
               el("span", { classe: "conversa-hora", texto: desde(c.atualizada_em) }),
             ]),
@@ -183,7 +185,13 @@ export async function conversas(raiz, ctx) {
       el("div", { classe: "thread-topo" }, [
         el("div", { style: "min-width:0;flex:1" }, [
           el("h2", { texto: c.titulo || c.contato || "Conversa" }),
-          el("p", { classe: "muted", texto: `${c.canal} · ${c.mensagens.length} mensagens` }),
+          el("p", {
+            classe: "muted",
+            // Nome no título, telefone aqui — os dois visíveis quando existem.
+            texto: [c.titulo && c.contato ? c.contato : null, c.canal, `${c.mensagens.length} mensagens`]
+              .filter(Boolean)
+              .join(" · "),
+          }),
         ]),
         encerrada
           ? etiqueta("encerrada")
