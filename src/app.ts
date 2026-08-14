@@ -31,6 +31,7 @@ import {
   listTraining,
   removeTraining,
 } from "./training.js";
+import { criarComandoPonte, lerEstadoPonte } from "./ponteWhatsapp.js";
 import { versaoDoCodigo } from "./version.js";
 import {
   cancelReservation,
@@ -765,21 +766,36 @@ async function roteasApi(
   }
 
   // ---- WhatsApp (Baileys) ----
+  // Com conector no processo (PC/VPS): responde direto, ao vivo. Sem conector
+  // (Vercel): ponte pelo banco — o site lê o estado que o conector publica e
+  // enfileira comandos que ele consome em ~5s. Ver src/ponteWhatsapp.ts.
   if (p[0] === "whatsapp" && p.length === 2) {
     const chave = await exigirChave(req, "reservations:write");
 
-    if (!conectorWhatsapp) {
-      throw erro(
-        501,
-        "not_implemented",
-        "O conector do WhatsApp não roda neste ambiente. Ele precisa de um " +
-          "host sempre ligado, com WebSocket e disco — não funciona em serverless.",
-      );
-    }
-
     if (metodo === "GET" && p[1] === "status") {
-      const estado = conectorWhatsapp.estado() as Record<string, unknown>;
-      return ok(res, { ...estado, versao: versaoDoCodigo() });
+      if (conectorWhatsapp) {
+        const estado = conectorWhatsapp.estado() as Record<string, unknown>;
+        return ok(res, { ...estado, versao: versaoDoCodigo(), fonte: "local" });
+      }
+      const slug = url.searchParams.get("venue");
+      const venue = slug
+        ? await findVenueBySlugInOrg(chave.org_id, slug)
+        : (await listVenuesInOrg(chave.org_id))[0];
+      if (!venue) throw erro(404, "not_found", "Nenhum estabelecimento cadastrado.");
+      const estado = lerEstadoPonte(venue.settings ?? null);
+      if (!estado) {
+        // Nunca houve conector publicando: nem heartbeat velho existe.
+        return ok(res, {
+          status: "sem_conector",
+          qr: null,
+          telefone: null,
+          agentSlug: null,
+          venueSlug: venue.slug,
+          versao: null,
+          fonte: "ponte",
+        });
+      }
+      return ok(res, { ...estado, fonte: "ponte" });
     }
 
     if (metodo === "POST" && p[1] === "conectar") {
@@ -788,19 +804,33 @@ async function roteasApi(
       const agentSlug = texto(corpo, "agent");
 
       // O conector responde por esta organização: confira antes de subir.
-      await findVenueBySlugInOrg(chave.org_id, venueSlug);
+      const venue = await findVenueBySlugInOrg(chave.org_id, venueSlug);
       const agentes = await listAgentsInOrg(chave.org_id);
       if (!agentes.some((a) => a.slug === agentSlug)) {
         throw erro(404, "not_found", `Agente "${agentSlug}" não encontrado nesta organização.`);
       }
 
-      await conectorWhatsapp.iniciar({ agentSlug, venueSlug });
-      return ok(res, conectorWhatsapp.estado());
+      if (conectorWhatsapp) {
+        await conectorWhatsapp.iniciar({ agentSlug, venueSlug });
+        return ok(res, conectorWhatsapp.estado());
+      }
+      await criarComandoPonte(venue.id, { acao: "conectar", agent: agentSlug });
+      return ok(res, { na_fila: true, acao: "conectar" });
     }
 
     if (metodo === "POST" && p[1] === "desconectar") {
-      await conectorWhatsapp.parar();
-      return ok(res, conectorWhatsapp.estado());
+      if (conectorWhatsapp) {
+        await conectorWhatsapp.parar();
+        return ok(res, conectorWhatsapp.estado());
+      }
+      const corpo = await lerJson(req);
+      const slug = textoOpcional(corpo, "venue");
+      const venue = slug
+        ? await findVenueBySlugInOrg(chave.org_id, slug)
+        : (await listVenuesInOrg(chave.org_id))[0];
+      if (!venue) throw erro(404, "not_found", "Nenhum estabelecimento cadastrado.");
+      await criarComandoPonte(venue.id, { acao: "desconectar" });
+      return ok(res, { na_fila: true, acao: "desconectar" });
     }
   }
 

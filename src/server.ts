@@ -1,6 +1,11 @@
 import { createServer } from "node:http";
 import { criarHandler, registrarConectorWhatsapp } from "./app.js";
 import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whatsapp.js";
+import {
+  consumirComandoPonte,
+  primeiroVenueAtivo,
+  publicarEstadoPonte,
+} from "./ponteWhatsapp.js";
 
 /**
  * Servidor Node de verdade: local, VPS ou container.
@@ -9,18 +14,78 @@ import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whats
  * lá o CDN serve os estáticos e este arquivo não é usado.
  */
 const PORTA = Number(process.env.PORT ?? 3000);
+// Numa VPS atrás de um proxy HTTPS (Caddy/nginx), defina HOST=127.0.0.1 no
+// .env: o Node só escuta dentro da máquina e a única porta de entrada vira o
+// proxy, com certificado. Sem HOST, escuta em todas as interfaces — é o que
+// permite abrir o painel pelo celular na rede do bar.
+const HOST = process.env.HOST ?? "0.0.0.0";
 
 // Aqui o conector pode existir: há processo longo e disco. Na Vercel, ninguém
-// registra, e as rotas de WhatsApp respondem 501 explicando o porquê.
+// registra, e as rotas de WhatsApp caem na ponte pelo banco.
 registrarConectorWhatsapp({
   estado: estadoWhatsapp,
   iniciar: iniciarWhatsapp,
   parar: pararWhatsapp,
 });
 
+// ============================================================
+// Ponte com o site: comandos e estado via banco
+// ============================================================
+// O painel na Vercel não enxerga este processo. A cada ciclo: consome um
+// comando enfileirado pelo site (conectar/desconectar) e publica o estado
+// atual (status, QR, telefone) para o site mostrar. Ver src/ponteWhatsapp.ts.
+
+const CICLO_PONTE_MS = 5_000;
+let venueDaPonte: { id: string; slug: string } | null = null;
+let cicloEmAndamento = false;
+
+async function cicloDaPonte(): Promise<void> {
+  if (cicloEmAndamento) return;
+  cicloEmAndamento = true;
+  try {
+    const recebido = await consumirComandoPonte();
+    if (recebido) {
+      venueDaPonte = { id: recebido.venueId, slug: recebido.venueSlug };
+      const { comando } = recebido;
+      console.log(`[ponte] comando "${comando.acao}" recebido do site.`);
+
+      if (comando.acao === "conectar" && comando.agent) {
+        // Reiniciar em vez de empilhar: um segundo iniciar() com socket vivo
+        // criaria duas conexões brigando pela mesma sessão.
+        if (estadoWhatsapp().status !== "desconectado") await pararWhatsapp();
+        await iniciarWhatsapp({ agentSlug: comando.agent, venueSlug: recebido.venueSlug });
+      } else if (comando.acao === "desconectar") {
+        await pararWhatsapp();
+      }
+    }
+
+    // Sem comando ainda? Publica mesmo assim no único venue: é o heartbeat
+    // que diz ao site "tem conector vivo aqui".
+    if (!venueDaPonte) venueDaPonte = await primeiroVenueAtivo();
+    if (venueDaPonte) {
+      const e = estadoWhatsapp();
+      await publicarEstadoPonte(venueDaPonte.id, {
+        status: e.status,
+        qr: e.qr,
+        telefone: e.telefone,
+        agentSlug: e.agentSlug,
+        venueSlug: e.venueSlug,
+      });
+    }
+  } catch (e) {
+    // Banco fora do ar não pode derrubar o atendimento — só a ponte espera.
+    console.error("[ponte] ciclo falhou:", e instanceof Error ? e.message : e);
+  } finally {
+    cicloEmAndamento = false;
+  }
+}
+
+setInterval(() => void cicloDaPonte(), CICLO_PONTE_MS);
+void cicloDaPonte();
+
 const server = createServer(criarHandler({ servirEstaticos: true }));
 
-server.listen(PORTA, () => {
+server.listen(PORTA, HOST, () => {
   console.log(`API e painel em http://localhost:${PORTA}`);
   console.log(`Health check: http://localhost:${PORTA}/health`);
 });
