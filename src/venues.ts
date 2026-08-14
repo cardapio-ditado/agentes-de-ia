@@ -138,19 +138,30 @@ export async function getReservationWithVenue(
   return { reservation, venue: await getVenue(reservation.venue_id) };
 }
 
-/** Programação a partir de agora, opcionalmente filtrada por tipo. */
+/**
+ * Programação a partir de agora, opcionalmente filtrada por tipo.
+ *
+ * Um evento sem `ends_at` cadastrado não pode sumir da lista no segundo em
+ * que o horário de início passa — o show das 20h ainda está rolando às
+ * 20h30. Por isso ele continua "no ar" por até 6h após começar, mesma
+ * tolerância usada nas reservas confirmadas. Com `ends_at` definido, o corte
+ * é o horário real de término.
+ */
 export async function listUpcomingEvents(params: {
   venueId: string;
   kind?: string;
   until?: Date;
   limit?: number;
 }): Promise<VenueEvent[]> {
+  const agora = new Date();
+  const corte = new Date(agora.getTime() - 6 * 60 * 60 * 1000);
+
   let query = db()
     .from("venue_events")
     .select("*")
     .eq("venue_id", params.venueId)
     .eq("active", true)
-    .gte("starts_at", new Date().toISOString())
+    .or(`ends_at.gte.${agora.toISOString()},and(ends_at.is.null,starts_at.gte.${corte.toISOString()})`)
     .order("starts_at", { ascending: true })
     .limit(params.limit ?? 20);
 
