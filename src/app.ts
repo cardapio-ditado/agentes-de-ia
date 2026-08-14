@@ -33,8 +33,10 @@ import {
 } from "./training.js";
 import { versaoDoCodigo } from "./version.js";
 import {
+  cancelReservation,
   createVenueEvent,
   createVenueInfo,
+  deleteReservation,
   deleteVenueEvent,
   deleteVenueInfo,
   findVenueBySlugInOrg,
@@ -45,7 +47,9 @@ import {
   listVenueInfo,
   listVenuesInOrg,
   mapsUrl,
+  updateReservation,
   updateVenue,
+  type DadosReserva,
   type DadosVenue,
 } from "./venues.js";
 
@@ -615,11 +619,11 @@ async function roteasApi(
     return ok(res, { removido: true });
   }
 
-  // POST /v1/reservations/:id/approve | /reject
+  // POST /v1/reservations/:id/approve | /reject | /cancel
   if (metodo === "POST" && p[0] === "reservations" && p.length === 3) {
     const chave = await exigirChave(req, "reservations:write");
     const acao = p[2]!;
-    if (acao !== "approve" && acao !== "reject") {
+    if (acao !== "approve" && acao !== "reject" && acao !== "cancel") {
       throw erro(404, "not_found", `Ação "${acao}" não existe.`);
     }
 
@@ -627,6 +631,16 @@ async function roteasApi(
     // Mesma resposta para "não existe" e "é de outra organização".
     if (!encontrado || encontrado.venue.org_id !== chave.org_id) {
       throw erro(404, "not_found", "Reserva não encontrada.");
+    }
+
+    // Cancelar não passa pelo fluxo de decisão: nenhuma notificação
+    // automática — cancelamento pela casa merece uma mensagem humana.
+    if (acao === "cancel") {
+      try {
+        return ok(res, await cancelReservation(encontrado.reservation.id));
+      } catch (e) {
+        throw erro(409, "conflict", e instanceof Error ? e.message : "Conflito ao cancelar.");
+      }
     }
 
     const corpo = await lerJson(req);
@@ -652,6 +666,42 @@ async function roteasApi(
     } catch (e) {
       // reviewReservation só atualiza quando ainda está pendente.
       throw erro(409, "conflict", e instanceof Error ? e.message : "Conflito ao decidir.");
+    }
+  }
+
+  // PATCH | DELETE /v1/reservations/:id — editar dados ou apagar de vez
+  if ((metodo === "PATCH" || metodo === "DELETE") && p[0] === "reservations" && p.length === 2) {
+    const chave = await exigirChave(req, "reservations:write");
+    const encontrado = await getReservationWithVenue(p[1]!);
+    if (!encontrado || encontrado.venue.org_id !== chave.org_id) {
+      throw erro(404, "not_found", "Reserva não encontrada.");
+    }
+
+    if (metodo === "DELETE") {
+      await deleteReservation(encontrado.reservation.id);
+      return ok(res, { removido: true });
+    }
+
+    const corpo = await lerJson(req);
+    const dados: DadosReserva = {};
+    if ("customer_name" in corpo) dados.customer_name = texto(corpo, "customer_name");
+    if ("customer_phone" in corpo) dados.customer_phone = texto(corpo, "customer_phone");
+    if ("party_size" in corpo) {
+      if (typeof corpo.party_size !== "number") {
+        throw erro(400, "invalid_request", 'O campo "party_size" precisa ser um número.');
+      }
+      dados.party_size = corpo.party_size;
+    }
+    if ("reserved_for" in corpo) dados.reserved_for = texto(corpo, "reserved_for");
+    // Campos anuláveis: mandar "" ou null limpa o valor.
+    if ("area_preference" in corpo) dados.area_preference = textoOpcional(corpo, "area_preference") ?? null;
+    if ("occasion" in corpo) dados.occasion = textoOpcional(corpo, "occasion") ?? null;
+    if ("notes" in corpo) dados.notes = textoOpcional(corpo, "notes") ?? null;
+
+    try {
+      return ok(res, await updateReservation(encontrado.reservation.id, dados));
+    } catch (e) {
+      throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
     }
   }
 

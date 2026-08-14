@@ -314,6 +314,101 @@ export async function createReservation(
   return data;
 }
 
+export interface DadosReserva {
+  customer_name?: string;
+  customer_phone?: string;
+  party_size?: number;
+  reserved_for?: string;
+  area_preference?: string | null;
+  occasion?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Edita uma reserva que ainda vai acontecer (pendente ou aprovada).
+ *
+ * Recusada, cancelada ou já atendida não se edita — se o cliente mudou de
+ * ideia depois, é uma reserva nova.
+ */
+export async function updateReservation(
+  reservationId: string,
+  dados: DadosReserva,
+): Promise<Reservation> {
+  const mudancas: Partial<TablesInsert<"reservations">> = {};
+
+  if (dados.customer_name !== undefined) {
+    if (!dados.customer_name.trim()) throw new Error("O nome não pode ficar vazio.");
+    mudancas.customer_name = dados.customer_name.trim();
+  }
+  if (dados.customer_phone !== undefined) {
+    if (!dados.customer_phone.trim()) throw new Error("O telefone não pode ficar vazio.");
+    mudancas.customer_phone = dados.customer_phone.trim();
+  }
+  if (dados.party_size !== undefined) {
+    if (!Number.isInteger(dados.party_size) || dados.party_size <= 0) {
+      throw new Error("Quantidade de pessoas precisa ser um inteiro positivo.");
+    }
+    mudancas.party_size = dados.party_size;
+  }
+  if (dados.reserved_for !== undefined) {
+    const quando = new Date(dados.reserved_for);
+    if (Number.isNaN(quando.getTime())) throw new Error("Data e hora inválidas.");
+    mudancas.reserved_for = quando.toISOString();
+  }
+  if (dados.area_preference !== undefined) {
+    mudancas.area_preference = dados.area_preference?.trim() || null;
+  }
+  if (dados.occasion !== undefined) mudancas.occasion = dados.occasion?.trim() || null;
+  if (dados.notes !== undefined) mudancas.notes = dados.notes?.trim() || null;
+  if (Object.keys(mudancas).length === 0) throw new Error("Nada para atualizar.");
+
+  const { data, error } = await db()
+    .from("reservations")
+    .update(mudancas)
+    .eq("id", reservationId)
+    .in("status", ["pending", "approved"])
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao editar a reserva: ${error.message}`);
+  if (!data) {
+    throw new Error("Só reservas pendentes ou aprovadas podem ser editadas.");
+  }
+  return data;
+}
+
+/**
+ * Cancela uma reserva pendente ou aprovada.
+ *
+ * O trigger de histórico registra a mudança. O cliente NÃO é avisado
+ * automaticamente — cancelamento pela casa merece uma mensagem humana.
+ */
+export async function cancelReservation(reservationId: string): Promise<Reservation> {
+  const { data, error } = await db()
+    .from("reservations")
+    .update({ status: "cancelled" })
+    .eq("id", reservationId)
+    .in("status", ["pending", "approved"])
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao cancelar a reserva: ${error.message}`);
+  if (!data) throw new Error("Só reservas pendentes ou aprovadas podem ser canceladas.");
+  return data;
+}
+
+/**
+ * Apaga a reserva de vez — para dados de teste ou lançamento errado.
+ *
+ * O histórico de status cai em cascata; a notificação já enviada mantém o
+ * registro dela (vínculo anulado). Cancelamento operacional é `cancelled`,
+ * que preserva a história — exclusão é exceção, não rotina.
+ */
+export async function deleteReservation(reservationId: string): Promise<void> {
+  const { error } = await db().from("reservations").delete().eq("id", reservationId);
+  if (error) throw new Error(`Falha ao excluir a reserva: ${error.message}`);
+}
+
 /** Fila do módulo de aprovação: reservas pendentes, mais próximas primeiro. */
 export async function listPendingReservations(venueId: string): Promise<Reservation[]> {
   const { data, error } = await db()

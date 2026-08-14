@@ -1,4 +1,4 @@
-import { get, post } from "../api.js";
+import { del, get, patch, post } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
@@ -6,6 +6,10 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
  *
  * O agente coleta os dados e para: nenhuma reserva é confirmada ao cliente sem
  * uma pessoa decidir aqui. Recusar exige motivo — o cliente precisa saber o porquê.
+ *
+ * Reservas nunca somem sozinhas do banco: a confirmada sai desta tela 6 horas
+ * depois do horário, mas a linha continua lá com o status dela. Excluir é a
+ * exceção (dado de teste, lançamento errado); cancelar preserva o histórico.
  */
 export async function reservas(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
@@ -67,9 +71,12 @@ export async function reservas(raiz, ctx) {
     }
   }
 
-  /** Cartão de leitura: a decisão já foi tomada, aqui é o mapa do serviço. */
+  /** Cartão da confirmada: mapa do serviço, mas a vida muda — dá para editar,
+   *  cancelar (fica no histórico) ou excluir (some de vez). */
   function cartaoConfirmada(r) {
-    return el("article", { classe: "cartao" }, [
+    const areaEdicao = el("div", {});
+
+    const cartao = el("article", { classe: "cartao" }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h3", { texto: r.customer_name }),
@@ -84,11 +91,41 @@ export async function reservas(raiz, ctx) {
       r.area_preference ? linha("Área", r.area_preference) : null,
       r.occasion ? linha("Ocasião", r.occasion) : null,
       r.notes ? linha("Observações", r.notes) : null,
+      areaEdicao,
+      el("div", { classe: "reserva-acoes" }, [
+        el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: "Editar",
+          onclick: () => alternarEdicao(areaEdicao, r),
+        }),
+        el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: "Cancelar reserva",
+          onclick: async (e) => {
+            if (!confirm(`Cancelar a reserva de ${r.customer_name}? O cliente NÃO é avisado automaticamente — combine com ele pelo WhatsApp.`)) return;
+            e.target.disabled = true;
+            try {
+              await post(`/v1/reservations/${r.id}/cancel`, {});
+              avisar("Reserva cancelada. Lembre de avisar o cliente.", "ok");
+              await carregar();
+            } catch (err) {
+              avisar(err.message, "erro");
+              e.target.disabled = false;
+            }
+          },
+        }),
+        botaoExcluir(r),
+      ]),
     ]);
+
+    return cartao;
   }
 
   function cartaoReserva(r) {
     const motivo = el("input", { placeholder: "Motivo (obrigatório para recusar)" });
+    const areaEdicao = el("div", {});
 
     const btnAprovar = el("button", {
       classe: "btn btn-primario btn-peq",
@@ -116,8 +153,19 @@ export async function reservas(raiz, ctx) {
       r.occasion ? linha("Ocasião", r.occasion) : null,
       r.notes ? linha("Observações", r.notes) : null,
       linha("Pedida em", dataHora(r.created_at)),
+      areaEdicao,
       el("div", { style: "margin-top:12px" }, [motivo]),
-      el("div", { classe: "reserva-acoes" }, [btnAprovar, btnRecusar]),
+      el("div", { classe: "reserva-acoes" }, [
+        btnAprovar,
+        btnRecusar,
+        el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: "Editar",
+          onclick: () => alternarEdicao(areaEdicao, r),
+        }),
+        botaoExcluir(r),
+      ]),
     ]);
 
     async function decidir(acao) {
@@ -158,6 +206,101 @@ export async function reservas(raiz, ctx) {
     }
 
     return cartao;
+  }
+
+  /** Excluir é para dado de teste ou lançamento errado — apaga de vez, sem
+   *  histórico. Cancelamento de verdade usa "Cancelar reserva". */
+  function botaoExcluir(r) {
+    return el("button", {
+      classe: "btn btn-perigo btn-peq",
+      type: "button",
+      texto: "Excluir",
+      onclick: async (e) => {
+        if (!confirm(`Excluir DE VEZ a reserva de ${r.customer_name}? Isso apaga também o histórico dela. Para cancelamento normal, use "Cancelar reserva".`)) return;
+        e.target.disabled = true;
+        try {
+          await del(`/v1/reservations/${r.id}`);
+          avisar("Reserva excluída.", "ok");
+          await carregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          e.target.disabled = false;
+        }
+      },
+    });
+  }
+
+  /** Abre (ou fecha, se já aberto) o formulário de edição dentro do cartão. */
+  function alternarEdicao(area, r) {
+    if (area.childElementCount > 0) {
+      limpar(area);
+      return;
+    }
+
+    const nome = el("input", { value: r.customer_name });
+    const telefone = el("input", { value: r.customer_phone });
+    const pessoas = el("input", { type: "number", min: "1", value: String(r.party_size) });
+    const quando = el("input", { type: "datetime-local", value: paraDatetimeLocal(r.reserved_for) });
+    const areaPref = el("input", { value: r.area_preference ?? "", placeholder: "Área (opcional)" });
+    const obs = el("input", { value: r.notes ?? "", placeholder: "Observações (opcional)" });
+
+    area.append(
+      el("div", { classe: "pilha", style: "margin-top:12px;gap:8px" }, [
+        campo("Nome", nome),
+        campo("Telefone", telefone),
+        campo("Pessoas", pessoas),
+        campo("Data e hora", quando),
+        campo("Área", areaPref),
+        campo("Observações", obs),
+        el("div", { classe: "reserva-acoes" }, [
+          el("button", {
+            classe: "btn btn-primario btn-peq",
+            type: "button",
+            texto: "Salvar",
+            onclick: async (e) => {
+              const quandoData = new Date(quando.value);
+              if (Number.isNaN(quandoData.getTime())) {
+                avisar("Data e hora inválidas.", "erro");
+                return;
+              }
+              e.target.disabled = true;
+              try {
+                await patch(`/v1/reservations/${r.id}`, {
+                  customer_name: nome.value,
+                  customer_phone: telefone.value,
+                  party_size: Number(pessoas.value),
+                  reserved_for: quandoData.toISOString(),
+                  area_preference: areaPref.value,
+                  notes: obs.value,
+                });
+                avisar("Reserva atualizada.", "ok");
+                await carregar();
+              } catch (err) {
+                avisar(err.message, "erro");
+                e.target.disabled = false;
+              }
+            },
+          }),
+          el("button", {
+            classe: "btn btn-peq",
+            type: "button",
+            texto: "Descartar",
+            onclick: () => limpar(area),
+          }),
+        ]),
+      ]),
+    );
+  }
+
+  function campo(rotulo, controle) {
+    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+  }
+
+  /** ISO (UTC) → valor de <input type="datetime-local"> no fuso do navegador. */
+  function paraDatetimeLocal(iso) {
+    const d = new Date(iso);
+    const dois = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}T${dois(d.getHours())}:${dois(d.getMinutes())}`;
   }
 
   function linha(rotulo, valor) {
