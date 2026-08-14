@@ -118,6 +118,207 @@ export async function createVenueEvent(
   return data;
 }
 
+const DIAS_SEMANA_RECORRENCIA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"];
+
+/** Regra que gerou uma ocorrência — guardada em cada linha da série. */
+export interface RegraRecorrencia {
+  freq: "weekly" | "daily";
+  /** Dias da semana (DIAS_SEMANA_RECORRENCIA), só para freq "weekly". */
+  days?: string[];
+  /** Corte inclusivo (YYYY-MM-DD) até onde a série foi materializada. */
+  until: string;
+  /** true = usuário não escolheu data final; `until` é só o horizonte atual. */
+  indefinite: boolean;
+}
+
+/** Sem data final, materializamos ~12 semanas por vez — não dá para gerar linhas infinitas. */
+const HORIZONTE_INDEFINIDO_MS = 84 * 24 * 60 * 60 * 1000;
+/** Trava contra data absurda (ex.: usuário digita 2035 sem querer). */
+const HORIZONTE_MAXIMO_MS = 365 * 24 * 60 * 60 * 1000;
+
+/** Deslocamento UTC de um fuso numa data específica, no formato "-04:00". */
+function deslocamentoEm(timezone: string, instante: Date): string {
+  const nome = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(instante)
+    .find((p) => p.type === "timeZoneName")?.value;
+  return nome?.match(/GMT([+-]\d{2}:\d{2})?/)?.[1] ?? "+00:00";
+}
+
+/** Ano, mês, dia, hora e minuto de um instante, lidos no fuso da casa. */
+function partesLocais(instante: Date, timezone: string) {
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(instante).map((p) => [p.type, p.value]),
+  );
+  return { ano: partes.year!, mes: partes.month!, dia: partes.day!, hora: partes.hour!, minuto: partes.minute! };
+}
+
+/**
+ * Gera os instantes de uma série recorrente, no fuso da casa.
+ *
+ * Anda dia a dia (em termos de calendário, não de milissegundos) para não
+ * derrapar em fusos com horário de verão, e recalcula o deslocamento UTC a
+ * cada data — assim cada ocorrência nasce no horário de parede certo.
+ */
+export function gerarOcorrencias(params: {
+  primeiraData: Date;
+  timezone: string;
+  freq: "weekly" | "daily";
+  dias?: string[];
+  ate: Date;
+}): Date[] {
+  const { primeiraData, timezone, freq, dias, ate } = params;
+  const ancora = partesLocais(primeiraData, timezone);
+  const diasAlvo = freq === "weekly" ? new Set(dias) : null;
+
+  const resultado: Date[] = [];
+  let cursor = new Date(Date.UTC(Number(ancora.ano), Number(ancora.mes) - 1, Number(ancora.dia)));
+  const fim = new Date(Date.UTC(ate.getUTCFullYear(), ate.getUTCMonth(), ate.getUTCDate()));
+
+  while (cursor.getTime() <= fim.getTime()) {
+    const diaSemana = DIAS_SEMANA_RECORRENCIA[(cursor.getUTCDay() + 6) % 7]!;
+    if (freq === "daily" || diasAlvo!.has(diaSemana)) {
+      const y = cursor.getUTCFullYear();
+      const m = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(cursor.getUTCDate()).padStart(2, "0");
+      const offset = deslocamentoEm(timezone, cursor);
+      const instante = new Date(`${y}-${m}-${d}T${ancora.hora}:${ancora.minuto}:00${offset}`);
+      if (instante.getTime() >= primeiraData.getTime()) resultado.push(instante);
+    }
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return resultado;
+}
+
+/**
+ * Cria uma série de eventos recorrentes (semanal em N dias, ou diária),
+ * todos com o mesmo `series_id` para poder gerenciá-los em bloco depois.
+ *
+ * Sem data final, a série vem com `indefinite: true` e um horizonte de ~12
+ * semanas — a tela de Programação avisa quando está acabando para renovar.
+ */
+export async function createVenueEventSeries(
+  base: Omit<TablesInsert<"venue_events">, "series_id" | "recurrence">,
+  regra: { freq: "weekly" | "daily"; days?: string[]; until?: Date },
+  timezone: string,
+): Promise<VenueEvent[]> {
+  if (regra.freq === "weekly" && (!regra.days || regra.days.length === 0)) {
+    throw new Error("Selecione ao menos um dia da semana.");
+  }
+
+  const primeiraData = new Date(base.starts_at);
+  if (Number.isNaN(primeiraData.getTime())) throw new Error("Data e hora inválidas.");
+
+  const indefinite = !regra.until;
+  const ate = regra.until ?? new Date(primeiraData.getTime() + HORIZONTE_INDEFINIDO_MS);
+  if (ate.getTime() > primeiraData.getTime() + HORIZONTE_MAXIMO_MS) {
+    throw new Error("A recorrência não pode ir além de 1 ano a partir da primeira data.");
+  }
+  if (ate.getTime() < primeiraData.getTime()) {
+    throw new Error("A data final precisa ser depois da primeira data.");
+  }
+
+  return materializarSerie(base, { freq: regra.freq, days: regra.days, indefinite }, primeiraData, ate, timezone);
+}
+
+async function materializarSerie(
+  base: Omit<TablesInsert<"venue_events">, "series_id" | "recurrence">,
+  regra: { freq: "weekly" | "daily"; days?: string[]; indefinite: boolean },
+  primeiraData: Date,
+  ate: Date,
+  timezone: string,
+  seriesId?: string,
+): Promise<VenueEvent[]> {
+  const datas = gerarOcorrencias({ primeiraData, timezone, freq: regra.freq, dias: regra.days, ate });
+  if (datas.length === 0) {
+    throw new Error("Nenhuma ocorrência cai nos dias escolhidos até a data final.");
+  }
+
+  const id = seriesId ?? crypto.randomUUID();
+  const recurrence: RegraRecorrencia = {
+    freq: regra.freq,
+    days: regra.freq === "weekly" ? regra.days : undefined,
+    until: ate.toISOString().slice(0, 10),
+    indefinite: regra.indefinite,
+  };
+
+  const linhas: TablesInsert<"venue_events">[] = datas.map((d) => ({
+    ...base,
+    starts_at: d.toISOString(),
+    series_id: id,
+    recurrence: recurrence as unknown as Json,
+  }));
+
+  const { data, error } = await db().from("venue_events").insert(linhas).select();
+  if (error) throw new Error(`Falha ao criar a série de eventos: ${error.message}`);
+  return data ?? [];
+}
+
+/**
+ * Remove as ocorrências futuras de uma série — as passadas ficam como
+ * registro, já que não existe histórico separado para eventos.
+ */
+export async function deleteVenueEventSeries(seriesId: string, venueId: string): Promise<void> {
+  const { error } = await db()
+    .from("venue_events")
+    .delete()
+    .eq("series_id", seriesId)
+    .eq("venue_id", venueId)
+    .gte("starts_at", new Date().toISOString());
+
+  if (error) throw new Error(`Falha ao remover a série: ${error.message}`);
+}
+
+/**
+ * Estende uma série indefinida por mais ~12 semanas, a partir do dia
+ * seguinte à última ocorrência já materializada.
+ */
+export async function renewVenueEventSeries(
+  seriesId: string,
+  venueId: string,
+  timezone: string,
+): Promise<VenueEvent[]> {
+  const { data: ultimas, error } = await db()
+    .from("venue_events")
+    .select("*")
+    .eq("series_id", seriesId)
+    .eq("venue_id", venueId)
+    .order("starts_at", { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(`Falha ao renovar a série: ${error.message}`);
+  const ultima = ultimas?.[0];
+  if (!ultima) throw new Error("Série não encontrada.");
+
+  const regra = ultima.recurrence as unknown as RegraRecorrencia | null;
+  if (!regra) throw new Error("Este evento não faz parte de uma série recorrente.");
+  if (!regra.indefinite) throw new Error("Esta série tem data final definida — não precisa renovar.");
+
+  const novaPrimeira = new Date(new Date(ultima.starts_at).getTime() + 24 * 60 * 60 * 1000);
+  const novoAte = new Date(novaPrimeira.getTime() + HORIZONTE_INDEFINIDO_MS);
+
+  const { series_id: _s, recurrence: _r, id: _id, created_at: _c, updated_at: _u, ...base } = ultima;
+
+  return materializarSerie(
+    base,
+    { freq: regra.freq, days: regra.days, indefinite: true },
+    novaPrimeira,
+    novoAte,
+    timezone,
+    seriesId,
+  );
+}
+
 /** O `venue_id` no filtro impede apagar evento de outro estabelecimento. */
 export async function deleteVenueEvent(eventId: string, venueId: string): Promise<void> {
   const { error } = await db()

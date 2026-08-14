@@ -35,9 +35,11 @@ import { versaoDoCodigo } from "./version.js";
 import {
   cancelReservation,
   createVenueEvent,
+  createVenueEventSeries,
   createVenueInfo,
   deleteReservation,
   deleteVenueEvent,
+  deleteVenueEventSeries,
   deleteVenueInfo,
   findVenueBySlugInOrg,
   getReservationWithVenue,
@@ -47,6 +49,7 @@ import {
   listVenueInfo,
   listVenuesInOrg,
   mapsUrl,
+  renewVenueEventSeries,
   updateReservation,
   updateVenue,
   type DadosReserva,
@@ -441,13 +444,14 @@ async function roteasApi(
       return ok(res, await listPendingReservations(venue.id));
     }
 
-    if (metodo === "GET" && recurso === "events") {
+    if (metodo === "GET" && recurso === "events" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await listAllEvents(venue.id));
     }
 
-    if (metodo === "POST" && recurso === "events") {
+    // POST /v1/venues:slug/events — evento único, ou série se vier "recorrencia"
+    if (metodo === "POST" && recurso === "events" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:write");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       const corpo = await lerJson(req);
@@ -457,16 +461,57 @@ async function roteasApi(
         throw erro(400, "invalid_request", "starts_at precisa ser uma data ISO 8601 válida.");
       }
       const cover = corpo.cover_charge;
-
-      const evento = await createVenueEvent({
+      const base = {
         venue_id: venue.id,
         kind: textoOpcional(corpo, "kind") ?? "musica",
         title: texto(corpo, "title"),
         description: textoOpcional(corpo, "description") ?? null,
         starts_at: startsAt.toISOString(),
         cover_charge: typeof cover === "number" ? cover : null,
-      });
+      };
+
+      const recorrencia = corpo.recorrencia;
+      if (recorrencia && typeof recorrencia === "object" && !Array.isArray(recorrencia)) {
+        const r = recorrencia as Record<string, unknown>;
+        const freq = r.freq;
+        if (freq !== "weekly" && freq !== "daily") {
+          throw erro(400, "invalid_request", 'recorrencia.freq precisa ser "weekly" ou "daily".');
+        }
+        const days = Array.isArray(r.days) ? r.days.filter((d): d is string => typeof d === "string") : undefined;
+        const until = typeof r.until === "string" && r.until ? new Date(r.until) : undefined;
+        if (until && Number.isNaN(until.getTime())) {
+          throw erro(400, "invalid_request", "recorrencia.until precisa ser uma data válida.");
+        }
+        try {
+          const eventos = await createVenueEventSeries(base, { freq, days, until }, venue.timezone);
+          return ok(res, eventos, 201);
+        } catch (e) {
+          throw erro(400, "invalid_request", e instanceof Error ? e.message : "Recorrência inválida.");
+        }
+      }
+
+      const evento = await createVenueEvent(base);
       return ok(res, evento, 201);
+    }
+
+    // DELETE /v1/venues:slug/events/series:seriesId — futuras ocorrências da série
+    if (metodo === "DELETE" && recurso === "events" && p[3] === "series" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await deleteVenueEventSeries(p[4]!, venue.id);
+      return ok(res, { removido: true });
+    }
+
+    // POST /v1/venues:slug/events/series:seriesId/renew — mais ~12 semanas
+    if (metodo === "POST" && recurso === "events" && p[3] === "series" && p.length === 6 && p[5] === "renew") {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      try {
+        const eventos = await renewVenueEventSeries(p[4]!, venue.id, venue.timezone);
+        return ok(res, eventos, 201);
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Não foi possível renovar.");
+      }
     }
 
     if (metodo === "GET" && recurso === "info") {

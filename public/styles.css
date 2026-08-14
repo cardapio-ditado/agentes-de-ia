@@ -689,6 +689,16 @@ textarea:focus {
 .campo-largo {
   grid-column: 1 / -1;
 }
+.check-dia {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
 .lista {
   display: grid;
   gap: 10px;
