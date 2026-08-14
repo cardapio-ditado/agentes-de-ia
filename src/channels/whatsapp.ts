@@ -186,8 +186,10 @@ async function aoReceberMensagem(
     return;
   }
 
-  const telefone = jid.split("@")[0] ?? jid;
-  console.log(`[whatsapp] ${telefone}: ${texto.slice(0, 80)}`);
+  // Só para o log ficar legível — quem identifica a conversa de volta é o jid
+  // inteiro, guardado abaixo.
+  const telefoneExibicao = jid.split("@")[0] ?? jid;
+  console.log(`[whatsapp] ${telefoneExibicao}: ${texto.slice(0, 80)}`);
 
   try {
     await socket?.sendPresenceUpdate("composing", jid);
@@ -196,11 +198,15 @@ async function aoReceberMensagem(
       venueSlug: opcoes.venueSlug,
       userMessage: texto,
       channel: "whatsapp",
-      externalId: telefone,
+      // O jid completo (com "@s.whatsapp.net" ou "@lid") — não só os dígitos.
+      // Contas migradas para LID só são alcançáveis por esse endereço exato;
+      // reconstruir a partir do número de telefone pode apontar para um jid
+      // que o WhatsApp não resolve (ver enviarPeloWhatsapp mais abaixo).
+      externalId: jid,
     });
     await responder(jid, resultado.text || "Desculpe, não consegui responder agora.");
   } catch (e) {
-    console.error(`[whatsapp] falha ao atender ${telefone}:`, e);
+    console.error(`[whatsapp] falha ao atender ${telefoneExibicao}:`, e);
     await responder(
       jid,
       "Tive um problema técnico aqui. Pode tentar de novo em instantes?",
@@ -243,22 +249,34 @@ async function responder(jid: string, texto: string): Promise<void> {
 }
 
 /**
+ * Um jid pronto (com "@...") já é roteável — veio de uma conversa real.
+ * Reconstruir a partir de um número de telefone só funciona para contas
+ * clássicas; contas migradas para LID não resolvem por aí (o WhatsApp
+ * aceita o envio sem erro, mas a mensagem não chega a lugar nenhum).
+ */
+function paraJid(destino: string): string | null {
+  if (destino.includes("@")) return destino;
+  const telefone = normalizarTelefone(destino);
+  return telefone ? `${telefone}@s.whatsapp.net` : null;
+}
+
+/**
  * Envia uma mensagem avulsa — usado pelas notificações de reserva.
  * Devolve o id da mensagem no WhatsApp, para rastrear a entrega.
  */
 export async function enviarPeloWhatsapp(
-  telefoneBruto: string,
+  destino: string,
   texto: string,
 ): Promise<{ enviado: boolean; providerId?: string; erro?: string }> {
   if (estado.status !== "conectado" || !socket) {
     return { enviado: false, erro: `WhatsApp não conectado (${estado.status}).` };
   }
 
-  const telefone = normalizarTelefone(telefoneBruto);
-  if (!telefone) return { enviado: false, erro: `Telefone inválido: "${telefoneBruto}".` };
+  const jid = paraJid(destino);
+  if (!jid) return { enviado: false, erro: `Telefone inválido: "${destino}".` };
 
   try {
-    const resultado = await socket.sendMessage(`${telefone}@s.whatsapp.net`, { text: texto });
+    const resultado = await socket.sendMessage(jid, { text: texto });
     return { enviado: true, providerId: resultado?.key?.id ?? undefined };
   } catch (e) {
     return { enviado: false, erro: e instanceof Error ? e.message : String(e) };

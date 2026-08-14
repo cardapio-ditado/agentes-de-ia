@@ -169,6 +169,31 @@ export function normalizarTelefone(bruto: string): string | null {
 // ============================================================
 
 /**
+ * Prefere o jid exato da conversa ao telefone que o cliente digitou.
+ *
+ * O jid é garantidamente roteável — acabamos de receber mensagem dali. O
+ * telefone digitado é só texto livre: pode ter erro de digitação, e em
+ * contas migradas para "LID" (identificador que o WhatsApp usa no lugar do
+ * número, numa parte dos aparelhos) ele nem corresponde ao endereço real da
+ * conversa. Sem conversa vinculada (reserva lançada manualmente, por
+ * exemplo), cai no telefone mesmo.
+ */
+async function resolverDestino(reserva: Reservation): Promise<string> {
+  if (!reserva.conversation_id) return reserva.customer_phone;
+
+  const { data, error } = await db()
+    .from("conversations")
+    .select("channel, external_id")
+    .eq("id", reserva.conversation_id)
+    .maybeSingle();
+
+  if (error || !data || data.channel !== "whatsapp" || !data.external_id) {
+    return reserva.customer_phone;
+  }
+  return data.external_id;
+}
+
+/**
  * Registra a notificação e tenta enviar na hora.
  *
  * Nunca lança: uma falha de envio não pode desfazer a aprovação já gravada.
@@ -181,6 +206,7 @@ export async function notificarCliente(params: {
 }): Promise<Notification | null> {
   const { template, reserva, venue } = params;
   const corpo = montarMensagem(template, reserva, venue);
+  const destino = await resolverDestino(reserva);
 
   // O canal do cliente é sempre WhatsApp. O processo que aprovou pode não
   // ter provedor nenhum (aprovação pelo painel na Vercel, onde o Baileys não
@@ -193,7 +219,7 @@ export async function notificarCliente(params: {
       venue_id: venue.id,
       reservation_id: reserva.id,
       channel: "whatsapp",
-      destination: reserva.customer_phone,
+      destination: destino,
       template,
       body: corpo,
     })
