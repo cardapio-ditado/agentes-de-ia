@@ -29,8 +29,42 @@ const PAGINAS = [
   { id: "organizacao", rotulo: "Organização", icone: ICONES.pessoa, render: organizacao, subtitulo: "Estabelecimentos, agentes e chaves" },
 ];
 
+/**
+ * Módulos do hub: cada solução do Brasa é uma porta.
+ *
+ * Só "Agentes de IA" existe hoje; os demais aparecem como "Em breve" para o
+ * cliente enxergar o tamanho do produto. Quando um módulo novo nascer, vira
+ * `ativo: true` com a função `entrar` dele.
+ */
+const MODULOS = [
+  {
+    id: "agentes-ia",
+    nome: "Agentes de IA",
+    descricao:
+      "Atendimento no WhatsApp e Instagram: reservas, programação e dúvidas respondidas na hora.",
+    icone:
+      "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z",
+    ativo: true,
+  },
+  {
+    id: "cardapio-digital",
+    nome: "Cardápio Digital",
+    descricao: "QR code na mesa, cardápio sempre atualizado e pedidos sem fila no balcão.",
+    icone: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z",
+    ativo: false,
+  },
+  {
+    id: "checklist",
+    nome: "Checklist Inteligente",
+    descricao: "Abertura, fechamento e rotinas da equipe sob controle, sem papel.",
+    icone: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
+    ativo: false,
+  },
+];
+
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");
+const telaHub = document.getElementById("tela-hub");
 const nav = document.getElementById("nav");
 const main = document.getElementById("pagina");
 const seletorVenue = document.getElementById("seletor-venue");
@@ -163,13 +197,12 @@ addEventListener("hashchange", () => irPara(location.hash.slice(1)));
 // ============ Acesso ============
 
 /**
- * Acende as brasas da tela de login.
+ * Acende as brasas de uma tela (login ou hub).
  *
  * Cada fagulha sai com tamanho, posição, ritmo e atraso sorteados — brasa de
- * verdade não sobe em fila. Roda uma vez; o CSS cuida do resto.
+ * verdade não sobe em fila. Roda uma vez por caixa; o CSS cuida do resto.
  */
-function acenderBrasas() {
-  const caixa = document.querySelector(".brasas");
+function acenderBrasas(caixa) {
   if (!caixa || caixa.childElementCount > 0) return;
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
@@ -190,13 +223,67 @@ function acenderBrasas() {
 }
 
 function pedirChave(mensagem) {
-  acenderBrasas();
+  acenderBrasas(telaAcesso.querySelector(".brasas"));
   app.hidden = true;
+  telaHub.hidden = true;
   telaAcesso.hidden = false;
   const erro = document.getElementById("erro-acesso");
   erro.hidden = !mensagem;
   erro.textContent = mensagem ?? "";
 }
+
+// ============ Hub de módulos ============
+
+function montarHub() {
+  const grade = document.getElementById("hub-grade");
+  limpar(grade);
+  for (const m of MODULOS) {
+    grade.append(
+      el(
+        "button",
+        {
+          classe: "modulo",
+          type: "button",
+          disabled: !m.ativo,
+          onclick: m.ativo ? () => entrarNoModulo() : null,
+        },
+        [
+          el("span", { classe: "modulo-icone" }, [icone(m.icone, 24)]),
+          el("span", { classe: "modulo-nome" }, [
+            el("span", { texto: m.nome }),
+            el("span", {
+              classe: `modulo-etiqueta ${m.ativo ? "modulo-etiqueta-ativo" : "modulo-etiqueta-breve"}`,
+              texto: m.ativo ? "Ativo" : "Em breve",
+            }),
+          ]),
+          el("p", { classe: "modulo-desc", texto: m.descricao }),
+        ],
+      ),
+    );
+  }
+}
+
+function mostrarHub() {
+  acenderBrasas(telaHub.querySelector(".brasas"));
+  telaAcesso.hidden = true;
+  app.hidden = true;
+  app.removeAttribute("data-menu");
+  telaHub.hidden = false;
+}
+
+/** Hoje a única porta é Agentes de IA — a aplicação de sempre. */
+function entrarNoModulo() {
+  telaHub.hidden = true;
+  app.hidden = false;
+  irPara(location.hash.slice(1));
+  contarPendentes();
+}
+
+document.getElementById("btn-hub").addEventListener("click", mostrarHub);
+document.getElementById("btn-sair-hub").addEventListener("click", () => {
+  esquecerChave();
+  location.reload();
+});
 
 document.getElementById("form-acesso").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -226,22 +313,22 @@ async function iniciar() {
   }
 
   telaAcesso.hidden = true;
-  app.hidden = false;
 
   limpar(seletorVenue);
   for (const v of venues) seletorVenue.append(el("option", { value: v.slug, texto: v.name }));
 
+  const nomeDoVenue = () => venues.find((v) => v.slug === ctx.venue)?.name ?? "";
   const salvo = localStorage.getItem("agentes.venue");
   ctx.venue = venues.some((v) => v.slug === salvo) ? salvo : venues[0].slug;
   seletorVenue.value = ctx.venue;
-  document.getElementById("marca-org").textContent =
-    venues.find((v) => v.slug === ctx.venue)?.name ?? "";
+  document.getElementById("marca-org").textContent = nomeDoVenue();
+  document.getElementById("hub-org").textContent = nomeDoVenue();
 
   seletorVenue.addEventListener("change", () => {
     ctx.venue = seletorVenue.value;
     localStorage.setItem("agentes.venue", ctx.venue);
-    document.getElementById("marca-org").textContent =
-      venues.find((v) => v.slug === ctx.venue)?.name ?? "";
+    document.getElementById("marca-org").textContent = nomeDoVenue();
+    document.getElementById("hub-org").textContent = nomeDoVenue();
     irPara(location.hash.slice(1));
   });
 
@@ -255,8 +342,12 @@ async function iniciar() {
   }
 
   montarNav();
-  await irPara(location.hash.slice(1));
-  await contarPendentes();
+  montarHub();
+
+  // Link direto para uma tela (#canais, #reservas…) pula o hub — é assim que
+  // o iniciar-brasa.bat abre direto em Canais. Entrada normal passa pelo hub.
+  if (location.hash.length > 1) entrarNoModulo();
+  else mostrarHub();
 }
 
 /** Badge de reservas na lateral, para a fila não passar despercebida. */

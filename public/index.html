@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Brasa — agentes de IA para bares e restaurantes</title>
+    <title>Brasa — hub de soluções para bares e restaurantes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -25,7 +25,7 @@
       <div class="brasas" aria-hidden="true"></div>
 
       <div class="acesso-conteudo">
-        <p class="capa-rotulo">Agentes de IA · Bares &amp; Restaurantes</p>
+        <p class="capa-rotulo">Hub de soluções · Bares &amp; Restaurantes</p>
         <div class="capa-logo">
           <span class="marca-icone capa-chama" aria-hidden="true">
             <svg viewBox="0 0 24 24">
@@ -47,10 +47,45 @@
             placeholder="sk_ditado_..."
             required
           />
-          <button type="submit" class="btn-fogo">Entrar no painel</button>
+          <button type="submit" class="btn-fogo">Entrar</button>
           <p class="acesso-nota">Fica salva neste navegador — você só faz isso uma vez.</p>
           <p id="erro-acesso" class="erro" role="alert" hidden></p>
         </form>
+      </div>
+
+      <p class="capa-rodape">Tech for bars &amp; restaurants</p>
+    </section>
+
+    <!-- ============ Hub de módulos ============
+         O saguão do Brasa: mesma fogueira do login, mas com os módulos que o
+         cliente contratou em cartões. Cada solução é uma porta. Os cartões
+         nascem via JS (montarHub), para a lista poder vir do plano do cliente. -->
+    <section id="tela-hub" class="acesso hub" hidden>
+      <div class="brasas" aria-hidden="true"></div>
+
+      <header class="hub-topo">
+        <div class="hub-logo">
+          <span class="marca-icone hub-chama" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"
+              />
+            </svg>
+          </span>
+          <span class="hub-wordmark">Brasa</span>
+        </div>
+        <div class="hub-topo-acoes">
+          <span id="hub-org" class="hub-org"></span>
+          <button id="btn-sair-hub" class="btn-hub-sair" type="button">Sair</button>
+        </div>
+      </header>
+
+      <div class="hub-conteudo">
+        <p class="capa-rotulo">Hub de soluções</p>
+        <h1 class="hub-titulo">O que vamos acender hoje?</h1>
+        <p class="hub-subtitulo">Escolha um módulo para entrar.</p>
+        <div class="hub-grade" id="hub-grade"></div>
+        <p class="hub-nota">Novos módulos acendem aqui em breve.</p>
       </div>
 
       <p class="capa-rodape">Tech for bars &amp; restaurants</p>
@@ -90,6 +125,12 @@
         <nav class="nav" id="nav" aria-label="Seções"></nav>
 
         <div class="lateral-rodape">
+          <button id="btn-hub" class="nav-item" type="button" title="Voltar aos módulos">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
+            </svg>
+            <span class="nav-rotulo">Módulos</span>
+          </button>
           <button id="btn-tema" class="nav-item" type="button" title="Tema claro/escuro">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
