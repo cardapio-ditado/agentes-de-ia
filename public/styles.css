@@ -167,6 +167,22 @@ h3 {
   color: #fff8f0;
 }
 
+/* Só o login leva a foto da churrasqueira de verdade; o hub continua no
+   carvão gradiente, senão a colmeia briga com as brasas da imagem. O véu
+   escurece o topo (onde ficam logo e formulário) e alivia perto das brasas. */
+#tela-acesso {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(18, 10, 8, 0.72) 0%,
+      rgba(18, 10, 8, 0.55) 45%,
+      rgba(18, 10, 8, 0.28) 78%,
+      rgba(18, 10, 8, 0.15) 100%
+    ),
+    url("/img/braseiro.jpg") center bottom / cover no-repeat,
+    #1c1210;
+}
+
 .acesso-conteudo {
   position: relative;
   z-index: 1;
@@ -343,10 +359,10 @@ h3 {
   }
 }
 
-/* ============ Hub de módulos — braseiro ============
-   O saguão é um braseiro: o fogo no coração e cada módulo é uma brasa em
-   volta. Acesa pulsa e solta fagulha; "em breve" é carvão apagado; carvões
-   soltos mostram que ainda cabe mais fogo aqui. */
+/* ============ Hub de módulos — colmeia ============
+   A chama no centro e um favo por módulo em volta, ligados por filetes de
+   energia. Favo aceso brilha e convida; "em breve" fica na penumbra; favos
+   vazios mostram para onde a colmeia cresce. */
 .hub {
   justify-content: flex-start;
   padding-top: 0;
@@ -409,204 +425,161 @@ h3 {
   line-height: 1.1;
 }
 
-/* A cama do braseiro: --bw é o passo de uma brasa; as posições chegam do
-   JS em passos via --dx/--dy. */
-.braseiro {
-  --bw: 200px;
+/* A geometria: hexágono de topo achatado, --hw de largura por --hh de
+   altura. As células recebem --dx/--dy em passos de favo via JS. */
+.colmeia {
+  --hw: 196px;
+  --hh: calc(var(--hw) * 0.866);
+  --hex: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
   position: relative;
-  width: calc(var(--bw) * 3);
-  height: calc(var(--bw) * 2.72);
-  margin: 8px 0 2px;
+  width: calc(var(--hw) * 2.5);
+  height: calc(var(--hh) * 3);
+  margin: 10px 0 4px;
 }
-/* O calor que sobe da cama de carvão, atrás de tudo. */
-.braseiro::before {
-  content: "";
+.colmeia-linhas {
   position: absolute;
-  left: 50%;
-  top: 60%;
-  width: 130%;
-  height: 76%;
-  translate: -50% -50%;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(255, 107, 53, 0.17), transparent 70%);
-  filter: blur(10px);
-  pointer-events: none;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.linha {
+  stroke: rgba(255, 248, 240, 0.16);
+  stroke-width: 1.5;
+}
+.linha-viva {
+  stroke: rgba(255, 107, 53, 0.65);
+  stroke-width: 2;
+  stroke-dasharray: 5 7;
+  animation: correr-linha 1.4s linear infinite;
+}
+.linha-apagada {
+  stroke: rgba(255, 248, 240, 0.08);
+  stroke-dasharray: 2 6;
+}
+@keyframes correr-linha {
+  to {
+    stroke-dashoffset: -12;
+  }
 }
 
-.brasa {
+.celula {
+  /* Célula um fio menor que o passo do favo: o vão que sobra é por onde os
+     filetes de energia aparecem correndo. */
+  --cw: calc(var(--hw) - 14px);
+  --ch: calc(var(--hh) - 12px);
   position: absolute;
-  left: calc(50% - var(--bw) / 2 + var(--dx, 0) * var(--bw));
-  top: calc(50% - var(--bw) * 0.46 + var(--dy, 0) * var(--bw));
-  width: var(--bw);
-  height: calc(var(--bw) * 0.92);
+  left: calc(50% - var(--cw) / 2 + var(--dx, 0) * var(--hw));
+  top: calc(50% - var(--ch) / 2 + var(--dy, 0) * var(--hh));
+  width: var(--cw);
+  height: var(--ch);
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 8px;
-  padding: 0 22px;
+  gap: 7px;
+  padding: 0 20px;
   text-align: center;
-  /* Pedra orgânica, não figura geométrica — cada brasa com um contorno. */
-  border-radius: 46% 54% 51% 49% / 53% 47% 55% 45%;
-  animation: brotar 0.5s ease both,
-    boiar calc(3.4s + var(--ordem, 0) * 0.7s) ease-in-out calc(var(--ordem, 0) * 0.3s) infinite alternate;
-  animation-delay: calc(var(--ordem, 0) * 90ms), calc(0.5s + var(--ordem, 0) * 0.3s);
+  clip-path: var(--hex);
+  background: rgba(255, 248, 240, 0.14); /* vira a "borda" do hexágono */
+  animation: brotar 0.5s ease both;
+  animation-delay: calc(var(--ordem, 0) * 80ms);
 }
-.brasa:nth-child(even) {
-  border-radius: 53% 47% 45% 55% / 46% 56% 44% 54%;
+.celula::before {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  clip-path: var(--hex);
+  background: rgba(32, 21, 17, 0.94);
+}
+.celula > * {
+  position: relative;
 }
 
 @keyframes brotar {
   from {
     opacity: 0;
-    scale: 0.6;
+    scale: 0.55;
   }
   to {
     opacity: 1;
     scale: 1;
   }
 }
-/* Brasa boia de leve no calor — cada uma no seu ritmo. */
-@keyframes boiar {
-  from {
-    translate: 0 0;
-  }
-  to {
-    translate: 0 -6px;
-  }
-}
 
-/* O coração do fogo. */
-.brasa-fogo {
-  width: calc(var(--bw) * 1.04);
-  height: calc(var(--bw) * 0.98);
+/* O miolo: a marca, respirando. */
+.hex-centro {
+  background: linear-gradient(150deg, #ffb066, #ff6b35 45%, #c1121f);
   color: #fff8f0;
-  background: radial-gradient(circle at 50% 68%, #ffd9a8 0%, #ffb066 22%, #ff6b35 52%, #c1121f 86%);
-  animation: brotar 0.5s ease both, arder 3.4s ease-in-out 0.8s infinite;
+  animation: brotar 0.5s ease both, pulsar-favo 3.6s ease-in-out 0.9s infinite;
 }
-.brasa-fogo svg {
+.hex-centro::before {
+  content: none; /* o centro é fogo maciço, sem miolo escuro */
+}
+.hex-centro svg {
   fill: #fff8f0 !important;
   stroke: none !important;
 }
-.brasa-wordmark {
+.hex-wordmark {
   font-family: var(--fonte-display);
   font-weight: 700;
   font-size: 27px;
   line-height: 1;
 }
-@keyframes arder {
+@keyframes pulsar-favo {
   0%,
   100% {
-    box-shadow: 0 0 26px 4px rgba(255, 107, 53, 0.4), 0 0 70px 12px rgba(193, 18, 31, 0.25);
+    filter: drop-shadow(0 0 16px rgba(255, 107, 53, 0.35));
   }
   50% {
-    box-shadow: 0 0 44px 10px rgba(255, 107, 53, 0.62), 0 0 100px 22px rgba(193, 18, 31, 0.35);
+    filter: drop-shadow(0 0 34px rgba(255, 107, 53, 0.65));
   }
 }
 
-/* Brasas de módulo. */
-.brasa-modulo {
+/* Favos de módulo. */
+.hex-modulo {
   border: 0;
   margin: 0;
+  color: #fff8f0;
   font: inherit;
   cursor: pointer;
-  transition: filter 0.18s ease, box-shadow 0.2s ease;
+  transition: translate 0.16s ease, filter 0.2s ease, background 0.16s ease;
 }
-.brasa-modulo:focus-visible {
-  outline: 2px solid rgba(255, 176, 102, 0.75);
-  outline-offset: 5px;
-}
-
-/* Acesa: crosta escura por fora, fogo vivo por dentro. */
-.brasa-acesa {
-  color: #fff8f0;
-  background: radial-gradient(circle at 50% 74%, #ffb066 0%, #ff6b35 26%, #c1121f 58%, #45120e 92%);
-  animation: brotar 0.5s ease both,
-    boiar calc(3.4s + var(--ordem, 0) * 0.7s) ease-in-out infinite alternate,
-    arder-brasa 2.8s ease-in-out 0.9s infinite;
-}
-.brasa-acesa:hover,
-.brasa-acesa:focus-visible {
-  /* A brasa não corre: ela flameja mais forte. */
-  filter: brightness(1.14);
-  box-shadow: 0 0 46px 10px rgba(255, 107, 53, 0.55);
+.hex-modulo:hover:not(.hex-apagado),
+.hex-modulo:focus-visible:not(.hex-apagado) {
+  translate: 0 -6px;
+  background: rgba(255, 107, 53, 0.75);
+  filter: drop-shadow(0 14px 26px rgba(255, 107, 53, 0.35));
   z-index: 2;
 }
-@keyframes arder-brasa {
-  0%,
-  100% {
-    box-shadow: 0 0 18px 2px rgba(255, 107, 53, 0.32);
-  }
-  50% {
-    box-shadow: 0 0 34px 7px rgba(255, 107, 53, 0.52);
-  }
+.hex-modulo:active:not(.hex-apagado) {
+  translate: 0 -3px;
 }
-
-/* Carvão apagado: escuro, fosco, com um resto de calor na barriga. */
-.carvao {
-  color: rgba(255, 248, 240, 0.5);
-  background: radial-gradient(circle at 42% 32%, #34251d 0%, #241712 55%, #170e09 100%);
-  box-shadow: inset 0 -14px 26px rgba(255, 107, 53, 0.07);
+.hex-apagado {
   cursor: default;
+  color: rgba(255, 248, 240, 0.45);
 }
-.carvao:hover {
-  filter: brightness(1.08);
-}
-
-/* Carvões soltos: só decoração, tamanho por --escala. */
-.carvao-solto {
-  width: calc(var(--bw) * var(--escala, 0.3));
-  height: calc(var(--bw) * var(--escala, 0.3) * 0.88);
-  padding: 0;
-  background: radial-gradient(circle at 40% 30%, #2c1e17 0%, #1a110b 70%);
-  box-shadow: inset 0 -6px 12px rgba(255, 107, 53, 0.06);
-}
-
-/* Fagulhas soltando das brasas vivas. */
-.faisca {
-  position: absolute;
-  bottom: 78%;
-  width: 4.5px;
-  height: 4.5px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe9c4 0%, #ffb066 45%, rgba(255, 107, 53, 0) 100%);
-  box-shadow: 0 0 8px 2px rgba(255, 140, 66, 0.45);
-  opacity: 0;
-  animation: soltar-faisca 2.4s ease-out infinite;
-  pointer-events: none;
-}
-@keyframes soltar-faisca {
-  0% {
-    translate: 0 0;
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  100% {
-    translate: 8px -64px;
-    opacity: 0;
-  }
-}
-
-.brasa-icone {
+.hex-icone {
   width: 42px;
   height: 42px;
   border-radius: 13px;
   display: grid;
   place-items: center;
   color: #fff8f0;
-  background: rgba(20, 8, 5, 0.32);
+  background: linear-gradient(135deg, #ff6b35, #c1121f);
+  box-shadow: 0 5px 18px rgba(255, 107, 53, 0.4);
 }
-.carvao .brasa-icone {
-  background: rgba(255, 248, 240, 0.07);
+.hex-apagado .hex-icone {
+  background: rgba(255, 248, 240, 0.09);
+  box-shadow: none;
   color: rgba(255, 248, 240, 0.4);
 }
-.brasa-nome {
+.hex-nome {
   font-family: var(--fonte-display);
   font-weight: 600;
   font-size: 16.5px;
   line-height: 1.15;
 }
-.brasa-etiqueta {
+.hex-etiqueta {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -615,15 +588,26 @@ h3 {
   padding: 3px 11px;
   border-radius: 999px;
   border: 1px solid rgba(255, 248, 240, 0.3);
-  color: rgba(255, 248, 240, 0.55);
+  color: rgba(255, 248, 240, 0.6);
 }
-.brasa-etiqueta-acesa {
+.hex-etiqueta-ativa {
   border: 0;
-  background: rgba(20, 8, 5, 0.4);
-  color: #ffd9a8;
+  background: linear-gradient(135deg, #ff6b35, #c1121f);
+  color: #fff8f0;
 }
 
-/* A legenda viva embaixo do braseiro. */
+/* Favos vazios: espaço de crescer. */
+.hex-vazio {
+  background: rgba(255, 248, 240, 0.07);
+  color: rgba(255, 248, 240, 0.22);
+  font-size: 26px;
+  font-weight: 300;
+}
+.hex-vazio::before {
+  background: rgba(28, 18, 16, 0.5);
+}
+
+/* A legenda viva embaixo da colmeia. */
 .hub-desc {
   margin: 8px 0 0;
   min-height: 2.8em;
@@ -652,31 +636,31 @@ h3 {
 }
 
 @media (max-width: 860px) {
-  .braseiro {
-    --bw: 156px;
+  .colmeia {
+    --hw: 152px;
   }
   .hub-titulo {
     font-size: 30px;
   }
-  .brasa-nome {
+  .hex-nome {
     font-size: 13.5px;
   }
-  .brasa-wordmark {
+  .hex-wordmark {
     font-size: 21px;
   }
-  .brasa-icone {
+  .hex-icone {
     width: 34px;
     height: 34px;
     border-radius: 10px;
   }
-  .brasa-icone svg {
+  .hex-icone svg {
     width: 18px;
     height: 18px;
   }
 }
 @media (max-width: 560px) {
-  .braseiro {
-    --bw: 128px;
+  .colmeia {
+    --hw: 120px;
   }
   .hub-titulo {
     font-size: 26px;
@@ -684,39 +668,39 @@ h3 {
   .hub-org {
     display: none;
   }
-  .brasa {
-    padding: 0 14px;
+  .celula {
+    padding: 0 12px;
     gap: 5px;
   }
-  .brasa-nome {
+  .hex-nome {
     font-size: 11.5px;
   }
-  .brasa-wordmark {
+  .hex-wordmark {
     font-size: 17px;
   }
-  .brasa-etiqueta {
+  .hex-etiqueta {
     font-size: 8.5px;
     padding: 2px 8px;
   }
-  /* Na brasa pequena, ícone + nome + selo não cabem — o nome diz mais. */
-  .brasa-modulo .brasa-icone {
+  /* No favo pequeno, ícone + nome + selo não cabem na ponta do hexágono —
+     o nome e o selo dizem mais que o ícone. */
+  .hex-modulo .hex-icone {
     display: none;
   }
-  .brasa-fogo svg {
+  .hex-centro svg {
     width: 24px;
     height: 24px;
   }
 }
 @media (max-width: 400px) {
-  .braseiro {
-    --bw: 112px;
+  .colmeia {
+    --hw: 106px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .brasa,
-  .brasa-fogo,
-  .brasa-acesa,
-  .faisca,
+  .celula,
+  .hex-centro,
+  .linha-viva,
   .hub-desc.trocando {
     animation: none;
   }

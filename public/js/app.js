@@ -45,7 +45,8 @@ const MODULOS = [
     icone:
       "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z",
     ativo: true,
-    // Posição no braseiro, em passos de brasa a partir do fogo central.
+    // Posição na colmeia, em passos de favo a partir do centro (x em larguras,
+    // y em alturas de hexágono).
     pos: { x: 0, y: -1 },
   },
   {
@@ -54,7 +55,7 @@ const MODULOS = [
     descricao: "QR code na mesa, cardápio sempre atualizado e pedidos sem fila no balcão.",
     icone: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z",
     ativo: false,
-    pos: { x: -0.92, y: 0.55 },
+    pos: { x: -0.75, y: 0.5 },
   },
   {
     id: "checklist",
@@ -62,15 +63,15 @@ const MODULOS = [
     descricao: "Abertura, fechamento e rotinas da equipe sob controle, sem papel.",
     icone: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
     ativo: false,
-    pos: { x: 0.92, y: 0.55 },
+    pos: { x: 0.75, y: 0.5 },
   },
 ];
 
-/** Carvões soltos, só decoração: o braseiro tem espaço pra crescer. */
-const CARVOES_SOLTOS = [
-  { x: -0.95, y: -0.72, escala: 0.34 },
-  { x: 0.98, y: -0.66, escala: 0.28 },
-  { x: 0.02, y: 1.04, escala: 0.38 },
+/** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
+const FAVOS_VAZIOS = [
+  { x: -0.75, y: -0.5 },
+  { x: 0.75, y: -0.5 },
+  { x: 0, y: 1 },
 ];
 
 const app = document.getElementById("app");
@@ -243,25 +244,43 @@ function pedirChave(mensagem) {
   erro.textContent = mensagem ?? "";
 }
 
-// ============ Hub de módulos (braseiro) ============
+// ============ Hub de módulos (colmeia) ============
 
 const CHAMA_BRASA =
   "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z";
 
-const DICA_PADRAO = "Toque numa brasa acesa para entrar.";
+const DICA_PADRAO = "Toque num favo aceso para entrar.";
 
 /**
- * O braseiro: o fogo no coração e cada módulo é uma brasa ao redor — acesa
- * (dá pra entrar, com fagulhas subindo) ou carvão apagado (ainda vamos
- * acender). Posições em passos de brasa via --dx/--dy; o CSS faz o resto.
+ * A colmeia: chama no centro, um favo por módulo em volta, filetes de
+ * energia ligando tudo. As posições vêm de MODULOS/FAVOS_VAZIOS em passos
+ * de favo; o CSS transforma em pixels. Células brotam em sequência.
  */
 function montarHub() {
-  const braseiro = document.getElementById("braseiro");
+  const colmeia = document.getElementById("colmeia");
   const descricao = document.getElementById("hub-desc");
-  limpar(braseiro);
+  limpar(colmeia);
 
-  const posicao = ({ x, y }, ordem, extra = "") =>
-    `--dx:${x};--dy:${y};--ordem:${ordem};${extra}`;
+  // Filetes de energia, por baixo das células. O container mede 2.5
+  // larguras por 3 alturas de favo — daí a conversão para %.
+  const NS = "http://www.w3.org/2000/svg";
+  const linhas = document.createElementNS(NS, "svg");
+  linhas.setAttribute("class", "colmeia-linhas");
+  linhas.setAttribute("aria-hidden", "true");
+  const ligar = ({ x, y }, classe) => {
+    const linha = document.createElementNS(NS, "line");
+    linha.setAttribute("x1", "50%");
+    linha.setAttribute("y1", "50%");
+    linha.setAttribute("x2", `${50 + (x / 2.5) * 100}%`);
+    linha.setAttribute("y2", `${50 + (y / 3) * 100}%`);
+    linha.setAttribute("class", classe);
+    linhas.append(linha);
+  };
+  for (const m of MODULOS) ligar(m.pos, m.ativo ? "linha linha-viva" : "linha");
+  for (const f of FAVOS_VAZIOS) ligar(f, "linha linha-apagada");
+  colmeia.append(linhas);
+
+  const posicao = ({ x, y }, ordem) => `--dx:${x};--dy:${y};--ordem:${ordem}`;
 
   // A troca reinicia a animação de fade — sem isto o texto pisca seco.
   const contar = (texto) => {
@@ -271,55 +290,37 @@ function montarHub() {
     descricao.classList.add("trocando");
   };
 
-  /** Fagulhas miúdas soltando de uma brasa viva. */
-  const soltarFaiscas = (quantas) => {
-    const faiscas = [];
-    for (let i = 0; i < quantas; i++) {
-      const f = el("span", { classe: "faisca", "aria-hidden": "true" });
-      f.style.left = `${18 + Math.random() * 64}%`;
-      f.style.animationDelay = `${(Math.random() * 2.4).toFixed(1)}s`;
-      f.style.animationDuration = `${(1.9 + Math.random() * 1.4).toFixed(1)}s`;
-      faiscas.push(f);
-    }
-    return faiscas;
-  };
-
-  // O coração do fogo: a marca, não um botão.
-  braseiro.append(
+  // O miolo é a marca, não um botão.
+  colmeia.append(
     el(
       "div",
-      { classe: "brasa brasa-fogo", style: posicao({ x: 0, y: 0 }, 0), "aria-hidden": "true" },
-      [
-        ...soltarFaiscas(5),
-        icone(CHAMA_BRASA, 34),
-        el("span", { classe: "brasa-wordmark", texto: "Brasa" }),
-      ],
+      { classe: "celula hex-centro", style: posicao({ x: 0, y: 0 }, 0), "aria-hidden": "true" },
+      [icone(CHAMA_BRASA, 34), el("span", { classe: "hex-wordmark", texto: "Brasa" })],
     ),
   );
 
   MODULOS.forEach((m, i) => {
     const dica = m.ativo ? m.descricao : `${m.descricao} — em breve.`;
-    braseiro.append(
+    colmeia.append(
       el(
         "button",
         {
-          classe: `brasa brasa-modulo${m.ativo ? " brasa-acesa" : " carvao"}`,
+          classe: `celula hex-modulo${m.ativo ? "" : " hex-apagado"}`,
           type: "button",
           style: posicao(m.pos, i + 1),
-          // aria-disabled (e não disabled) para o carvão apagado continuar
+          // aria-disabled (e não disabled) para o favo "em breve" continuar
           // contando o que é ao passar o mouse ou focar.
           "aria-disabled": String(!m.ativo),
           "aria-label": `${m.nome}${m.ativo ? "" : " — em breve"}`,
-          onclick: () => (m.ativo ? entrarNoModulo() : avisar(`${m.nome} ainda vamos acender.`, "info")),
+          onclick: () => (m.ativo ? entrarNoModulo() : avisar(`${m.nome} chega em breve.`, "info")),
           onmouseenter: () => contar(dica),
           onfocus: () => contar(dica),
         },
         [
-          ...(m.ativo ? soltarFaiscas(4) : []),
-          el("span", { classe: "brasa-icone" }, [icone(m.icone, 22)]),
-          el("span", { classe: "brasa-nome", texto: m.nome }),
+          el("span", { classe: "hex-icone" }, [icone(m.icone, 22)]),
+          el("span", { classe: "hex-nome", texto: m.nome }),
           el("span", {
-            classe: `brasa-etiqueta${m.ativo ? " brasa-etiqueta-acesa" : ""}`,
+            classe: `hex-etiqueta${m.ativo ? " hex-etiqueta-ativa" : ""}`,
             texto: m.ativo ? "Entrar" : "Em breve",
           }),
         ],
@@ -327,17 +328,18 @@ function montarHub() {
     );
   });
 
-  CARVOES_SOLTOS.forEach((c, i) => {
-    braseiro.append(
+  FAVOS_VAZIOS.forEach((f, i) => {
+    colmeia.append(
       el("div", {
-        classe: "brasa carvao-solto",
-        style: posicao(c, MODULOS.length + 1 + i, `--escala:${c.escala}`),
+        classe: "celula hex-vazio",
+        style: posicao(f, MODULOS.length + 1 + i),
         "aria-hidden": "true",
+        texto: "+",
       }),
     );
   });
 
-  braseiro.addEventListener("mouseleave", () => contar(DICA_PADRAO));
+  colmeia.addEventListener("mouseleave", () => contar(DICA_PADRAO));
   contar(DICA_PADRAO);
 }
 
@@ -425,7 +427,7 @@ async function iniciar() {
   montarNav();
   montarHub();
 
-  // O braseiro recebe toda entrada nova. Só pula direto pro módulo quem:
+  // A colmeia recebe toda entrada nova. Só pula direto pro módulo quem:
   // - veio de um atalho explícito (?direto=1, como o iniciar-brasa.bat), ou
   // - já passou pelo hub nesta sessão e só deu F5 dentro do módulo.
   // A âncora (#reservas etc.) sozinha NÃO pula: o navegador guarda a da
