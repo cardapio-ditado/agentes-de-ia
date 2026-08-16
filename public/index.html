@@ -57,23 +57,15 @@
     </section>
 
     <!-- ============ Hub de módulos ============
-         O saguão do Brasa: mesma fogueira do login, mas com os módulos que o
-         cliente contratou em cartões. Cada solução é uma porta. Os cartões
-         nascem via JS (montarHub), para a lista poder vir do plano do cliente. -->
+         O saguão do Brasa: a chama no centro da colmeia e cada módulo num
+         favo ao redor, ligado por filetes de energia. Favos apagados são
+         espaço de crescer. As células nascem via JS (montarHub), para a
+         lista poder vir do plano do cliente. -->
     <section id="tela-hub" class="acesso hub" hidden>
       <div class="brasas" aria-hidden="true"></div>
 
       <header class="hub-topo">
-        <div class="hub-logo">
-          <span class="marca-icone hub-chama" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"
-              />
-            </svg>
-          </span>
-          <span class="hub-wordmark">Brasa</span>
-        </div>
+        <p class="capa-rotulo">Hub de soluções</p>
         <div class="hub-topo-acoes">
           <span id="hub-org" class="hub-org"></span>
           <button id="btn-sair-hub" class="btn-hub-sair" type="button">Sair</button>
@@ -81,11 +73,10 @@
       </header>
 
       <div class="hub-conteudo">
-        <p class="capa-rotulo">Hub de soluções</p>
         <h1 class="hub-titulo">O que vamos acender hoje?</h1>
-        <p class="hub-subtitulo">Escolha um módulo para entrar.</p>
-        <div class="hub-grade" id="hub-grade"></div>
-        <p class="hub-nota">Novos módulos acendem aqui em breve.</p>
+        <div class="colmeia" id="colmeia"></div>
+        <p class="hub-desc" id="hub-desc"></p>
+        <p class="hub-nota">Favos apagados são módulos que ainda vão acender.</p>
       </div>
 
       <p class="capa-rodape">Tech for bars &amp; restaurants</p>
