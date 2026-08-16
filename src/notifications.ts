@@ -218,6 +218,59 @@ export function normalizarTelefone(bruto: string): string | null {
   return null;
 }
 
+/**
+ * O mesmo celular brasileiro com e sem o nono dígito.
+ *
+ * O WhatsApp registrou muitos números antigos sem o 9 que a Anatel acrescentou
+ * — quem digita "65 98138-2139" pode estar cadastrado como "65 8138-2139".
+ * Errar isso manda a mensagem para um número que não existe, sem erro visível.
+ */
+export function variacoesDoTelefone(e164: string): string[] {
+  const variacoes = [e164];
+  if (!e164.startsWith("55")) return variacoes;
+
+  const ddd = e164.slice(2, 4);
+  const resto = e164.slice(4);
+  if (resto.length === 9 && resto.startsWith("9")) variacoes.push(`55${ddd}${resto.slice(1)}`);
+  else if (resto.length === 8) variacoes.push(`55${ddd}9${resto}`);
+  return variacoes;
+}
+
+/**
+ * Endereço de WhatsApp já usado numa conversa com este número.
+ *
+ * É a fonte mais confiável que existe: se recebemos mensagem dali, dali se
+ * responde. Contas migradas para LID só são alcançáveis por esse endereço —
+ * reconstruir a partir do telefone aponta para o vazio.
+ */
+export async function jidConhecidoDoTelefone(candidatos: string[]): Promise<string | null> {
+  const { data, error } = await db()
+    .from("conversations")
+    .select("external_id, metadata")
+    .eq("channel", "whatsapp")
+    .order("updated_at", { ascending: false })
+    .limit(200);
+  if (error || !data) return null;
+
+  const alvos = new Set(candidatos);
+  for (const conversa of data) {
+    if (!conversa.external_id) continue;
+    const meta = (conversa.metadata ?? {}) as Record<string, unknown>;
+    const contato = typeof meta.contato === "string" ? meta.contato.replace(/\D/g, "") : "";
+    const doExternalId = conversa.external_id.split("@")[0]?.replace(/\D/g, "") ?? "";
+
+    for (const digitos of [contato, doExternalId]) {
+      if (!digitos) continue;
+      const normalizado = normalizarTelefone(digitos);
+      if (!normalizado) continue;
+      if (variacoesDoTelefone(normalizado).some((v) => alvos.has(v))) {
+        return conversa.external_id;
+      }
+    }
+  }
+  return null;
+}
+
 // ============================================================
 // Fila
 // ============================================================

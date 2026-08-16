@@ -11,10 +11,12 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import {
+  jidConhecidoDoTelefone,
   listPendingNotifications,
   normalizarTelefone,
   registrarProvedorWhatsapp,
   tentarEnviar,
+  variacoesDoTelefone,
 } from "../notifications.js";
 
 /**
@@ -270,20 +272,43 @@ function extrairTelefone(jid: string, jidAlt: string | null | undefined): string
 }
 
 /**
- * Um jid pronto (com "@...") já é roteável — veio de uma conversa real.
- * Reconstruir a partir de um número de telefone só funciona para contas
- * clássicas; contas migradas para LID não resolvem por aí (o WhatsApp
- * aceita o envio sem erro, mas a mensagem não chega a lugar nenhum).
+ * Descobre o endereço que realmente entrega a mensagem.
  *
- * Dígitos demais para ser telefone (14+) são um LID gravado sem o sufixo —
- * conversas registradas antes da correção do endereço. Remontamos o "@lid".
+ * Reconstruir "telefone@s.whatsapp.net" só funciona para contas clássicas com
+ * o número digitado exatamente como o WhatsApp o registrou. Duas armadilhas
+ * derrubam isso em silêncio (o envio "dá certo" e nada chega): contas
+ * migradas para LID, que só respondem pelo id interno, e o nono dígito, que
+ * muitos números antigos não têm. Por isso a busca é em cascata, da fonte
+ * mais confiável para a menos:
+ *
+ *   1. jid pronto — veio de uma conversa real
+ *   2. conversa já existente com esse número — endereço que já funcionou
+ *   3. o próprio WhatsApp (onWhatsApp), testando com e sem o nono dígito
+ *   4. reconstrução — o palpite de sempre, para contas clássicas
  */
-function paraJid(destino: string): string | null {
+async function resolverJid(destino: string): Promise<string | null> {
   if (destino.includes("@")) return destino;
+
   const digitos = destino.replace(/\D/g, "");
+  // Longo demais para telefone: é um LID gravado sem o sufixo.
   if (digitos.length >= 14) return `${digitos}@lid`;
+
   const telefone = normalizarTelefone(destino);
-  return telefone ? `${telefone}@s.whatsapp.net` : null;
+  if (!telefone) return null;
+  const candidatos = variacoesDoTelefone(telefone);
+
+  const conhecido = await jidConhecidoDoTelefone(candidatos).catch(() => null);
+  if (conhecido) return conhecido;
+
+  try {
+    const achados = await socket?.onWhatsApp(...candidatos);
+    const valido = achados?.find((a) => a.exists && a.jid);
+    if (valido?.jid) return valido.jid;
+  } catch (e) {
+    console.error("[whatsapp] consulta de número falhou:", e);
+  }
+
+  return `${telefone}@s.whatsapp.net`;
 }
 
 /**
@@ -298,7 +323,7 @@ export async function enviarPeloWhatsapp(
     return { enviado: false, erro: `WhatsApp não conectado (${estado.status}).` };
   }
 
-  const jid = paraJid(destino);
+  const jid = await resolverJid(destino);
   if (!jid) return { enviado: false, erro: `Telefone inválido: "${destino}".` };
 
   try {
