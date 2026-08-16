@@ -298,16 +298,28 @@ async function resolverJid(destino: string): Promise<string | null> {
   const candidatos = variacoesDoTelefone(telefone);
 
   const conhecido = await jidConhecidoDoTelefone(candidatos).catch(() => null);
-  if (conhecido) return conhecido;
+  if (conhecido) {
+    console.log(`[whatsapp] ${destino} → ${conhecido} (conversa conhecida)`);
+    return conhecido;
+  }
 
   try {
     const achados = await socket?.onWhatsApp(...candidatos);
     const valido = achados?.find((a) => a.exists && a.jid);
-    if (valido?.jid) return valido.jid;
+    if (valido?.jid) {
+      console.log(`[whatsapp] ${destino} → ${valido.jid} (consulta ao WhatsApp)`);
+      return valido.jid;
+    }
+    console.warn(
+      `[whatsapp] ${destino}: o WhatsApp não reconheceu ${candidatos.join(" nem ")}.`,
+    );
   } catch (e) {
     console.error("[whatsapp] consulta de número falhou:", e);
   }
 
+  // Último recurso, e o mais frágil: se a conta for LID ou o número estiver
+  // registrado com outro formato, o envio "dá certo" e não chega a ninguém.
+  console.warn(`[whatsapp] ${destino} → ${telefone}@s.whatsapp.net (palpite; pode não chegar)`);
   return `${telefone}@s.whatsapp.net`;
 }
 
@@ -328,6 +340,7 @@ export async function enviarPeloWhatsapp(
 
   try {
     const resultado = await socket.sendMessage(jid, { text: texto });
+    console.log(`[whatsapp] mensagem enviada para ${jid} (id ${resultado?.key?.id ?? "?"})`);
     return { enviado: true, providerId: resultado?.key?.id ?? undefined };
   } catch (e) {
     return { enviado: false, erro: e instanceof Error ? e.message : String(e) };
