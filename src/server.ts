@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { criarHandler, registrarConectorWhatsapp } from "./app.js";
 import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whatsapp.js";
+import { dispararChecklistsAgendados } from "./checklists.js";
 import {
   consumirComandoPonte,
   primeiroVenueAtivo,
@@ -82,6 +83,29 @@ async function cicloDaPonte(): Promise<void> {
 
 setInterval(() => void cicloDaPonte(), CICLO_PONTE_MS);
 void cicloDaPonte();
+
+// ============================================================
+// Agendador de checklists
+// ============================================================
+// A cada minuto: cria as execuções cujo horário chegou e enfileira o link
+// no WhatsApp do responsável — a fila de notificações (acima) entrega.
+// Vive aqui porque a Vercel não tem processo de pé; é o mesmo motivo da
+// fila. Idempotente: rodar de novo no mesmo dia não duplica nada.
+
+let agendadorEmAndamento = false;
+async function cicloDosChecklists(): Promise<void> {
+  if (agendadorEmAndamento) return;
+  agendadorEmAndamento = true;
+  try {
+    await dispararChecklistsAgendados();
+  } catch (e) {
+    console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
+  } finally {
+    agendadorEmAndamento = false;
+  }
+}
+setInterval(() => void cicloDosChecklists(), 60_000);
+void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));
 

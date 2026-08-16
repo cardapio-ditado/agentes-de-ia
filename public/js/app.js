@@ -9,6 +9,8 @@ import { agentes } from "./pages/agentes.js";
 import { agente } from "./pages/agente.js";
 import { empresa } from "./pages/empresa.js";
 import { organizacao } from "./pages/organizacao.js";
+import { checklists } from "./pages/checklists.js";
+import { execucoes } from "./pages/execucoes.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -17,17 +19,24 @@ import { organizacao } from "./pages/organizacao.js";
  * limpa o main e chama a tela — sem framework, sem build.
  */
 
+// Cada página pertence a um módulo do hub; a lateral só mostra as do módulo
+// em que o usuário entrou.
 const PAGINAS = [
-  { id: "painel", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
-  { id: "conversas", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "Atendimentos do agente" },
-  { id: "reservas", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
-  { id: "programacao", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
-  { id: "empresa", rotulo: "Empresa", icone: ICONES.organizacao, render: empresa, subtitulo: "Endereço, horários e informações da casa" },
-  { id: "agentes", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
-  { id: "canais", rotulo: "Canais", icone: ICONES.canais, render: canais, subtitulo: "Por onde o agente atende" },
-  { id: "agente", rotulo: "Testar agente", icone: ICONES.raio, render: agente, subtitulo: "Converse como se fosse um cliente" },
-  { id: "organizacao", rotulo: "Organização", icone: ICONES.pessoa, render: organizacao, subtitulo: "Estabelecimentos, agentes e chaves" },
+  { id: "painel", modulo: "agentes-ia", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
+  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "Atendimentos do agente" },
+  { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
+  { id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
+  { id: "empresa", modulo: "agentes-ia", rotulo: "Empresa", icone: ICONES.organizacao, render: empresa, subtitulo: "Endereço, horários e informações da casa" },
+  { id: "agentes", modulo: "agentes-ia", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
+  { id: "canais", modulo: "agentes-ia", rotulo: "Canais", icone: ICONES.canais, render: canais, subtitulo: "Por onde o agente atende" },
+  { id: "agente", modulo: "agentes-ia", rotulo: "Testar agente", icone: ICONES.raio, render: agente, subtitulo: "Converse como se fosse um cliente" },
+  { id: "organizacao", modulo: "agentes-ia", rotulo: "Organização", icone: ICONES.pessoa, render: organizacao, subtitulo: "Estabelecimentos, agentes e chaves" },
+
+  { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
+  { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
 ];
+
+let moduloAtual = "agentes-ia";
 
 /**
  * Módulos do hub: cada solução do Brasa é uma porta.
@@ -60,9 +69,10 @@ const MODULOS = [
   {
     id: "checklist",
     nome: "Checklist Inteligente",
-    descricao: "Abertura, fechamento e rotinas da equipe sob controle, sem papel.",
+    descricao:
+      "Rotinas de abertura e fechamento com link no WhatsApp, fotos como prova e a IA conferindo cada resposta.",
     icone: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
-    ativo: false,
+    ativo: true,
     pos: { x: 0.75, y: 0.5 },
   },
 ];
@@ -145,7 +155,7 @@ document.getElementById("btn-sair").addEventListener("click", () => {
 // ============ Navegação ============
 function montarNav() {
   limpar(nav);
-  for (const p of PAGINAS) {
+  for (const p of PAGINAS.filter((p) => p.modulo === moduloAtual)) {
     nav.append(
       el(
         "a",
@@ -162,7 +172,10 @@ function montarNav() {
 }
 
 async function irPara(id) {
-  const pagina = PAGINAS.find((p) => p.id === id) ?? PAGINAS[0];
+  // Só as páginas do módulo atual contam; hash de outro módulo cai na
+  // primeira página deste — o hub é quem troca de módulo.
+  const doModulo = PAGINAS.filter((p) => p.modulo === moduloAtual);
+  const pagina = doModulo.find((p) => p.id === id) ?? doModulo[0];
 
   // A tela anterior pode ter deixado timers rodando.
   for (const fn of limpezas) {
@@ -312,7 +325,7 @@ function montarHub() {
           // contando o que é ao passar o mouse ou focar.
           "aria-disabled": String(!m.ativo),
           "aria-label": `${m.nome}${m.ativo ? "" : " — em breve"}`,
-          onclick: () => (m.ativo ? entrarNoModulo() : avisar(`${m.nome} chega em breve.`, "info")),
+          onclick: () => (m.ativo ? entrarNoModulo(m.id) : avisar(`${m.nome} chega em breve.`, "info")),
           onmouseenter: () => contar(dica),
           onfocus: () => contar(dica),
         },
@@ -351,15 +364,18 @@ function mostrarHub() {
   telaHub.hidden = false;
 }
 
-/** Hoje a única porta é Agentes de IA — a aplicação de sempre. */
-function entrarNoModulo() {
+/** Abre um módulo: a lateral e as telas viram as dele. */
+function entrarNoModulo(moduloId = "agentes-ia") {
+  moduloAtual = PAGINAS.some((p) => p.modulo === moduloId) ? moduloId : "agentes-ia";
   // F5 dentro do módulo não deve voltar pro saguão — mas fechar o navegador
   // e voltar amanhã, sim. Por isso sessionStorage, que morre com a aba.
   sessionStorage.setItem("brasa.hub.visto", "1");
+  sessionStorage.setItem("brasa.modulo", moduloAtual);
+  montarNav();
   telaHub.hidden = true;
   app.hidden = false;
   irPara(location.hash.slice(1));
-  contarPendentes();
+  if (moduloAtual === "agentes-ia") contarPendentes();
 }
 
 document.getElementById("btn-hub").addEventListener("click", mostrarHub);
@@ -435,7 +451,7 @@ async function iniciar() {
   const direto =
     new URLSearchParams(location.search).has("direto") ||
     sessionStorage.getItem("brasa.hub.visto") === "1";
-  if (direto) entrarNoModulo();
+  if (direto) entrarNoModulo(sessionStorage.getItem("brasa.modulo") ?? "agentes-ia");
   else mostrarHub();
 }
 

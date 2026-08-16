@@ -166,6 +166,116 @@ export type Database = {
           },
         ]
       }
+      checklist_runs: {
+        Row: {
+          answers: Json
+          checklist_id: string
+          completed_at: string | null
+          created_at: string
+          executor_nome: string | null
+          id: string
+          resumo_ia: string | null
+          alertas_ia: Json
+          scheduled_for: string
+          started_at: string | null
+          status: string
+          token: string
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          answers?: Json
+          checklist_id: string
+          completed_at?: string | null
+          created_at?: string
+          executor_nome?: string | null
+          id?: string
+          resumo_ia?: string | null
+          alertas_ia?: Json
+          scheduled_for: string
+          started_at?: string | null
+          status?: string
+          token: string
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          answers?: Json
+          checklist_id?: string
+          completed_at?: string | null
+          created_at?: string
+          executor_nome?: string | null
+          id?: string
+          resumo_ia?: string | null
+          alertas_ia?: Json
+          scheduled_for?: string
+          started_at?: string | null
+          status?: string
+          token?: string
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_runs_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_runs_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklists: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          items: Json
+          name: string
+          schedule: Json
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          items?: Json
+          name: string
+          schedule?: Json
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          items?: Json
+          name?: string
+          schedule?: Json
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklists_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           agent_id: string

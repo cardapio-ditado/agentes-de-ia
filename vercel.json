@@ -8,7 +8,8 @@
   },
   "rewrites": [
     { "source": "/v1/:caminho*", "destination": "/api" },
-    { "source": "/health", "destination": "/api" }
+    { "source": "/health", "destination": "/api" },
+    { "source": "/checklist", "destination": "/checklist.html" }
   ],
   "headers": [
     {

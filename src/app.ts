@@ -37,7 +37,29 @@ import {
   processarWebhookInstagram,
   verificarWebhook,
 } from "./channels/instagram.js";
+import {
+  LIMITE_FOTO_BYTES,
+  concluirRun,
+  createChecklist,
+  deleteChecklist,
+  dispararChecklist,
+  gerarItensComIA,
+  getChecklistInVenue,
+  getRunByToken,
+  getRunInVenue,
+  itensDe,
+  listChecklists,
+  listRuns,
+  marcarEmAndamento,
+  salvarFotoDeItem,
+  updateChecklist,
+  urlAssinadaDaFoto,
+  validarAgenda,
+  validarItens,
+  type RespostaItem,
+} from "./checklists.js";
 import { criarComandoPonte, lerEstadoPonte } from "./ponteWhatsapp.js";
+import { db } from "./supabase.js";
 import { versaoDoCodigo } from "./version.js";
 import {
   cancelReservation,
@@ -552,6 +574,47 @@ async function roteasApi(
       return ok(res, { removido: true });
     }
 
+    // GET | POST /v1/venues/:slug/checklists — modelos do módulo Checklist
+    if (recurso === "checklists" && p.length === 3) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await listChecklists(venue.id));
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = await lerJson(req);
+        try {
+          const checklist = await createChecklist({
+            venueId: venue.id,
+            name: texto(corpo, "name"),
+            description: textoOpcional(corpo, "description") ?? null,
+            items: validarItens(corpo.items),
+            schedule: validarAgenda(corpo.schedule),
+          });
+          return ok(res, checklist, 201);
+        } catch (e) {
+          throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+        }
+      }
+    }
+
+    // GET /v1/venues/:slug/checklist-runs — histórico de execuções
+    if (metodo === "GET" && recurso === "checklist-runs" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const [runs, modelos] = await Promise.all([
+        listRuns(venue.id),
+        listChecklists(venue.id),
+      ]);
+      const nomes = new Map(modelos.map((c) => [c.id, c.name]));
+      return ok(
+        res,
+        runs.map((r) => ({ ...r, checklist_nome: nomes.get(r.checklist_id) ?? "—", answers: undefined, token: undefined })),
+      );
+    }
+
     // GET /v1/venues/:slug/conversations?canal=&status=&humanas=1
     if (metodo === "GET" && recurso === "conversations") {
       const chave = await exigirChave(req, "reservations:read");
@@ -771,6 +834,153 @@ async function roteasApi(
     return ok(res, await listNotificationsForReservation(encontrado.reservation.id));
   }
 
+  // ---- Checklists (gestão pelo painel) ----
+
+  // POST /v1/checklists/gerar — IA monta as perguntas a partir da descrição
+  if (metodo === "POST" && p[0] === "checklists" && p[1] === "gerar" && p.length === 2) {
+    await exigirChave(req, "reservations:write");
+    const corpo = await lerJson(req);
+    try {
+      return ok(res, await gerarItensComIA(texto(corpo, "descricao")));
+    } catch (e) {
+      throw erro(400, "invalid_request", e instanceof Error ? e.message : "Não deu para gerar.");
+    }
+  }
+
+  // PATCH | DELETE /v1/checklists/:id?venue=slug
+  if ((metodo === "PATCH" || metodo === "DELETE") && p[0] === "checklists" && p.length === 2) {
+    const chave = await exigirChave(req, "reservations:write");
+    const slug = url.searchParams.get("venue");
+    if (!slug) throw erro(400, "invalid_request", 'Informe o estabelecimento em "?venue=".');
+    const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+    if (metodo === "DELETE") {
+      await deleteChecklist(p[1]!, venue.id);
+      return ok(res, { removido: true });
+    }
+
+    const corpo = await lerJson(req);
+    try {
+      const mudancas: Parameters<typeof updateChecklist>[2] = {};
+      if ("name" in corpo) mudancas.name = texto(corpo, "name");
+      if ("description" in corpo) mudancas.description = textoOpcional(corpo, "description") ?? null;
+      if ("items" in corpo) mudancas.items = validarItens(corpo.items) as never;
+      if ("schedule" in corpo) mudancas.schedule = validarAgenda(corpo.schedule) as never;
+      if ("active" in corpo) mudancas.active = corpo.active === true;
+      return ok(res, await updateChecklist(p[1]!, venue.id, mudancas));
+    } catch (e) {
+      throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+    }
+  }
+
+  // POST /v1/checklists/:id/disparar?venue=slug — envia o link agora
+  if (metodo === "POST" && p[0] === "checklists" && p[2] === "disparar" && p.length === 3) {
+    const chave = await exigirChave(req, "reservations:write");
+    const slug = url.searchParams.get("venue");
+    if (!slug) throw erro(400, "invalid_request", 'Informe o estabelecimento em "?venue=".');
+    const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+    const checklist = await getChecklistInVenue(p[1]!, venue.id);
+    if (!checklist) throw erro(404, "not_found", "Checklist não encontrado.");
+    const { run, criadaAgora } = await dispararChecklist(checklist, venue);
+    return ok(res, { run_id: run.id, criada_agora: criadaAgora, token: run.token });
+  }
+
+  // GET /v1/checklist-runs/:id?venue=slug — execução completa, com fotos assinadas
+  if (metodo === "GET" && p[0] === "checklist-runs" && p.length === 2) {
+    const chave = await exigirChave(req, "reservations:read");
+    const slug = url.searchParams.get("venue");
+    if (!slug) throw erro(400, "invalid_request", 'Informe o estabelecimento em "?venue=".');
+    const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+    const run = await getRunInVenue(p[1]!, venue.id);
+    if (!run) throw erro(404, "not_found", "Execução não encontrada.");
+    const checklist = await getChecklistInVenue(run.checklist_id, venue.id);
+
+    const respostas = Array.isArray(run.answers) ? (run.answers as unknown as RespostaItem[]) : [];
+    const comFotos = await Promise.all(
+      respostas.map(async (r) => ({
+        ...r,
+        foto_url: r.foto ? await urlAssinadaDaFoto(r.foto) : null,
+      })),
+    );
+    return ok(res, {
+      ...run,
+      token: undefined,
+      answers: comFotos,
+      checklist: checklist ? { name: checklist.name, items: itensDe(checklist) } : null,
+    });
+  }
+
+  // ---- Checklist público (quem executa, via token — sem chave de API) ----
+  if (p[0] === "checklist-publico" && p.length >= 2) {
+    const run = await getRunByToken(p[1]!);
+    if (!run) throw erro(404, "not_found", "Este link de checklist não existe ou foi trocado.");
+    const checklist = await getChecklistInVenue(run.checklist_id, run.venue_id);
+    if (!checklist) throw erro(404, "not_found", "O checklist deste link foi removido.");
+    const { data: venueRow } = await db()
+      .from("venues")
+      .select("id, name, timezone")
+      .eq("id", run.venue_id)
+      .single();
+    if (!venueRow) throw erro(404, "not_found", "Estabelecimento não encontrado.");
+
+    // GET /v1/checklist-publico/:token — perguntas e estado
+    if (metodo === "GET" && p.length === 2) {
+      await marcarEmAndamento(run);
+      return ok(res, {
+        checklist: checklist.name,
+        descricao: checklist.description,
+        venue: venueRow.name,
+        data: run.scheduled_for,
+        status: run.status,
+        executor: run.executor_nome,
+        itens: itensDe(checklist),
+      });
+    }
+
+    // POST /v1/checklist-publico/:token/foto?item=ID — corpo binário
+    if (metodo === "POST" && p[2] === "foto" && p.length === 3) {
+      if (run.status === "concluida") {
+        throw erro(409, "conflict", "Esta execução já foi concluída.");
+      }
+      const itemId = url.searchParams.get("item");
+      if (!itemId || !itensDe(checklist).some((i) => i.id === itemId)) {
+        throw erro(400, "invalid_request", "Item da foto não encontrado neste checklist.");
+      }
+      const arquivo = await lerBinario(req, LIMITE_FOTO_BYTES);
+      if (arquivo.length === 0) throw erro(400, "invalid_request", "Foto vazia.");
+      const contentType = req.headers["content-type"] ?? "image/jpeg";
+      const caminho = await salvarFotoDeItem(run, itemId, arquivo, String(contentType));
+      return ok(res, { foto: caminho }, 201);
+    }
+
+    // POST /v1/checklist-publico/:token/concluir — respostas + análise da IA
+    if (metodo === "POST" && p[2] === "concluir" && p.length === 3) {
+      const corpo = await lerJson(req);
+      const brutas = Array.isArray(corpo.respostas) ? corpo.respostas : [];
+      const respostas: RespostaItem[] = brutas.map((r) => {
+        const o = (r ?? {}) as Record<string, unknown>;
+        return {
+          item: typeof o.item === "string" ? o.item : "",
+          valor: typeof o.valor === "string" ? o.valor : null,
+          foto: typeof o.foto === "string" ? o.foto : null,
+          observacao: typeof o.observacao === "string" && o.observacao.trim() ? o.observacao.trim() : null,
+        };
+      });
+      try {
+        const resultado = await concluirRun({
+          run,
+          checklist,
+          venue: venueRow,
+          executorNome: texto(corpo, "executor"),
+          respostas,
+        });
+        return ok(res, { concluida: true, resumo: resultado.resumo, alertas: resultado.alertas });
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Não deu para concluir.");
+      }
+    }
+  }
+
   // ---- Instagram (API oficial da Meta) ----
   // O webhook NÃO usa chave de API: quem chama é a Meta. A segurança é o
   // verify token (GET de verificação) e a assinatura HMAC do corpo (POST).
@@ -949,10 +1159,20 @@ const TIPOS: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+
+// Rotas "bonitas" sem extensão — a mesma coisa que o rewrite faz na Vercel.
+const PAGINAS_LIMPAS: Record<string, string> = {
+  "/": "index.html",
+  "/checklist": "checklist.html",
 };
 
 async function servirEstatico(res: ServerResponse, caminho: string): Promise<void> {
-  const relativo = caminho === "/" ? "index.html" : caminho.slice(1);
+  const relativo = PAGINAS_LIMPAS[caminho] ?? caminho.slice(1);
 
   // normalize resolve "..", e o prefixo é conferido depois — sem isso,
   // "/../.env" escaparia do diretório público.
