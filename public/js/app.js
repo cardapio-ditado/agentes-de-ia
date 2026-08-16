@@ -351,6 +351,9 @@ function mostrarHub() {
 
 /** Hoje a única porta é Agentes de IA — a aplicação de sempre. */
 function entrarNoModulo() {
+  // F5 dentro do módulo não deve voltar pro saguão — mas fechar o navegador
+  // e voltar amanhã, sim. Por isso sessionStorage, que morre com a aba.
+  sessionStorage.setItem("brasa.hub.visto", "1");
   telaHub.hidden = true;
   app.hidden = false;
   irPara(location.hash.slice(1));
@@ -422,9 +425,15 @@ async function iniciar() {
   montarNav();
   montarHub();
 
-  // Link direto para uma tela (#canais, #reservas…) pula o hub — é assim que
-  // o iniciar-brasa.bat abre direto em Canais. Entrada normal passa pelo hub.
-  if (location.hash.length > 1) entrarNoModulo();
+  // O braseiro recebe toda entrada nova. Só pula direto pro módulo quem:
+  // - veio de um atalho explícito (?direto=1, como o iniciar-brasa.bat), ou
+  // - já passou pelo hub nesta sessão e só deu F5 dentro do módulo.
+  // A âncora (#reservas etc.) sozinha NÃO pula: o navegador guarda a da
+  // última visita, e o hub sumia pra sempre depois do primeiro uso.
+  const direto =
+    new URLSearchParams(location.search).has("direto") ||
+    sessionStorage.getItem("brasa.hub.visto") === "1";
+  if (direto) entrarNoModulo();
   else mostrarHub();
 }
 
