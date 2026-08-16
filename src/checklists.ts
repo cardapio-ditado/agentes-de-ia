@@ -565,25 +565,59 @@ async function analisarComIA(
   };
 }
 
-/** Gera as perguntas de um checklist a partir de uma descrição livre. */
-export async function gerarItensComIA(descricao: string): Promise<ItemChecklist[]> {
+export interface MensagemGeracao {
+  papel: "usuario" | "ia";
+  texto: string;
+}
+
+export type RespostaGeracao =
+  | { tipo: "pergunta"; texto: string }
+  | { tipo: "itens"; itens: ItemChecklist[] };
+
+/**
+ * Monta o checklist conversando: antes de gerar, a IA entrevista quem está
+ * criando — o que é obrigatório, o que exige foto, o que é registro em
+ * texto, a ordem do percurso. Com contexto suficiente (ou depois de no
+ * máximo duas rodadas de perguntas), entrega os itens prontos para revisão.
+ */
+export async function conversarGeracao(mensagens: MensagemGeracao[]): Promise<RespostaGeracao> {
+  if (mensagens.length === 0) throw new Error("Descreva a rotina para começar.");
+
   const resposta = await anthropic().messages.create({
     model: MODELO_IA,
     max_tokens: 1500,
     system:
-      "Você monta checklists operacionais para bares e restaurantes brasileiros. " +
-      "Responda APENAS um JSON válido: uma lista de no máximo 15 itens no formato " +
-      '[{"tipo": "sim_nao"|"texto"|"foto", "pergunta": "...", "obrigatorio": true|false}]. ' +
-      "Use sim_nao para verificações objetivas, texto para registros (temperatura, contagem, ocorrências) " +
-      "e foto quando evidência visual importa (limpeza, organização, validade). " +
-      "Perguntas curtas, específicas e na ordem em que a pessoa anda pelo espaço.",
-    messages: [{ role: "user", content: descricao }],
+      "Você monta checklists operacionais para bares e restaurantes brasileiros, " +
+      "conversando com o dono antes de gerar. Entenda primeiro: quais itens são " +
+      "obrigatórios e quais opcionais; o que precisa de FOTO como evidência (limpeza, " +
+      "organização, validade); o que precisa de registro em TEXTO (temperaturas, valores, " +
+      "contagens, ocorrências); a ordem do percurso pelo espaço; e quantos itens fazem sentido. " +
+      "Faça NO MÁXIMO duas rodadas de perguntas — curtas, agrupadas numa mensagem só, " +
+      "no máximo 4 perguntas por rodada. Se o contexto já basta (ou o usuário já respondeu " +
+      "ou pediu para gerar logo), gere. " +
+      "Responda SEMPRE um único JSON válido, sem texto fora dele, em um destes formatos: " +
+      '{"tipo":"pergunta","texto":"suas perguntas aqui"} ou ' +
+      '{"tipo":"itens","itens":[{"tipo":"sim_nao"|"texto"|"foto","pergunta":"...","obrigatorio":true|false}]} ' +
+      "com no máximo 15 itens, perguntas curtas e específicas.",
+    messages: mensagens.map((m) => ({
+      role: m.papel === "ia" ? ("assistant" as const) : ("user" as const),
+      content: m.texto,
+    })),
   });
 
   const texto = resposta.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
-  const bruto = JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1));
-  return validarItens(bruto);
+  const bruto = JSON.parse(texto.slice(texto.indexOf("{"), texto.lastIndexOf("}") + 1)) as {
+    tipo?: string;
+    texto?: string;
+    itens?: unknown;
+  };
+
+  if (bruto.tipo === "itens") return { tipo: "itens", itens: validarItens(bruto.itens) };
+  if (bruto.tipo === "pergunta" && typeof bruto.texto === "string" && bruto.texto.trim()) {
+    return { tipo: "pergunta", texto: bruto.texto.trim() };
+  }
+  throw new Error("A IA respondeu num formato inesperado — tente de novo.");
 }

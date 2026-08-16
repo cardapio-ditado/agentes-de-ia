@@ -245,37 +245,106 @@ export async function checklists(raiz, ctx) {
       ]);
     };
 
+    // ---- Montagem conversada com a IA ----
+    // Ela entrevista antes de gerar: o que é obrigatório, o que pede foto,
+    // o que é registro em texto. O histórico inteiro vai a cada rodada.
+    const conversaIA = [];
+    const dialogo = el("div", { classe: "pilha", style: "gap:8px" });
     const descricaoIA = el("input", {
       placeholder: "Ex.: abertura de bar com foco em limpeza, freezers e caixa",
       style: "flex:1;min-width:220px",
-    });
-    const btnGerar = el("button", {
-      classe: "btn btn-primario btn-peq",
-      type: "button",
-      texto: "Gerar perguntas com IA",
-      onclick: async () => {
-        const descricao = descricaoIA.value.trim() || campos.descricao.value.trim() || campos.nome.value.trim();
-        if (!descricao) {
-          avisar("Descreva a rotina em uma frase para a IA montar as perguntas.", "erro");
-          descricaoIA.focus();
-          return;
-        }
-        btnGerar.disabled = true;
-        btnGerar.textContent = "Gerando…";
-        try {
-          const gerados = await post("/v1/checklists/gerar", { descricao });
-          // A IA propõe; quem monta decide — os itens chegam editáveis, não gravados.
-          itens = itens.concat(gerados);
-          desenharItens();
-          avisar(`${gerados.length} pergunta(s) geradas. Revise, ajuste e salve.`, "ok");
-        } catch (e) {
-          avisar(e.message, "erro");
-        } finally {
-          btnGerar.disabled = false;
-          btnGerar.textContent = "Gerar perguntas com IA";
+      onkeydown: (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          enviarParaIA();
         }
       },
     });
+
+    const balao = (papel, texto) =>
+      el(
+        "div",
+        {
+          classe: "cartao",
+          style: `padding:10px 12px;${papel === "usuario" ? "margin-left:auto;max-width:85%;background:var(--marca-suave);border-color:var(--marca-borda)" : "max-width:90%"}`,
+        },
+        [
+          el("span", {
+            classe: "muted",
+            style: "display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em",
+            texto: papel === "usuario" ? "Você" : "IA",
+          }),
+          el("span", { texto, style: "white-space:pre-wrap" }),
+        ],
+      );
+
+    const btnGerar = el("button", {
+      classe: "btn btn-primario btn-peq",
+      type: "button",
+      texto: "Conversar com a IA",
+      onclick: () => enviarParaIA(),
+    });
+
+    const btnGerarJa = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Pode gerar já",
+      hidden: true,
+      title: "Pula as perguntas e monta com o que a IA já sabe",
+      onclick: () => enviarParaIA("Pode gerar já, com o que você já sabe."),
+    });
+
+    async function enviarParaIA(textoForcado) {
+      const entrada =
+        textoForcado ??
+        (descricaoIA.value.trim() ||
+          (conversaIA.length === 0
+            ? campos.descricao.value.trim() || campos.nome.value.trim()
+            : ""));
+      if (!entrada) {
+        avisar(
+          conversaIA.length === 0
+            ? "Descreva a rotina para a IA começar."
+            : "Responda as perguntas da IA (ou clique em “Pode gerar já”).",
+          "erro",
+        );
+        descricaoIA.focus();
+        return;
+      }
+
+      conversaIA.push({ papel: "usuario", texto: entrada });
+      dialogo.append(balao("usuario", entrada));
+      descricaoIA.value = "";
+      btnGerar.disabled = true;
+      btnGerar.textContent = "Pensando…";
+
+      try {
+        const r = await post("/v1/checklists/gerar", { mensagens: conversaIA });
+        if (r.tipo === "pergunta") {
+          conversaIA.push({ papel: "ia", texto: r.texto });
+          dialogo.append(balao("ia", r.texto));
+          btnGerarJa.hidden = false;
+          descricaoIA.placeholder = "Responda aqui…";
+          descricaoIA.focus();
+        } else {
+          // A IA propõe; quem monta decide — os itens chegam editáveis, não gravados.
+          itens = itens.concat(r.itens);
+          desenharItens();
+          dialogo.append(
+            balao("ia", `Pronto: ${r.itens.length} pergunta(s) adicionadas abaixo. Revise e ajuste o que quiser.`),
+          );
+          btnGerarJa.hidden = true;
+          descricaoIA.placeholder = "Quer ajustar? Peça outra rodada aqui.";
+          avisar(`${r.itens.length} pergunta(s) geradas. Revise, ajuste e salve.`, "ok");
+        }
+      } catch (e) {
+        avisar(e.message, "erro");
+      } finally {
+        btnGerar.disabled = false;
+        btnGerar.textContent = "Conversar com a IA";
+        dialogo.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
 
     limpar(area).append(
       el("div", { classe: "cabecalho-secao" }, [
@@ -292,9 +361,16 @@ export async function checklists(raiz, ctx) {
 
       el("section", { classe: "cartao" }, [
         el("h3", { texto: "Perguntas" }),
+        el("p", {
+          classe: "muted",
+          texto:
+            "Conte para a IA como é a rotina. Ela pergunta o que precisa saber — o que é obrigatório, o que pede foto — e só então monta as perguntas.",
+        }),
+        dialogo,
         el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0" }, [
           descricaoIA,
           btnGerar,
+          btnGerarJa,
         ]),
         listaItens,
         el("button", {

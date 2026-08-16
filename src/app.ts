@@ -40,10 +40,10 @@ import {
 import {
   LIMITE_FOTO_BYTES,
   concluirRun,
+  conversarGeracao,
   createChecklist,
   deleteChecklist,
   dispararChecklist,
-  gerarItensComIA,
   getChecklistInVenue,
   getRunByToken,
   getRunInVenue,
@@ -56,6 +56,7 @@ import {
   urlAssinadaDaFoto,
   validarAgenda,
   validarItens,
+  type MensagemGeracao,
   type RespostaItem,
 } from "./checklists.js";
 import { criarComandoPonte, lerEstadoPonte } from "./ponteWhatsapp.js";
@@ -836,12 +837,30 @@ async function roteasApi(
 
   // ---- Checklists (gestão pelo painel) ----
 
-  // POST /v1/checklists/gerar — IA monta as perguntas a partir da descrição
+  // POST /v1/checklists/gerar — a IA conversa antes de montar as perguntas.
+  // Corpo: {mensagens:[{papel:"usuario"|"ia", texto}]}. Resposta: ou
+  // {tipo:"pergunta", texto} (a IA quer saber mais) ou {tipo:"itens", itens}.
   if (metodo === "POST" && p[0] === "checklists" && p[1] === "gerar" && p.length === 2) {
     await exigirChave(req, "reservations:write");
     const corpo = await lerJson(req);
+    const brutas = Array.isArray(corpo.mensagens) ? corpo.mensagens : [];
+    const mensagens: MensagemGeracao[] = brutas
+      .map((m) => {
+        const o = (m ?? {}) as Record<string, unknown>;
+        return {
+          papel: o.papel === "ia" ? ("ia" as const) : ("usuario" as const),
+          texto: typeof o.texto === "string" ? o.texto.trim() : "",
+        };
+      })
+      .filter((m) => m.texto)
+      .slice(-12);
+    // Compatibilidade com o formato antigo ({descricao}).
+    const descricaoLegada = textoOpcional(corpo, "descricao");
+    if (mensagens.length === 0 && descricaoLegada) {
+      mensagens.push({ papel: "usuario", texto: descricaoLegada });
+    }
     try {
-      return ok(res, await gerarItensComIA(texto(corpo, "descricao")));
+      return ok(res, await conversarGeracao(mensagens));
     } catch (e) {
       throw erro(400, "invalid_request", e instanceof Error ? e.message : "Não deu para gerar.");
     }
