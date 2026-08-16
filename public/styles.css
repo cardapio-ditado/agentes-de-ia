@@ -167,10 +167,12 @@ h3 {
   color: #fff8f0;
 }
 
-/* Só o login leva a foto da churrasqueira de verdade; o hub continua no
-   carvão gradiente, senão a colmeia briga com as brasas da imagem. O véu
-   escurece o topo (onde ficam logo e formulário) e alivia perto das brasas. */
-#tela-acesso {
+/* Login e colmeia sobre a foto da churrasqueira de verdade. O véu escurece
+   o topo (onde ficam logo, formulário e título) e alivia perto das brasas.
+   Na colmeia o véu central é um pouco mais fechado: os hexágonos de vidro
+   precisam de fundo calmo para o texto respirar. */
+#tela-acesso,
+#tela-hub {
   background:
     linear-gradient(
       180deg,
@@ -178,6 +180,18 @@ h3 {
       rgba(18, 10, 8, 0.55) 45%,
       rgba(18, 10, 8, 0.28) 78%,
       rgba(18, 10, 8, 0.15) 100%
+    ),
+    url("/img/braseiro.jpg") center bottom / cover no-repeat,
+    #1c1210;
+}
+#tela-hub {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(18, 10, 8, 0.78) 0%,
+      rgba(18, 10, 8, 0.66) 50%,
+      rgba(18, 10, 8, 0.4) 80%,
+      rgba(18, 10, 8, 0.22) 100%
     ),
     url("/img/braseiro.jpg") center bottom / cover no-repeat,
     #1c1210;
