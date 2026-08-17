@@ -18,6 +18,7 @@
  */
 
 import { diaLocal } from "./inbox.js";
+import { deslocamentoEm } from "./venues.js";
 import { db } from "./supabase.js";
 
 /** Peso de cada família de modelo, por prefixo do id. */
@@ -53,6 +54,21 @@ export const MOTORES: Array<{ id: string; nome: string; peso: number }> = [
   { id: "claude-opus-5", nome: "Opus", peso: 5 },
 ];
 
+/**
+ * Instante UTC da meia-noite local de uma data.
+ *
+ * O deslocamento é lido NA data em questão, não hoje: fuso com horário de
+ * verão muda de offset no meio do ano, e usar o de hoje erraria o início do
+ * ciclo por uma hora em metade do calendário.
+ */
+function meiaNoiteLocal(ano: number, mes: number, dia: number, timezone: string): Date {
+  const aproximado = new Date(Date.UTC(ano, mes - 1, dia, 12, 0, 0));
+  const offset = deslocamentoEm(timezone, aproximado);
+  const mm = String(mes).padStart(2, "0");
+  const dd = String(dia).padStart(2, "0");
+  return new Date(`${ano}-${mm}-${dd}T00:00:00${offset}`);
+}
+
 export interface Ciclo {
   inicio: Date;
   fim: Date;
@@ -82,10 +98,20 @@ export function cicloAtual(cicloDia: number, timezone: string, agora = new Date(
     }
   }
 
-  const inicio = new Date(Date.UTC(anoInicio, mesInicio - 1, dia, 0, 0, 0));
-  const fim = new Date(Date.UTC(anoInicio, mesInicio, dia, 0, 0, 0));
+  // Meia-noite LOCAL convertida para o instante UTC correspondente, e não
+  // meia-noite UTC da data local. Em Cuiabá (UTC-4) a diferença é de quatro
+  // horas: sem isto, as respostas das 20h à meia-noite do último dia do ciclo
+  // cairiam no ciclo seguinte — cobrança errada na virada, que é o único
+  // momento em que ninguém está olhando.
+  const inicio = meiaNoiteLocal(anoInicio, mesInicio, dia, timezone);
+  const proximoMes = mesInicio === 12 ? 1 : mesInicio + 1;
+  const anoDoFim = mesInicio === 12 ? anoInicio + 1 : anoInicio;
+  const fim = meiaNoiteLocal(anoDoFim, proximoMes, dia, timezone);
 
-  const hoje = new Date(Date.UTC(ano, mes - 1, diaHoje, 0, 0, 0));
+  // "Hoje" na mesma régua que início e fim — meia-noite local. Misturar
+  // meia-noite UTC com meia-noite local faria a diferença cair em fração de
+  // dia e a contagem passar a depender de arredondamento.
+  const hoje = meiaNoiteLocal(ano, mes, diaHoje, timezone);
   const MS_DIA = 24 * 60 * 60 * 1000;
   // Dias corridos conta o dia de hoje: no primeiro dia do ciclo o ritmo é
   // "o que foi gasto hoje", não uma divisão por zero.

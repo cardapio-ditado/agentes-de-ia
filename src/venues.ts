@@ -137,7 +137,7 @@ const HORIZONTE_INDEFINIDO_MS = 84 * 24 * 60 * 60 * 1000;
 const HORIZONTE_MAXIMO_MS = 365 * 24 * 60 * 60 * 1000;
 
 /** Deslocamento UTC de um fuso numa data específica, no formato "-04:00". */
-function deslocamentoEm(timezone: string, instante: Date): string {
+export function deslocamentoEm(timezone: string, instante: Date): string {
   const nome = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     timeZoneName: "longOffset",

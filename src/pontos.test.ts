@@ -72,6 +72,24 @@ describe("ciclo de cobrança", () => {
     assert.ok(Number.isFinite(100 / c.diasCorridos));
   });
 
+  it("começa na meia-noite LOCAL, não na meia-noite UTC", () => {
+    // Cuiabá é UTC-4: o ciclo abre às 04:00Z, não às 00:00Z. As quatro horas
+    // de diferença são as respostas das 20h à meia-noite do último dia — sem
+    // isto elas caem no ciclo errado, e cobrança errada na virada de mês é o
+    // tipo de defeito que ninguém percebe até o cliente reclamar da fatura.
+    const c = cicloAtual(1, TZ, new Date("2026-08-17T15:00:00Z"));
+    assert.equal(c.inicio.toISOString(), "2026-08-01T04:00:00.000Z");
+    assert.equal(c.fim.toISOString(), "2026-09-01T04:00:00.000Z");
+  });
+
+  it("uma resposta às 22h do último dia pertence ao ciclo que está fechando", () => {
+    // 31/08 22h em Cuiabá = 01/09 02h UTC. Pelo relógio UTC já é setembro;
+    // para o restaurante ainda é a noite de agosto.
+    const c = cicloAtual(1, TZ, new Date("2026-08-31T23:00:00Z"));
+    const resposta = new Date("2026-09-01T02:00:00Z");
+    assert.ok(resposta < c.fim, "deveria contar no ciclo de agosto");
+  });
+
   it("limita o dia da virada a 28 para não sumir em fevereiro", () => {
     const c = cicloAtual(31, TZ, new Date("2026-03-10T15:00:00Z"));
     assert.equal(c.inicio.toISOString().slice(0, 10), "2026-02-28");

@@ -77,10 +77,17 @@ select 'B. plano' as conferencia, name, slug, plano, pontos_mensais, ciclo_dia
 -- ============================================================
 with ciclo as (
   select v.id,
-         date_trunc('month', (now() at time zone v.timezone))
-           + ((v.ciclo_dia - 1) || ' days')::interval
-           - case when extract(day from (now() at time zone v.timezone)) < v.ciclo_dia
-                  then interval '1 month' else interval '0' end as inicio,
+         -- O `at time zone` no fim não é enfeite: date_trunc devolve um
+         -- horário SEM fuso, e o Postgres o compararia como se fosse UTC.
+         -- Em Cuiabá (UTC-4) isso puxaria para dentro do ciclo as quatro
+         -- últimas horas do mês anterior — erro que só aparece na virada,
+         -- justamente quando ninguém está olhando.
+         (
+           date_trunc('month', (now() at time zone v.timezone))
+             + ((v.ciclo_dia - 1) || ' days')::interval
+             - case when extract(day from (now() at time zone v.timezone)) < v.ciclo_dia
+                    then interval '1 month' else interval '0' end
+         ) at time zone v.timezone as inicio,
          v.pontos_mensais,
          v.slug
     from public.venues v
