@@ -50,8 +50,14 @@ id -u "$USUARIO" >/dev/null 2>&1 || useradd --system --create-home --shell /bin/
 # Se o usuário já existia com nologin (instalação anterior), conserta.
 usermod --shell /bin/bash "$USUARIO"
 
+# O git recusa operar em repositório de outro dono ("dubious ownership") — e
+# aqui isso é esperado: a pasta é do usuário do serviço e o instalador roda
+# como root. Declarar a exceção é o caminho previsto para este caso.
+git config --global --add safe.directory "$DESTINO" 2>/dev/null || true
+
 if [ -d "$DESTINO/.git" ]; then
-  git -C "$DESTINO" pull --ff-only
+  # Atualiza como o dono da pasta, para os arquivos não trocarem de dono.
+  sudo -u "$USUARIO" -H git -C "$DESTINO" pull --ff-only
 else
   git clone --depth 1 "$REPO" "$DESTINO"
 fi
