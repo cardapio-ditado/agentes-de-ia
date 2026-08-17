@@ -12,6 +12,8 @@ import {
   type Agent,
   type Message,
 } from "./repository.js";
+import { definirAtendimento } from "./inbox.js";
+import { estadoDoPlano, PlanoBloqueadoError } from "./pontos.js";
 import { resolveTools, type AgentTool, type ToolContext } from "./tools/index.js";
 import { findVenueBySlug } from "./venues.js";
 import type { Json } from "./database.types.js";
@@ -94,6 +96,32 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     content: userMessage,
   });
 
+  // Cobrança entra DEPOIS de gravar a mensagem do cliente, de propósito: mesmo
+  // com o plano travado o restaurante precisa ver na inbox quem chamou, para
+  // responder na mão. Travar o agente não pode significar perder o pedido.
+  let agenteEfetivo = agent;
+  if (venue) {
+    const plano = await estadoDoPlano(venue);
+    if (plano.estado === "bloqueado") {
+      // Passa a conversa para atendimento humano: travada, ela precisa aparecer
+      // na inbox como algo que espera resposta, não sumir no silêncio.
+      await definirAtendimento({
+        conversationId: conversation.id,
+        por: "humano",
+        quem: "pontos esgotados",
+      }).catch(() => undefined);
+      await logEvent({
+        agentId: agent.id,
+        conversationId: conversation.id,
+        level: "warn",
+        event: "plano_bloqueado",
+        payload: { usados: plano.extrato.usados, total: plano.extrato.total },
+      });
+      throw new PlanoBloqueadoError(plano.extrato, conversation.id);
+    }
+    if (plano.modelo) agenteEfetivo = { ...agent, model: plano.modelo };
+  }
+
   const tools = resolveTools(readToolNames(agent));
   let stopReason: string | null = null;
   let textoFinal = "";
@@ -103,7 +131,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     // Sempre em streaming: com max_tokens alto a requisição não-streaming
     // estoura o timeout HTTP do SDK.
     const stream = anthropic().messages.stream(
-      buildRequest(agent, messages, tools, venue?.timezone ?? "America/Cuiaba"),
+      buildRequest(agenteEfetivo, messages, tools, venue?.timezone ?? "America/Cuiaba"),
     );
     if (onEvent) {
       stream.on("text", (delta) => onEvent({ type: "text_delta", text: delta }));

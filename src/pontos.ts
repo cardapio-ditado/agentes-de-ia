@@ -114,6 +114,43 @@ export interface DuracaoEstimada {
   cobreOCiclo: boolean;
 }
 
+/**
+ * O que acontece quando os pontos acabam.
+ *
+ * Cortar o atendimento no instante em que o saldo zera seria transformar um
+ * problema de cobrança em WhatsApp mudo numa noite de sábado — e o cliente
+ * culpa o produto, não o plano dele. Então há dois dias de cortesia rodando
+ * no motor mais barato: o restaurante continua atendendo, o custo fica preso
+ * no mínimo e sobra tempo para comprar pontos antes de travar de verdade.
+ */
+export type EstadoDoPlano = "ativo" | "cortesia" | "bloqueado";
+
+export const MODELO_DE_CORTESIA = "claude-haiku-4-5-20251001";
+export const DIAS_DE_CORTESIA = 2;
+
+/**
+ * Traduz "quando o saldo zerou" em estado do plano agora.
+ *
+ * Função pura e separada porque é a regra de cobrança: é ela que decide se o
+ * agente fala, e a borda exata das 48h precisa ser testável sem banco.
+ */
+export function estadoPelaExaustao(
+  esgotadoEm: string | null,
+  agora: Date,
+): { estado: EstadoDoPlano; cortesiaAte: Date | null; horasDeCortesia: number | null } {
+  if (esgotadoEm === null) {
+    return { estado: "ativo", cortesiaAte: null, horasDeCortesia: null };
+  }
+  const MS_HORA = 60 * 60 * 1000;
+  const cortesiaAte = new Date(new Date(esgotadoEm).getTime() + DIAS_DE_CORTESIA * 24 * MS_HORA);
+  return {
+    // Exatamente às 48h já bloqueia: a cortesia é "menos que", não "até".
+    estado: agora.getTime() < cortesiaAte.getTime() ? "cortesia" : "bloqueado",
+    cortesiaAte,
+    horasDeCortesia: Math.max(0, Math.ceil((cortesiaAte.getTime() - agora.getTime()) / MS_HORA)),
+  };
+}
+
 export interface Extrato {
   plano: string;
   total: number;
@@ -126,6 +163,13 @@ export interface Extrato {
   ritmo_diario: number;
   projecao_ciclo: number;
   duracao_por_motor: DuracaoEstimada[];
+  estado: EstadoDoPlano;
+  /** Quando o saldo zerou, ISO. null enquanto houver pontos. */
+  esgotado_em: string | null;
+  /** Fim da cortesia, ISO. null enquanto houver pontos. */
+  cortesia_ate: string | null;
+  /** Horas que ainda restam de cortesia — o número do aviso. */
+  horas_de_cortesia: number | null;
 }
 
 interface VenueDoPlano {
@@ -143,37 +187,38 @@ export async function extratoDePontos(venue: VenueDoPlano, agora = new Date()): 
   const total = Math.max(0, venue.pontos_mensais ?? 2500);
   const ciclo = cicloAtual(venue.ciclo_dia ?? 1, venue.timezone, agora);
 
-  const { data: conversas, error: erroConversas } = await db()
-    .from("conversations")
-    .select("id")
-    .eq("venue_id", venue.id);
-  if (erroConversas) throw new Error(`Falha ao listar conversas: ${erroConversas.message}`);
-
-  const ids = (conversas ?? []).map((c) => c.id);
   const porModelo = new Map<string, { mensagens: number; pontos: number; modelo: string | null }>();
   let usados = 0;
   let mensagens = 0;
 
-  if (ids.length > 0) {
-    const { data: msgs, error: erroMsgs } = await db()
-      .from("messages")
-      .select("model, created_at")
-      .in("conversation_id", ids)
-      .eq("role", "assistant")
-      .gte("created_at", ciclo.inicio.toISOString())
-      .lt("created_at", ciclo.fim.toISOString());
-    if (erroMsgs) throw new Error(`Falha ao somar o consumo: ${erroMsgs.message}`);
+  // Em ordem cronológica porque não basta somar: precisamos saber em QUE
+  // momento o saldo cruzou o limite, e é desse instante que a cortesia conta.
+  let esgotadoEm: string | null = null;
 
-    for (const m of msgs ?? []) {
-      const peso = pesoDoModelo(m.model);
-      const nome = nomeDoModelo(m.model);
-      usados += peso;
-      mensagens += 1;
-      const atual = porModelo.get(nome) ?? { mensagens: 0, pontos: 0, modelo: m.model };
-      atual.mensagens += 1;
-      atual.pontos += peso;
-      porModelo.set(nome, atual);
-    }
+  // Junção no banco em vez de buscar os ids das conversas e mandá-los de volta
+  // num `in(...)`: numa casa com milhares de conversas essa lista viraria uma
+  // URL gigante (e um 414). Isto roda a cada mensagem recebida — precisa ser
+  // uma consulta só, com filtro do lado do Postgres.
+  const { data: msgs, error: erroMsgs } = await db()
+    .from("messages")
+    .select("model, created_at, conversations!inner(venue_id)")
+    .eq("conversations.venue_id", venue.id)
+    .eq("role", "assistant")
+    .gte("created_at", ciclo.inicio.toISOString())
+    .lt("created_at", ciclo.fim.toISOString())
+    .order("created_at", { ascending: true });
+  if (erroMsgs) throw new Error(`Falha ao somar o consumo: ${erroMsgs.message}`);
+
+  for (const m of msgs ?? []) {
+    const peso = pesoDoModelo(m.model);
+    const nome = nomeDoModelo(m.model);
+    usados += peso;
+    mensagens += 1;
+    if (esgotadoEm === null && usados >= total) esgotadoEm = m.created_at;
+    const atual = porModelo.get(nome) ?? { mensagens: 0, pontos: 0, modelo: m.model };
+    atual.mensagens += 1;
+    atual.pontos += peso;
+    porModelo.set(nome, atual);
   }
 
   const restantes = Math.max(0, total - usados);
@@ -196,12 +241,18 @@ export async function extratoDePontos(venue: VenueDoPlano, agora = new Date()): 
     };
   });
 
+  const { estado, cortesiaAte, horasDeCortesia } = estadoPelaExaustao(esgotadoEm, agora);
+
   return {
     plano: venue.plano ?? "profissional",
     total,
     usados,
     restantes,
     percentual: total > 0 ? Math.min(100, Math.round((usados / total) * 100)) : 0,
+    estado,
+    esgotado_em: esgotadoEm,
+    cortesia_ate: cortesiaAte?.toISOString() ?? null,
+    horas_de_cortesia: horasDeCortesia,
     ciclo: {
       inicio: ciclo.inicio.toISOString().slice(0, 10),
       fim: ciclo.fim.toISOString().slice(0, 10),
@@ -216,4 +267,57 @@ export async function extratoDePontos(venue: VenueDoPlano, agora = new Date()): 
     projecao_ciclo: projecao,
     duracao_por_motor: duracao,
   };
+}
+
+/**
+ * Estado do plano para decidir, em tempo de resposta, se o agente fala e com
+ * qual motor.
+ *
+ * Memória de 60 segundos porque isto roda a CADA mensagem recebida: sem cache
+ * seria uma varredura do ciclo inteiro por mensagem de cliente. Um minuto de
+ * atraso pode deixar passar algumas respostas depois do limite — barato perto
+ * de transformar cada "oi" do WhatsApp numa agregação no banco.
+ */
+const memoria = new Map<string, { quando: number; extrato: Extrato }>();
+const VALIDADE_MS = 60_000;
+
+export async function estadoDoPlano(
+  venue: VenueDoPlano,
+  agora = new Date(),
+): Promise<{ estado: EstadoDoPlano; modelo: string | null; extrato: Extrato }> {
+  const guardado = memoria.get(venue.id);
+  let extrato = guardado && agora.getTime() - guardado.quando < VALIDADE_MS ? guardado.extrato : null;
+
+  if (!extrato) {
+    extrato = await extratoDePontos(venue, agora);
+    memoria.set(venue.id, { quando: agora.getTime(), extrato });
+  }
+
+  return {
+    estado: extrato.estado,
+    // Na cortesia o motor escolhido pelo cliente é ignorado: o combinado é
+    // continuar atendendo ao custo mínimo, não continuar gastando 5x.
+    modelo: extrato.estado === "cortesia" ? MODELO_DE_CORTESIA : null,
+    extrato,
+  };
+}
+
+/** Some com a memória de um venue — usar após vender pontos ou trocar o plano. */
+export function esquecerEstado(venueId: string): void {
+  memoria.delete(venueId);
+}
+
+/** Erro de plano travado: o chamador decide o que dizer em cada canal. */
+export class PlanoBloqueadoError extends Error {
+  readonly extrato: Extrato;
+  readonly conversationId: string | null;
+  constructor(extrato: Extrato, conversationId: string | null = null) {
+    super(
+      "Os pontos deste estabelecimento acabaram e o período de cortesia terminou. " +
+        "Renove o plano ou compre pontos extras para o agente voltar a responder.",
+    );
+    this.name = "PlanoBloqueadoError";
+    this.extrato = extrato;
+    this.conversationId = conversationId;
+  }
 }

@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { cartaoDeSaldo, extrato } from "../pontos.js";
+import { avisarSeAcabou, cartaoDeSaldo, extrato } from "../pontos.js";
 import { el, ICONES, icone, indicador, numero, vazio } from "../ui.js";
 
 /** Painel: os números que respondem "como foi a semana?" numa olhada. */
@@ -16,7 +16,10 @@ export async function painel(raiz, ctx) {
 
   const pilha = el("div", { classe: "pilha" });
 
-  if (pontos) pilha.append(cartaoDeSaldo(pontos));
+  if (pontos) {
+    pilha.append(cartaoDeSaldo(pontos));
+    avisarSeAcabou(pontos);
+  }
 
   pilha.append(
     el("div", { classe: "grade" }, [

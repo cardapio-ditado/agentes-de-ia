@@ -159,3 +159,74 @@ export function avisoDeMotor(e, modelo) {
     texto: partes.join(" "),
   });
 }
+
+/**
+ * Pop-up de fim de pontos.
+ *
+ * Aparece na cortesia e depois de travar. Some ao ser fechado, mas volta no
+ * dia seguinte: um aviso que se cala para sempre no primeiro clique não avisa
+ * nada — e este é o único momento em que o cliente descobre que o atendimento
+ * automático está por um fio.
+ */
+const GUARDA_AVISO = "brasa.pontos.avisado";
+
+export function avisarSeAcabou(e) {
+  if (!e || (e.estado !== "cortesia" && e.estado !== "bloqueado")) return;
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const marca = `${e.estado}:${hoje}`;
+  // Travado avisa sempre; na cortesia, uma vez por dia já incomoda o bastante.
+  if (e.estado === "cortesia" && localStorage.getItem(GUARDA_AVISO) === marca) return;
+  localStorage.setItem(GUARDA_AVISO, marca);
+
+  document.querySelector(".pontos-modal-fundo")?.remove();
+
+  const bloqueado = e.estado === "bloqueado";
+  // Em horas, sempre: a cortesia dura no máximo 48h, e "30 horas" comunica
+  // urgência de um jeito que "1 dia" arredondado não comunica.
+  const horas = e.horas_de_cortesia ?? 0;
+  const quanto = `${horas} ${horas === 1 ? "hora" : "horas"}`;
+
+  const fundo = el("div", { classe: "pontos-modal-fundo" });
+  const fechar = () => fundo.remove();
+
+  const caixa = el("div", { classe: `pontos-modal ${bloqueado ? "pontos-modal-grave" : ""}` }, [
+    el("div", { classe: "pontos-modal-icone", texto: bloqueado ? "🔒" : "🔥" }),
+    el("h2", { texto: bloqueado ? "Agente pausado" : "Seus pontos acabaram" }),
+    el("p", {
+      texto: bloqueado
+        ? "O período de cortesia terminou e o agente parou de responder sozinho. As mensagens que chegarem continuam aparecendo em Conversas para a equipe atender na mão."
+        : `O agente continua atendendo por mais ${quanto}, no motor mais econômico (Haiku), para o WhatsApp não ficar mudo. Depois disso ele pausa até a renovação.`,
+    }),
+    el("div", { classe: "pontos-modal-dados" }, [
+      el("div", {}, [
+        el("strong", { texto: numero(e.usados) }),
+        el("small", { texto: `de ${numero(e.total)} pontos` }),
+      ]),
+      el("div", {}, [
+        el("strong", { texto: diaCurto(e.ciclo.fim) }),
+        el("small", { texto: "renovação automática" }),
+      ]),
+    ]),
+    el("p", { classe: "pontos-modal-nota", texto: "Fale com o Brasa Food para comprar pontos extras e religar agora." }),
+    el("button", {
+      classe: "btn btn-primario",
+      type: "button",
+      texto: "Entendi",
+      onclick: fechar,
+    }),
+  ]);
+
+  fundo.addEventListener("click", (ev) => {
+    if (ev.target === fundo) fechar();
+  });
+  document.addEventListener("keydown", function aoEsc(ev) {
+    if (ev.key === "Escape") {
+      fechar();
+      document.removeEventListener("keydown", aoEsc);
+    }
+  });
+
+  fundo.append(caixa);
+  document.body.append(fundo);
+}

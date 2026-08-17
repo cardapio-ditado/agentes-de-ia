@@ -10,6 +10,7 @@ import { toDataURL } from "qrcode";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
+import { PlanoBloqueadoError } from "../pontos.js";
 import {
   jidConhecidoDoTelefone,
   listPendingNotifications,
@@ -212,11 +213,26 @@ async function aoReceberMensagem(
     });
     await responder(jid, resultado.text || "Desculpe, não consegui responder agora.");
   } catch (e) {
-    console.error(`[whatsapp] falha ao atender ${telefoneExibicao}:`, e);
-    await responder(
-      jid,
-      "Tive um problema técnico aqui. Pode tentar de novo em instantes?",
-    );
+    // Plano travado não é falha técnica: o cliente do restaurante não pode
+    // receber "erro" nem ficar no vácuo. Ele é acolhido com uma frase fixa
+    // (custo zero, nenhuma chamada de IA) e a conversa já foi marcada para
+    // atendimento humano lá no runAgent.
+    if (e instanceof PlanoBloqueadoError) {
+      console.warn(
+        `[whatsapp] pontos esgotados: ${telefoneExibicao} não foi atendido pelo agente. ` +
+          `Renove o plano no painel para religar.`,
+      );
+      await responder(
+        jid,
+        "Recebi sua mensagem! Em instantes alguém da equipe fala com você por aqui.",
+      );
+    } else {
+      console.error(`[whatsapp] falha ao atender ${telefoneExibicao}:`, e);
+      await responder(
+        jid,
+        "Tive um problema técnico aqui. Pode tentar de novo em instantes?",
+      );
+    }
   } finally {
     await socket?.sendPresenceUpdate("paused", jid).catch(() => undefined);
   }

@@ -24,7 +24,7 @@ import {
   metricasDoVenue,
   registrarMensagemHumana,
 } from "./inbox.js";
-import { extratoDePontos } from "./pontos.js";
+import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
 import {
   addTrainingFile,
   addTrainingText,
@@ -1149,12 +1149,19 @@ async function executarAgente(
     (req.headers.accept ?? "").includes("text/event-stream");
 
   if (!querStream) {
-    const resultado = await runAgent({ agentSlug, userMessage, channel, externalId, venueSlug });
-    return ok(res, {
-      conversation_id: resultado.conversationId,
-      output: resultado.text,
-      stop_reason: resultado.stopReason,
-    });
+    try {
+      const resultado = await runAgent({ agentSlug, userMessage, channel, externalId, venueSlug });
+      return ok(res, {
+        conversation_id: resultado.conversationId,
+        output: resultado.text,
+        stop_reason: resultado.stopReason,
+      });
+    } catch (e) {
+      // 402 e não 500: não é defeito do sistema, é plano a renovar. O código
+      // distingue "quebrou" de "acabou" para quem integra pela API.
+      if (e instanceof PlanoBloqueadoError) throw erro(402, "pontos_esgotados", e.message);
+      throw e;
+    }
   }
 
   res.writeHead(200, {

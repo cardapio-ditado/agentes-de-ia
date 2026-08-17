@@ -1691,3 +1691,76 @@ textarea:focus {
   color: var(--perigo);
   font-weight: 600;
 }
+
+/* Pop-up de fim de pontos — o momento em que o cliente descobre que o
+   atendimento automático está por um fio. Precisa parar a tela. */
+.pontos-modal-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(34, 23, 20, 0.62);
+  backdrop-filter: blur(3px);
+  animation: pontos-surgir 0.16s ease;
+}
+.pontos-modal {
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  border-top: 4px solid var(--ambar);
+  border-radius: var(--raio-g);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  padding: 26px 24px 22px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+}
+.pontos-modal-grave {
+  border-top-color: var(--perigo);
+}
+.pontos-modal-icone {
+  font-size: 38px;
+  line-height: 1;
+}
+.pontos-modal h2 {
+  font-family: "Fraunces", serif;
+  font-size: 22px;
+  margin: 10px 0 8px;
+}
+.pontos-modal p {
+  margin: 0;
+  color: var(--texto-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.pontos-modal-dados {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 18px 0 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--borda);
+  border-bottom: 1px solid var(--borda);
+}
+.pontos-modal-dados strong {
+  display: block;
+  font-family: "Fraunces", serif;
+  font-size: 20px;
+}
+.pontos-modal-dados small {
+  color: var(--texto-3);
+  font-size: 11.5px;
+}
+.pontos-modal-nota {
+  font-size: 12.5px !important;
+  color: var(--texto-3) !important;
+  margin-bottom: 16px !important;
+}
+.pontos-modal .btn {
+  width: 100%;
+}
+@keyframes pontos-surgir {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

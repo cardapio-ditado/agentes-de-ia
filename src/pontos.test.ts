@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { cicloAtual, nomeDoModelo, pesoDoModelo } from "./pontos.js";
+import {
+  cicloAtual,
+  estadoPelaExaustao,
+  MODELO_DE_CORTESIA,
+  nomeDoModelo,
+  pesoDoModelo,
+} from "./pontos.js";
 
 describe("pesos dos motores", () => {
   it("segue a razão real de preço entre os modelos", () => {
@@ -69,5 +75,53 @@ describe("ciclo de cobrança", () => {
   it("limita o dia da virada a 28 para não sumir em fevereiro", () => {
     const c = cicloAtual(31, TZ, new Date("2026-03-10T15:00:00Z"));
     assert.equal(c.inicio.toISOString().slice(0, 10), "2026-02-28");
+  });
+});
+
+describe("estados do plano quando os pontos acabam", () => {
+  /** A função de verdade que o agente consulta — sem cópia da regra aqui. */
+  function estado(esgotadoEm: string | null, agora: Date) {
+    const r = estadoPelaExaustao(esgotadoEm, agora);
+    return { estado: r.estado, horas: r.horasDeCortesia };
+  }
+
+  it("com saldo, o plano fica ativo", () => {
+    assert.equal(estado(null, new Date("2026-08-17T12:00:00Z")).estado, "ativo");
+  });
+
+  it("logo após zerar entra em cortesia com 48 horas", () => {
+    const r = estado("2026-08-17T12:00:00Z", new Date("2026-08-17T12:00:01Z"));
+    assert.equal(r.estado, "cortesia");
+    assert.equal(r.horas, 48);
+  });
+
+  it("no meio da cortesia continua atendendo", () => {
+    const r = estado("2026-08-17T12:00:00Z", new Date("2026-08-18T12:00:00Z"));
+    assert.equal(r.estado, "cortesia");
+    assert.equal(r.horas, 24);
+  });
+
+  it("um minuto antes de fechar 48h ainda é cortesia", () => {
+    const r = estado("2026-08-17T12:00:00Z", new Date("2026-08-19T11:59:00Z"));
+    assert.equal(r.estado, "cortesia");
+  });
+
+  it("exatamente em 48h já está bloqueado", () => {
+    // A borda importa: aqui é onde o agente para de responder sozinho.
+    const r = estado("2026-08-17T12:00:00Z", new Date("2026-08-19T12:00:00Z"));
+    assert.equal(r.estado, "bloqueado");
+    assert.equal(r.horas, 0);
+  });
+
+  it("muito depois segue bloqueado, sem horas negativas", () => {
+    const r = estado("2026-08-17T12:00:00Z", new Date("2026-08-30T12:00:00Z"));
+    assert.equal(r.estado, "bloqueado");
+    assert.equal(r.horas, 0);
+  });
+
+  it("na cortesia o motor é forçado para o mais barato", () => {
+    // O combinado com o cliente é continuar atendendo ao custo mínimo — não
+    // continuar gastando 5x num plano que já estourou.
+    assert.equal(pesoDoModelo(MODELO_DE_CORTESIA), 1);
   });
 });
