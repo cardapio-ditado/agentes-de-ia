@@ -13,13 +13,28 @@ alter table public.venues
   -- feita em 31 de janeiro não pode sumir em fevereiro.
   add column if not exists ciclo_dia smallint not null default 1;
 
-alter table public.venues
-  add constraint venues_plano_valido
-    check (plano in ('essencial', 'profissional', 'casa_cheia', 'cortesia')),
-  add constraint venues_pontos_positivos
-    check (pontos_mensais >= 0),
-  add constraint venues_ciclo_dia_valido
-    check (ciclo_dia between 1 and 28);
+-- Em bloco condicional porque o Postgres não tem "add constraint if not
+-- exists". Rodar a migração duas vezes é comum (na dúvida se ela pegou), e um
+-- erro aqui abortaria o arquivo ANTES do `notify pgrst` do fim — deixando o
+-- cache de schema desatualizado, que é justamente o "erro interno" que a API
+-- devolve quando acha que a coluna não existe.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'venues_plano_valido') then
+    alter table public.venues add constraint venues_plano_valido
+      check (plano in ('essencial', 'profissional', 'casa_cheia', 'cortesia'));
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'venues_pontos_positivos') then
+    alter table public.venues add constraint venues_pontos_positivos
+      check (pontos_mensais >= 0);
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'venues_ciclo_dia_valido') then
+    alter table public.venues add constraint venues_ciclo_dia_valido
+      check (ciclo_dia between 1 and 28);
+  end if;
+end $$;
 
 comment on column public.venues.plano is
   'Plano comercial. Define quais motores de IA o cliente pode escolher.';
