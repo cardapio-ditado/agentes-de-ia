@@ -39,7 +39,7 @@ const PAGINAS = [
 let moduloAtual = "agentes-ia";
 
 /**
- * Módulos do hub: cada solução do Brasa é uma porta.
+ * Módulos do hub: cada solução do Brasa Food é uma porta.
  *
  * Só "Agentes de IA" existe hoje; os demais aparecem como "Em breve" para o
  * cliente enxergar o tamanho do produto. Quando um módulo novo nascer, vira
@@ -259,9 +259,6 @@ function pedirChave(mensagem) {
 
 // ============ Hub de módulos (colmeia) ============
 
-const CHAMA_BRASA =
-  "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z";
-
 const DICA_PADRAO = "Toque num favo aceso para entrar.";
 
 /**
@@ -308,7 +305,13 @@ function montarHub() {
     el(
       "div",
       { classe: "celula hex-centro", style: posicao({ x: 0, y: 0 }, 0), "aria-hidden": "true" },
-      [icone(CHAMA_BRASA, 34), el("span", { classe: "hex-wordmark", texto: "Brasa" })],
+      [
+        el("img", { classe: "hex-chama", src: "/img/chama-brasa-food.png", alt: "" }),
+        el("span", { classe: "hex-wordmark" }, [
+          el("span", { texto: "Brasa" }),
+          el("span", { classe: "hex-food", texto: "Food" }),
+        ]),
+      ],
     ),
   );
 

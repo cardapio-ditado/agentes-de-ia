@@ -1,5 +1,5 @@
 /* ============================================================
-   Brasa — sistema visual
+   Brasa Food — sistema visual
    Paleta do guia de marca: Carvão #221714 · Vinho #7D1128 ·
    Fogo #C1121F · Brasa #FF6B35 · Âmbar #F4A100 · Creme #FFF8F0.
    Tema claro completo no :root; o escuro (base carvão) só troca tokens.
@@ -216,26 +216,13 @@ h3 {
   text-transform: uppercase;
   color: var(--ambar);
 }
-.capa-logo {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.capa-chama {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  box-shadow: 0 8px 34px rgba(255, 107, 53, 0.45);
-}
-.capa-chama svg {
-  width: 30px;
-  height: 30px;
-}
-.capa-wordmark {
-  font-family: var(--fonte-display);
-  font-weight: 700;
-  font-size: 58px;
-  line-height: 1;
+/* A logo oficial no lugar do lettering desenhado em CSS: a marca chega
+   inteira (chama + Brasa Food + assinatura), com um halo quente por trás
+   para ela não flutuar solta sobre a foto do braseiro. */
+.capa-logo-img {
+  width: min(310px, 74vw);
+  height: auto;
+  filter: drop-shadow(0 10px 40px rgba(255, 107, 53, 0.35));
 }
 .capa-tagline {
   margin: 0 0 14px;
@@ -365,9 +352,6 @@ h3 {
 }
 
 @media (max-width: 480px) {
-  .capa-wordmark {
-    font-size: 44px;
-  }
   .capa-tagline {
     font-size: 17px;
   }
@@ -521,23 +505,39 @@ h3 {
 }
 
 /* O miolo: a marca, respirando. */
+/* Miolo em carvão com halo quente: é assim que a logo apresenta a chama, e
+   é o único fundo em que ela realmente brilha — sobre laranja, fogo some
+   dentro de fogo. A borda incandescente mantém o centro como protagonista. */
 .hex-centro {
-  background: linear-gradient(150deg, #ffb066, #ff6b35 45%, #c1121f);
+  background: linear-gradient(150deg, #ff8a4c, #ff6b35 40%, #c1121f);
   color: #fff8f0;
   animation: brotar 0.5s ease both, pulsar-favo 3.6s ease-in-out 0.9s infinite;
 }
 .hex-centro::before {
-  content: none; /* o centro é fogo maciço, sem miolo escuro */
+  background: radial-gradient(circle at 50% 42%, #2c1a14 0%, #1a0f0b 70%);
 }
-.hex-centro svg {
-  fill: #fff8f0 !important;
-  stroke: none !important;
+.hex-chama {
+  width: 40px;
+  height: auto;
+  filter: drop-shadow(0 0 14px rgba(255, 140, 66, 0.55));
 }
 .hex-wordmark {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
   font-family: var(--fonte-display);
   font-weight: 700;
-  font-size: 27px;
+  font-size: 25px;
   line-height: 1;
+}
+.hex-food {
+  font-family: var(--fonte-ui);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  text-transform: uppercase;
+  opacity: 0.92;
 }
 @keyframes pulsar-favo {
   0%,
@@ -701,9 +701,13 @@ h3 {
   .hex-modulo .hex-icone {
     display: none;
   }
-  .hex-centro svg {
-    width: 24px;
-    height: 24px;
+  .hex-chama {
+    width: 22px;
+  }
+  .hex-food {
+    font-size: 8.5px;
+    letter-spacing: 0.24em;
+    text-indent: 0.24em;
   }
 }
 @media (max-width: 400px) {
@@ -727,32 +731,30 @@ h3 {
   gap: 10px;
   min-width: 0;
 }
-.marca-icone {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
+/* A chama oficial em vez do ícone desenhado: sem caixa colorida atrás, ela
+   se apoia no próprio desenho — funciona igual no tema claro e no escuro. */
+.marca-chama {
+  width: 26px;
+  height: 34px;
   flex: none;
-  border-radius: 9px;
-  /* Gradiente do guia: Brasa → Âmbar, como no ícone de app */
-  background: linear-gradient(135deg, var(--marca), var(--ambar));
-  color: #fff8f0;
+  object-fit: contain;
 }
-.marca-icone svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-/* Wordmark na serifada da marca, como no guia */
+/* Wordmark na serifada da marca, com "Food" na assinatura do logo */
 .wordmark {
+  display: block;
   font-family: var(--fonte-display);
   font-weight: 700;
   font-size: 16px;
   letter-spacing: 0;
+  line-height: 1.1;
+}
+.wordmark span {
+  font-family: var(--fonte-ui);
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--marca);
 }
 .marca-texto {
   min-width: 0;

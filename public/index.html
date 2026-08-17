@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Brasa — hub de soluções para bares e restaurantes</title>
+    <title>Brasa Food — hub de soluções para restaurantes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -11,10 +11,8 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>"
-    />
+    <link rel="icon" type="image/png" href="/img/favicon-brasa-food.png" />
+    <link rel="apple-touch-icon" href="/img/favicon-brasa-food.png" />
   </head>
   <body>
     <!-- ============ Acesso ============
@@ -25,18 +23,12 @@
       <div class="brasas" aria-hidden="true"></div>
 
       <div class="acesso-conteudo">
-        <p class="capa-rotulo">Hub de soluções · Bares &amp; Restaurantes</p>
-        <div class="capa-logo">
-          <span class="marca-icone capa-chama" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"
-              />
-            </svg>
-          </span>
-          <span class="capa-wordmark">Brasa</span>
-        </div>
-        <p class="capa-tagline">A brasa que move seu bar e restaurante.</p>
+        <img
+          class="capa-logo-img"
+          src="/img/logo-brasa-food.png"
+          alt="Brasa Food — hub de soluções para restaurantes"
+        />
+        <p class="capa-tagline">A brasa que move seu restaurante.</p>
 
         <form id="form-acesso" class="cartao-acesso">
           <label for="campo-chave">Chave de acesso</label>
@@ -53,11 +45,11 @@
         </form>
       </div>
 
-      <p class="capa-rodape">Tech for bars &amp; restaurants</p>
+      <p class="capa-rodape">Tech for restaurants</p>
     </section>
 
     <!-- ============ Hub de módulos ============
-         O saguão do Brasa: a chama no centro da colmeia e cada módulo num
+         O saguão do Brasa Food: a chama no centro da colmeia e cada módulo num
          favo ao redor, ligado por filetes de energia. Favos apagados são
          espaço de crescer. As células nascem via JS (montarHub), para a
          lista poder vir do plano do cliente. -->
@@ -79,7 +71,7 @@
         <p class="hub-nota">Favos apagados são módulos que ainda vão acender.</p>
       </div>
 
-      <p class="capa-rodape">Tech for bars &amp; restaurants</p>
+      <p class="capa-rodape">Tech for restaurants</p>
     </section>
 
     <!-- ============ Aplicação ============ -->
@@ -88,15 +80,9 @@
       <aside class="lateral" id="lateral">
         <div class="lateral-topo">
           <div class="marca">
-            <span class="marca-icone" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path
-                  d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"
-                />
-              </svg>
-            </span>
+            <img class="marca-chama" src="/img/chama-brasa-food.png" alt="" aria-hidden="true" />
             <div class="marca-texto">
-              <strong class="wordmark">Brasa</strong>
+              <strong class="wordmark">Brasa <span>Food</span></strong>
               <small id="marca-org">—</small>
             </div>
           </div>

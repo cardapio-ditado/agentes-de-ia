@@ -1,9 +1,9 @@
 @echo off
 rem ============================================================
-rem Brasa - inicia o painel + conector WhatsApp neste computador.
+rem Brasa Food - inicia o painel + conector WhatsApp neste computador.
 rem Duplo clique e pronto. Feche a janela para parar o agente.
 rem ============================================================
-title Brasa - Agentes de IA
+title Brasa Food - Hub de solucoes
 cd /d "%~dp0"
 
 where node >nul 2>nul
