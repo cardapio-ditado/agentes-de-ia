@@ -104,7 +104,7 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
 
   const userId = data.user.id;
 
-  const [{ data: membro }, { data: admin }] = await Promise.all([
+  const [vinculo, admin] = await Promise.all([
     db()
       .from("org_members")
       .select("org_id, role")
@@ -115,12 +115,30 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
     db().from("platform_admins").select("user_id").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const plataformaAdmin = Boolean(admin);
+  // Consulta que FALHOU e consulta que não achou nada devolvem ambas `data:
+  // null`. Tratar as duas igual manda o usuário caçar um vínculo que existe,
+  // enquanto o problema real (tabela fora do cache do PostgREST, permissão,
+  // rede) fica invisível. Por isso o erro é lido antes.
+  const falhas = [vinculo.error, admin.error].filter(Boolean);
+  if (falhas.length > 0) {
+    for (const f of falhas) console.error("[auth] consulta de vínculo falhou:", f?.message);
+    throw new ErroDeAcesso(
+      503,
+      "Não consegui conferir seu acesso agora — o banco recusou a consulta. " +
+        `Detalhe: ${falhas.map((f) => f?.message).join(" | ")}`,
+    );
+  }
+
+  const plataformaAdmin = Boolean(admin.data);
+  const membro = vinculo.data;
 
   if (!membro && !plataformaAdmin) {
     // Conta existe no Supabase Auth mas não pertence a nenhuma organização:
     // acontece se alguém for removido, ou se o cadastro parou no meio.
-    throw new ErroDeAcesso(403, "Sua conta ainda não está vinculada a um estabelecimento.");
+    throw new ErroDeAcesso(
+      403,
+      `Sua conta (${data.user.email ?? userId}) ainda não está vinculada a um estabelecimento.`,
+    );
   }
 
   const sessao: Sessao = {
