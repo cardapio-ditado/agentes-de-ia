@@ -24,7 +24,14 @@ import {
   metricasDoVenue,
   registrarMensagemHumana,
 } from "./inbox.js";
-import { entrar, ErroDeAcesso, pedirTrocaDeSenha, renovar, sessaoDoToken } from "./auth.js";
+import {
+  entrar,
+  ErroDeAcesso,
+  pedirTrocaDeSenha,
+  renovar,
+  sessaoDoToken,
+  trocarSenha,
+} from "./auth.js";
 import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
 import { criarCliente, listarClientes, type DadosDoCliente } from "./tenants.js";
 import {
@@ -815,6 +822,21 @@ async function roteasApi(
       const destino = textoOpcional(corpo, "redirect") ?? "";
       await pedirTrocaDeSenha(texto(corpo, "email"), destino);
       return ok(res, { enviado: true });
+    }
+
+    // POST /v1/auth/senha — define senha nova (recuperação ou troca voluntária)
+    if (metodo === "POST" && p[1] === "senha" && p.length === 2) {
+      const header = req.headers.authorization ?? "";
+      const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+      if (!token) throw erro(401, "unauthorized", "Link de troca de senha inválido.");
+      const corpo = await lerJson(req);
+      try {
+        await trocarSenha(token, texto(corpo, "senha"));
+        return ok(res, { trocada: true });
+      } catch (e) {
+        if (e instanceof ErroDeAcesso) throw erro(e.status, "invalid_request", e.message);
+        throw e;
+      }
     }
 
     // GET /v1/auth/me — quem sou eu, para o painel montar o menu

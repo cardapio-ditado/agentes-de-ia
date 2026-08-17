@@ -460,6 +460,86 @@ document.getElementById("btn-esqueci").addEventListener("click", async () => {
   mostrarErroAcesso("erro-acesso", "Se esse e-mail tiver conta, o link de troca chega em instantes.");
 });
 
+// ---------- Definir senha nova ----------
+//
+// O Supabase manda o link de recuperação com os tokens no FRAGMENTO da URL
+// (#access_token=...&type=recovery). Fragmento não vai para o servidor, então
+// quem tem que reconhecê-lo é esta página — sem isto o cliente clica no link
+// do e-mail, cai no painel e não acontece nada.
+const formNovaSenha = document.getElementById("form-nova-senha");
+let tokenDeTroca = null;
+
+function verificarLinkDeRecuperacao() {
+  const hash = location.hash.startsWith("#") ? location.hash.slice(1) : "";
+  if (!hash.includes("access_token")) return false;
+
+  const params = new URLSearchParams(hash);
+  const token = params.get("access_token");
+  if (!token) return false;
+
+  tokenDeTroca = token;
+  // Limpa o endereço na hora: token em URL fica no histórico do navegador e
+  // vaza em print de tela ou link compartilhado.
+  history.replaceState(null, "", location.pathname + location.search);
+
+  acenderBrasas(telaAcesso.querySelector(".brasas"));
+  app.hidden = true;
+  telaHub.hidden = true;
+  telaAcesso.hidden = false;
+  formAcesso.hidden = true;
+  formChave.hidden = true;
+  formNovaSenha.hidden = false;
+  document.getElementById("campo-nova-senha").focus();
+  return true;
+}
+
+// Erro some ao digitar. Sem isto, quando o próprio navegador barra o envio
+// (o minlength do campo), a mensagem da tentativa anterior fica na tela
+// contradizendo o que a pessoa acabou de corrigir.
+for (const id of ["campo-nova-senha", "campo-nova-senha-2"]) {
+  document.getElementById(id).addEventListener("input", () =>
+    mostrarErroAcesso("erro-nova-senha", null),
+  );
+}
+
+formNovaSenha.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const senha = document.getElementById("campo-nova-senha").value;
+  const repetida = document.getElementById("campo-nova-senha-2").value;
+  mostrarErroAcesso("erro-nova-senha", null);
+
+  if (senha !== repetida) {
+    return mostrarErroAcesso("erro-nova-senha", "As duas senhas não são iguais.");
+  }
+  if (senha.length < 8) {
+    return mostrarErroAcesso("erro-nova-senha", "A senha precisa ter pelo menos 8 caracteres.");
+  }
+
+  const botao = formNovaSenha.querySelector("button[type=submit]");
+  botao.disabled = true;
+  botao.textContent = "Salvando…";
+  try {
+    const resposta = await fetch("/v1/auth/senha", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${tokenDeTroca}` },
+      body: JSON.stringify({ senha }),
+    });
+    const corpo = await resposta.json();
+    if (!resposta.ok || corpo?.success === false) {
+      throw new Error(corpo?.error?.message ?? "Não deu para salvar a senha.");
+    }
+    tokenDeTroca = null;
+    formNovaSenha.hidden = true;
+    formAcesso.hidden = false;
+    mostrarErroAcesso("erro-acesso", "Senha salva! Entre com ela agora.");
+  } catch (erro) {
+    mostrarErroAcesso("erro-nova-senha", erro.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Salvar senha";
+  }
+});
+
 // ---------- Entrada por chave (máquinas e transição) ----------
 document.getElementById("btn-usar-chave").addEventListener("click", () => {
   formAcesso.hidden = true;
@@ -479,6 +559,11 @@ formChave.addEventListener("submit", async (e) => {
 });
 
 async function iniciar() {
+  // Antes de tudo: o link do e-mail de recuperação tem precedência sobre
+  // qualquer sessão salva. Quem chega por ele veio justamente porque não
+  // consegue entrar.
+  if (verificarLinkDeRecuperacao()) return;
+
   if (!chaveSalva()) return pedirChave();
 
   let venues;

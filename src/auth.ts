@@ -177,3 +177,33 @@ const PODEM_ESCREVER = new Set(["owner", "admin", "member", "plataforma"]);
 export function podeEscrever(sessao: Sessao): boolean {
   return sessao.plataformaAdmin || PODEM_ESCREVER.has(sessao.papel);
 }
+
+/**
+ * Define uma senha nova para quem está com um token válido em mãos.
+ *
+ * Serve aos dois caminhos: quem clicou no link de recuperação (o token vem
+ * no endereço) e quem já está logado e quer trocar. Nos dois casos a prova
+ * de identidade é o token — nunca a senha antiga, que quem esqueceu não tem.
+ */
+export async function trocarSenha(token: string, novaSenha: string): Promise<void> {
+  if (novaSenha.length < 8) {
+    throw new ErroDeAcesso(400, "A senha precisa ter pelo menos 8 caracteres.");
+  }
+
+  const cliente = dbAuth();
+  const { data, error } = await cliente.auth.getUser(token);
+  if (error || !data.user) {
+    throw new ErroDeAcesso(401, "Este link de troca de senha expirou. Peça outro.");
+  }
+
+  // Pelo admin e não pelo updateUser da sessão: o cliente aqui é descartável
+  // e não tem sessão nenhuma — só o token que acabou de ser conferido.
+  const { error: erroTroca } = await cliente.auth.admin.updateUserById(data.user.id, {
+    password: novaSenha,
+  });
+  if (erroTroca) throw new ErroDeAcesso(400, `Não deu para trocar a senha: ${erroTroca.message}`);
+
+  // A sessão em memória guarda o papel, não a senha — mas sair do cache força
+  // a próxima requisição a reler tudo, que é o que se espera depois de trocar.
+  esquecerSessao(token);
+}

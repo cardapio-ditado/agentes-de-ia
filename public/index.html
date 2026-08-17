@@ -55,6 +55,34 @@
           <p id="erro-acesso" class="erro" role="alert" hidden></p>
         </form>
 
+        <!-- Definir senha nova. Aparece quando o cliente chega pelo link do
+             e-mail de recuperação (o token vem no endereço) e também no
+             primeiro acesso, quando ele ainda está com a senha que o vendedor
+             ditou por telefone. -->
+        <form id="form-nova-senha" class="cartao-acesso" hidden>
+          <label for="campo-nova-senha">Nova senha</label>
+          <input
+            id="campo-nova-senha"
+            type="password"
+            autocomplete="new-password"
+            placeholder="pelo menos 8 caracteres"
+            minlength="8"
+            required
+          />
+          <label for="campo-nova-senha-2">Repita a senha</label>
+          <input
+            id="campo-nova-senha-2"
+            type="password"
+            autocomplete="new-password"
+            placeholder="digite de novo"
+            minlength="8"
+            required
+          />
+          <button type="submit" class="btn-fogo">Salvar senha</button>
+          <p class="acesso-nota">Depois de salvar, você entra com ela.</p>
+          <p id="erro-nova-senha" class="erro" role="alert" hidden></p>
+        </form>
+
         <!-- Acesso por chave: continua existindo para máquinas e para o
              período de transição, mas não é mais a porta principal. -->
         <form id="form-chave" class="cartao-acesso" hidden>
