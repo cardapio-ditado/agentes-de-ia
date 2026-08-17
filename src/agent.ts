@@ -89,7 +89,16 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
   const historico = await listMessages(conversation.id);
   const messages: Anthropic.MessageParam[] = historico.map(toMessageParam);
 
-  messages.push({ role: "user", content: userMessage });
+  // A mensagem GRAVADA é a do cliente, limpa: é ela que aparece na inbox e no
+  // histórico das próximas chamadas. A ENVIADA leva a data grudada no fim.
+  //
+  // O motivo é concreto: o bloco de data fica no começo do prompt, e numa
+  // conversa com dias de histórico ele perde para o que está mais perto da
+  // pergunta. Uma conversa que teve mensagens no domingo faz o modelo dizer
+  // que hoje é domingo — ele não está inventando, está lendo o vizinho mais
+  // próximo. Repetir a data como última coisa antes da resposta resolve.
+  const agora = contextoDeAgora(venue?.timezone ?? "America/Cuiaba");
+  messages.push({ role: "user", content: comContextoDeAgora(userMessage, agora) });
   await insertMessage({
     conversation_id: conversation.id,
     role: "user",
@@ -236,6 +245,17 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
  * "Agora é ..." no fuso da casa — sem isso o modelo só tem o conhecimento de
  * treinamento, que não sabe (nem podia saber) que dia é hoje.
  */
+/**
+ * Cola o contexto de tempo no fim da fala do cliente, delimitado.
+ *
+ * Delimitado porque o modelo precisa distinguir o que o cliente disse do que
+ * o sistema informou — sem a marcação, ele pode responder à data como se
+ * fosse parte da pergunta ("por que você me mandou a hora?").
+ */
+export function comContextoDeAgora(mensagem: string, contexto: string): string {
+  return `${mensagem}\n\n<contexto-do-sistema>\n${contexto}\n</contexto-do-sistema>`;
+}
+
 function contextoDeAgora(timezone: string): string {
   const data = new Intl.DateTimeFormat("pt-BR", {
     timeZone: timezone,
