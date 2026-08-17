@@ -172,31 +172,48 @@ function falha(res: ServerResponse, e: ErroHttp): void {
  * Não expõe nada sensível: só contagens de linhas que o painel já mostra.
  */
 async function diagnosticoDoBanco(): Promise<Record<string, unknown>> {
+  // Referência do projeto: o "abcdefg" de https://abcdefg.supabase.co. Não é
+  // segredo — vai em qualquer app cliente — e responde a pergunta que já custou
+  // caro nesta base: o app fala com o MESMO projeto onde o SQL foi rodado?
+  // Com duas contas Supabase, o SQL acerta um banco e o app lê o outro, e o
+  // sintoma é dado que "existe" mas o sistema não encontra.
+  const projeto = (process.env.SUPABASE_URL ?? "").match(/https?:\/\/([^.]+)\./)?.[1] ?? "?";
+
   try {
-    const [orgs, chaves] = await Promise.all([
-      db().from("organizations").select("id", { count: "exact", head: true }),
-      db().from("api_keys").select("id", { count: "exact", head: true }),
+    const contar = (tabela: "organizations" | "api_keys" | "org_members" | "platform_admins") =>
+      db().from(tabela).select("*", { count: "exact", head: true });
+
+    const [orgs, chaves, membros, admins] = await Promise.all([
+      contar("organizations"),
+      contar("api_keys"),
+      contar("org_members"),
+      contar("platform_admins"),
     ]);
 
-    if (orgs.error || chaves.error) {
-      return { alcancavel: false, erro: orgs.error?.message ?? chaves.error?.message };
-    }
+    const erroGrave = orgs.error ?? chaves.error;
+    if (erroGrave) return { projeto, alcancavel: false, erro: erroGrave.message };
 
     const total = (orgs.count ?? 0) + (chaves.count ?? 0);
     return {
+      projeto,
       alcancavel: true,
       organizacoes: orgs.count ?? 0,
       chaves_de_api: chaves.count ?? 0,
-      // Zero nas duas num banco em uso é o sintoma do RLS bloqueando tudo.
-      // Nunca é o estado normal: sem organização e sem chave, ninguém teria
-      // conseguido usar o sistema para chegar até aqui.
+      // Tabelas do login por e-mail e senha. Erro aqui (e não zero) significa
+      // que a migração não rodou NESTE projeto, ou que o PostgREST ainda não
+      // recarregou o schema.
+      vinculos: membros.error ? `erro: ${membros.error.message}` : (membros.count ?? 0),
+      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : (admins.count ?? 0),
+      // Zero nas duas primeiras num banco em uso é o sintoma do RLS bloqueando
+      // tudo. Nunca é o estado normal: sem organização e sem chave, ninguém
+      // teria conseguido usar o sistema para chegar até aqui.
       credencial:
         total === 0
           ? "SUSPEITA: leituras vazias. SUPABASE_SERVICE_ROLE_KEY pode não ser a service_role (RLS bloqueando)."
           : "service_role ok",
     };
   } catch (e) {
-    return { alcancavel: false, erro: e instanceof Error ? e.message : "falha desconhecida" };
+    return { projeto, alcancavel: false, erro: e instanceof Error ? e.message : "falha desconhecida" };
   }
 }
 
