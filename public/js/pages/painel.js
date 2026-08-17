@@ -1,14 +1,22 @@
 import { get } from "../api.js";
+import { cartaoDeSaldo, extrato } from "../pontos.js";
 import { el, ICONES, icone, indicador, numero, vazio } from "../ui.js";
 
 /** Painel: os números que respondem "como foi a semana?" numa olhada. */
 export async function painel(raiz, ctx) {
   raiz.append(el("p", { classe: "muted", texto: "Carregando números…" }));
 
-  const m = await get(`/v1/venues/${ctx.venue}/metrics`);
+  // O saldo não pode derrubar o painel: se a conta de pontos falhar, o resto
+  // dos números continua valendo.
+  const [m, pontos] = await Promise.all([
+    get(`/v1/venues/${ctx.venue}/metrics`),
+    extrato(ctx.venue).catch(() => null),
+  ]);
   raiz.replaceChildren();
 
   const pilha = el("div", { classe: "pilha" });
+
+  if (pontos) pilha.append(cartaoDeSaldo(pontos));
 
   pilha.append(
     el("div", { classe: "grade" }, [

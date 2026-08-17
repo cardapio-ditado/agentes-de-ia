@@ -1576,3 +1576,118 @@ textarea:focus {
     max-width: 88%;
   }
 }
+
+/* ============ Medidor de pontos ============
+   Saldo do plano no Painel e aviso de duração no editor de agentes. A cor
+   segue o que SOBRA, não o que foi gasto: 80% consumido é notícia boa no dia
+   28 e notícia ruim no dia 5 — quem resolve isso é a frase, não a barra. */
+.pontos-cartao {
+  display: grid;
+  gap: 12px;
+}
+.pontos-borda-atencao {
+  border-color: var(--alerta);
+}
+.pontos-borda-critico,
+.pontos-borda-esgotado {
+  border-color: var(--perigo);
+}
+.pontos-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pontos-topo h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+.pontos-topo p {
+  margin: 0;
+  font-size: 13px;
+}
+.pontos-numero {
+  text-align: right;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+.pontos-numero strong {
+  display: block;
+  font-family: "Fraunces", serif;
+  font-size: 30px;
+  font-weight: 600;
+}
+.pontos-numero small {
+  font-size: 11.5px;
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pontos-barra {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  overflow: hidden;
+}
+.pontos-preenchido {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+  background: linear-gradient(90deg, var(--marca), var(--ambar));
+}
+.pontos-preenchido.pontos-atencao {
+  background: linear-gradient(90deg, var(--ambar), #d98500);
+}
+.pontos-preenchido.pontos-critico,
+.pontos-preenchido.pontos-esgotado {
+  background: linear-gradient(90deg, var(--marca-forte), var(--vinho));
+}
+.pontos-leitura {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--texto-2);
+}
+.pontos-texto-atencao {
+  color: var(--alerta);
+  font-weight: 600;
+}
+.pontos-texto-critico,
+.pontos-texto-esgotado {
+  color: var(--perigo);
+  font-weight: 600;
+}
+.pontos-motores {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+}
+.pontos-motor {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.pontos-motor-nome {
+  font-weight: 700;
+}
+.pontos-motor-detalhe {
+  color: var(--texto-3);
+}
+.pontos-aviso {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--raio-p, 8px);
+  background: var(--superficie-2);
+  border-left: 3px solid var(--marca);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--texto-2);
+}
+.pontos-aviso-grave {
+  background: var(--perigo-suave);
+  border-left-color: var(--perigo);
+  color: var(--perigo);
+  font-weight: 600;
+}

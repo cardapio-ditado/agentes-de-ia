@@ -1,4 +1,5 @@
 import { api, del, get, post, postArquivo } from "../api.js";
+import { avisoDeMotor, extrato } from "../pontos.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 const MODELOS = [
@@ -167,11 +168,28 @@ export async function agentes(raiz, ctx) {
       texto: criando ? "Criar agente" : "Salvar alterações",
     });
 
+    // Trocar de motor muda a velocidade com que os pontos somem. O cliente vê
+    // o efeito da escolha dele antes de salvar, com o consumo real da casa.
+    const campoModelo = campo("Modelo", campos.model);
+    let saldo = null;
+    function mostrarDuracao() {
+      if (!saldo) return;
+      campoModelo.querySelector(".pontos-aviso")?.remove();
+      campoModelo.append(avisoDeMotor(saldo, campos.model.value));
+    }
+    campos.model.addEventListener("change", mostrarDuracao);
+    extrato(ctx.venue)
+      .then((e) => {
+        saldo = e;
+        mostrarDuracao();
+      })
+      .catch(() => {});
+
     const form = el("form", { classe: "cartao", onsubmit: salvar }, [
       el("div", { classe: "grade" }, [
         campo("Nome", campos.name),
         campo("Identificador", campos.slug),
-        campo("Modelo", campos.model),
+        campoModelo,
         campo("Esforço de raciocínio", campos.effort),
         el("div", { classe: "campo campo-largo" }, [
           el("label", { texto: "Descrição (para a equipe, o cliente não vê)" }),

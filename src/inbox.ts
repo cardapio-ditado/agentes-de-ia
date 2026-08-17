@@ -347,7 +347,7 @@ async function total(
 }
 
 /** Dia em YYYY-MM-DD no fuso da casa — não no UTC do timestamp gravado. */
-function diaLocal(iso: string, timezone: string): string {
+export function diaLocal(iso: string, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",

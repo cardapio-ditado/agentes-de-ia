@@ -24,6 +24,7 @@ import {
   metricasDoVenue,
   registrarMensagemHumana,
 } from "./inbox.js";
+import { extratoDePontos } from "./pontos.js";
 import {
   addTrainingFile,
   addTrainingText,
@@ -636,6 +637,14 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await metricasDoVenue(venue.id, venue.timezone));
+    }
+
+    // GET /v1/venues/:slug/pontos — saldo do plano, consumo por motor e
+    // quanto tempo a sobra dura em cada um deles
+    if (metodo === "GET" && recurso === "pontos") {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await extratoDePontos(venue));
     }
   }
 
