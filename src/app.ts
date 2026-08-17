@@ -33,7 +33,13 @@ import {
   trocarSenha,
 } from "./auth.js";
 import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
-import { criarCliente, listarClientes, type DadosDoCliente } from "./tenants.js";
+import {
+  atualizarComercial,
+  criarCliente,
+  listarClientes,
+  resumirPlataforma,
+  type DadosDoCliente,
+} from "./tenants.js";
 import {
   addTrainingFile,
   addTrainingText,
@@ -852,11 +858,40 @@ async function roteasApi(
   }
 
   // ---- Administração da plataforma (equipe Brasa Food) ----
+  // GET /v1/admin/resumo — números da carteira inteira
+  if (metodo === "GET" && p[0] === "admin" && p[1] === "resumo" && p.length === 2) {
+    await exigirAdminDaPlataforma(req);
+    return ok(res, resumirPlataforma(await listarClientes()));
+  }
+
   if (p[0] === "admin" && p[1] === "clientes") {
     // GET /v1/admin/clientes — carteira de clientes
     if (metodo === "GET" && p.length === 2) {
       await exigirAdminDaPlataforma(req);
       return ok(res, await listarClientes());
+    }
+
+    // PATCH /v1/admin/clientes/:orgId — dados comerciais (status, mensalidade)
+    if (metodo === "PATCH" && p.length === 3) {
+      await exigirAdminDaPlataforma(req);
+      const corpo = await lerJson(req);
+      const dados: { status_pagamento?: string; mensalidade?: number; vencimento_dia?: number } = {};
+
+      const status = textoOpcional(corpo, "status_pagamento");
+      if (status) {
+        if (!["ativo", "atrasado", "suspenso", "cortesia", "cancelado"].includes(status)) {
+          throw erro(400, "invalid_request", "Status de pagamento inválido.");
+        }
+        dados.status_pagamento = status;
+      }
+      if (typeof corpo.mensalidade === "number") dados.mensalidade = corpo.mensalidade;
+      if (typeof corpo.vencimento_dia === "number") dados.vencimento_dia = corpo.vencimento_dia;
+
+      if (Object.keys(dados).length === 0) {
+        throw erro(400, "invalid_request", "Nada para atualizar.");
+      }
+      await atualizarComercial(p[2]!, dados);
+      return ok(res, { atualizado: true });
     }
 
     // POST /v1/admin/clientes — cria organização, estabelecimento, agente,

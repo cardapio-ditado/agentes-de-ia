@@ -1,4 +1,4 @@
-import { get, post } from "../api.js";
+import { get, patch, post } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
@@ -10,6 +10,25 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
  * hora e erra no campo mais silencioso — o fuso horário, que só se revela
  * semanas depois numa reserva marcada na hora errada.
  */
+
+const STATUS = [
+  ["ativo", "Em dia"],
+  ["atrasado", "Atrasado"],
+  ["suspenso", "Suspenso"],
+  ["cortesia", "Cortesia"],
+  ["cancelado", "Cancelado"],
+];
+
+const NOMES_DE_PLANO = {
+  essencial: "Essencial",
+  profissional: "Profissional",
+  casa_cheia: "Casa Cheia",
+  cortesia: "Cortesia",
+};
+
+const numeroBr = (v) => (v ?? 0).toLocaleString("pt-BR");
+const dinheiro = (v) =>
+  (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 const PLANOS = [
   ["essencial", "Essencial — 1.000 pontos · R$ 147"],
@@ -74,26 +93,75 @@ export async function clientes(raiz, ctx) {
     }
 
     const grade = el("div", { classe: "lista" });
-    for (const c of lista) {
-      grade.append(
-        el("article", { classe: "cartao" }, [
-          el("div", { classe: "cabecalho-secao" }, [
-            el("div", {}, [
-              el("h3", { texto: c.nome }),
-              el("p", { classe: "muted", texto: c.email_contato ?? `@${c.slug}` }),
-            ]),
-            c.primeiro_acesso_em
-              ? etiqueta("já entrou", "etiqueta-ok")
-              : etiqueta("não acessou", "etiqueta-alerta"),
-          ]),
-          linha("Plano", c.plano ?? "—"),
-          linha("Pontos por ciclo", c.pontos_mensais ? c.pontos_mensais.toLocaleString("pt-BR") : "—"),
-          linha("Estabelecimentos", String(c.estabelecimentos)),
-          linha("Cliente desde", dataHora(c.criado_em)),
-        ]),
-      );
-    }
+    for (const c of lista) grade.append(cartaoDeCliente(c));
     conteudo.append(grade);
+  }
+
+  /** Um cliente na carteira: quem é, quanto paga e quanto já gastou. */
+  function cartaoDeCliente(c) {
+    const temSaldo = c.pontos_mensais > 0 && c.pontos_usados !== null;
+    const percentual = temSaldo ? Math.round((c.pontos_usados / c.pontos_mensais) * 100) : 0;
+
+    const barra = el("div", { classe: "pontos-barra" }, [
+      el("div", {
+        classe: `pontos-preenchido ${percentual >= 85 ? "pontos-critico" : percentual >= 65 ? "pontos-atencao" : ""}`,
+      }),
+    ]);
+    barra.firstChild.style.width = `${Math.min(100, percentual)}%`;
+
+    const seletorStatus = el(
+      "select",
+      {
+        classe: "select select-peq",
+        onchange: async (ev) => {
+          try {
+            await patch(`/v1/admin/clientes/${c.org_id}`, { status_pagamento: ev.target.value });
+            avisar("Situação atualizada.", "ok");
+          } catch (e) {
+            avisar(e.message, "erro");
+          }
+        },
+      },
+      STATUS.map(([v, r]) => el("option", { value: v, texto: r, selected: v === c.status_pagamento })),
+    );
+
+    return el("article", { classe: "cartao" }, [
+      el("div", { classe: "cabecalho-secao" }, [
+        el("div", {}, [
+          el("h3", { texto: c.nome }),
+          el("p", { classe: "muted", texto: c.email_contato ?? `@${c.slug}` }),
+        ]),
+        el("div", { style: "display:flex;gap:6px;align-items:center;flex-wrap:wrap" }, [
+          c.estado_do_plano === "bloqueado"
+            ? etiqueta("agente pausado", "etiqueta-perigo")
+            : c.estado_do_plano === "cortesia"
+              ? etiqueta("em cortesia", "etiqueta-alerta")
+              : null,
+          c.primeiro_acesso_em
+            ? etiqueta("já entrou", "etiqueta-ok")
+            : etiqueta("nunca acessou", "etiqueta-alerta"),
+        ].filter(Boolean)),
+      ]),
+
+      temSaldo
+        ? el("div", { style: "margin:10px 0 4px" }, [
+            barra,
+            el("p", {
+              classe: "muted",
+              texto: `${numeroBr(c.pontos_usados)} de ${numeroBr(c.pontos_mensais)} pontos usados · restam ${numeroBr(c.pontos_restantes)}`,
+            }),
+          ])
+        : el("p", { classe: "muted", texto: "Sem consumo registrado neste ciclo." }),
+
+      linha("Plano", NOMES_DE_PLANO[c.plano] ?? c.plano ?? "—"),
+      linha("Mensalidade", dinheiro(c.mensalidade)),
+      linha("Estabelecimentos", String(c.estabelecimentos)),
+      linha("Cliente desde", dataHora(c.criado_em)),
+      el("div", { classe: "linha-dado" }, [
+        el("span", { texto: "Situação" }),
+        seletorStatus,
+      ]),
+    ]);
   }
 
   function formulario() {

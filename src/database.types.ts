@@ -492,37 +492,49 @@ export type Database = {
           created_at: string
           email_contato: string | null
           id: string
+          inicio_contrato: string | null
+          mensalidade: number | null
           name: string
           observacoes: string | null
           plan: string
           settings: Json
           slug: string
+          status_pagamento: string
           telefone_contato: string | null
           updated_at: string
+          vencimento_dia: number | null
         }
         Insert: {
           created_at?: string
           email_contato?: string | null
           id?: string
+          inicio_contrato?: string | null
+          mensalidade?: number | null
           name: string
           observacoes?: string | null
           plan?: string
           settings?: Json
           slug: string
+          status_pagamento?: string
           telefone_contato?: string | null
           updated_at?: string
+          vencimento_dia?: number | null
         }
         Update: {
           created_at?: string
           email_contato?: string | null
           id?: string
+          inicio_contrato?: string | null
+          mensalidade?: number | null
           name?: string
           observacoes?: string | null
           plan?: string
           settings?: Json
           slug?: string
+          status_pagamento?: string
           telefone_contato?: string | null
           updated_at?: string
+          vencimento_dia?: number | null
         }
         Relationships: []
       }

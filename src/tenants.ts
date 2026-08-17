@@ -15,6 +15,7 @@
  */
 
 import { createApiKey } from "./apikeys.js";
+import { extratoDePontos } from "./pontos.js";
 import { db, dbAuth } from "./supabase.js";
 
 export interface DadosDoCliente {
@@ -47,6 +48,16 @@ const PONTOS_DO_PLANO: Record<DadosDoCliente["plano"], number> = {
   profissional: 2500,
   casa_cheia: 6000,
   cortesia: 500,
+};
+
+/** Preço de tabela, em reais. A mensalidade gravada tem precedência: desconto
+ *  e negociação existem, e o painel precisa mostrar o combinado, não o
+ *  catálogo. */
+export const PRECO_DO_PLANO: Record<string, number> = {
+  essencial: 147,
+  profissional: 297,
+  casa_cheia: 597,
+  cortesia: 0,
 };
 
 export function gerarSlug(texto: string): string {
@@ -229,15 +240,31 @@ export interface ResumoDeCliente {
   estabelecimentos: number;
   plano: string | null;
   pontos_mensais: number | null;
-  dono_email: string | null;
+  /** Consumo do ciclo corrente. null quando o cliente não tem estabelecimento. */
+  pontos_usados: number | null;
+  pontos_restantes: number | null;
+  estado_do_plano: string | null;
+  status_pagamento: string;
+  mensalidade: number;
+  vencimento_dia: number | null;
   primeiro_acesso_em: string | null;
 }
 
-/** Lista para a tela de administração da plataforma. */
+/**
+ * Carteira da plataforma, com o saldo real de cada cliente.
+ *
+ * O saldo sai de `extratoDePontos`, uma chamada por estabelecimento — cada
+ * cliente tem seu próprio ciclo (ancorado no dia da assinatura), então não dá
+ * para somar todo mundo numa consulta só sem errar as bordas. Com dezenas de
+ * clientes isso é tranquilo; passando de algumas centenas, vira uma view
+ * materializada.
+ */
 export async function listarClientes(): Promise<ResumoDeCliente[]> {
   const { data: orgs, error } = await db()
     .from("organizations")
-    .select("id, slug, name, email_contato, created_at")
+    .select(
+      "id, slug, name, email_contato, created_at, status_pagamento, mensalidade, vencimento_dia",
+    )
     .order("created_at", { ascending: false });
   if (error) throw new Error(`Falha ao listar clientes: ${error.message}`);
 
@@ -245,13 +272,35 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
   if (ids.length === 0) return [];
 
   const [{ data: venues }, { data: membros }] = await Promise.all([
-    db().from("venues").select("org_id, plano, pontos_mensais").in("org_id", ids),
-    db().from("org_members").select("org_id, primeiro_acesso_em").in("org_id", ids).eq("role", "owner"),
+    db().from("venues").select("id, org_id, plano, pontos_mensais, timezone, ciclo_dia").in("org_id", ids),
+    db()
+      .from("org_members")
+      .select("org_id, primeiro_acesso_em")
+      .in("org_id", ids)
+      .eq("role", "owner"),
   ]);
+
+  // O saldo de cada casa em paralelo. Uma falha isolada não pode derrubar a
+  // carteira inteira: o cliente aparece sem saldo em vez de a tela quebrar.
+  const saldos = new Map<string, { usados: number; restantes: number; estado: string }>();
+  await Promise.all(
+    (venues ?? []).map(async (v) => {
+      try {
+        const e = await extratoDePontos(v);
+        saldos.set(v.id, { usados: e.usados, restantes: e.restantes, estado: e.estado });
+      } catch (falha) {
+        console.error(`[tenants] saldo do venue ${v.id} falhou:`, falha);
+      }
+    }),
+  );
 
   return (orgs ?? []).map((o) => {
     const meus = (venues ?? []).filter((v) => v.org_id === o.id);
+    const principal = meus[0];
+    const saldo = principal ? saldos.get(principal.id) : undefined;
     const dono = (membros ?? []).find((m) => m.org_id === o.id);
+    const plano = principal?.plano ?? null;
+
     return {
       org_id: o.id,
       slug: o.slug,
@@ -259,10 +308,90 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
       email_contato: o.email_contato ?? null,
       criado_em: o.created_at,
       estabelecimentos: meus.length,
-      plano: meus[0]?.plano ?? null,
-      pontos_mensais: meus[0]?.pontos_mensais ?? null,
-      dono_email: o.email_contato ?? null,
+      plano,
+      pontos_mensais: principal?.pontos_mensais ?? null,
+      pontos_usados: saldo?.usados ?? null,
+      pontos_restantes: saldo?.restantes ?? null,
+      estado_do_plano: saldo?.estado ?? null,
+      status_pagamento: o.status_pagamento,
+      mensalidade: Number(o.mensalidade ?? PRECO_DO_PLANO[plano ?? ""] ?? 0),
+      vencimento_dia: o.vencimento_dia,
       primeiro_acesso_em: dono?.primeiro_acesso_em ?? null,
     };
   });
+}
+
+export interface ResumoDaPlataforma {
+  clientes: number;
+  clientes_ativos: number;
+  clientes_em_atraso: number;
+  receita_mensal: number;
+  pontos_contratados: number;
+  pontos_usados: number;
+  /** Custo estimado da API de IA no ciclo, em reais. */
+  custo_ia_estimado: number;
+  margem_bruta: number;
+  nunca_acessaram: number;
+  planos: Array<{ plano: string; clientes: number; receita: number }>;
+}
+
+/**
+ * Números da plataforma para a tela de visão geral.
+ *
+ * Deriva tudo da carteira, sem consulta nova: os dados já foram buscados e o
+ * risco de dois números divergirem na mesma tela é maior que o custo de
+ * recalcular aqui.
+ */
+export function resumirPlataforma(clientes: ResumoDeCliente[]): ResumoDaPlataforma {
+  // Custo real por ponto: um ponto é uma resposta no motor mais leve, ~US$
+  // 0,0032. A ponderação dos motores foi feita justamente para o custo por
+  // ponto ser o mesmo em qualquer um deles.
+  const CUSTO_POR_PONTO_USD = 0.0032;
+  const DOLAR = 5.5;
+
+  const porPlano = new Map<string, { clientes: number; receita: number }>();
+  let receita = 0;
+  let contratados = 0;
+  let usados = 0;
+
+  for (const c of clientes) {
+    // Cancelado não entra na receita — continua na lista para histórico.
+    if (c.status_pagamento !== "cancelado") receita += c.mensalidade;
+    contratados += c.pontos_mensais ?? 0;
+    usados += c.pontos_usados ?? 0;
+
+    const chave = c.plano ?? "sem plano";
+    const atual = porPlano.get(chave) ?? { clientes: 0, receita: 0 };
+    atual.clientes += 1;
+    atual.receita += c.mensalidade;
+    porPlano.set(chave, atual);
+  }
+
+  const custo = usados * CUSTO_POR_PONTO_USD * DOLAR;
+
+  return {
+    clientes: clientes.length,
+    clientes_ativos: clientes.filter((c) => c.status_pagamento === "ativo").length,
+    clientes_em_atraso: clientes.filter((c) =>
+      ["atrasado", "suspenso"].includes(c.status_pagamento),
+    ).length,
+    receita_mensal: Math.round(receita * 100) / 100,
+    pontos_contratados: contratados,
+    pontos_usados: usados,
+    custo_ia_estimado: Math.round(custo * 100) / 100,
+    margem_bruta: Math.round((receita - custo) * 100) / 100,
+    nunca_acessaram: clientes.filter((c) => !c.primeiro_acesso_em).length,
+    planos: [...porPlano.entries()]
+      .map(([plano, v]) => ({ plano, clientes: v.clientes, receita: v.receita }))
+      .sort((a, b) => b.receita - a.receita),
+  };
+}
+
+/** Atualiza os dados comerciais de um cliente. */
+export async function atualizarComercial(
+  orgId: string,
+  dados: { status_pagamento?: string; mensalidade?: number; vencimento_dia?: number },
+): Promise<void> {
+  const { error } = await db().from("organizations").update(dados).eq("id", orgId);
+  if (error) throw new Error(`Falha ao atualizar o cliente: ${error.message}`);
 }

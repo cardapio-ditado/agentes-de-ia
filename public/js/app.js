@@ -2,6 +2,7 @@ import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessa
 import { ICONES, avisar, el, icone, limpar } from "./ui.js";
 import { painel } from "./pages/painel.js";
 import { clientes } from "./pages/clientes.js";
+import { plataforma } from "./pages/plataforma.js";
 import { conversas } from "./pages/conversas.js";
 import { reservas } from "./pages/reservas.js";
 import { programacao } from "./pages/programacao.js";
@@ -36,9 +37,12 @@ const PAGINAS = [
   { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
 
-  // Só a equipe Brasa Food enxerga. O servidor confere de novo em cada rota:
-  // esconder no menu é conveniência, não é a trava de segurança.
-  { id: "clientes", modulo: "agentes-ia", plataforma: true, rotulo: "Clientes", icone: ICONES.organizacao, render: clientes, subtitulo: "Carteira da plataforma e cadastro de cliente novo" },
+  // Módulo da equipe Brasa Food. Administrar a plataforma não é uma seção do
+  // produto do cliente: são perguntas de negócios diferentes, e misturar as
+  // duas faz o dono do restaurante ver menu que não é dele. O servidor confere
+  // de novo em cada rota — esconder aqui é conveniência, não é a trava.
+  { id: "visao-geral", modulo: "plataforma", plataforma: true, rotulo: "Visão geral", icone: ICONES.painel, render: plataforma, subtitulo: "Receita, custo de IA e saúde da carteira" },
+  { id: "clientes", modulo: "plataforma", plataforma: true, rotulo: "Clientes", icone: ICONES.organizacao, render: clientes, subtitulo: "Carteira, saldo de pontos e situação de pagamento" },
 ];
 
 /** Preenchido no login por /v1/auth/me. */
@@ -83,13 +87,23 @@ const MODULOS = [
     ativo: true,
     pos: { x: 0.75, y: 0.5 },
   },
+  {
+    id: "plataforma",
+    nome: "Administração",
+    descricao:
+      "Carteira de clientes, receita, custo de IA e cadastro de cliente novo. Só a equipe Brasa Food.",
+    icone: "M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01",
+    ativo: true,
+    // Só aparece na colmeia para administrador da plataforma.
+    somentePlataforma: true,
+    pos: { x: 0, y: 1 },
+  },
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
 const FAVOS_VAZIOS = [
   { x: -0.75, y: -0.5 },
   { x: 0.75, y: -0.5 },
-  { x: 0, y: 1 },
 ];
 
 const app = document.getElementById("app");
@@ -162,6 +176,11 @@ document.getElementById("btn-sair").addEventListener("click", () => {
 
 // ============ Navegação ============
 function montarNav() {
+  // Escolher estabelecimento não faz sentido enquanto se olha a carteira
+  // inteira: o módulo de administração é sobre TODOS os clientes, e um
+  // seletor dizendo "Ditado Popular" ali é só ruído que confunde.
+  seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
+
   limpar(nav);
   for (const p of PAGINAS.filter((p) => p.modulo === moduloAtual && (!p.plataforma || souPlataforma))) {
     nav.append(
@@ -302,8 +321,16 @@ function montarHub() {
     linha.setAttribute("class", classe);
     linhas.append(linha);
   };
-  for (const m of MODULOS) ligar(m.pos, m.ativo ? "linha linha-viva" : "linha");
-  for (const f of FAVOS_VAZIOS) ligar(f, "linha linha-apagada");
+  // O favo de administração só existe para a equipe; para o cliente aquele
+  // espaço volta a ser um favo vazio, como era antes.
+  const visiveis = MODULOS.filter((m) => !m.somentePlataforma || souPlataforma);
+  const vazios = [
+    ...FAVOS_VAZIOS,
+    ...MODULOS.filter((m) => m.somentePlataforma && !souPlataforma).map((m) => m.pos),
+  ];
+
+  for (const m of visiveis) ligar(m.pos, m.ativo ? "linha linha-viva" : "linha");
+  for (const f of vazios) ligar(f, "linha linha-apagada");
   colmeia.append(linhas);
 
   const posicao = ({ x, y }, ordem) => `--dx:${x};--dy:${y};--ordem:${ordem}`;
@@ -331,7 +358,7 @@ function montarHub() {
     ),
   );
 
-  MODULOS.forEach((m, i) => {
+  visiveis.forEach((m, i) => {
     const dica = m.ativo ? m.descricao : `${m.descricao} — em breve.`;
     colmeia.append(
       el(
@@ -360,11 +387,11 @@ function montarHub() {
     );
   });
 
-  FAVOS_VAZIOS.forEach((f, i) => {
+  vazios.forEach((f, i) => {
     colmeia.append(
       el("div", {
         classe: "celula hex-vazio",
-        style: posicao(f, MODULOS.length + 1 + i),
+        style: posicao(f, visiveis.length + 1 + i),
         "aria-hidden": "true",
         texto: "+",
       }),

@@ -1807,3 +1807,11 @@ textarea:focus {
   text-underline-offset: 3px;
 }
 .link-acesso:hover { color: var(--ambar); }
+
+/* Seletor compacto dentro de uma linha de dado — situação de pagamento na
+   carteira, onde o valor é editável em vez de só exibido. */
+.select-peq {
+  padding: 5px 8px;
+  font-size: 13px;
+  min-width: 130px;
+}
