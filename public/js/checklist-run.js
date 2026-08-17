@@ -20,6 +20,58 @@ const campoExecutor = document.getElementById("executor");
 const respostas = new Map();
 let itens = [];
 
+// A câmera de um celular atual entrega de 3 a 8 MB por foto. Para conferir se a
+// câmara fria está limpa isso é desperdício puro: 1600px já mostra qualquer
+// coisa que um gerente precise enxergar, e o arquivo cai umas 20 vezes — o que
+// significa upload rápido no 4G da cozinha e conta de armazenamento sob
+// controle. Se qualquer parte disso falhar, mandamos o original: reduzir é
+// otimização, não requisito.
+const FOTO_LADO_MAXIMO = 1600;
+const FOTO_QUALIDADE = 0.72;
+
+async function comprimirFoto(arquivo) {
+  if (!arquivo.type.startsWith("image/") || typeof createImageBitmap !== "function") {
+    return arquivo;
+  }
+  let bitmap;
+  try {
+    // "from-image" respeita o EXIF: sem isso a foto de pé chega deitada.
+    bitmap = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
+  } catch {
+    try {
+      bitmap = await createImageBitmap(arquivo);
+    } catch {
+      return arquivo;
+    }
+  }
+
+  try {
+    const escala = Math.min(1, FOTO_LADO_MAXIMO / Math.max(bitmap.width, bitmap.height));
+    const largura = Math.round(bitmap.width * escala);
+    const altura = Math.round(bitmap.height * escala);
+
+    const tela = document.createElement("canvas");
+    tela.width = largura;
+    tela.height = altura;
+    const ctx = tela.getContext("2d");
+    // JPEG não tem transparência: sem este fundo, um print com alpha vira preto.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, largura, altura);
+    ctx.drawImage(bitmap, 0, 0, largura, altura);
+
+    const menor = await new Promise((resolve) =>
+      tela.toBlob(resolve, "image/jpeg", FOTO_QUALIDADE),
+    );
+    // Foto já pequena ou print de tela podem sair maiores como JPEG.
+    if (!menor || menor.size >= arquivo.size) return arquivo;
+    return menor;
+  } catch {
+    return arquivo;
+  } finally {
+    bitmap.close?.();
+  }
+}
+
 function erroFatal(mensagem) {
   titulo.textContent = "Ops.";
   subtitulo.textContent = "";
@@ -100,12 +152,18 @@ function cartaoFoto(item) {
   input.addEventListener("change", async () => {
     const arquivo = input.files?.[0];
     if (!arquivo) return;
-    btn.textContent = "Enviando foto…";
+    btn.textContent = "Preparando foto…";
     btn.disabled = true;
     try {
+      const envio = await comprimirFoto(arquivo);
+      btn.textContent = "Enviando foto…";
       const res = await fetch(
         `/v1/checklist-publico/${encodeURIComponent(token)}/foto?item=${encodeURIComponent(item.id)}`,
-        { method: "POST", body: arquivo },
+        {
+          method: "POST",
+          headers: { "content-type": envio.type || "image/jpeg" },
+          body: envio,
+        },
       );
       const json = await res.json();
       if (!res.ok || json?.success === false) {
@@ -114,8 +172,10 @@ function cartaoFoto(item) {
       resposta(item.id).foto = json.data.foto;
       btn.innerHTML = "";
       const img = document.createElement("img");
-      img.src = URL.createObjectURL(arquivo);
+      const previa = URL.createObjectURL(envio);
+      img.src = previa;
       img.alt = "Foto enviada";
+      img.addEventListener("load", () => URL.revokeObjectURL(previa), { once: true });
       btn.append(img, document.createTextNode(" ✓ Trocar foto"));
       atualizarProgresso();
     } catch (e) {
