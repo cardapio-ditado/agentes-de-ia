@@ -253,6 +253,29 @@ function contextoDeAgora(timezone: string): string {
   );
 }
 
+/**
+ * Prefixos dos modelos que aceitam `thinking: adaptive` e `output_config`.
+ *
+ * Lista explícita, e não uma regra por número de versão: o nome do modelo não
+ * carrega a geração de forma confiável (claude-haiku-4-5 é anterior ao
+ * claude-sonnet-4-6 apesar do "4"), e errar aqui só aparece em produção, na
+ * forma de um 400 no meio de um atendimento.
+ */
+const MODELOS_COM_ADAPTATIVO = [
+  "claude-opus-4-6",
+  "claude-opus-4-7",
+  "claude-opus-4-8",
+  "claude-opus-5",
+  "claude-sonnet-4-6",
+  "claude-sonnet-5",
+  "claude-fable-5",
+  "claude-mythos-5",
+];
+
+export function suportaRaciocinioAdaptativo(model: string): boolean {
+  return MODELOS_COM_ADAPTATIVO.some((prefixo) => model.startsWith(prefixo));
+}
+
 function buildRequest(
   agent: Agent,
   messages: Anthropic.MessageParam[],
@@ -282,9 +305,17 @@ function buildRequest(
     max_tokens: agent.max_tokens,
     messages,
     system: blocos.length > 0 ? blocos : undefined,
-    thinking: { type: "adaptive" },
-    output_config: { effort: agent.effort as Anthropic.OutputConfig["effort"] },
   };
+
+  // Raciocínio adaptativo e esforço só existem da geração 4.6 em diante.
+  // Mandar para um modelo mais antigo não degrada: a API recusa com 400 e o
+  // cliente recebe "problema técnico". Pior ainda, isso quebrava justamente a
+  // cortesia dos pontos esgotados, que força o Haiku — o modo pensado para
+  // manter o restaurante atendendo era o único que nunca funcionaria.
+  if (suportaRaciocinioAdaptativo(agent.model)) {
+    request.thinking = { type: "adaptive" };
+    request.output_config = { effort: agent.effort as Anthropic.OutputConfig["effort"] };
+  }
 
   if (tools.length > 0) {
     request.tools = tools.map((tool) => tool.definition);
