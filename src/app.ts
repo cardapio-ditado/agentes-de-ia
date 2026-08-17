@@ -159,6 +159,47 @@ function falha(res: ServerResponse, e: ErroHttp): void {
   });
 }
 
+/**
+ * O banco responde, e responde com o poder certo?
+ *
+ * Existe porque uma falha específica é invisível de fora: com a chave `anon`
+ * no lugar da `service_role`, o RLS (ligado em todas as tabelas, sem policy
+ * permissiva) devolve ZERO LINHAS em vez de erro. A API sobe, o login
+ * funciona, e todo o resto simplesmente parece vazio — o que se manifesta
+ * como "chave inválida" e "conta sem estabelecimento" mesmo com os dados
+ * todos lá. Descobrir isso por eliminação custa horas; aqui custa uma URL.
+ *
+ * Não expõe nada sensível: só contagens de linhas que o painel já mostra.
+ */
+async function diagnosticoDoBanco(): Promise<Record<string, unknown>> {
+  try {
+    const [orgs, chaves] = await Promise.all([
+      db().from("organizations").select("id", { count: "exact", head: true }),
+      db().from("api_keys").select("id", { count: "exact", head: true }),
+    ]);
+
+    if (orgs.error || chaves.error) {
+      return { alcancavel: false, erro: orgs.error?.message ?? chaves.error?.message };
+    }
+
+    const total = (orgs.count ?? 0) + (chaves.count ?? 0);
+    return {
+      alcancavel: true,
+      organizacoes: orgs.count ?? 0,
+      chaves_de_api: chaves.count ?? 0,
+      // Zero nas duas num banco em uso é o sintoma do RLS bloqueando tudo.
+      // Nunca é o estado normal: sem organização e sem chave, ninguém teria
+      // conseguido usar o sistema para chegar até aqui.
+      credencial:
+        total === 0
+          ? "SUSPEITA: leituras vazias. SUPABASE_SERVICE_ROLE_KEY pode não ser a service_role (RLS bloqueando)."
+          : "service_role ok",
+    };
+  } catch (e) {
+    return { alcancavel: false, erro: e instanceof Error ? e.message : "falha desconhecida" };
+  }
+}
+
 // ============================================================
 // Autenticação
 // ============================================================
@@ -328,7 +369,12 @@ async function rotear(
   const partes = caminho.split("/").filter(Boolean);
 
   if (metodo === "GET" && caminho === "/health") {
-    return ok(res, { status: "ok", versao: versaoDoCodigo(), trace_id: traceId });
+    return ok(res, {
+      status: "ok",
+      versao: versaoDoCodigo(),
+      banco: await diagnosticoDoBanco(),
+      trace_id: traceId,
+    });
   }
 
   // Tudo sob /v1 exige chave de API.
