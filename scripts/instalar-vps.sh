@@ -16,6 +16,7 @@
 set -euo pipefail
 
 REPO="${REPO:-https://github.com/cardapio-ditado/cardapiodigital.git}"
+URL_DESTE_SCRIPT="https://raw.githubusercontent.com/cardapio-ditado/cardapiodigital/claude/ia-agents-github-supabase-jpt5ok/scripts/instalar-vps.sh"
 DESTINO="/opt/brasa-food"
 USUARIO="brasa"
 SERVICO="brasa-food"
@@ -41,9 +42,13 @@ fi
 verde "Node $(node -v)"
 
 azul "== 3/6  Usuário e código =="
-# Usuário sem shell e sem sudo: se o conector for comprometido, o invasor
-# não ganha a máquina junto.
-id -u "$USUARIO" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "$USUARIO"
+# Usuário de sistema sem senha: ninguém entra por ele, mas o npm precisa de
+# um shell de verdade — com nologin ele falha com um "path ... Received null"
+# que não diz nada sobre a causa. Sem senha e sem chave SSH, ter shell não
+# abre porta nenhuma.
+id -u "$USUARIO" >/dev/null 2>&1 || useradd --system --create-home --shell /bin/bash "$USUARIO"
+# Se o usuário já existia com nologin (instalação anterior), conserta.
+usermod --shell /bin/bash "$USUARIO"
 
 if [ -d "$DESTINO/.git" ]; then
   git -C "$DESTINO" pull --ff-only
@@ -61,9 +66,30 @@ else
   echo "Cole as três chaves. Elas NÃO aparecem na tela enquanto você digita."
   echo "Pegue em: Supabase > Settings > API  e  console.anthropic.com"
   echo
-  read -rp  "SUPABASE_URL (https://xxxx.supabase.co): " SUPA_URL
-  read -rsp "SUPABASE_SERVICE_ROLE_KEY (a secreta, não a anon): " SUPA_KEY; echo
-  read -rsp "ANTHROPIC_API_KEY: " ANTHROPIC_KEY; echo
+  # Lê do terminal, e não da entrada padrão: rodando por "curl | bash" a
+  # entrada é o PRÓPRIO script, então um read comum recebe EOF na hora e
+  # grava tudo em branco — sem erro nenhum, que é o pior tipo de falha.
+  # Não basta testar se /dev/tty existe: em sessão sem terminal de controle
+  # ele existe e mesmo assim não abre. O teste tem que ser a abertura.
+  if ! (exec 3</dev/tty) 2>/dev/null; then
+    vermelho "Sem terminal para perguntar as chaves."
+    vermelho "Baixe primeiro e rode depois:"
+    vermelho "  curl -fsSL $URL_DESTE_SCRIPT -o instalar.sh && bash instalar.sh"
+    exit 1
+  fi
+
+  read -rp  "SUPABASE_URL (https://xxxx.supabase.co): " SUPA_URL < /dev/tty
+  read -rsp "SUPABASE_SERVICE_ROLE_KEY (a secreta, não a anon): " SUPA_KEY < /dev/tty; echo
+  read -rsp "ANTHROPIC_API_KEY: " ANTHROPIC_KEY < /dev/tty; echo
+
+  # Chave vazia gera um servidor que sobe e não funciona, com erro só lá na
+  # frente e sem relação aparente com a instalação.
+  for par in "SUPABASE_URL:$SUPA_URL" "SUPABASE_SERVICE_ROLE_KEY:$SUPA_KEY" "ANTHROPIC_API_KEY:$ANTHROPIC_KEY"; do
+    if [ -z "${par#*:}" ]; then
+      vermelho "A chave ${par%%:*} veio vazia. Rode de novo e cole as três."
+      exit 1
+    fi
+  done
 
   # Escreve com permissão restrita ANTES de colocar conteúdo: entre criar e
   # proteger existe uma janela em que o arquivo seria legível por todos.
@@ -84,10 +110,10 @@ fi
 
 azul "== 5/6  Dependências e build =="
 cd "$DESTINO"
-sudo -u "$USUARIO" npm ci --omit=dev --no-audit --no-fund 2>/dev/null \
-  || sudo -u "$USUARIO" npm install --no-audit --no-fund
-sudo -u "$USUARIO" npm install --no-save typescript >/dev/null 2>&1 || true
-sudo -u "$USUARIO" npx tsc -p tsconfig.build.json
+sudo -u "$USUARIO" -H npm ci --omit=dev --no-audit --no-fund 2>/dev/null \
+  || sudo -u "$USUARIO" -H npm install --no-audit --no-fund
+sudo -u "$USUARIO" -H npm install --no-save typescript >/dev/null 2>&1 || true
+sudo -u "$USUARIO" -H npx tsc -p tsconfig.build.json
 
 azul "== 6/6  Serviço =="
 cat > "/etc/systemd/system/$SERVICO.service" <<UNITEOF
