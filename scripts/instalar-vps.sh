@@ -34,10 +34,18 @@ azul "== 1/6  Pacotes do sistema =="
 apt-get update -qq
 apt-get install -y -qq curl git ca-certificates >/dev/null
 
-azul "== 2/6  Node.js 20 =="
-if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
+azul "== 2/6  Node.js 22 =="
+# Node 22, não 20: o cliente do Supabase usa WebSocket nativo, que só existe
+# como global a partir do 22. No 20 o processo SOBE — e falha em toda chamada
+# ao banco com "native WebSocket not found", o que parece problema de rede ou
+# de chave. O Node 20 também já saiu do suporte.
+if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1
   apt-get install -y -qq nodejs >/dev/null
+fi
+if [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
+  vermelho "Node $(node -v) é antigo demais. O conector precisa do 22 ou maior."
+  exit 1
 fi
 verde "Node $(node -v)"
 

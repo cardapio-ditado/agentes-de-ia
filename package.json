@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Plataforma de agentes de IA com Claude e Supabase",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
