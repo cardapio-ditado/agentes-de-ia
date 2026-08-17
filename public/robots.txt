@@ -1,0 +1,15 @@
+# O que os buscadores podem visitar.
+#
+# A landing é pública e deve ser encontrada. O resto não: /app é login e
+# painel, /checklist carrega o token da execução no próprio endereço, e /v1 é
+# a API. Nada disso tem serventia em resultado de busca.
+User-agent: *
+Allow: /$
+Disallow: /app
+Disallow: /painel
+Disallow: /entrar
+Disallow: /checklist
+Disallow: /v1/
+Disallow: /health
+
+Sitemap: https://brasafood.app/sitemap.xml

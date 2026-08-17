@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mapa do site. Só a landing entra: é a única página pública.
+
+  As âncoras (#modulos, #precos) não viram linha aqui — para o Google elas são
+  a mesma página, e listá-las separadamente não acrescenta nada.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://brasafood.app/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

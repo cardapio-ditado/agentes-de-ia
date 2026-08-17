@@ -8,12 +8,54 @@
       name="description"
       content="Agente de IA que atende o WhatsApp do seu restaurante 24h, anota reservas e cobra a rotina da equipe. Sem app novo para o cliente baixar."
     />
+    <!-- Endereço oficial da página. Sem isto, o Google trata o endereço da
+         Vercel e o domínio próprio como duas páginas iguais concorrendo entre
+         si, e divide a relevância entre as duas. -->
+    <link rel="canonical" href="https://brasafood.app/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Brasa Food" />
+    <meta property="og:url" content="https://brasafood.app/" />
+    <meta property="og:locale" content="pt_BR" />
     <meta property="og:title" content="Brasa Food — tecnologia para restaurantes" />
     <meta
       property="og:description"
       content="Seu WhatsApp respondido 24h, reservas organizadas e checklists que a equipe realmente faz."
     />
-    <meta property="og:image" content="/img/logo-brasa-food.png" />
+    <!-- Endereço completo, e não /img/...: WhatsApp, Instagram e LinkedIn
+         buscam a imagem de fora do site, e caminho relativo não resolve para
+         eles — o link é compartilhado sem imagem nenhuma. -->
+    <meta property="og:image" content="https://brasafood.app/img/logo-brasa-food.png" />
+    <meta property="og:image:alt" content="Brasa Food" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Brasa Food — tecnologia para restaurantes" />
+    <meta
+      name="twitter:description"
+      content="Seu WhatsApp respondido 24h, reservas organizadas e checklists que a equipe realmente faz."
+    />
+    <meta name="twitter:image" content="https://brasafood.app/img/logo-brasa-food.png" />
+    <meta name="theme-color" content="#1a1005" />
+
+    <!-- Ficha estruturada: é assim que o Google entende que isto é um produto
+         de software com preço, e não um texto qualquer. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Brasa Food",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://brasafood.app/",
+        "description": "Agente de IA que atende o WhatsApp do restaurante 24h, registra reservas e cobra a rotina da equipe por checklists.",
+        "inLanguage": "pt-BR",
+        "offers": {
+          "@type": "Offer",
+          "price": "147.00",
+          "priceCurrency": "BRL",
+          "url": "https://brasafood.app/#precos"
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

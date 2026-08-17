@@ -1475,6 +1475,10 @@ const TIPOS: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".png": "image/png",
   ".webp": "image/webp",
+  // Sem estes dois, robots.txt e sitemap.xml saem como
+  // application/octet-stream e o buscador os ignora — servidos, mas inúteis.
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
 };
 
 // Rotas "bonitas" sem extensão — a mesma coisa que o rewrite faz na Vercel.
