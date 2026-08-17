@@ -34,10 +34,15 @@ create index if not exists messages_conversa_papel_data_idx
   on public.messages (conversation_id, role, created_at desc)
   where role = 'assistant';
 
--- ---------- 2. Plano do Ditado Popular ----------
+-- ---------- 2. Plano dos estabelecimentos existentes ----------
+-- Sem `where slug = '...'`: chutar o identificador é como este arquivo falhou
+-- em silêncio na primeira vez — o slug real era "ditado-popular", o update
+-- casou com zero linhas e ninguém percebeu, porque UPDATE de 0 linhas não é
+-- erro. Só toca em quem ainda está no padrão, então repetir não desfaz plano
+-- que já foi ajustado à mão.
 update public.venues
    set plano = 'profissional', pontos_mensais = 2500, ciclo_dia = 1
- where slug = 'ditado';
+ where plano = 'profissional' and pontos_mensais = 2500 and ciclo_dia = 1;
 
 -- ---------- 3. Recarregar o cache do PostgREST ----------
 -- Sem isto a API jura que as colunas novas não existem ("erro interno").
@@ -57,9 +62,11 @@ select 'A. colunas' as conferencia, column_name, column_default
 -- CONFERÊNCIA B — o plano foi gravado?
 -- Esperado: 1 linha com Ditado Popular / profissional / 2500 / 1.
 -- ============================================================
-select 'B. plano' as conferencia, name, plano, pontos_mensais, ciclo_dia
+-- O slug aparece aqui de propósito: foi exatamente o que faltava saber
+-- quando o script original assumiu "ditado" e o real era "ditado-popular".
+select 'B. plano' as conferencia, name, slug, plano, pontos_mensais, ciclo_dia
   from public.venues
- where slug = 'ditado';
+ order by name;
 
 -- ============================================================
 -- CONFERÊNCIA C — o consumo real do ciclo corrente.
@@ -74,12 +81,13 @@ with ciclo as (
            + ((v.ciclo_dia - 1) || ' days')::interval
            - case when extract(day from (now() at time zone v.timezone)) < v.ciclo_dia
                   then interval '1 month' else interval '0' end as inicio,
-         v.pontos_mensais
+         v.pontos_mensais,
+         v.slug
     from public.venues v
-   where v.slug = 'ditado'
 ),
 consumo as (
-  select case when m.model like 'claude-opus%'   then 'Opus'
+  select k.slug as estabelecimento,
+         case when m.model like 'claude-opus%'   then 'Opus'
               when m.model like 'claude-sonnet%' then 'Sonnet'
               when m.model like 'claude-haiku%'  then 'Haiku'
               else coalesce(m.model, 'desconhecido') end as motor,
@@ -93,13 +101,14 @@ consumo as (
     join ciclo k on k.id = c.venue_id
    where m.role = 'assistant'
      and m.created_at >= k.inicio
-   group by 1, m.model
+   group by 1, 2, m.model
 )
 select 'C. consumo' as conferencia,
+       estabelecimento,
        motor,
        respostas,
        pontos,
-       (select pontos_mensais from ciclo) as total_do_plano,
-       (select pontos_mensais from ciclo) - sum(pontos) over () as restantes
+       (select max(pontos_mensais) from ciclo) as total_do_plano,
+       (select max(pontos_mensais) from ciclo) - sum(pontos) over (partition by estabelecimento) as restantes
   from consumo
  order by pontos desc;
