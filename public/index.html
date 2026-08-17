@@ -31,6 +31,33 @@
         <p class="capa-tagline">A brasa que move seu restaurante.</p>
 
         <form id="form-acesso" class="cartao-acesso">
+          <label for="campo-email">E-mail</label>
+          <input
+            id="campo-email"
+            type="email"
+            autocomplete="username"
+            placeholder="voce@seurestaurante.com.br"
+            required
+          />
+          <label for="campo-senha">Senha</label>
+          <input
+            id="campo-senha"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+          />
+          <button type="submit" class="btn-fogo">Entrar</button>
+          <div class="acesso-links">
+            <button type="button" id="btn-esqueci" class="link-acesso">Esqueci minha senha</button>
+            <button type="button" id="btn-usar-chave" class="link-acesso">Entrar com chave</button>
+          </div>
+          <p id="erro-acesso" class="erro" role="alert" hidden></p>
+        </form>
+
+        <!-- Acesso por chave: continua existindo para máquinas e para o
+             período de transição, mas não é mais a porta principal. -->
+        <form id="form-chave" class="cartao-acesso" hidden>
           <label for="campo-chave">Chave de acesso</label>
           <input
             id="campo-chave"
@@ -40,8 +67,13 @@
             required
           />
           <button type="submit" class="btn-fogo">Entrar</button>
+          <div class="acesso-links">
+            <button type="button" id="btn-usar-senha" class="link-acesso">
+              Voltar para e-mail e senha
+            </button>
+          </div>
           <p class="acesso-nota">Fica salva neste navegador — você só faz isso uma vez.</p>
-          <p id="erro-acesso" class="erro" role="alert" hidden></p>
+          <p id="erro-chave" class="erro" role="alert" hidden></p>
         </form>
       </div>
 

@@ -1,0 +1,155 @@
+/**
+ * Autenticação por e-mail e senha, em cima do Supabase Auth.
+ *
+ * O login não acontece no navegador: o painel manda e-mail e senha para a
+ * nossa API, e é o servidor que fala com o Supabase. Assim o front continua
+ * sem nenhuma dependência nem chave do Supabase — o que combina com um painel
+ * de JS puro, sem build, e evita ter que explicar a um dono de restaurante
+ * por que existe uma "chave anônima" no código da página dele.
+ *
+ * O que o navegador guarda é o par de tokens do Supabase: o de acesso (curto,
+ * ~1h) e o de renovação. Quando o primeiro expira, o painel troca o segundo
+ * por um novo par, sem pedir a senha de novo.
+ *
+ * A chave `sk_...` continua valendo em paralelo. Ela é o acesso de máquina
+ * (conector do WhatsApp, integrações) e não deve morrer junto com a migração
+ * das pessoas para e-mail e senha — são coisas diferentes que só por
+ * comodidade dividiam o mesmo campo.
+ */
+
+import { db } from "./supabase.js";
+
+export interface Sessao {
+  userId: string;
+  email: string | null;
+  orgId: string;
+  papel: string;
+  /** Administrador da plataforma enxerga e cria todas as organizações. */
+  plataformaAdmin: boolean;
+}
+
+export interface Tokens {
+  access_token: string;
+  refresh_token: string;
+  expira_em: number;
+}
+
+/** Erro de autenticação com mensagem já pronta para o usuário final. */
+export class ErroDeAcesso extends Error {
+  readonly status: number;
+  constructor(status: number, mensagem: string) {
+    super(mensagem);
+    this.name = "ErroDeAcesso";
+    this.status = status;
+  }
+}
+
+// Verificar o token custa uma chamada ao Supabase. Uma tela do painel dispara
+// várias requisições em sequência, então uma memória curta evita repetir a
+// mesma verificação meia dúzia de vezes por clique.
+const memoria = new Map<string, { quando: number; sessao: Sessao }>();
+const VALIDADE_MS = 60_000;
+
+export function esquecerSessao(token: string): void {
+  memoria.delete(token);
+}
+
+export async function entrar(email: string, senha: string): Promise<Tokens> {
+  const { data, error } = await db().auth.signInWithPassword({ email, password: senha });
+  if (error || !data.session) {
+    // Mensagem única para e-mail inexistente e senha errada: dizer qual dos
+    // dois falhou entrega a quem tenta invadir a lista de quem é cliente.
+    throw new ErroDeAcesso(401, "E-mail ou senha incorretos.");
+  }
+  return formatarTokens(data.session);
+}
+
+export async function renovar(refreshToken: string): Promise<Tokens> {
+  const { data, error } = await db().auth.refreshSession({ refresh_token: refreshToken });
+  if (error || !data.session) {
+    throw new ErroDeAcesso(401, "Sua sessão expirou. Entre de novo.");
+  }
+  return formatarTokens(data.session);
+}
+
+export async function pedirTrocaDeSenha(email: string, redirectTo: string): Promise<void> {
+  // Nunca revela se o e-mail existe: a resposta é sempre a mesma, e o erro
+  // (se houver) fica só no log do servidor.
+  const { error } = await db().auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) console.warn(`[auth] recuperação de senha falhou para um e-mail:`, error.message);
+}
+
+function formatarTokens(sessao: {
+  access_token: string;
+  refresh_token: string;
+  expires_in?: number;
+}): Tokens {
+  return {
+    access_token: sessao.access_token,
+    refresh_token: sessao.refresh_token,
+    expira_em: sessao.expires_in ?? 3600,
+  };
+}
+
+/**
+ * Resolve o token de acesso na sessão da pessoa: quem é, de qual organização
+ * e com qual papel.
+ */
+export async function sessaoDoToken(token: string): Promise<Sessao> {
+  const guardado = memoria.get(token);
+  if (guardado && Date.now() - guardado.quando < VALIDADE_MS) return guardado.sessao;
+
+  const { data, error } = await db().auth.getUser(token);
+  if (error || !data.user) throw new ErroDeAcesso(401, "Sessão inválida ou expirada.");
+
+  const userId = data.user.id;
+
+  const [{ data: membro }, { data: admin }] = await Promise.all([
+    db()
+      .from("org_members")
+      .select("org_id, role")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    db().from("platform_admins").select("user_id").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  const plataformaAdmin = Boolean(admin);
+
+  if (!membro && !plataformaAdmin) {
+    // Conta existe no Supabase Auth mas não pertence a nenhuma organização:
+    // acontece se alguém for removido, ou se o cadastro parou no meio.
+    throw new ErroDeAcesso(403, "Sua conta ainda não está vinculada a um estabelecimento.");
+  }
+
+  const sessao: Sessao = {
+    userId,
+    email: data.user.email ?? null,
+    orgId: membro?.org_id ?? "",
+    papel: membro?.role ?? "plataforma",
+    plataformaAdmin,
+  };
+
+  memoria.set(token, { quando: Date.now(), sessao });
+  await marcarPrimeiroAcesso(userId, membro?.org_id);
+  return sessao;
+}
+
+/** Registra o primeiro login para a tela de clientes mostrar quem já entrou. */
+async function marcarPrimeiroAcesso(userId: string, orgId?: string): Promise<void> {
+  if (!orgId) return;
+  await db()
+    .from("org_members")
+    .update({ primeiro_acesso_em: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .is("primeiro_acesso_em", null);
+}
+
+/** Papéis que podem alterar dados. `viewer` só lê. */
+const PODEM_ESCREVER = new Set(["owner", "admin", "member", "plataforma"]);
+
+export function podeEscrever(sessao: Sessao): boolean {
+  return sessao.plataformaAdmin || PODEM_ESCREVER.has(sessao.papel);
+}

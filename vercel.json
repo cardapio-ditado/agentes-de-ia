@@ -9,7 +9,11 @@
   "rewrites": [
     { "source": "/v1/:caminho*", "destination": "/api" },
     { "source": "/health", "destination": "/api" },
-    { "source": "/checklist", "destination": "/checklist.html" }
+    { "source": "/checklist", "destination": "/checklist.html" },
+    { "source": "/app", "destination": "/index.html" },
+    { "source": "/painel", "destination": "/index.html" },
+    { "source": "/entrar", "destination": "/index.html" },
+    { "source": "/", "destination": "/landing.html" }
   ],
   "headers": [
     {

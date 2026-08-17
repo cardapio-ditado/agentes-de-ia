@@ -1,6 +1,7 @@
-import { ErroApi, chaveSalva, esquecerChave, get, salvarChave } from "./api.js";
+import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessao } from "./api.js";
 import { ICONES, avisar, el, icone, limpar } from "./ui.js";
 import { painel } from "./pages/painel.js";
+import { clientes } from "./pages/clientes.js";
 import { conversas } from "./pages/conversas.js";
 import { reservas } from "./pages/reservas.js";
 import { programacao } from "./pages/programacao.js";
@@ -34,7 +35,14 @@ const PAGINAS = [
 
   { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
+
+  // Só a equipe Brasa Food enxerga. O servidor confere de novo em cada rota:
+  // esconder no menu é conveniência, não é a trava de segurança.
+  { id: "clientes", modulo: "agentes-ia", plataforma: true, rotulo: "Clientes", icone: ICONES.organizacao, render: clientes, subtitulo: "Carteira da plataforma e cadastro de cliente novo" },
 ];
+
+/** Preenchido no login por /v1/auth/me. */
+let souPlataforma = false;
 
 let moduloAtual = "agentes-ia";
 
@@ -155,7 +163,7 @@ document.getElementById("btn-sair").addEventListener("click", () => {
 // ============ Navegação ============
 function montarNav() {
   limpar(nav);
-  for (const p of PAGINAS.filter((p) => p.modulo === moduloAtual)) {
+  for (const p of PAGINAS.filter((p) => p.modulo === moduloAtual && (!p.plataforma || souPlataforma))) {
     nav.append(
       el(
         "a",
@@ -174,7 +182,15 @@ function montarNav() {
 async function irPara(id) {
   // Só as páginas do módulo atual contam; hash de outro módulo cai na
   // primeira página deste — o hub é quem troca de módulo.
-  const doModulo = PAGINAS.filter((p) => p.modulo === moduloAtual);
+  //
+  // Páginas de plataforma também somem daqui, e não só do menu: sem isto,
+  // digitar #clientes na barra de endereço abriria o formulário de cadastro
+  // para um cliente comum. Ele quebraria no servidor (403), mas mostrar uma
+  // tela que não vai funcionar é confundir sem motivo. A trava de verdade
+  // continua sendo a do servidor — esta é conveniência, não segurança.
+  const doModulo = PAGINAS.filter(
+    (p) => p.modulo === moduloAtual && (!p.plataforma || souPlataforma),
+  );
   const pagina = doModulo.find((p) => p.id === id) ?? doModulo[0];
 
   // A tela anterior pode ter deixado timers rodando.
@@ -387,7 +403,74 @@ document.getElementById("btn-sair-hub").addEventListener("click", () => {
   location.reload();
 });
 
-document.getElementById("form-acesso").addEventListener("submit", async (e) => {
+// ---------- Entrada por e-mail e senha ----------
+const formAcesso = document.getElementById("form-acesso");
+const formChave = document.getElementById("form-chave");
+
+function mostrarErroAcesso(id, mensagem) {
+  const alvo = document.getElementById(id);
+  alvo.hidden = !mensagem;
+  alvo.textContent = mensagem ?? "";
+}
+
+formAcesso.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("campo-email").value.trim();
+  const senha = document.getElementById("campo-senha").value;
+  if (!email || !senha) return;
+
+  const botao = formAcesso.querySelector("button[type=submit]");
+  botao.disabled = true;
+  botao.textContent = "Entrando…";
+  mostrarErroAcesso("erro-acesso", null);
+  try {
+    // Sem `post()`: ainda não há sessão, e mandar Authorization com um token
+    // velho aqui faria o servidor recusar um login legítimo.
+    const resposta = await fetch("/v1/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, senha }),
+    });
+    const corpo = await resposta.json();
+    if (!resposta.ok || corpo?.success === false) {
+      throw new Error(corpo?.error?.message ?? "Não deu para entrar.");
+    }
+    salvarSessao(corpo.data);
+    await iniciar();
+  } catch (erro) {
+    mostrarErroAcesso("erro-acesso", erro.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Entrar";
+  }
+});
+
+document.getElementById("btn-esqueci").addEventListener("click", async () => {
+  const email = document.getElementById("campo-email").value.trim();
+  if (!email) {
+    return mostrarErroAcesso("erro-acesso", "Escreva seu e-mail antes — é para lá que o link vai.");
+  }
+  await fetch("/v1/auth/recuperar", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, redirect: `${location.origin}/app` }),
+  }).catch(() => {});
+  // Resposta igual exista ou não o e-mail: dizer "não encontrei" entregaria
+  // a lista de quem é cliente a quem ficar testando endereços.
+  mostrarErroAcesso("erro-acesso", "Se esse e-mail tiver conta, o link de troca chega em instantes.");
+});
+
+// ---------- Entrada por chave (máquinas e transição) ----------
+document.getElementById("btn-usar-chave").addEventListener("click", () => {
+  formAcesso.hidden = true;
+  formChave.hidden = false;
+});
+document.getElementById("btn-usar-senha").addEventListener("click", () => {
+  formChave.hidden = true;
+  formAcesso.hidden = false;
+});
+
+formChave.addEventListener("submit", async (e) => {
   e.preventDefault();
   const chave = document.getElementById("campo-chave").value.trim();
   if (!chave) return;
@@ -405,7 +488,7 @@ async function iniciar() {
     esquecerChave();
     return pedirChave(
       e instanceof ErroApi && e.status === 401
-        ? "Chave inválida, revogada ou expirada."
+        ? "Sua sessão expirou ou a credencial não vale mais. Entre de novo."
         : e.message,
     );
   }
@@ -433,6 +516,13 @@ async function iniciar() {
     document.getElementById("hub-org").textContent = nomeDoVenue();
     irPara(location.hash.slice(1));
   });
+
+  try {
+    const eu = await get("/v1/auth/me");
+    souPlataforma = eu.plataforma_admin === true;
+  } catch {
+    souPlataforma = false;
+  }
 
   // A tela de Canais precisa saber qual agente vai atender no WhatsApp, e ela
   // pode ser a primeira que o usuário abre — sem isto, "Conectar" iria sem agente.

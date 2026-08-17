@@ -6,6 +6,7 @@
  */
 
 const GUARDA = "agentes.chave";
+const GUARDA_REFRESH = "brasa.refresh";
 
 export function chaveSalva() {
   return localStorage.getItem(GUARDA);
@@ -17,6 +18,59 @@ export function salvarChave(chave) {
 
 export function esquecerChave() {
   localStorage.removeItem(GUARDA);
+  localStorage.removeItem(GUARDA_REFRESH);
+}
+
+/**
+ * Guarda o par de tokens do login por e-mail e senha.
+ *
+ * O de acesso vive no mesmo lugar da chave `sk_...` de propósito: para o
+ * resto do painel, "o que vai no Authorization" continua sendo uma coisa só.
+ * Quem sabe a diferença é o servidor, que decide pelo prefixo.
+ */
+export function salvarSessao({ access_token, refresh_token }) {
+  localStorage.setItem(GUARDA, access_token);
+  if (refresh_token) localStorage.setItem(GUARDA_REFRESH, refresh_token);
+}
+
+export function entrouComSenha() {
+  return Boolean(localStorage.getItem(GUARDA_REFRESH));
+}
+
+/**
+ * Troca o token de renovação por um par novo.
+ *
+ * O token de acesso do Supabase dura cerca de uma hora. Sem isto, quem deixa
+ * o painel aberto durante o serviço seria expulso no meio do movimento.
+ */
+let renovacaoEmCurso = null;
+
+async function renovarSessao() {
+  const refresh = localStorage.getItem(GUARDA_REFRESH);
+  if (!refresh) return false;
+
+  // Várias telas podem levar 401 ao mesmo tempo; uma renovação só atende
+  // todas, senão o primeiro sucesso invalida o refresh dos outros.
+  if (!renovacaoEmCurso) {
+    renovacaoEmCurso = (async () => {
+      try {
+        const resposta = await fetch("/v1/auth/refresh", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ refresh_token: refresh }),
+        });
+        const corpo = await resposta.json();
+        if (!resposta.ok || corpo?.success === false) return false;
+        salvarSessao(corpo.data);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        renovacaoEmCurso = null;
+      }
+    })();
+  }
+  return renovacaoEmCurso;
 }
 
 /** Erro com o código da API preservado, para a tela decidir o que dizer. */
@@ -29,7 +83,7 @@ export class ErroApi extends Error {
   }
 }
 
-export async function api(caminho, opcoes = {}) {
+export async function api(caminho, opcoes = {}, jaRenovou = false) {
   const chave = chaveSalva();
   // Corpo texto (JSON.stringify) leva content-type json; corpo binário
   // (File/Blob) deixa o navegador decidir — forçar json quebraria o upload.
@@ -42,6 +96,12 @@ export async function api(caminho, opcoes = {}) {
       ...opcoes.headers,
     },
   });
+
+  // Token vencido: renova uma vez e repete. `jaRenovou` impede laço infinito
+  // quando o refresh também não vale mais.
+  if (resposta.status === 401 && !jaRenovou && (await renovarSessao())) {
+    return api(caminho, opcoes, true);
+  }
 
   let corpo = null;
   try {

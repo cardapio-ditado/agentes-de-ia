@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { runAgent, type AgentStreamEvent } from "./agent.js";
-import { authenticateApiKey, hasScope, type ApiKey } from "./apikeys.js";
+import { authenticateApiKey, hasScope } from "./apikeys.js";
 import {
   createAgent,
   getAgentInOrg,
@@ -24,7 +24,9 @@ import {
   metricasDoVenue,
   registrarMensagemHumana,
 } from "./inbox.js";
+import { entrar, ErroDeAcesso, pedirTrocaDeSenha, renovar, sessaoDoToken } from "./auth.js";
 import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
+import { criarCliente, listarClientes, type DadosDoCliente } from "./tenants.js";
 import {
   addTrainingFile,
   addTrainingText,
@@ -160,18 +162,88 @@ function falha(res: ServerResponse, e: ErroHttp): void {
 // ============================================================
 // Autenticação
 // ============================================================
-async function exigirChave(req: IncomingMessage, escopo: string): Promise<ApiKey> {
-  const header = req.headers.authorization ?? "";
-  const chave = header.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
-  const apiKey = await authenticateApiKey(chave);
+/**
+ * Quem está do outro lado da requisição.
+ *
+ * Dois caminhos chegam aqui e é de propósito: pessoas entram com e-mail e
+ * senha (token do Supabase Auth), máquinas entram com chave `sk_...` — o
+ * conector do WhatsApp roda num PC sem ninguém para digitar senha. As rotas
+ * não precisam saber qual dos dois veio; recebem sempre o mesmo formato.
+ */
+interface Acesso {
+  org_id: string;
+  /** Assinatura da ação na inbox: nome da chave ou e-mail de quem agiu. */
+  name: string;
+  scopes: string[];
+  plataformaAdmin: boolean;
+}
 
-  if (!apiKey) {
-    throw erro(401, "unauthorized", "Chave de API ausente, inválida, revogada ou expirada.");
+/** Papel de pessoa vira escopo. `viewer` olha, não mexe. */
+const ESCOPOS_POR_PAPEL: Record<string, string[]> = {
+  owner: ["runs:write", "reservations:read", "reservations:write"],
+  admin: ["runs:write", "reservations:read", "reservations:write"],
+  member: ["runs:write", "reservations:read", "reservations:write"],
+  plataforma: ["runs:write", "reservations:read", "reservations:write"],
+  viewer: ["reservations:read"],
+};
+
+async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso> {
+  const header = req.headers.authorization ?? "";
+  const credencial = header.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
+
+  if (!credencial) {
+    throw erro(401, "unauthorized", "Faça login para continuar.");
   }
-  if (!hasScope(apiKey, escopo)) {
-    throw erro(403, "forbidden", `Esta chave não tem o escopo "${escopo}".`);
+
+  // Chave de máquina: o prefixo torna a distinção inequívoca, sem precisar
+  // tentar validar dos dois jeitos e ver qual não explode.
+  if (credencial.startsWith("sk_")) {
+    const apiKey = await authenticateApiKey(credencial);
+    if (!apiKey) {
+      throw erro(401, "unauthorized", "Chave de API ausente, inválida, revogada ou expirada.");
+    }
+    if (!hasScope(apiKey, escopo)) {
+      throw erro(403, "forbidden", `Esta chave não tem o escopo "${escopo}".`);
+    }
+    return {
+      org_id: apiKey.org_id,
+      name: apiKey.name,
+      scopes: apiKey.scopes,
+      plataformaAdmin: false,
+    };
   }
-  return apiKey;
+
+  // Sessão de pessoa.
+  let sessao;
+  try {
+    sessao = await sessaoDoToken(credencial);
+  } catch (e) {
+    if (e instanceof ErroDeAcesso) throw erro(e.status, "unauthorized", e.message);
+    throw e;
+  }
+
+  const scopes = ESCOPOS_POR_PAPEL[sessao.papel] ?? ESCOPOS_POR_PAPEL.viewer!;
+  if (!sessao.plataformaAdmin && !scopes.includes(escopo)) {
+    throw erro(403, "forbidden", "Seu perfil não permite esta ação.");
+  }
+
+  // Admin da plataforma sem organização própria pode olhar a de um cliente
+  // passando ?org=slug — é como o suporte enxerga o que o cliente enxerga.
+  return {
+    org_id: sessao.orgId,
+    name: sessao.email ?? "painel",
+    scopes,
+    plataformaAdmin: sessao.plataformaAdmin,
+  };
+}
+
+/** Rotas de administração da plataforma exigem mais que estar logado. */
+async function exigirAdminDaPlataforma(req: IncomingMessage): Promise<Acesso> {
+  const acesso = await exigirChave(req, "reservations:read");
+  if (!acesso.plataformaAdmin) {
+    throw erro(403, "forbidden", "Esta área é da equipe Brasa Food.");
+  }
+  return acesso;
 }
 
 async function lerJson(
@@ -645,6 +717,87 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await extratoDePontos(venue));
+    }
+  }
+
+  // ---- Autenticação de pessoas ----
+  // Sem chave de API: são justamente as rotas de quem ainda não tem sessão.
+  if (p[0] === "auth") {
+    // POST /v1/auth/login — e-mail e senha em troca do par de tokens
+    if (metodo === "POST" && p[1] === "login" && p.length === 2) {
+      const corpo = await lerJson(req);
+      try {
+        const tokens = await entrar(texto(corpo, "email"), texto(corpo, "senha"));
+        return ok(res, tokens);
+      } catch (e) {
+        if (e instanceof ErroDeAcesso) throw erro(e.status, "unauthorized", e.message);
+        throw e;
+      }
+    }
+
+    // POST /v1/auth/refresh — troca o token de renovação por um par novo
+    if (metodo === "POST" && p[1] === "refresh" && p.length === 2) {
+      const corpo = await lerJson(req);
+      try {
+        return ok(res, await renovar(texto(corpo, "refresh_token")));
+      } catch (e) {
+        if (e instanceof ErroDeAcesso) throw erro(e.status, "unauthorized", e.message);
+        throw e;
+      }
+    }
+
+    // POST /v1/auth/recuperar — sempre responde igual, exista o e-mail ou não
+    if (metodo === "POST" && p[1] === "recuperar" && p.length === 2) {
+      const corpo = await lerJson(req);
+      const destino = textoOpcional(corpo, "redirect") ?? "";
+      await pedirTrocaDeSenha(texto(corpo, "email"), destino);
+      return ok(res, { enviado: true });
+    }
+
+    // GET /v1/auth/me — quem sou eu, para o painel montar o menu
+    if (metodo === "GET" && p[1] === "me" && p.length === 2) {
+      const acesso = await exigirChave(req, "reservations:read");
+      return ok(res, {
+        nome: acesso.name,
+        org_id: acesso.org_id,
+        plataforma_admin: acesso.plataformaAdmin,
+        escopos: acesso.scopes,
+      });
+    }
+  }
+
+  // ---- Administração da plataforma (equipe Brasa Food) ----
+  if (p[0] === "admin" && p[1] === "clientes") {
+    // GET /v1/admin/clientes — carteira de clientes
+    if (metodo === "GET" && p.length === 2) {
+      await exigirAdminDaPlataforma(req);
+      return ok(res, await listarClientes());
+    }
+
+    // POST /v1/admin/clientes — cria organização, estabelecimento, agente,
+    // conta do dono e chave do conector numa tacada
+    if (metodo === "POST" && p.length === 2) {
+      await exigirAdminDaPlataforma(req);
+      const corpo = await lerJson(req);
+      const plano = texto(corpo, "plano");
+      if (!["essencial", "profissional", "casa_cheia", "cortesia"].includes(plano)) {
+        throw erro(400, "invalid_request", "Plano inválido.");
+      }
+      try {
+        const criado = await criarCliente({
+          nome: texto(corpo, "nome"),
+          slug: textoOpcional(corpo, "slug"),
+          cidade: textoOpcional(corpo, "cidade"),
+          timezone: texto(corpo, "timezone"),
+          plano: plano as DadosDoCliente["plano"],
+          emailDono: texto(corpo, "email"),
+          telefone: textoOpcional(corpo, "telefone"),
+          observacoes: textoOpcional(corpo, "observacoes"),
+        });
+        return ok(res, criado, 201);
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Não deu para cadastrar.");
+      }
     }
   }
 
@@ -1127,7 +1280,7 @@ async function roteasApi(
 async function executarAgente(
   req: IncomingMessage,
   res: ServerResponse,
-  chave: ApiKey,
+  chave: Acesso,
   url: URL,
 ): Promise<void> {
   const corpo = await lerJson(req);
@@ -1201,8 +1354,15 @@ const TIPOS: Record<string, string> = {
 };
 
 // Rotas "bonitas" sem extensão — a mesma coisa que o rewrite faz na Vercel.
+// A raiz agora é a página de vendas. Quem chega ao Brasa Food pela primeira
+// vez não pode cair numa caixa pedindo uma chave sem saber o que é o produto.
+// O painel mudou para /app — e /painel continua valendo porque links antigos
+// não deixam de ser clicados só porque a gente reorganizou.
 const PAGINAS_LIMPAS: Record<string, string> = {
-  "/": "index.html",
+  "/": "landing.html",
+  "/app": "index.html",
+  "/painel": "index.html",
+  "/entrar": "index.html",
   "/checklist": "checklist.html",
 };
 

@@ -454,20 +454,26 @@ export type Database = {
       }
       org_members: {
         Row: {
+          convidado_em: string | null
           created_at: string
           org_id: string
+          primeiro_acesso_em: string | null
           role: string
           user_id: string
         }
         Insert: {
+          convidado_em?: string | null
           created_at?: string
           org_id: string
+          primeiro_acesso_em?: string | null
           role?: string
           user_id: string
         }
         Update: {
+          convidado_em?: string | null
           created_at?: string
           org_id?: string
+          primeiro_acesso_em?: string | null
           role?: string
           user_id?: string
         }
@@ -484,30 +490,57 @@ export type Database = {
       organizations: {
         Row: {
           created_at: string
+          email_contato: string | null
           id: string
           name: string
+          observacoes: string | null
           plan: string
           settings: Json
           slug: string
+          telefone_contato: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          email_contato?: string | null
           id?: string
           name: string
+          observacoes?: string | null
           plan?: string
           settings?: Json
           slug: string
+          telefone_contato?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          email_contato?: string | null
           id?: string
           name?: string
+          observacoes?: string | null
           plan?: string
           settings?: Json
           slug?: string
+          telefone_contato?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_admins: {
+        Row: {
+          created_at: string
+          nome: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          nome?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          nome?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -802,6 +835,7 @@ export type Database = {
           active: boolean
           address: string | null
           capacity: number | null
+          ciclo_dia: number
           created_at: string
           description: string | null
           email: string | null
@@ -810,6 +844,8 @@ export type Database = {
           opening_hours: Json
           org_id: string
           phone: string | null
+          plano: string
+          pontos_mensais: number
           settings: Json
           slug: string
           timezone: string
@@ -820,6 +856,7 @@ export type Database = {
           active?: boolean
           address?: string | null
           capacity?: number | null
+          ciclo_dia?: number
           created_at?: string
           description?: string | null
           email?: string | null
@@ -828,6 +865,8 @@ export type Database = {
           opening_hours?: Json
           org_id: string
           phone?: string | null
+          plano?: string
+          pontos_mensais?: number
           settings?: Json
           slug: string
           timezone?: string
@@ -838,6 +877,7 @@ export type Database = {
           active?: boolean
           address?: string | null
           capacity?: number | null
+          ciclo_dia?: number
           created_at?: string
           description?: string | null
           email?: string | null
@@ -846,6 +886,8 @@ export type Database = {
           opening_hours?: Json
           org_id?: string
           phone?: string | null
+          plano?: string
+          pontos_mensais?: number
           settings?: Json
           slug?: string
           timezone?: string
