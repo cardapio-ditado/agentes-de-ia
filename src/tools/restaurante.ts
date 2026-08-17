@@ -2,10 +2,12 @@ import {
   createReservation,
   getReservation,
   getVenue,
+  listReservationsForConversation,
   listUpcomingEvents,
   listVenueInfo,
   mapsUrl,
   venueSettings,
+  type Reservation,
   type Venue,
   type VenueEvent,
 } from "../venues.js";
@@ -337,20 +339,11 @@ const consultarReserva: AgentTool = {
       return `Nenhuma reserva encontrada com o protocolo ${protocolo}.`;
     }
 
-    const situacao: Record<string, string> = {
-      pending: "aguardando aprovação do restaurante",
-      approved: "confirmada",
-      rejected: "não pôde ser confirmada",
-      cancelled: "cancelada",
-      seated: "cliente já acomodado",
-      no_show: "cliente não compareceu",
-    };
-
     const linhas = [
       `Protocolo: ${reserva.id}`,
       `Nome: ${reserva.customer_name} — ${reserva.party_size} pessoa(s)`,
       `Data: ${formatarData(reserva.reserved_for, venue.timezone)}`,
-      `Situação: ${situacao[reserva.status] ?? reserva.status}`,
+      `Situação: ${SITUACAO[reserva.status] ?? reserva.status}`,
     ];
     if (reserva.status === "rejected" && reserva.review_reason) {
       linhas.push(`Motivo: ${reserva.review_reason}`);
@@ -358,6 +351,83 @@ const consultarReserva: AgentTool = {
     return linhas.join("\n");
   },
 };
+
+// ============================================================
+// minhas_reservas
+// ============================================================
+const SITUACAO: Record<string, string> = {
+  pending: "aguardando aprovação do restaurante",
+  approved: "confirmada",
+  rejected: "não pôde ser confirmada",
+  cancelled: "cancelada",
+  seated: "cliente já acomodado",
+  no_show: "cliente não compareceu",
+};
+
+const minhasReservas: AgentTool = {
+  definition: {
+    name: "minhas_reservas",
+    description:
+      "Lista as reservas que ESTE cliente já fez nesta conversa, separando as que ainda " +
+      "vão acontecer das que já passaram. Chame sempre que o cliente perguntar se tem " +
+      "reserva, quiser saber quando é, ou pedir para mudar ou cancelar. " +
+      "Nunca responda sobre reserva olhando o que foi dito antes na conversa: " +
+      "uma reserva confirmada semanas atrás continua escrita ali como se fosse futura.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  async run(_input, ctx) {
+    const venue = await getVenue(venueIdObrigatorio(ctx));
+    const reservas = await listReservationsForConversation(ctx.conversationId);
+    // Reservas de outro estabelecimento não existem para este agente.
+    const daCasa = reservas.filter((r) => r.venue_id === venue.id);
+
+    if (daCasa.length === 0) {
+      return "Este cliente não tem nenhuma reserva registrada nesta conversa.";
+    }
+
+    return descreverReservas(daCasa, venue.timezone, new Date());
+  },
+};
+
+/**
+ * Monta o texto que o modelo lê, separando passado de futuro.
+ *
+ * Separado da ferramenta para poder ser testado: a única coisa que impede o
+ * agente de oferecer uma reserva vencida é este corte, e ele precisa valer
+ * também no minuto exato do horário reservado.
+ */
+export function descreverReservas(
+  reservas: Reservation[],
+  timezone: string,
+  agora: Date,
+): string {
+  if (reservas.length === 0) {
+    return "Este cliente não tem nenhuma reserva registrada nesta conversa.";
+  }
+
+  const corte = agora.getTime();
+  const futuras = reservas.filter((r) => new Date(r.reserved_for).getTime() >= corte);
+  const passadas = reservas.filter((r) => new Date(r.reserved_for).getTime() < corte);
+
+  const descrever = (r: Reservation) =>
+    `- ${formatarData(r.reserved_for, timezone)} — ${r.party_size} pessoa(s), ` +
+    `${SITUACAO[r.status] ?? r.status} (protocolo ${r.id})`;
+
+  const linhas: string[] = [];
+  if (futuras.length > 0) {
+    linhas.push("Reservas que AINDA VÃO ACONTECER:", ...futuras.map(descrever));
+  } else {
+    linhas.push("Este cliente não tem nenhuma reserva futura.");
+  }
+  if (passadas.length > 0) {
+    linhas.push(
+      "",
+      "Reservas que JÁ PASSARAM (não ofereça como se fossem válidas):",
+      ...passadas.map(descrever),
+    );
+  }
+  return linhas.join("\n");
+}
 
 // ---------- validação de entrada ----------
 
@@ -403,4 +473,5 @@ export const ferramentasDeRestaurante: AgentTool[] = [
   informacoesDoRestaurante,
   registrarReserva,
   consultarReserva,
+  minhasReservas,
 ];

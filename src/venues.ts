@@ -654,6 +654,30 @@ export async function listUpcomingApproved(venueId: string): Promise<Reservation
   return data ?? [];
 }
 
+/**
+ * Todas as reservas feitas nesta conversa, da mais recente para a mais antiga.
+ *
+ * Inclui as que já passaram de propósito. Sem isso o agente só tinha uma fonte
+ * sobre as reservas do cliente: o próprio histórico da conversa — onde a
+ * confirmação de uma reserva de semanas atrás continua escrita no presente
+ * ("sua mesa está reservada"), sem nada indicando que a data já passou. Ler o
+ * banco e comparar com o relógio é o que separa "você tem" de "você teve".
+ */
+export async function listReservationsForConversation(
+  conversationId: string,
+  limite = 10,
+): Promise<Reservation[]> {
+  const { data, error } = await db()
+    .from("reservations")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("reserved_for", { ascending: false })
+    .limit(limite);
+
+  if (error) throw new Error(`Falha ao carregar as reservas da conversa: ${error.message}`);
+  return data ?? [];
+}
+
 export async function getReservation(reservationId: string): Promise<Reservation | null> {
   const { data, error } = await db()
     .from("reservations")
