@@ -135,9 +135,15 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
   if (!membro && !plataformaAdmin) {
     // Conta existe no Supabase Auth mas não pertence a nenhuma organização:
     // acontece se alguém for removido, ou se o cadastro parou no meio.
+    //
+    // O id vai junto porque o e-mail sozinho não basta para diagnosticar: dois
+    // usuários podem ter e-mails parecidos, e é o id que a consulta usa. Sem
+    // ele, comparar o que o servidor vê com o que o banco tem vira adivinhação.
+    console.warn(`[auth] sem vínculo para ${data.user.email ?? "?"} (id ${userId})`);
     throw new ErroDeAcesso(
       403,
-      `Sua conta (${data.user.email ?? userId}) ainda não está vinculada a um estabelecimento.`,
+      `Sua conta (${data.user.email ?? "?"}) ainda não está vinculada a um estabelecimento. ` +
+        `Id do usuário: ${userId}`,
     );
   }
 
