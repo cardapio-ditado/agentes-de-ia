@@ -17,7 +17,7 @@
  * comodidade dividiam o mesmo campo.
  */
 
-import { db } from "./supabase.js";
+import { db, dbAuth } from "./supabase.js";
 
 export interface Sessao {
   userId: string;
@@ -55,7 +55,7 @@ export function esquecerSessao(token: string): void {
 }
 
 export async function entrar(email: string, senha: string): Promise<Tokens> {
-  const { data, error } = await db().auth.signInWithPassword({ email, password: senha });
+  const { data, error } = await dbAuth().auth.signInWithPassword({ email, password: senha });
   if (error || !data.session) {
     // Mensagem única para e-mail inexistente e senha errada: dizer qual dos
     // dois falhou entrega a quem tenta invadir a lista de quem é cliente.
@@ -65,7 +65,7 @@ export async function entrar(email: string, senha: string): Promise<Tokens> {
 }
 
 export async function renovar(refreshToken: string): Promise<Tokens> {
-  const { data, error } = await db().auth.refreshSession({ refresh_token: refreshToken });
+  const { data, error } = await dbAuth().auth.refreshSession({ refresh_token: refreshToken });
   if (error || !data.session) {
     throw new ErroDeAcesso(401, "Sua sessão expirou. Entre de novo.");
   }
@@ -75,7 +75,7 @@ export async function renovar(refreshToken: string): Promise<Tokens> {
 export async function pedirTrocaDeSenha(email: string, redirectTo: string): Promise<void> {
   // Nunca revela se o e-mail existe: a resposta é sempre a mesma, e o erro
   // (se houver) fica só no log do servidor.
-  const { error } = await db().auth.resetPasswordForEmail(email, { redirectTo });
+  const { error } = await dbAuth().auth.resetPasswordForEmail(email, { redirectTo });
   if (error) console.warn(`[auth] recuperação de senha falhou para um e-mail:`, error.message);
 }
 
@@ -99,7 +99,7 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
   const guardado = memoria.get(token);
   if (guardado && Date.now() - guardado.quando < VALIDADE_MS) return guardado.sessao;
 
-  const { data, error } = await db().auth.getUser(token);
+  const { data, error } = await dbAuth().auth.getUser(token);
   if (error || !data.user) throw new ErroDeAcesso(401, "Sessão inválida ou expirada.");
 
   const userId = data.user.id;

@@ -15,7 +15,7 @@
  */
 
 import { createApiKey } from "./apikeys.js";
-import { db } from "./supabase.js";
+import { db, dbAuth } from "./supabase.js";
 
 export interface DadosDoCliente {
   /** Nome comercial: "Ditado Popular". Vira organização e estabelecimento. */
@@ -161,7 +161,7 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
 
     // ---- 4. Conta do dono ----
     const senhaInicial = senhaLegivel();
-    const { data: usuario, error: erroUsuario } = await db().auth.admin.createUser({
+    const { data: usuario, error: erroUsuario } = await dbAuth().auth.admin.createUser({
       email,
       password: senhaInicial,
       email_confirm: true,
@@ -176,7 +176,7 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
     }
     const userId = usuario.user.id;
     desfazer.push(async () => {
-      await db().auth.admin.deleteUser(userId);
+      await dbAuth().auth.admin.deleteUser(userId);
     });
 
     const { error: erroMembro } = await db().from("org_members").insert({
