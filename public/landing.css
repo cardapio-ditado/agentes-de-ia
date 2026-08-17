@@ -373,6 +373,71 @@ a { color: inherit; text-decoration: none; }
 .lp-rodape-marca strong { color: var(--brasa); font-size: 11px; letter-spacing: 0.16em; }
 .lp-rodape a:hover { color: var(--creme); }
 
+/* ---------- Documentos (privacidade, termos) ---------- */
+.lp-doc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 108px 24px 72px;
+  color: var(--creme-2);
+}
+.lp-doc h1 {
+  font-size: clamp(30px, 5vw, 44px);
+  color: var(--creme);
+  margin: 0 0 8px;
+}
+.lp-doc-data {
+  color: var(--creme-3);
+  font-size: 13.5px;
+  margin: 0 0 40px;
+}
+.lp-doc h2 {
+  font-family: var(--fonte-ui);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--creme);
+  margin: 40px 0 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--borda);
+}
+.lp-doc h3 {
+  font-family: var(--fonte-ui);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--creme);
+  margin: 24px 0 8px;
+}
+.lp-doc p, .lp-doc li { font-size: 15.5px; }
+.lp-doc ul { padding-left: 20px; }
+.lp-doc li { margin-bottom: 8px; }
+.lp-doc a { color: var(--brasa); }
+.lp-doc a:hover { color: var(--ambar); }
+.lp-doc strong { color: var(--creme); }
+/* Tabela de terceiros: precisa rolar sozinha no celular, senão empurra a
+   página inteira para o lado. */
+.lp-doc-tabela { overflow-x: auto; margin: 16px 0; }
+.lp-doc-tabela table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.lp-doc-tabela th, .lp-doc-tabela td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borda);
+  vertical-align: top;
+}
+.lp-doc-tabela th { color: var(--creme); font-weight: 700; white-space: nowrap; }
+.lp-doc-destaque {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--ambar);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 20px 0;
+}
+.lp-doc-destaque p:last-child { margin-bottom: 0; }
+/* Rodapé com mais de uma linha de informação. */
+.lp-rodape-legal { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.lp-rodape-legal a { color: var(--creme-3); }
+.lp-rodape-legal a:hover { color: var(--creme); }
+.lp-rodape-id { width: 100%; color: var(--creme-3); font-size: 12.5px; margin: 12px 0 0; }
+
 /* ---------- Telas pequenas ---------- */
 @media (max-width: 820px) {
   .lp-nav { display: none; }

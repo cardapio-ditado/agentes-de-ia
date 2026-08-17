@@ -1495,6 +1495,8 @@ const PAGINAS_LIMPAS: Record<string, string> = {
   "/painel": "app.html",
   "/entrar": "app.html",
   "/checklist": "checklist.html",
+  "/privacidade": "privacidade.html",
+  "/termos": "termos.html",
 };
 
 async function servirEstatico(res: ServerResponse, caminho: string): Promise<void> {
