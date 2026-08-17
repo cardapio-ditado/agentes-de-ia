@@ -7,18 +7,40 @@
     }
   },
   "rewrites": [
-    { "source": "/v1/:caminho*", "destination": "/api" },
-    { "source": "/health", "destination": "/api" },
-    { "source": "/checklist", "destination": "/checklist.html" },
-    { "source": "/app", "destination": "/index.html" },
-    { "source": "/painel", "destination": "/index.html" },
-    { "source": "/entrar", "destination": "/index.html" },
-    { "source": "/", "destination": "/landing.html" }
+    {
+      "source": "/v1/:caminho*",
+      "destination": "/api"
+    },
+    {
+      "source": "/health",
+      "destination": "/api"
+    },
+    {
+      "source": "/checklist",
+      "destination": "/checklist.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/painel",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/entrar",
+      "destination": "/app.html"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
     }
   ]
 }

@@ -1474,15 +1474,18 @@ const TIPOS: Record<string, string> = {
 };
 
 // Rotas "bonitas" sem extensão — a mesma coisa que o rewrite faz na Vercel.
-// A raiz agora é a página de vendas. Quem chega ao Brasa Food pela primeira
-// vez não pode cair numa caixa pedindo uma chave sem saber o que é o produto.
-// O painel mudou para /app — e /painel continua valendo porque links antigos
-// não deixam de ser clicados só porque a gente reorganizou.
+// A raiz é a página de vendas: quem chega pela primeira vez não pode cair
+// numa caixa pedindo uma chave sem saber o que é o produto.
+//
+// A landing é o próprio index.html, e não um rewrite de "/" para outro
+// arquivo, porque na Vercel os rewrites só valem quando NENHUM arquivo casa
+// com a rota — um index.html no diretório público ganharia da regra e a
+// landing nunca apareceria. O painel virou app.html pelo mesmo motivo.
 const PAGINAS_LIMPAS: Record<string, string> = {
-  "/": "landing.html",
-  "/app": "index.html",
-  "/painel": "index.html",
-  "/entrar": "index.html",
+  "/": "index.html",
+  "/app": "app.html",
+  "/painel": "app.html",
+  "/entrar": "app.html",
   "/checklist": "checklist.html",
 };
 

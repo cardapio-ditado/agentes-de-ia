@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brasa Food — hub de soluções para restaurantes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" type="image/png" href="/img/favicon-brasa-food.png" />
+    <link rel="apple-touch-icon" href="/img/favicon-brasa-food.png" />
+  </head>
+  <body>
+    <!-- ============ Acesso ============
+         A capa do guia da marca em tela cheia: carvão, brasas subindo e o
+         formulário integrado no escuro. As fagulhas nascem via JS, cada uma
+         com tamanho e ritmo próprios. -->
+    <section id="tela-acesso" class="acesso" hidden>
+      <div class="brasas" aria-hidden="true"></div>
+
+      <div class="acesso-conteudo">
+        <img
+          class="capa-logo-img"
+          src="/img/logo-brasa-food.png"
+          alt="Brasa Food — hub de soluções para restaurantes"
+        />
+        <p class="capa-tagline">A brasa que move seu restaurante.</p>
+
+        <form id="form-acesso" class="cartao-acesso">
+          <label for="campo-email">E-mail</label>
+          <input
+            id="campo-email"
+            type="email"
+            autocomplete="username"
+            placeholder="voce@seurestaurante.com.br"
+            required
+          />
+          <label for="campo-senha">Senha</label>
+          <input
+            id="campo-senha"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+          />
+          <button type="submit" class="btn-fogo">Entrar</button>
+          <div class="acesso-links">
+            <button type="button" id="btn-esqueci" class="link-acesso">Esqueci minha senha</button>
+            <button type="button" id="btn-usar-chave" class="link-acesso">Entrar com chave</button>
+          </div>
+          <p id="erro-acesso" class="erro" role="alert" hidden></p>
+        </form>
+
+        <!-- Definir senha nova. Aparece quando o cliente chega pelo link do
+             e-mail de recuperação (o token vem no endereço) e também no
+             primeiro acesso, quando ele ainda está com a senha que o vendedor
+             ditou por telefone. -->
+        <form id="form-nova-senha" class="cartao-acesso" hidden>
+          <label for="campo-nova-senha">Nova senha</label>
+          <input
+            id="campo-nova-senha"
+            type="password"
+            autocomplete="new-password"
+            placeholder="pelo menos 8 caracteres"
+            minlength="8"
+            required
+          />
+          <label for="campo-nova-senha-2">Repita a senha</label>
+          <input
+            id="campo-nova-senha-2"
+            type="password"
+            autocomplete="new-password"
+            placeholder="digite de novo"
+            minlength="8"
+            required
+          />
+          <button type="submit" class="btn-fogo">Salvar senha</button>
+          <p class="acesso-nota">Depois de salvar, você entra com ela.</p>
+          <p id="erro-nova-senha" class="erro" role="alert" hidden></p>
+        </form>
+
+        <!-- Acesso por chave: continua existindo para máquinas e para o
+             período de transição, mas não é mais a porta principal. -->
+        <form id="form-chave" class="cartao-acesso" hidden>
+          <label for="campo-chave">Chave de acesso</label>
+          <input
+            id="campo-chave"
+            type="password"
+            autocomplete="off"
+            placeholder="sk_ditado_..."
+            required
+          />
+          <button type="submit" class="btn-fogo">Entrar</button>
+          <div class="acesso-links">
+            <button type="button" id="btn-usar-senha" class="link-acesso">
+              Voltar para e-mail e senha
+            </button>
+          </div>
+          <p class="acesso-nota">Fica salva neste navegador — você só faz isso uma vez.</p>
+          <p id="erro-chave" class="erro" role="alert" hidden></p>
+        </form>
+      </div>
+
+      <p class="capa-rodape">Tech for restaurants</p>
+    </section>
+
+    <!-- ============ Hub de módulos ============
+         O saguão do Brasa Food: a chama no centro da colmeia e cada módulo num
+         favo ao redor, ligado por filetes de energia. Favos apagados são
+         espaço de crescer. As células nascem via JS (montarHub), para a
+         lista poder vir do plano do cliente. -->
+    <section id="tela-hub" class="acesso hub" hidden>
+      <div class="brasas" aria-hidden="true"></div>
+
+      <header class="hub-topo">
+        <p class="capa-rotulo">Hub de soluções</p>
+        <div class="hub-topo-acoes">
+          <span id="hub-org" class="hub-org"></span>
+          <button id="btn-sair-hub" class="btn-hub-sair" type="button">Sair</button>
+        </div>
+      </header>
+
+      <div class="hub-conteudo">
+        <h1 class="hub-titulo">O que vamos acender hoje?</h1>
+        <div class="colmeia" id="colmeia"></div>
+        <p class="hub-desc" id="hub-desc"></p>
+        <p class="hub-nota">Favos apagados são módulos que ainda vão acender.</p>
+      </div>
+
+      <p class="capa-rodape">Tech for restaurants</p>
+    </section>
+
+    <!-- ============ Aplicação ============ -->
+    <div id="app" class="app" hidden>
+      <!-- Barra lateral -->
+      <aside class="lateral" id="lateral">
+        <div class="lateral-topo">
+          <div class="marca">
+            <img class="marca-chama" src="/img/chama-brasa-food.png" alt="" aria-hidden="true" />
+            <div class="marca-texto">
+              <strong class="wordmark">Brasa <span>Food</span></strong>
+              <small id="marca-org">—</small>
+            </div>
+          </div>
+          <button
+            id="btn-recolher"
+            class="btn-icone"
+            type="button"
+            title="Recolher menu"
+            aria-label="Recolher menu"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+        </div>
+
+        <nav class="nav" id="nav" aria-label="Seções"></nav>
+
+        <div class="lateral-rodape">
+          <button id="btn-hub" class="nav-item" type="button" title="Voltar aos módulos">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
+            </svg>
+            <span class="nav-rotulo">Módulos</span>
+          </button>
+          <button id="btn-tema" class="nav-item" type="button" title="Tema claro/escuro">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"
+              />
+            </svg>
+            <span class="nav-rotulo">Tema</span>
+          </button>
+          <button id="btn-sair" class="nav-item" type="button" title="Sair">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+            </svg>
+            <span class="nav-rotulo">Sair</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Conteúdo -->
+      <div class="conteudo">
+        <header class="topo">
+          <button
+            id="btn-menu"
+            class="btn-icone apenas-movel"
+            type="button"
+            aria-label="Abrir menu"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
+
+          <div class="topo-titulo">
+            <h1 id="titulo-pagina">Painel</h1>
+            <p id="subtitulo-pagina" class="muted"></p>
+          </div>
+
+          <div class="topo-acoes">
+            <label class="sr-only" for="seletor-venue">Estabelecimento</label>
+            <select id="seletor-venue" class="select"></select>
+          </div>
+        </header>
+
+        <main id="pagina" class="pagina" tabindex="-1"></main>
+      </div>
+
+      <div id="cortina" class="cortina" hidden></div>
+    </div>
+
+    <div id="avisos" class="avisos" aria-live="polite"></div>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

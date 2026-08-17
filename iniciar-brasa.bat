@@ -36,12 +36,12 @@ echo Conferindo dependencias...
 call npm install --no-audit --no-fund || (pause & exit /b 1)
 
 echo.
-echo Painel local: http://localhost:3000  (abrindo no navegador)
+echo Painel local: http://localhost:3000/app  (abrindo no navegador)
 echo Para conectar o WhatsApp: aba Canais - Conectar - leia o QR
 echo com o WhatsApp do CHIP DO AGENTE (nao o numero principal da casa).
 echo.
 echo Esta janela precisa ficar aberta. Fechar = agente desligado.
 echo.
-start "" "http://localhost:3000/?direto=1#canais"
+start "" "http://localhost:3000/app?direto=1#canais"
 call npm run dev
 pause

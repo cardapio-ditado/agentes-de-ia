@@ -358,7 +358,10 @@ src/
   tools/                ferramentas do agente
 api/index.ts            ponto de entrada da Vercel
 public/
-  index.html            casca do painel: barra lateral e cabeçalho
+  index.html            página de vendas (a raiz do site)
+  app.html              casca do painel: barra lateral e cabeçalho
+  checklist.html        execução do checklist pelo link público
+  landing.css           estilos da página de vendas
   styles.css            tokens de tema (claro/escuro) e componentes
   js/app.js             roteamento por hash, estado e navegação
   js/api.js             cliente HTTP e leitura do SSE
