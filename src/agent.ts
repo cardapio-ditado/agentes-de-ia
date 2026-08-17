@@ -98,6 +98,10 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
   // que hoje é domingo — ele não está inventando, está lendo o vizinho mais
   // próximo. Repetir a data como última coisa antes da resposta resolve.
   const agora = contextoDeAgora(venue?.timezone ?? "America/Cuiaba");
+  // No log porque erro de data não aparece em stack trace nenhum: ele chega
+  // como "o agente falou que hoje é domingo", e aí só o que foi ENVIADO
+  // resolve a discussão.
+  console.log(`[agente] ${agent.slug} <- ${agora}`);
   messages.push({ role: "user", content: comContextoDeAgora(userMessage, agora) });
   await insertMessage({
     conversation_id: conversation.id,
@@ -256,7 +260,15 @@ export function comContextoDeAgora(mensagem: string, contexto: string): string {
   return `${mensagem}\n\n<contexto-do-sistema>\n${contexto}\n</contexto-do-sistema>`;
 }
 
-function contextoDeAgora(timezone: string): string {
+/**
+ * A frase de data que vai para o modelo — exportada de propósito.
+ *
+ * O /health devolve exatamente esta string. Quando o agente erra o dia da
+ * semana, a primeira pergunta é sempre "o que o modelo recebeu?", e sem isso
+ * a resposta vira dedução: o build da VPS pode estar velho, o relógio da
+ * máquina errado, o Intl sem os dados de fuso. Um comando responde os três.
+ */
+export function contextoDeAgora(timezone: string): string {
   const data = new Intl.DateTimeFormat("pt-BR", {
     timeZone: timezone,
     weekday: "long",

@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
-import { runAgent, type AgentStreamEvent } from "./agent.js";
+import { contextoDeAgora, runAgent, type AgentStreamEvent } from "./agent.js";
 import { authenticateApiKey, hasScope } from "./apikeys.js";
 import {
   createAgent,
@@ -402,6 +402,10 @@ async function rotear(
     return ok(res, {
       status: "ok",
       versao: versaoDoCodigo(),
+      // A mesma frase de data que o agente recebe. Serve de teste rápido de
+      // três coisas ao mesmo tempo: build atualizado, relógio da máquina certo
+      // e fuso horário resolvendo. Um curl responde o que antes era palpite.
+      agora: contextoDeAgora("America/Cuiaba"),
       banco: await diagnosticoDoBanco(),
       trace_id: traceId,
     });
