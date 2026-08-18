@@ -9,6 +9,31 @@ export type GooglePerfil = Tables<"google_perfis">;
 export type Avaliacao = Tables<"google_avaliacoes">;
 
 /**
+ * Traduz "a tabela não existe" para uma resposta que diz o que fazer.
+ *
+ * Sem isto, esquecer de rodar a migração vira "Erro interno, consulte o
+ * trace-id no log" — que manda a pessoa caçar log na Vercel para descobrir
+ * algo que o próprio sistema já sabe. O formato {status, code, message} é o
+ * que o tratador de erros repassa ao cliente em vez de engolir.
+ *
+ * 42P01 é o Postgres ("relation does not exist"); PGRST205 é o PostgREST
+ * respondendo pelo cache de schema, que é o caso mais comum logo depois de
+ * uma migração.
+ */
+export function traduzirFalha(mensagem: string, contexto: string): never {
+  if (/42P01|PGRST205|does not exist|schema cache/i.test(mensagem)) {
+    throw {
+      status: 503,
+      code: "modulo_nao_instalado",
+      message:
+        "O módulo de Avaliações ainda não foi instalado no banco. " +
+        "Rode a migração 20260818000000_create_avaliacoes_google.sql no Supabase.",
+    };
+  }
+  throw new Error(`${contexto}: ${mensagem}`);
+}
+
+/**
  * Avaliações do Google: lê o que os clientes escreveram, redige a resposta e
  * segura na fila o que não pode sair sozinho.
  *
@@ -81,7 +106,7 @@ export async function perfilDoVenue(venueId: string): Promise<GooglePerfil | nul
     .eq("venue_id", venueId)
     .maybeSingle();
 
-  if (error) throw new Error(`Falha ao carregar o perfil do Google: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao carregar o perfil do Google");
   return data;
 }
 
@@ -124,7 +149,7 @@ export async function salvarPerfil(params: {
     ? await db().from("google_perfis").update(linha).eq("id", atual.id).select().single()
     : await db().from("google_perfis").insert(linha).select().single();
 
-  if (error) throw new Error(`Falha ao salvar o perfil do Google: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao salvar o perfil do Google");
   return data;
 }
 
@@ -162,7 +187,7 @@ export async function registrarAvaliacoes(
     .eq("venue_id", venueId)
     .in("avaliacao_id", ids);
 
-  if (erroBusca) throw new Error(`Falha ao conferir avaliações já gravadas: ${erroBusca.message}`);
+  if (erroBusca) traduzirFalha(erroBusca.message, "Falha ao conferir as avaliações já gravadas");
   const jaTemos = new Set((existentes ?? []).map((e) => e.avaliacao_id));
 
   const novas = recebidas.filter((a) => !jaTemos.has(a.avaliacao_id));
@@ -182,7 +207,7 @@ export async function registrarAvaliacoes(
     )
     .select();
 
-  if (error) throw new Error(`Falha ao gravar as avaliações: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao gravar as avaliações");
   return data ?? [];
 }
 
@@ -335,7 +360,7 @@ export async function filaDeAprovacao(venueId: string): Promise<Avaliacao[]> {
     .order("nota", { ascending: true })
     .order("avaliada_em", { ascending: true });
 
-  if (error) throw new Error(`Falha ao carregar a fila de avaliações: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao carregar a fila de avaliações");
   return data ?? [];
 }
 
@@ -349,7 +374,7 @@ export async function prontasParaPublicar(venueId: string): Promise<Avaliacao[]>
     .not("resposta", "is", null)
     .order("avaliada_em", { ascending: true });
 
-  if (error) throw new Error(`Falha ao carregar as respostas aprovadas: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao carregar as respostas aprovadas");
   return data ?? [];
 }
 
@@ -369,7 +394,7 @@ export async function avaliacaoComOrg(
     .eq("id", id)
     .maybeSingle();
 
-  if (error) throw new Error(`Falha ao carregar a avaliação: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao carregar a avaliação");
   if (!data) return null;
 
   const { venues, ...avaliacao } = data as Avaliacao & { venues: { org_id: string } };
@@ -385,7 +410,7 @@ export async function historicoDeAvaliacoes(venueId: string, limite = 50): Promi
     .order("avaliada_em", { ascending: false, nullsFirst: false })
     .limit(limite);
 
-  if (error) throw new Error(`Falha ao carregar o histórico de avaliações: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao carregar o histórico de avaliações");
   return data ?? [];
 }
 
@@ -469,6 +494,6 @@ async function atualizar(id: string, campos: Record<string, Json>): Promise<Aval
     .select()
     .single();
 
-  if (error) throw new Error(`Falha ao atualizar a avaliação: ${error.message}`);
+  if (error) traduzirFalha(error.message, "Falha ao atualizar a avaliação");
   return data;
 }

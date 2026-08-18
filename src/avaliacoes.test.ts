@@ -4,6 +4,7 @@ import {
   lerConfiguracao,
   politicaDeResposta,
   promptDeResposta,
+  traduzirFalha,
   NOTA_MINIMA_PARA_AUTOMATICO,
 } from "./avaliacoes.js";
 
@@ -70,4 +71,32 @@ test("respostas anteriores entram no prompt para o modelo não repetir a fórmul
   assert.match(p, /Obrigado pela visita, Marina!/);
   assert.match(p, /Tom desta casa: informal/);
   assert.match(p, /Assine como: Equipe Ditado/);
+});
+
+test("tabela faltando vira instrução, não 'erro interno'", () => {
+  // O PostgREST responde assim quando a migração não rodou. Sem tradução, o
+  // painel mostra "consulte o trace-id no log" e manda a pessoa caçar log.
+  const mensagens = [
+    "Could not find the table 'public.google_avaliacoes' in the schema cache",
+    'relation "public.google_perfis" does not exist',
+    "42P01",
+  ];
+
+  for (const m of mensagens) {
+    assert.throws(
+      () => traduzirFalha(m, "Falha ao carregar"),
+      (e) =>
+        e.status === 503 &&
+        e.code === "modulo_nao_instalado" &&
+        /20260818000000_create_avaliacoes_google\.sql/.test(e.message),
+      `não traduziu: ${m}`,
+    );
+  }
+});
+
+test("falha de verdade continua sendo erro de verdade", () => {
+  assert.throws(
+    () => traduzirFalha("connection refused", "Falha ao carregar"),
+    (e) => e instanceof Error && /Falha ao carregar: connection refused/.test(e.message),
+  );
 });
