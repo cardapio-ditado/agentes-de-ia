@@ -9,6 +9,15 @@ dist/
 # Sessão do WhatsApp (Baileys) — são credenciais do número pareado
 .whatsapp/
 
+# Sessão do navegador da conta gerente do Google. Vazar esta pasta é entregar
+# a conta inteira: ela contém cookies de sessão já autenticados, que passam
+# direto pela senha e pela verificação em duas etapas.
+.google/
+
+# Fotos e HTML salvos pelo diagnóstico — carregam a tela logada da conta.
+diagnostico-*.png
+diagnostico-*.html
+
 # Logs e temporários
 *.log
 npm-debug.log*
