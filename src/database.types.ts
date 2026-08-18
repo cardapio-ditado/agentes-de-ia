@@ -166,6 +166,102 @@ export type Database = {
           },
         ]
       }
+      google_perfis: {
+        Row: {
+          conta_gerente: string
+          configuracao: Json
+          created_at: string
+          id: string
+          local_id: string | null
+          status: string
+          ultima_sincronizacao: string | null
+          ultimo_erro: string | null
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          conta_gerente: string
+          configuracao?: Json
+          created_at?: string
+          id?: string
+          local_id?: string | null
+          status?: string
+          ultima_sincronizacao?: string | null
+          ultimo_erro?: string | null
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          conta_gerente?: string
+          configuracao?: Json
+          created_at?: string
+          id?: string
+          local_id?: string | null
+          status?: string
+          ultima_sincronizacao?: string | null
+          ultimo_erro?: string | null
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: []
+      }
+      google_avaliacoes: {
+        Row: {
+          aprovada_por: string | null
+          autor: string | null
+          avaliacao_id: string
+          avaliada_em: string | null
+          comentario: string | null
+          created_at: string
+          id: string
+          liberacao: string | null
+          modelo: string | null
+          nota: number
+          publicada_em: string | null
+          resposta: string | null
+          resposta_status: string
+          ultimo_erro: string | null
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          aprovada_por?: string | null
+          autor?: string | null
+          avaliacao_id: string
+          avaliada_em?: string | null
+          comentario?: string | null
+          created_at?: string
+          id?: string
+          liberacao?: string | null
+          modelo?: string | null
+          nota: number
+          publicada_em?: string | null
+          resposta?: string | null
+          resposta_status?: string
+          ultimo_erro?: string | null
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          aprovada_por?: string | null
+          autor?: string | null
+          avaliacao_id?: string
+          avaliada_em?: string | null
+          comentario?: string | null
+          created_at?: string
+          id?: string
+          liberacao?: string | null
+          modelo?: string | null
+          nota?: number
+          publicada_em?: string | null
+          resposta?: string | null
+          resposta_status?: string
+          ultimo_erro?: string | null
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: []
+      }
       checklist_runs: {
         Row: {
           answers: Json
