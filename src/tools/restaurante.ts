@@ -12,6 +12,7 @@ import {
   type VenueEvent,
 } from "../venues.js";
 import { publicarReservaCriada } from "../reservationFlow.js";
+import { buscarNoCardapio, descreverCardapio, listarCardapio, promocoesDeHoje } from "../cardapio.js";
 import type { AgentTool, ToolContext } from "./types.js";
 
 const TIPOS_DE_EVENTO = ["musica", "jogo", "promocao", "evento", "outro"] as const;
@@ -353,6 +354,112 @@ const consultarReserva: AgentTool = {
 };
 
 // ============================================================
+// consultar_cardapio
+// ============================================================
+const consultarCardapio: AgentTool = {
+  definition: {
+    name: "consultar_cardapio",
+    description:
+      "Lista o cardápio da casa com preços reais e promoções em vigor. " +
+      "Use SEMPRE que o cliente perguntar o que tem, quanto custa, ou pedir sugestão. " +
+      "Nunca diga preço de memória: preço muda e o cliente cobra o que você falou.",
+    input_schema: {
+      type: "object",
+      properties: {
+        categoria: {
+          type: "string",
+          description:
+            'Filtra por categoria ou grupo, ex.: "porções", "bebida", "sobremesa". ' +
+            "Deixe vazio para o cardápio inteiro.",
+        },
+      },
+      required: [],
+    },
+  },
+  async run(input, ctx) {
+    const venue = await getVenue(venueIdObrigatorio(ctx));
+    const categoria = textoOpcional(input.categoria) ?? undefined;
+    const itens = await listarCardapio({
+      venueId: venue.id,
+      timezone: venue.timezone,
+      categoria,
+    });
+
+    if (itens.length === 0) {
+      // A distinção importa: "não temos essa categoria" é diferente de "o
+      // cardápio ainda não foi cadastrado", e o agente responde diferente.
+      return categoria
+        ? `Nenhum item na categoria "${categoria}". Ofereça outra categoria ou chame consultar_cardapio sem filtro para ver o que existe.`
+        : "O cardápio ainda não foi cadastrado no sistema. Não invente itens — diga que vai confirmar com a casa.";
+    }
+    return descreverCardapio(itens);
+  },
+};
+
+// ============================================================
+// buscar_no_cardapio
+// ============================================================
+const buscarItem: AgentTool = {
+  definition: {
+    name: "buscar_no_cardapio",
+    description:
+      "Procura um prato ou bebida específico pelo nome ou por um ingrediente. " +
+      "Use quando o cliente perguntar por algo pontual — 'tem picanha?', " +
+      "'vocês têm algo sem glúten?' — em vez de listar o cardápio inteiro.",
+    input_schema: {
+      type: "object",
+      properties: {
+        termo: {
+          type: "string",
+          description: "O que procurar: nome do prato, ingrediente ou característica.",
+        },
+      },
+      required: ["termo"],
+    },
+  },
+  async run(input, ctx) {
+    const venue = await getVenue(venueIdObrigatorio(ctx));
+    const termo = textoObrigatorio(input.termo, "termo");
+    const achados = await buscarNoCardapio({
+      venueId: venue.id,
+      timezone: venue.timezone,
+      termo,
+    });
+
+    if (achados.length === 0) {
+      return (
+        `Nada no cardápio corresponde a "${termo}". ` +
+        `Diga ao cliente que a casa não tem, e ofereça algo parecido — ` +
+        `chame consultar_cardapio para ver as opções antes de sugerir.`
+      );
+    }
+    return descreverCardapio(achados);
+  },
+};
+
+// ============================================================
+// promocoes_de_hoje
+// ============================================================
+const promocoes: AgentTool = {
+  definition: {
+    name: "promocoes_de_hoje",
+    description:
+      "Promoções válidas AGORA, já considerando o dia da semana. " +
+      "Use quando o cliente perguntar por promoção, desconto ou o que está em conta hoje.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  async run(_input, ctx) {
+    const venue = await getVenue(venueIdObrigatorio(ctx));
+    const itens = await promocoesDeHoje({ venueId: venue.id, timezone: venue.timezone });
+
+    if (itens.length === 0) {
+      return "Nenhuma promoção em vigor hoje. Não prometa desconto — sugira algo do cardápio normal.";
+    }
+    return descreverCardapio(itens);
+  },
+};
+
+// ============================================================
 // minhas_reservas
 // ============================================================
 const SITUACAO: Record<string, string> = {
@@ -474,4 +581,7 @@ export const ferramentasDeRestaurante: AgentTool[] = [
   registrarReserva,
   consultarReserva,
   minhasReservas,
+  consultarCardapio,
+  buscarItem,
+  promocoes,
 ];
