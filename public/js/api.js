@@ -120,6 +120,8 @@ export async function api(caminho, opcoes = {}, jaRenovou = false) {
 export const get = (caminho) => api(caminho);
 export const post = (caminho, corpo) =>
   api(caminho, { method: "POST", body: JSON.stringify(corpo ?? {}) });
+export const put = (caminho, corpo) =>
+  api(caminho, { method: "PUT", body: JSON.stringify(corpo) });
 export const patch = (caminho, corpo) =>
   api(caminho, { method: "PATCH", body: JSON.stringify(corpo ?? {}) });
 export const del = (caminho) => api(caminho, { method: "DELETE" });

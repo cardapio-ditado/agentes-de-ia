@@ -32,6 +32,16 @@ import {
   sessaoDoToken,
   trocarSenha,
 } from "./auth.js";
+import {
+  adicionarAvaliacaoManual,
+  aprovarResposta,
+  avaliacaoComOrg,
+  descartarResposta,
+  filaDeAprovacao,
+  historicoDeAvaliacoes,
+  perfilDoVenue,
+  salvarPerfil,
+} from "./avaliacoes.js";
 import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
 import {
   atualizarComercial,
@@ -627,6 +637,64 @@ async function roteasApi(
       return ok(res, await listPendingReservations(venue.id));
     }
 
+    // ---- Avaliações do Google ----
+
+    // GET /v1/venues/:slug/avaliacoes — fila + histórico + perfil, numa ida só
+    if (metodo === "GET" && recurso === "avaliacoes" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const [perfil, fila, historico] = await Promise.all([
+        perfilDoVenue(venue.id),
+        filaDeAprovacao(venue.id),
+        historicoDeAvaliacoes(venue.id),
+      ]);
+      return ok(res, { perfil, fila, historico });
+    }
+
+    // POST /v1/venues/:slug/avaliacoes — lança uma avaliação na mão e já redige
+    if (metodo === "POST" && recurso === "avaliacoes" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+
+      const nota = Number(corpo.nota);
+      if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
+        throw erro(400, "invalid_request", "A nota precisa ser um número inteiro de 1 a 5.");
+      }
+      return ok(
+        res,
+        await adicionarAvaliacaoManual({
+          venue,
+          autor: textoOpcional(corpo, "autor") ?? null,
+          nota,
+          comentario: textoOpcional(corpo, "comentario") ?? null,
+        }),
+        201,
+      );
+    }
+
+    // PUT /v1/venues/:slug/avaliacoes-perfil — conexão e regras do perfil
+    if (metodo === "PUT" && recurso === "avaliacoes-perfil" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      const nota = Number(corpo.nota_automatica);
+
+      return ok(
+        res,
+        await salvarPerfil({
+          venueId: venue.id,
+          contaGerente: texto(corpo, "conta_gerente"),
+          localId: textoOpcional(corpo, "local_id") ?? null,
+          configuracao: {
+            ...(Number.isInteger(nota) ? { nota_automatica: nota } : {}),
+            assinatura: textoOpcional(corpo, "assinatura") ?? "",
+            tom: textoOpcional(corpo, "tom") ?? "",
+          },
+        }),
+      );
+    }
+
     if (metodo === "GET" && recurso === "events" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
@@ -1026,6 +1094,40 @@ async function roteasApi(
   }
 
   // POST /v1/reservations/:id/approve | /reject | /cancel
+  // POST /v1/avaliacoes/:id/aprovar|descartar
+  if (metodo === "POST" && p[0] === "avaliacoes" && p.length === 3) {
+    const chave = await exigirChave(req, "reservations:write");
+    const acao = p[2]!;
+    if (acao !== "aprovar" && acao !== "descartar") {
+      throw erro(404, "not_found", `Ação "${acao}" não existe.`);
+    }
+
+    const encontrado = await avaliacaoComOrg(p[1]!);
+    // Mesma resposta para "não existe" e "é de outra organização".
+    if (!encontrado || encontrado.orgId !== chave.org_id) {
+      throw erro(404, "not_found", "Avaliação não encontrada.");
+    }
+
+    if (acao === "descartar") {
+      return ok(res, await descartarResposta(encontrado.avaliacao.id));
+    }
+
+    // O texto editado à mão vem junto: o dono corrige a resposta na hora de
+    // aprovar, e é justamente nas avaliações que mais importam que ele corrige.
+    const corpo = await lerJson(req);
+    const editado = textoOpcional(corpo, "texto");
+    if (editado !== undefined && editado.trim() === "") {
+      throw erro(400, "invalid_request", "A resposta não pode ficar vazia.");
+    }
+    return ok(
+      res,
+      await aprovarResposta({
+        id: encontrado.avaliacao.id,
+        ...(editado ? { texto: editado.trim() } : {}),
+      }),
+    );
+  }
+
   if (metodo === "POST" && p[0] === "reservations" && p.length === 3) {
     const chave = await exigirChave(req, "reservations:write");
     const acao = p[2]!;

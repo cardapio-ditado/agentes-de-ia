@@ -13,6 +13,7 @@ import { empresa } from "./pages/empresa.js";
 import { organizacao } from "./pages/organizacao.js";
 import { checklists } from "./pages/checklists.js";
 import { execucoes } from "./pages/execucoes.js";
+import { avaliacoes } from "./pages/avaliacoes.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -36,6 +37,8 @@ const PAGINAS = [
 
   { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
+
+  { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
 
   // Módulo da equipe Brasa Food. Administrar a plataforma não é uma seção do
   // produto do cliente: são perguntas de negócios diferentes, e misturar as
@@ -88,6 +91,15 @@ const MODULOS = [
     pos: { x: 0.75, y: 0.5 },
   },
   {
+    id: "avaliacoes",
+    nome: "Avaliações do Google",
+    descricao:
+      "Toda avaliação respondida, no tom da casa. Nota baixa nunca sai sem alguém ler.",
+    icone: ICONES.estrela,
+    ativo: true,
+    pos: { x: 0.75, y: -0.5 },
+  },
+  {
     id: "plataforma",
     nome: "Administração",
     descricao:
@@ -101,10 +113,7 @@ const MODULOS = [
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
-const FAVOS_VAZIOS = [
-  { x: -0.75, y: -0.5 },
-  { x: 0.75, y: -0.5 },
-];
+const FAVOS_VAZIOS = [{ x: -0.75, y: -0.5 }];
 
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");

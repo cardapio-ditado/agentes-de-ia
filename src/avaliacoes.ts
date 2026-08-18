@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "node:crypto";
 import { anthropicConfig } from "./config.js";
 import { db } from "./supabase.js";
 import type { Json, Tables } from "./database.types.js";
@@ -81,6 +82,49 @@ export async function perfilDoVenue(venueId: string): Promise<GooglePerfil | nul
     .maybeSingle();
 
   if (error) throw new Error(`Falha ao carregar o perfil do Google: ${error.message}`);
+  return data;
+}
+
+/**
+ * Cria ou atualiza a ligação com o perfil do Google.
+ *
+ * Upsert por venue, e não insert: o dono vai reconectar — trocar de conta
+ * gerente, refazer depois de uma sessão expirada — e cada tentativa criando
+ * uma linha nova daria duas respostas na mesma avaliação.
+ */
+export async function salvarPerfil(params: {
+  venueId: string;
+  contaGerente: string;
+  localId?: string | null;
+  configuracao?: Partial<ConfiguracaoPerfil>;
+}): Promise<GooglePerfil> {
+  const atual = await perfilDoVenue(params.venueId);
+  const configuracao = {
+    ...(atual ? lerConfiguracao(atual) : { nota_automatica: NOTA_AUTOMATICA_PADRAO, assinatura: "", tom: "" }),
+    ...params.configuracao,
+  };
+
+  // O piso vale também na gravação: configuração fora da regra não deve nem
+  // chegar ao banco, para o painel nunca exibir uma promessa que o código não
+  // vai cumprir.
+  configuracao.nota_automatica = Math.max(
+    NOTA_MINIMA_PARA_AUTOMATICO,
+    Math.min(5, configuracao.nota_automatica),
+  );
+
+  const linha = {
+    venue_id: params.venueId,
+    conta_gerente: params.contaGerente,
+    local_id: params.localId ?? atual?.local_id ?? null,
+    configuracao: configuracao as unknown as Json,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = atual
+    ? await db().from("google_perfis").update(linha).eq("id", atual.id).select().single()
+    : await db().from("google_perfis").insert(linha).select().single();
+
+  if (error) throw new Error(`Falha ao salvar o perfil do Google: ${error.message}`);
   return data;
 }
 
@@ -307,6 +351,77 @@ export async function prontasParaPublicar(venueId: string): Promise<Avaliacao[]>
 
   if (error) throw new Error(`Falha ao carregar as respostas aprovadas: ${error.message}`);
   return data ?? [];
+}
+
+/**
+ * A avaliação junto com a organização dona dela.
+ *
+ * Existe para a rota poder responder 404 igual para "não existe" e "é de outra
+ * organização" — a diferença entre as duas respostas conta a quem perguntou
+ * que o registro existe.
+ */
+export async function avaliacaoComOrg(
+  id: string,
+): Promise<{ avaliacao: Avaliacao; orgId: string } | null> {
+  const { data, error } = await db()
+    .from("google_avaliacoes")
+    .select("*, venues!inner(org_id)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao carregar a avaliação: ${error.message}`);
+  if (!data) return null;
+
+  const { venues, ...avaliacao } = data as Avaliacao & { venues: { org_id: string } };
+  return { avaliacao, orgId: venues.org_id };
+}
+
+/** Tudo que já passou por aqui, do mais recente para o mais antigo. */
+export async function historicoDeAvaliacoes(venueId: string, limite = 50): Promise<Avaliacao[]> {
+  const { data, error } = await db()
+    .from("google_avaliacoes")
+    .select("*")
+    .eq("venue_id", venueId)
+    .order("avaliada_em", { ascending: false, nullsFirst: false })
+    .limit(limite);
+
+  if (error) throw new Error(`Falha ao carregar o histórico de avaliações: ${error.message}`);
+  return data ?? [];
+}
+
+/**
+ * Lança uma avaliação na mão e já redige a resposta.
+ *
+ * Existe para o módulo poder ser usado e ajustado ANTES de qualquer automação
+ * tocar num perfil de verdade. É assim que se descobre que o tom está errado
+ * sem descobrir isso em público.
+ */
+export async function adicionarAvaliacaoManual(params: {
+  venue: Pick<Venue, "id" | "name">;
+  autor: string | null;
+  nota: number;
+  comentario: string | null;
+  avaliadaEm?: string | null;
+}): Promise<Avaliacao> {
+  const { venue } = params;
+  const [criada] = await registrarAvaliacoes(venue.id, [
+    {
+      // Prefixo "manual:" para nunca colidir com um id vindo do Google.
+      avaliacao_id: `manual:${randomUUID()}`,
+      autor: params.autor,
+      nota: params.nota,
+      comentario: params.comentario,
+      avaliada_em: params.avaliadaEm ?? new Date().toISOString(),
+    },
+  ]);
+  if (!criada) throw new Error("Não foi possível gravar a avaliação.");
+
+  const perfil = await perfilDoVenue(venue.id);
+  const config = perfil
+    ? lerConfiguracao(perfil)
+    : lerConfiguracao({ configuracao: {} as unknown as Json });
+
+  return await prepararResposta({ avaliacao: criada, venue, config });
 }
 
 /**
