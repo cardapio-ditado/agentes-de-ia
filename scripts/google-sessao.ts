@@ -75,7 +75,20 @@ async function estado(): Promise<void> {
  * foto e o HTML na mão, o seletor é escrito a partir do que existe.
  */
 async function diagnostico(url?: string): Promise<void> {
-  const alvo = url ?? "https://business.google.com/";
+  // Sem --url, usa o link que o painel guardou: é o mesmo que o dono salvou
+  // na tela de Avaliações, e poupa o operador de digitar endereço no terminal.
+  let alvo = url;
+  if (!alvo) {
+    const { db } = await import("../src/supabase.js");
+    const { data } = await db()
+      .from("google_perfis")
+      .select("local_id")
+      .not("local_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+    alvo = data?.local_id ?? "https://business.google.com/";
+    console.log(`Usando o link salvo no painel: ${alvo}`);
+  }
   const sessao = await abrirNavegador();
   const pagina = await sessao.contexto.newPage();
 
