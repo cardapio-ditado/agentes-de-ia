@@ -51,14 +51,24 @@ const PAGINAS = [
 /** Preenchido no login por /v1/auth/me. */
 let souPlataforma = false;
 
+/**
+ * Módulos contratados pelo estabelecimento aberto agora.
+ *
+ * Mapa de id -> { ativo, url }. Vazio significa "ainda não carregou", não
+ * "não tem nada": quem lê precisa esperar, senão a colmeia pisca apagada
+ * antes de acender.
+ */
+let modulosDoCliente = new Map();
+
 let moduloAtual = "agentes-ia";
 
 /**
  * Módulos do hub: cada solução do Brasa Food é uma porta.
  *
- * Só "Agentes de IA" existe hoje; os demais aparecem como "Em breve" para o
- * cliente enxergar o tamanho do produto. Quando um módulo novo nascer, vira
- * `ativo: true` com a função `entrar` dele.
+ * Aqui só está o que o módulo É — nome, ícone, lugar na colmeia. Se ele acende
+ * para ESTE cliente quem diz é o banco (`venue_modulos`), carregado no login.
+ * Antes era uma bandeira fixa no código, igual para todo mundo: quem só tinha
+ * o cardápio via "Agentes de IA" aceso e entrava.
  */
 const MODULOS = [
   {
@@ -68,7 +78,6 @@ const MODULOS = [
       "Atendimento no WhatsApp e Instagram: reservas, programação e dúvidas respondidas na hora.",
     icone:
       "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z",
-    ativo: true,
     // Posição na colmeia, em passos de favo a partir do centro (x em larguras,
     // y em alturas de hexágono).
     pos: { x: 0, y: -1 },
@@ -78,7 +87,10 @@ const MODULOS = [
     nome: "Cardápio Digital",
     descricao: "QR code na mesa, cardápio sempre atualizado e pedidos sem fila no balcão.",
     icone: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z",
-    ativo: false,
+    // O cardápio é um deploy separado, com domínio próprio de cada cliente. O
+    // endereço vem do banco (venue_modulos.url) e o favo abre noutra aba: o
+    // painel continua onde estava, para quem só foi conferir um preço.
+    externo: true,
     pos: { x: -0.75, y: 0.5 },
   },
   {
@@ -87,7 +99,6 @@ const MODULOS = [
     descricao:
       "Rotinas de abertura e fechamento com link no WhatsApp, fotos como prova e a IA conferindo cada resposta.",
     icone: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
-    ativo: true,
     pos: { x: 0.75, y: 0.5 },
   },
   {
@@ -96,7 +107,6 @@ const MODULOS = [
     descricao:
       "Toda avaliação respondida, no tom da casa. Nota baixa nunca sai sem alguém ler.",
     icone: ICONES.estrela,
-    ativo: true,
     pos: { x: 0.75, y: -0.5 },
   },
   {
@@ -105,7 +115,6 @@ const MODULOS = [
     descricao:
       "Carteira de clientes, receita, custo de IA e cadastro de cliente novo. Só a equipe Brasa Food.",
     icone: "M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01",
-    ativo: true,
     // Só aparece na colmeia para administrador da plataforma.
     somentePlataforma: true,
     pos: { x: 0, y: 1 },
@@ -306,6 +315,17 @@ function pedirChave(mensagem) {
 const DICA_PADRAO = "Toque num favo aceso para entrar.";
 
 /**
+ * Este favo acende para o cliente aberto agora?
+ *
+ * Administração não é módulo contratado — é a mesa da equipe Brasa Food, e já
+ * foi filtrada por `souPlataforma` antes de chegar aqui.
+ */
+function moduloAceso(m) {
+  if (m.somentePlataforma) return true;
+  return modulosDoCliente.get(m.id)?.ativo === true;
+}
+
+/**
  * A colmeia: chama no centro, um favo por módulo em volta, filetes de
  * energia ligando tudo. As posições vêm de MODULOS/FAVOS_VAZIOS em passos
  * de favo; o CSS transforma em pixels. Células brotam em sequência.
@@ -338,7 +358,7 @@ function montarHub() {
     ...MODULOS.filter((m) => m.somentePlataforma && !souPlataforma).map((m) => m.pos),
   ];
 
-  for (const m of visiveis) ligar(m.pos, m.ativo ? "linha linha-viva" : "linha");
+  for (const m of visiveis) ligar(m.pos, moduloAceso(m) ? "linha linha-viva" : "linha");
   for (const f of vazios) ligar(f, "linha linha-apagada");
   colmeia.append(linhas);
 
@@ -368,19 +388,26 @@ function montarHub() {
   );
 
   visiveis.forEach((m, i) => {
-    const dica = m.ativo ? m.descricao : `${m.descricao} — em breve.`;
+    const aceso = moduloAceso(m);
+    // Favo apagado agora quer dizer "não está no seu contrato", não "ainda não
+    // existe". Dizer "em breve" para algo que já roda faria o cliente esperar
+    // por uma coisa que ele só precisa pedir.
+    const dica = aceso ? m.descricao : `${m.descricao} — não está no seu plano.`;
     colmeia.append(
       el(
         "button",
         {
-          classe: `celula hex-modulo${m.ativo ? "" : " hex-apagado"}`,
+          classe: `celula hex-modulo${aceso ? "" : " hex-apagado"}`,
           type: "button",
           style: posicao(m.pos, i + 1),
           // aria-disabled (e não disabled) para o favo "em breve" continuar
           // contando o que é ao passar o mouse ou focar.
-          "aria-disabled": String(!m.ativo),
-          "aria-label": `${m.nome}${m.ativo ? "" : " — em breve"}`,
-          onclick: () => (m.ativo ? entrarNoModulo(m.id) : avisar(`${m.nome} chega em breve.`, "info")),
+          "aria-disabled": String(!aceso),
+          "aria-label": `${m.nome}${aceso ? "" : " — não incluso no plano"}`,
+          onclick: () =>
+            aceso
+              ? entrarNoModulo(m.id)
+              : avisar(`${m.nome} não faz parte do seu plano. Fale com a gente para ativar.`, "info"),
           onmouseenter: () => contar(dica),
           onfocus: () => contar(dica),
         },
@@ -388,8 +415,8 @@ function montarHub() {
           el("span", { classe: "hex-icone" }, [icone(m.icone, 22)]),
           el("span", { classe: "hex-nome", texto: m.nome }),
           el("span", {
-            classe: `hex-etiqueta${m.ativo ? " hex-etiqueta-ativa" : ""}`,
-            texto: m.ativo ? "Entrar" : "Em breve",
+            classe: `hex-etiqueta${aceso ? " hex-etiqueta-ativa" : ""}`,
+            texto: aceso ? "Entrar" : "Ativar",
           }),
         ],
       ),
@@ -421,6 +448,30 @@ function mostrarHub() {
 
 /** Abre um módulo: a lateral e as telas viram as dele. */
 function entrarNoModulo(moduloId = "agentes-ia") {
+  const definicao = MODULOS.find((m) => m.id === moduloId);
+
+  // Módulo que mora fora do painel abre noutra aba. O endereço é por cliente:
+  // cada casa tem o seu domínio de cardápio.
+  if (definicao?.externo) {
+    const endereco = modulosDoCliente.get(moduloId)?.url;
+    if (!endereco) {
+      return avisar(
+        `O endereço do ${definicao.nome} deste estabelecimento ainda não foi cadastrado.`,
+        "erro",
+      );
+    }
+    // noopener: sem ele a aba aberta pode mexer nesta pelo window.opener.
+    return void window.open(endereco, "_blank", "noopener");
+  }
+
+  // Quem guardou o endereço de uma tela entraria por ela mesmo com o favo
+  // apagado. As rotas do servidor são a trava de verdade; isto evita a tela
+  // meio carregada, cheia de erro, que parece defeito e não falta de contrato.
+  if (definicao && !moduloAceso(definicao)) {
+    mostrarHub();
+    return avisar(`${definicao.nome} não faz parte do seu plano.`, "info");
+  }
+
   moduloAtual = PAGINAS.some((p) => p.modulo === moduloId) ? moduloId : "agentes-ia";
   // F5 dentro do módulo não deve voltar pro saguão — mas fechar o navegador
   // e voltar amanhã, sim. Por isso sessionStorage, que morre com a aba.
@@ -630,11 +681,15 @@ async function iniciar() {
   document.getElementById("marca-org").textContent = nomeDoVenue();
   document.getElementById("hub-org").textContent = nomeDoVenue();
 
-  seletorVenue.addEventListener("change", () => {
+  seletorVenue.addEventListener("change", async () => {
     ctx.venue = seletorVenue.value;
     localStorage.setItem("agentes.venue", ctx.venue);
     document.getElementById("marca-org").textContent = nomeDoVenue();
     document.getElementById("hub-org").textContent = nomeDoVenue();
+    // Cada casa tem o seu contrato: trocar de estabelecimento sem recarregar
+    // os módulos deixaria a colmeia mostrando o que a casa anterior comprou.
+    await carregarModulos();
+    montarHub();
     irPara(location.hash.slice(1));
   });
 
@@ -644,6 +699,8 @@ async function iniciar() {
   } catch {
     souPlataforma = false;
   }
+
+  await carregarModulos();
 
   // A tela de Canais precisa saber qual agente vai atender no WhatsApp, e ela
   // pode ser a primeira que o usuário abre — sem isto, "Conectar" iria sem agente.
@@ -667,6 +724,23 @@ async function iniciar() {
     sessionStorage.getItem("brasa.hub.visto") === "1";
   if (direto) entrarNoModulo(sessionStorage.getItem("brasa.modulo") ?? "agentes-ia");
   else mostrarHub();
+}
+
+/**
+ * O que este estabelecimento contratou.
+ *
+ * Falhando, o painel fica com o que o cliente sempre teve em vez de abrir uma
+ * colmeia apagada — uma rede ruim não deve parecer contrato cancelado.
+ */
+async function carregarModulos() {
+  try {
+    const lista = await get(`/v1/venues/${ctx.venue}/modulos`);
+    modulosDoCliente = new Map(lista.map((m) => [m.modulo, m]));
+  } catch {
+    modulosDoCliente = new Map(
+      ["agentes-ia", "checklist", "avaliacoes"].map((id) => [id, { modulo: id, ativo: true, url: null }]),
+    );
+  }
 }
 
 /** Badge de reservas na lateral, para a fila não passar despercebida. */

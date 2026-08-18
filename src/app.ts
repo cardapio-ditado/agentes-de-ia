@@ -112,6 +112,7 @@ import {
   type DadosReserva,
   type DadosVenue,
 } from "./venues.js";
+import { definirModulo, listarModulos } from "./modulos.js";
 
 /**
  * Roteamento da API, sem servidor.
@@ -638,6 +639,14 @@ async function roteasApi(
       return ok(res, await listPendingReservations(venue.id));
     }
 
+    // GET /v1/venues/:slug/modulos — quais favos acendem na colmeia deste
+    // cliente, e para onde vão os que moram fora do painel.
+    if (metodo === "GET" && recurso === "modulos" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await listarModulos(venue.id));
+    }
+
     // ---- Avaliações do Google ----
 
     // GET /v1/venues/:slug/avaliacoes — fila + histórico + perfil, numa ida só
@@ -939,6 +948,34 @@ async function roteasApi(
   if (metodo === "GET" && p[0] === "admin" && p[1] === "resumo" && p.length === 2) {
     await exigirAdminDaPlataforma(req);
     return ok(res, resumirPlataforma(await listarClientes()));
+  }
+
+  // PUT /v1/admin/venues/:venueId/modulos — liga, desliga ou reendereça um
+  // módulo do cliente. Só a equipe Brasa Food: é a linha do contrato.
+  if (metodo === "PUT" && p[0] === "admin" && p[1] === "venues" && p[3] === "modulos" && p.length === 4) {
+    await exigirAdminDaPlataforma(req);
+    const corpo = await lerJson(req);
+    const modulo = texto(corpo, "modulo");
+    const ativo = (corpo as Record<string, unknown>).ativo;
+    if (typeof ativo !== "boolean") {
+      throw erro(400, "invalid_request", "Informe `ativo` como verdadeiro ou falso.");
+    }
+
+    // Ausente = não mexe no endereço; vazio = apaga. Sem essa diferença,
+    // ligar um módulo apagaria a URL já cadastrada.
+    const temUrl = Object.prototype.hasOwnProperty.call(corpo, "url");
+    const bruta = textoOpcional(corpo, "url");
+    if (bruta && !/^https:\/\//i.test(bruta)) {
+      throw erro(400, "invalid_request", "O endereço precisa começar com https://");
+    }
+
+    await definirModulo({
+      venueId: p[2]!,
+      modulo,
+      ativo,
+      url: temUrl ? (bruta ?? null) : undefined,
+    });
+    return ok(res, { salvo: true });
   }
 
   if (p[0] === "admin" && p[1] === "clientes") {

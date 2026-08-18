@@ -16,6 +16,7 @@
 
 import { createApiKey } from "./apikeys.js";
 import { extratoDePontos } from "./pontos.js";
+import type { ModuloDoCliente } from "./modulos.js";
 import { db, dbAuth } from "./supabase.js";
 
 export interface DadosDoCliente {
@@ -233,6 +234,8 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
 
 export interface ResumoDeCliente {
   org_id: string;
+  /** Estabelecimento principal — é a ele que os módulos e o plano pertencem. */
+  venue_id: string | null;
   slug: string;
   nome: string;
   email_contato: string | null;
@@ -248,6 +251,8 @@ export interface ResumoDeCliente {
   mensalidade: number;
   vencimento_dia: number | null;
   primeiro_acesso_em: string | null;
+  /** Módulos contratados pelo estabelecimento principal. */
+  modulos: ModuloDoCliente[];
 }
 
 /**
@@ -280,6 +285,21 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
       .eq("role", "owner"),
   ]);
 
+  // Os módulos de todas as casas numa consulta só. Uma por cliente seria uma
+  // rajada de idas ao banco só para desenhar a lista.
+  const modulosPorVenue = new Map<string, ModuloDoCliente[]>();
+  {
+    const { data } = await db()
+      .from("venue_modulos")
+      .select("venue_id, modulo, ativo, url")
+      .in("venue_id", (venues ?? []).map((v) => v.id));
+    for (const linha of data ?? []) {
+      const lista = modulosPorVenue.get(linha.venue_id) ?? [];
+      lista.push({ modulo: linha.modulo, ativo: linha.ativo, url: linha.url });
+      modulosPorVenue.set(linha.venue_id, lista);
+    }
+  }
+
   // O saldo de cada casa em paralelo. Uma falha isolada não pode derrubar a
   // carteira inteira: o cliente aparece sem saldo em vez de a tela quebrar.
   const saldos = new Map<string, { usados: number; restantes: number; estado: string }>();
@@ -303,6 +323,7 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
 
     return {
       org_id: o.id,
+      venue_id: principal?.id ?? null,
       slug: o.slug,
       nome: o.name,
       email_contato: o.email_contato ?? null,
@@ -317,6 +338,7 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
       mensalidade: Number(o.mensalidade ?? PRECO_DO_PLANO[plano ?? ""] ?? 0),
       vencimento_dia: o.vencimento_dia,
       primeiro_acesso_em: dono?.primeiro_acesso_em ?? null,
+      modulos: principal ? (modulosPorVenue.get(principal.id) ?? []) : [],
     };
   });
 }

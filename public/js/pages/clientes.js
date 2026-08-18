@@ -1,4 +1,4 @@
-import { get, patch, post } from "../api.js";
+import { get, patch, post, put } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
@@ -35,6 +35,16 @@ const PLANOS = [
   ["profissional", "Profissional — 2.500 pontos · R$ 297"],
   ["casa_cheia", "Casa Cheia — 6.000 pontos · R$ 597"],
   ["cortesia", "Cortesia — 500 pontos · demonstração"],
+];
+
+// Os módulos que se vendem. "Administração" não entra: é a mesa da equipe
+// Brasa Food, não um produto — liberá-la para um cliente daria a ele a
+// carteira inteira, com a receita e os dados dos concorrentes dele.
+const MODULOS_VENDAVEIS = [
+  ["agentes-ia", "Agentes de IA"],
+  ["cardapio-digital", "Cardápio Digital"],
+  ["checklist", "Checklist"],
+  ["avaliacoes", "Avaliações"],
 ];
 
 // Os fusos que existem no Brasil. Lista curta de propósito: o seletor com as
@@ -161,7 +171,82 @@ export async function clientes(raiz, ctx) {
         el("span", { texto: "Situação" }),
         seletorStatus,
       ]),
+      modulosDoCliente(c),
     ]);
+  }
+
+  /**
+   * Quais favos acendem na colmeia deste cliente.
+   *
+   * Fica no cartão, junto do plano e da mensalidade, porque é a mesma
+   * pergunta: o que ele comprou. Separado, viraria uma tela que ninguém abre
+   * e um cliente novo passaria semanas sem o módulo que já paga.
+   */
+  function modulosDoCliente(c) {
+    if (!c.venue_id) {
+      return el("p", { classe: "muted", texto: "Sem estabelecimento — nada a liberar ainda." });
+    }
+
+    const atual = new Map((c.modulos ?? []).map((m) => [m.modulo, m]));
+    const caixa = el("div", { style: "margin-top:12px;border-top:1px solid var(--borda);padding-top:10px" }, [
+      el("p", { classe: "muted", texto: "Módulos liberados" }),
+    ]);
+
+    const chips = el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;margin:6px 0" });
+    for (const [id, nome] of MODULOS_VENDAVEIS) {
+      const ligado = atual.get(id)?.ativo === true;
+      const chip = el("button", {
+        type: "button",
+        classe: `btn btn-peq ${ligado ? "btn-primario" : ""}`,
+        texto: nome,
+        onclick: async () => {
+          chip.disabled = true;
+          try {
+            await put(`/v1/admin/venues/${c.venue_id}/modulos`, { modulo: id, ativo: !ligado });
+            avisar(`${nome} ${ligado ? "desligado" : "liberado"}.`, "ok");
+            await listar();
+          } catch (e) {
+            avisar(e.message, "erro");
+            chip.disabled = false;
+          }
+        },
+      });
+      chips.append(chip);
+    }
+    caixa.append(chips);
+
+    // O cardápio é um deploy separado, com domínio por cliente. Sem o endereço
+    // aqui, o favo acende e não leva a lugar nenhum.
+    if (atual.get("cardapio-digital")?.ativo) {
+      const campo = el("input", {
+        placeholder: "https://cardapio.seucliente.com.br",
+        value: atual.get("cardapio-digital")?.url ?? "",
+      });
+      caixa.append(
+        el("div", { style: "display:flex;gap:6px;margin-top:6px" }, [
+          campo,
+          el("button", {
+            classe: "btn btn-peq",
+            type: "button",
+            texto: "Salvar endereço",
+            onclick: async () => {
+              try {
+                await put(`/v1/admin/venues/${c.venue_id}/modulos`, {
+                  modulo: "cardapio-digital",
+                  ativo: true,
+                  url: campo.value.trim(),
+                });
+                avisar("Endereço do cardápio salvo.", "ok");
+              } catch (e) {
+                avisar(e.message, "erro");
+              }
+            },
+          }),
+        ]),
+      );
+    }
+
+    return caixa;
   }
 
   function formulario() {

@@ -1056,6 +1056,38 @@ export type Database = {
           },
         ]
       }
+      venue_modulos: {
+        Row: {
+          ativo: boolean
+          contratado_em: string
+          modulo: string
+          url: string | null
+          venue_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          contratado_em?: string
+          modulo: string
+          url?: string | null
+          venue_id: string
+        }
+        Update: {
+          ativo?: boolean
+          contratado_em?: string
+          modulo?: string
+          url?: string | null
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_modulos_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venues: {
         Row: {
           active: boolean
