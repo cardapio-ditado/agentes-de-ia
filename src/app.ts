@@ -39,6 +39,7 @@ import {
   descartarResposta,
   filaDeAprovacao,
   historicoDeAvaliacoes,
+  marcarPublicada,
   perfilDoVenue,
   salvarPerfil,
 } from "./avaliacoes.js";
@@ -1102,7 +1103,7 @@ async function roteasApi(
   if (metodo === "POST" && p[0] === "avaliacoes" && p.length === 3) {
     const chave = await exigirChave(req, "reservations:write");
     const acao = p[2]!;
-    if (acao !== "aprovar" && acao !== "descartar") {
+    if (acao !== "aprovar" && acao !== "descartar" && acao !== "colada") {
       throw erro(404, "not_found", `Ação "${acao}" não existe.`);
     }
 
@@ -1114,6 +1115,13 @@ async function roteasApi(
 
     if (acao === "descartar") {
       return ok(res, await descartarResposta(encontrado.avaliacao.id));
+    }
+
+    // Enquanto a publicação é manual, quem confirma que a resposta chegou ao
+    // Google é a pessoa que colou. Sem isso a resposta ficaria para sempre na
+    // lista de "prontas para colar", e ninguém saberia o que já foi feito.
+    if (acao === "colada") {
+      return ok(res, await marcarPublicada(encontrado.avaliacao.id));
     }
 
     // O texto editado à mão vem junto: o dono corrige a resposta na hora de

@@ -4,26 +4,26 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 /**
  * Avaliações do Google.
  *
- * A tela existe antes da automação de propósito: com o lançamento manual dá
- * para ver o tom das respostas e corrigir o que estiver errado sem que nada
- * disso encoste num perfil de verdade. Errar o tom em público é caro; errar
- * aqui não custa nada.
+ * O fluxo de hoje é colar-e-copiar, e a tela é desenhada em volta dele: o
+ * cliente cola a avaliação, a IA redige, ele copia a resposta e cola no
+ * Google. Nada toca o Google sozinho — a automação por navegador foi
+ * aposentada depois que o Google a sinalizou com CAPTCHA na primeira visita,
+ * e a automação de verdade chega com a API oficial (pedido protocolado,
+ * previsão setembro/2026). Quando ela chegar, esta tela ganha o botão
+ * "Conectar com Google" e o colar-e-copiar se aposenta.
  *
- * A regra que manda: 1 e 2 estrelas nunca são publicadas sem alguém ler. O
- * servidor decide isso — a tela só mostra o que foi decidido.
+ * A regra que não muda: 1 e 2 estrelas nunca são respondidas sem alguém ler.
+ * O servidor decide isso — a tela só mostra o que foi decidido.
  */
 
-/**
- * A conta que os donos adicionam como gerente dos perfis. Uma para todos os
- * clientes: o dono nunca cria conta nem entrega senha — só autoriza esta.
- */
+/** A conta usada pela equipe na configuração técnica; o cliente não a vê. */
 const CONTA_GERENTE_PADRAO = "agente@brasafood.app";
 
 const SITUACOES = {
   pendente: ["aguardando redação", ""],
   rascunho: ["esperando você", "etiqueta-alerta"],
-  aprovada: ["liberada para publicar", "etiqueta-info"],
-  publicada: ["publicada", "etiqueta-ok"],
+  aprovada: ["pronta para colar", "etiqueta-info"],
+  publicada: ["respondida no Google", "etiqueta-ok"],
   descartada: ["sem resposta", ""],
   erro: ["falhou", "etiqueta-perigo"],
 };
@@ -40,43 +40,60 @@ function classeDaNota(nota) {
 }
 
 export async function avaliacoes(raiz, ctx) {
-  const conexao = el("div", { classe: "cartao" });
   const fila = el("div", { classe: "lista" });
+  const prontas = el("div", { classe: "lista" });
+  const regras = el("div", { classe: "cartao" });
   const historico = el("div", { classe: "lista" });
 
   raiz.append(
     el("section", { classe: "pilha" }, [
+      // O recado que explica a fase atual — e o que vem aí.
+      el("div", { classe: "cartao alerta" }, [
+        el("p", {}, [
+          el("strong", { texto: "Respostas automáticas chegam em setembro. " }),
+          document.createTextNode(
+            "Estamos ligando o Brasa Food direto ao Google: as avaliações boas serão " +
+              "respondidas sozinhas e as de nota baixa vão esperar o seu OK. " +
+              "Até lá funciona assim: cole a avaliação abaixo, a IA escreve, você copia e cola no Google.",
+          ),
+        ]),
+      ]),
+
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: "Esperando você" }),
-          el("p", {
-            classe: "muted",
-            texto:
-              "Respostas redigidas que precisam da sua leitura. Nota 1 e 2 sempre param aqui.",
-          }),
+          el("h2", { texto: "Responder uma avaliação" }),
+          el("p", { classe: "muted", texto: "Cole o que o cliente escreveu no Google. A IA responde no tom da casa." }),
         ]),
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: "Recarregar",
-          onclick: carregar,
-        }),
+      ]),
+      formularioResponder(),
+
+      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
+        el("div", {}, [
+          el("h2", { texto: "Esperando você" }),
+          el("p", { classe: "muted", texto: "Nota baixa para aqui, sempre: leia, ajuste se quiser e aprove." }),
+        ]),
+        el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
       ]),
       fila,
 
       el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
         el("div", {}, [
-          el("h2", { texto: "Conexão e regras" }),
-          el("p", { classe: "muted", texto: "Como o agente escreve e o que sai sem revisão." }),
+          el("h2", { texto: "Prontas para colar no Google" }),
+          el("p", { classe: "muted", texto: "Copie a resposta, cole no Google e marque como feita." }),
         ]),
       ]),
-      conexao,
+      prontas,
 
       el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
         el("div", {}, [
-          el("h2", { texto: "Histórico" }),
-          el("p", { classe: "muted", texto: "Tudo que passou por aqui." }),
+          el("h2", { texto: "Como a IA escreve" }),
+          el("p", { classe: "muted", texto: "O tom da casa e o que poderá sair sem a sua revisão." }),
         ]),
+      ]),
+      regras,
+
+      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
+        el("div", {}, [el("h2", { texto: "Histórico" })]),
       ]),
       historico,
     ]),
@@ -86,37 +103,90 @@ export async function avaliacoes(raiz, ctx) {
 
   async function carregar() {
     limpar(fila).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(prontas);
     limpar(historico);
 
     const dados = await get(`/v1/venues/${ctx.venue}/avaliacoes`);
 
     limpar(fila);
     if (dados.fila.length === 0) {
-      fila.append(vazio("Nada esperando", "Nenhuma resposta pendente de aprovação."));
+      fila.append(vazio("Nada esperando", "Nenhuma resposta pendente da sua leitura."));
       ctx.atualizarContador("avaliacoes", 0);
     } else {
       ctx.atualizarContador("avaliacoes", dados.fila.length);
       for (const a of dados.fila) fila.append(cartaoDaFila(a));
     }
 
-    limpar(conexao).append(...formularioDeConexao(dados.perfil));
-
-    if (dados.historico.length === 0) {
-      historico.append(vazio("Nenhuma avaliação ainda"));
+    const liberadas = dados.historico.filter((a) => a.resposta_status === "aprovada" && a.resposta);
+    if (liberadas.length === 0) {
+      prontas.append(vazio("Nenhuma resposta esperando ser colada"));
     } else {
-      for (const a of dados.historico) historico.append(cartaoDoHistorico(a));
+      for (const a of liberadas) prontas.append(cartaoPronta(a));
+    }
+
+    limpar(regras).append(...formularioDeRegras(dados.perfil));
+
+    const resto = dados.historico.filter(
+      (a) => a.resposta_status !== "aprovada" && a.resposta_status !== "rascunho",
+    );
+    if (resto.length === 0) {
+      historico.append(vazio("Nenhuma avaliação concluída ainda"));
+    } else {
+      for (const a of resto) historico.append(cartaoDoHistorico(a));
     }
   }
 
-  // ---------- Fila ----------
+  // ---------- Colar uma avaliação ----------
+
+  function formularioResponder() {
+    const autor = el("input", { placeholder: "Nome de quem avaliou (como aparece no Google)" });
+    const nota = el("select", {}, [5, 4, 3, 2, 1].map((n) =>
+      el("option", { value: String(n), texto: `${estrelas(n)} ${n}` }),
+    ));
+    const comentario = el("textarea", { rows: 3 });
+    comentario.placeholder = "Cole aqui o texto da avaliação. Se for só nota, deixe em branco.";
+    comentario.style.width = "100%";
+
+    const botao = el("button", {
+      classe: "btn btn-primario btn-peq",
+      type: "button",
+      texto: "Redigir resposta",
+      onclick: async () => {
+        botao.disabled = true;
+        try {
+          await post(`/v1/venues/${ctx.venue}/avaliacoes`, {
+            autor: autor.value.trim(),
+            nota: Number(nota.value),
+            comentario: comentario.value.trim(),
+          });
+          avisar("Resposta redigida — veja logo abaixo.", "ok");
+          autor.value = "";
+          comentario.value = "";
+          await carregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+        } finally {
+          botao.disabled = false;
+        }
+      },
+    });
+
+    return el("div", { classe: "cartao" }, [
+      campo("Quem avaliou", autor),
+      campo("Nota", nota),
+      campo("O que a pessoa escreveu", comentario),
+      el("div", { classe: "reserva-acoes" }, [botao]),
+    ]);
+  }
+
+  // ---------- Fila (nota baixa espera gente) ----------
 
   function cartaoDaFila(a) {
     // A resposta é editável antes de aprovar: o dono corrige justamente nas
     // avaliações que mais importam, e obrigá-lo a aprovar o texto como veio
     // faria dele refém de um rascunho.
     // O valor vai pela propriedade, não pelo atributo: em <textarea> o
-    // conteúdo é filho de texto, e setAttribute("value") não preenche nada —
-    // o rascunho apareceria em branco justamente na tela em que ele importa.
+    // conteúdo é filho de texto, e setAttribute("value") não preenche nada.
     const texto = el("textarea", { rows: 4 });
     texto.value = a.resposta ?? "";
     texto.style.width = "100%";
@@ -140,10 +210,7 @@ export async function avaliacoes(raiz, ctx) {
         texto.focus();
         return;
       }
-      if (
-        acao === "descartar" &&
-        !confirm("Deixar esta avaliação sem resposta? Ela sai da fila.")
-      ) {
+      if (acao === "descartar" && !confirm("Deixar esta avaliação sem resposta? Ela sai da fila.")) {
         return;
       }
 
@@ -154,7 +221,10 @@ export async function avaliacoes(raiz, ctx) {
           `/v1/avaliacoes/${a.id}/${acao}`,
           acao === "aprovar" ? { texto: texto.value.trim() } : {},
         );
-        avisar(acao === "aprovar" ? "Resposta liberada." : "Avaliação sem resposta.", "ok");
+        avisar(
+          acao === "aprovar" ? "Aprovada — agora copie e cole no Google." : "Avaliação sem resposta.",
+          "ok",
+        );
         await carregar();
       } catch (err) {
         avisar(err.message, "erro");
@@ -165,20 +235,50 @@ export async function avaliacoes(raiz, ctx) {
 
     return el("article", { classe: "cartao" }, [
       cabecalhoDaAvaliacao(a),
-      a.comentario ? el("p", { texto: `"${a.comentario}"` }) : el("p", { classe: "muted", texto: "Sem comentário, só a nota." }),
+      a.comentario
+        ? el("p", { texto: `"${a.comentario}"` })
+        : el("p", { classe: "muted", texto: "Sem comentário, só a nota." }),
       el("p", { classe: "muted", style: "margin-top:12px", texto: "Resposta sugerida — edite se quiser:" }),
       texto,
-      el("div", { classe: "reserva-acoes" }, [btnAprovar, botaoCopiar(() => texto.value), btnDescartar]),
+      el("div", { classe: "reserva-acoes" }, [btnAprovar, btnDescartar]),
+    ]);
+  }
+
+  // ---------- Prontas para colar ----------
+
+  function cartaoPronta(a) {
+    const jaColei = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Já colei no Google",
+      onclick: async () => {
+        jaColei.disabled = true;
+        try {
+          await post(`/v1/avaliacoes/${a.id}/colada`, {});
+          avisar("Marcada como respondida.", "ok");
+          await carregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          jaColei.disabled = false;
+        }
+      },
+    });
+
+    return el("article", { classe: "cartao" }, [
+      cabecalhoDaAvaliacao(a),
+      a.comentario ? el("p", { classe: "muted", texto: `"${a.comentario}"` }) : null,
+      el("p", { style: "margin-top:10px", texto: a.resposta }),
+      el("div", { classe: "reserva-acoes" }, [botaoCopiar(a.resposta), jaColei]),
     ]);
   }
 
   /** Copiar para colar no Google — é assim que a resposta chega lá hoje. */
   function botaoCopiar(pegarTexto) {
-    const btn = el("button", {
-      classe: "btn btn-peq",
+    return el("button", {
+      classe: "btn btn-primario btn-peq",
       type: "button",
       texto: "Copiar resposta",
-      onclick: async () => {
+      onclick: async (e) => {
         const texto = (typeof pegarTexto === "function" ? pegarTexto() : pegarTexto)?.trim();
         if (!texto) return avisar("Não há resposta para copiar.", "erro");
         try {
@@ -189,7 +289,6 @@ export async function avaliacoes(raiz, ctx) {
         }
       },
     });
-    return btn;
   }
 
   function cabecalhoDaAvaliacao(a) {
@@ -215,38 +314,20 @@ export async function avaliacoes(raiz, ctx) {
         el("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, [
           etiqueta(`${estrelas(a.nota)} ${a.nota}`, classeDaNota(a.nota)),
           etiqueta(rotulo, variante),
-          a.liberacao === "automatica" ? etiqueta("automática", "") : null,
         ]),
       ]),
       a.comentario ? el("p", { texto: `"${a.comentario}"` }) : null,
       a.resposta ? el("p", { classe: "muted", texto: `Resposta: ${a.resposta}` }) : null,
       a.ultimo_erro ? el("p", { classe: "muted", texto: `Erro: ${a.ultimo_erro}` }) : null,
-      // Aprovada ainda não colada no Google: o botão fica à mão até alguém
-      // publicar de verdade e marcar como publicada.
-      a.resposta && (a.resposta_status === "aprovada" || a.resposta_status === "rascunho")
-        ? el("div", { classe: "reserva-acoes" }, [botaoCopiar(a.resposta)])
-        : null,
     ]);
   }
 
-  // ---------- Conexão e regras ----------
+  // ---------- Regras ----------
 
-  function formularioDeConexao(perfil) {
+  function formularioDeRegras(perfil) {
     const config = perfil?.configuracao ?? {};
-    // A conta que o dono adiciona como gerente. Vem do perfil quando já
-    // existe; o padrão cobre o caso do primeiro acesso.
     const conta = perfil?.conta_gerente || CONTA_GERENTE_PADRAO;
 
-    const partes = [estadoDaConexao(perfil)];
-
-    // Sem conexão ainda: o passo a passo é a tela. O dono não instala nada e
-    // não entrega senha — ele adiciona um e-mail como gerente, dentro do
-    // Google que ele já usa, e pode remover quando quiser.
-    if (!perfil || perfil.status === "pendente") {
-      partes.push(passoAPasso(conta, perfil));
-    }
-
-    // ---- Regras: essas são do dono, sempre visíveis ----
     const notaAutomatica = el("select", {}, [
       el("option", { value: "5", texto: "Só 5 estrelas" }),
       el("option", { value: "4", texto: "4 e 5 estrelas (recomendado)" }),
@@ -285,125 +366,26 @@ export async function avaliacoes(raiz, ctx) {
       },
     });
 
-    partes.push(
-      campo("Publicar sem revisão", notaAutomatica),
-      el("p", { classe: "muted", texto: "Nota 1 e 2 sempre passam por você — não há como desligar." }),
+    return [
+      campo("Responder sem sua revisão", notaAutomatica),
+      el("p", {
+        classe: "muted",
+        texto:
+          "Hoje isso decide o que pula a fila e já sai pronto para colar. Em setembro, com a " +
+          "automática ligada, decide o que é publicado sozinho. Nota 1 e 2 sempre passam por você — não há como desligar.",
+      }),
       campo("Assinatura", assinatura),
       campo("Tom da casa", tom),
       el("div", { classe: "reserva-acoes" }, [salvar]),
-      testarComAvaliacaoManual(),
       blocoTecnico(perfil, conta),
-    );
-    return partes;
+    ];
   }
 
-  /**
-   * O estado da conexão em linguagem de dono de bar.
-   *
-   * Sessão expirada e erro são problema da equipe Brasa Food, não do cliente —
-   * as mensagens dizem "nossa equipe resolve" em vez de vazar comando de
-   * terminal. O detalhe técnico existe, mas mora no bloco técnico.
-   */
-  function estadoDaConexao(perfil) {
-    const estados = {
-      pendente: [
-        "🟡",
-        "Quase lá",
-        "Recebemos seu pedido de conexão. Nossa equipe ativa em até 1 dia útil e você não precisa fazer mais nada.",
-      ],
-      conectado: [
-        "🟢",
-        "Conectado",
-        perfil?.ultima_sincronizacao
-          ? `Suas avaliações estão sendo acompanhadas. Última verificação: ${dataHora(perfil.ultima_sincronizacao)}.`
-          : "Suas avaliações estão sendo acompanhadas.",
-      ],
-      sessao_expirada: [
-        "🟠",
-        "Reconectando",
-        "A conexão com o Google precisa ser renovada. Nossa equipe já foi avisada — nada muda para você.",
-      ],
-      erro: [
-        "🔴",
-        "Problema na conexão",
-        "Encontramos um problema e nossa equipe está verificando. Suas avaliações não se perdem.",
-      ],
-    };
-    const [icone, titulo, texto] = perfil
-      ? (estados[perfil.status] ?? estados.erro)
-      : ["⚪", "Ainda não conectado", "Siga os passos abaixo — leva uns 2 minutos e você não instala nada."];
-
-    return el("div", { style: "margin-bottom:14px" }, [
-      el("h3", { texto: `${icone} ${titulo}` }),
-      el("p", { classe: "muted", texto }),
-    ]);
-  }
-
-  /** Os três passos do dono. Tudo dentro do Google que ele já conhece. */
-  function passoAPasso(conta, perfil) {
-    const copiar = el("button", {
-      classe: "btn btn-peq",
-      type: "button",
-      texto: "Copiar e-mail",
-      onclick: async () => {
-        try {
-          await navigator.clipboard.writeText(conta);
-          avisar("E-mail copiado.", "ok");
-        } catch {
-          avisar(`Copie manualmente: ${conta}`, "info");
-        }
-      },
-    });
-
-    const jaAdicionei = el("button", {
-      classe: "btn btn-primario btn-peq",
-      type: "button",
-      texto: "Pronto, já adicionei",
-      onclick: async () => {
-        jaAdicionei.disabled = true;
-        try {
-          await put(`/v1/venues/${ctx.venue}/avaliacoes-perfil`, { conta_gerente: conta });
-          avisar("Recebido! Nossa equipe ativa a conexão em até 1 dia útil.", "ok");
-          await carregar();
-        } catch (err) {
-          avisar(err.message, "erro");
-          jaAdicionei.disabled = false;
-        }
-      },
-    });
-
-    return el("ol", { style: "margin:0 0 16px;padding-left:20px;display:grid;gap:10px" }, [
-      el("li", {}, [
-        document.createTextNode("Abra o "),
-        el("a", { href: "https://business.google.com/", target: "_blank", rel: "noopener", texto: "perfil da sua empresa no Google" }),
-        document.createTextNode(" com a conta que administra o seu negócio."),
-      ]),
-      el("li", {}, [
-        document.createTextNode(
-          "Nas configurações do perfil, entre em “Pessoas e acesso” e clique em Adicionar.",
-        ),
-      ]),
-      el("li", {}, [
-        document.createTextNode("Adicione este e-mail como "),
-        el("strong", { texto: "Gerente" }),
-        document.createTextNode(`: ${conta} `),
-        copiar,
-      ]),
-      el("li", {}, [
-        document.createTextNode("Você não entrega senha nenhuma e pode remover o acesso quando quiser. "),
-        perfil ? document.createTextNode("") : jaAdicionei,
-      ]),
-    ]);
-  }
-
-  /**
-   * O que só a equipe Brasa Food mexe. Fica na tela — atrás de um "detalhes" —
-   * porque o operador usa o MESMO painel; mas nada aqui é pedido ao dono.
-   */
+  /** O que só a equipe Brasa Food mexe. Nada aqui é pedido ao cliente. */
   function blocoTecnico(perfil, conta) {
     const contaGerente = el("input", { value: conta });
     const localId = el("input", {
-      placeholder: "https://business.google.com/…/reviews",
+      placeholder: "https://…",
       value: perfil?.local_id ?? "",
     });
 
@@ -430,58 +412,11 @@ export async function avaliacoes(raiz, ctx) {
     return el("details", { style: "margin-top:16px" }, [
       el("summary", { texto: "Configuração técnica (equipe Brasa Food)" }),
       campo("Conta gerente", contaGerente),
-      campo("Página de avaliações (local_id)", localId),
+      campo("Endereço do perfil (local_id)", localId),
       perfil?.ultimo_erro
         ? el("p", { classe: "muted", texto: `Último erro: ${perfil.ultimo_erro}` })
         : null,
       el("div", { classe: "reserva-acoes" }, [salvar]),
-    ]);
-  }
-
-  /** Lançamento manual: serve para ajustar o tom antes de ligar a automação. */
-  function testarComAvaliacaoManual() {
-    const autor = el("input", { placeholder: "Marina S." });
-    const nota = el("select", {}, [5, 4, 3, 2, 1].map((n) =>
-      el("option", { value: String(n), texto: `${estrelas(n)} ${n}` }),
-    ));
-    const comentario = el("textarea", { rows: 2 });
-    comentario.placeholder = "Demorou 40 minutos pra sair o prato…";
-    comentario.style.width = "100%";
-
-    const botao = el("button", {
-      classe: "btn btn-peq",
-      type: "button",
-      texto: "Redigir resposta",
-      onclick: async () => {
-        botao.disabled = true;
-        try {
-          await post(`/v1/venues/${ctx.venue}/avaliacoes`, {
-            autor: autor.value.trim(),
-            nota: Number(nota.value),
-            comentario: comentario.value.trim(),
-          });
-          avisar("Avaliação lançada e resposta redigida.", "ok");
-          await carregar();
-        } catch (err) {
-          avisar(err.message, "erro");
-        } finally {
-          botao.disabled = false;
-        }
-      },
-    });
-
-    return el("details", { style: "margin-top:16px", open: true }, [
-      el("summary", { texto: "Chegou avaliação? Cole aqui que a IA responde" }),
-      el("p", {
-        classe: "muted",
-        texto:
-          "Copie a avaliação do Google e cole aqui. A IA escreve a resposta no tom da casa; " +
-          "você aprova, copia e cola de volta no Google. Nada é enviado sozinho.",
-      }),
-      campo("Autor", autor),
-      campo("Nota", nota),
-      campo("Comentário", comentario),
-      el("div", { classe: "reserva-acoes" }, [botao]),
     ]);
   }
 
