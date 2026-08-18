@@ -16,6 +16,8 @@ import { db } from "./supabase.js";
 export interface ItemDoCardapio {
   nome: string;
   descricao: string | null;
+  /** Quantas pessoas o prato serve. É a pergunta mais feita numa mesa. */
+  servePessoas: number | null;
   preco: number;
   categoria: string | null;
   grupo: string | null;
@@ -28,6 +30,8 @@ export interface ItemDoCardapio {
 interface LinhaItem {
   name: string;
   description: string | null;
+  descricao_agente: string | null;
+  serve_pessoas: number | null;
   price: number;
   categories: { name: string; grupo: string | null } | null;
   promotion_items: Array<{
@@ -48,7 +52,7 @@ interface LinhaItem {
 }
 
 const SELECAO = `
-  name, description, price,
+  name, description, descricao_agente, serve_pessoas, price,
   categories ( name, grupo ),
   promotion_items ( promotional_price, promotions ( name, is_active, starts_at, ends_at, weekly_days ) ),
   item_variation_groups ( name, required, item_variation_options ( name, price_modifier ) )
@@ -92,7 +96,10 @@ function converter(linha: LinhaItem, agora: Date, timezone: string): ItemDoCarda
 
   return {
     nome: linha.name,
-    descricao: linha.description || null,
+    // A descrição escrita para o agente vence a pública: uma foi feita para
+    // fundamentar resposta, a outra para vender numa vitrine.
+    descricao: linha.descricao_agente?.trim() || linha.description || null,
+    servePessoas: linha.serve_pessoas ?? null,
     preco: Number(linha.price),
     categoria: linha.categories?.name ?? null,
     grupo: linha.categories?.grupo ?? null,
@@ -183,7 +190,10 @@ export function descreverItem(item: ItemDoCardapio): string {
     ? `R$ ${item.promocao.preco.toFixed(2)} (promoção "${item.promocao.nome}" — de R$ ${item.preco.toFixed(2)})`
     : `R$ ${item.preco.toFixed(2)}`;
 
-  linhas.push(`- ${item.nome} — ${preco}`);
+  const serve = item.servePessoas
+    ? ` — serve ${item.servePessoas} ${item.servePessoas === 1 ? "pessoa" : "pessoas"}`
+    : "";
+  linhas.push(`- ${item.nome} — ${preco}${serve}`);
   if (item.descricao) linhas.push(`  ${item.descricao}`);
   for (const v of item.variacoes) {
     if (v.opcoes.length === 0) continue;

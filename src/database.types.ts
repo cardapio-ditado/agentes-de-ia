@@ -169,6 +169,8 @@ export type Database = {
       items: {
         Row: {
           category_id: string | null
+          descricao_agente: string | null
+          serve_pessoas: number | null
           cover_image_url: string | null
           created_at: string
           description: string | null
@@ -182,6 +184,8 @@ export type Database = {
         }
         Insert: {
           category_id?: string | null
+          descricao_agente?: string | null
+          serve_pessoas?: number | null
           cover_image_url?: string | null
           created_at?: string
           description?: string | null
@@ -195,6 +199,8 @@ export type Database = {
         }
         Update: {
           category_id?: string | null
+          descricao_agente?: string | null
+          serve_pessoas?: number | null
           cover_image_url?: string | null
           created_at?: string
           description?: string | null

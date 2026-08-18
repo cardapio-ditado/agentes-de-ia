@@ -59,6 +59,7 @@ function item(extra: Partial<ItemDoCardapio> = {}): ItemDoCardapio {
   return {
     nome: "Isca de tilápia",
     descricao: null,
+    servePessoas: null,
     preco: 62,
     categoria: "Porções",
     grupo: "comida",
@@ -121,4 +122,12 @@ test("o cardápio sai agrupado por categoria", () => {
 
 test("cardápio vazio devolve string vazia, para quem chama decidir o que dizer", () => {
   assert.equal(descreverCardapio([]), "");
+});
+
+test('"serve X pessoas" entra na descrição — é a pergunta mais feita numa mesa', () => {
+  assert.match(descreverItem(item({ servePessoas: 2 })), /serve 2 pessoas/);
+  // Singular sem "1 pessoas".
+  assert.match(descreverItem(item({ servePessoas: 1 })), /serve 1 pessoa(?!s)/);
+  // Sem o dado, nada é dito — melhor calar que chutar o tamanho da porção.
+  assert.doesNotMatch(descreverItem(item()), /serve/i);
 });
