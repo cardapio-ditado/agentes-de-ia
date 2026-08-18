@@ -219,8 +219,32 @@ create table if not exists turno_mesas (
 );
 
 -- ============================================================
+-- Conversas do chat da mesa
+-- ============================================================
+-- Provisória: na Fase 3 o chat da mesa passa a usar o agente do Brasa Food,
+-- que já guarda conversa em `conversations`/`messages` — com histórico,
+-- ferramentas e cobrança por pontos. Até lá o app grava aqui, e apagar esta
+-- tabela agora quebraria o widget que está no ar.
+create table if not exists ai_chat_logs (
+  id uuid primary key default gen_random_uuid(),
+  venue_id uuid not null references venues(id) on delete cascade,
+  session_id text not null,
+  item_id uuid references items(id) on delete set null,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamptz default now()
+);
+
+comment on table ai_chat_logs is
+  'Conversas do chat da mesa. Provisória até o chat migrar para o agente do Brasa Food.';
+
+alter table ai_chat_logs enable row level security;
+
+
+-- ============================================================
 -- Índices
 -- ============================================================
+create index if not exists idx_ai_chat_logs_sessao on ai_chat_logs (venue_id, session_id, created_at);
 create index if not exists idx_categories_venue on categories (venue_id, sort_order);
 create index if not exists idx_items_venue on items (venue_id, is_active, sort_order);
 create index if not exists idx_items_category on items (category_id);
@@ -370,6 +394,11 @@ create policy "equipe administra itens de promocao"
   on promotion_items for all to authenticated
   using (exists (select 1 from promotions p where p.id = promotion_id and e_da_casa(p.venue_id)))
   with check (exists (select 1 from promotions p where p.id = promotion_id and e_da_casa(p.venue_id)));
+
+create policy "cliente registra conversa do chat"
+  on ai_chat_logs for insert to anon, authenticated with check (true);
+create policy "equipe le conversas do chat"
+  on ai_chat_logs for select to authenticated using (e_da_casa(venue_id));
 
 -- Realtime: o painel do garçom precisa ver evento de mesa na hora.
 alter publication supabase_realtime add table mesa_eventos;
