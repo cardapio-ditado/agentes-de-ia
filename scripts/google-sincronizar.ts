@@ -1,5 +1,25 @@
+import { createInterface } from "node:readline/promises";
+import { stdin, stdout } from "node:process";
 import { sincronizar } from "../src/channels/googleAvaliacoes.js";
 import { db } from "../src/supabase.js";
+
+/**
+ * Trava de consentimento.
+ *
+ * Na primeira visita automatizada o Google respondeu com CAPTCHA de "tráfego
+ * incomum" (18/08/2026) — o degrau seguinte dessa escada é restrição na conta
+ * gerente. Rodar de novo tem que ser decisão consciente de quem entende o
+ * risco, nunca um duplo clique por hábito. A recomendação é esperar a API
+ * oficial, já solicitada.
+ */
+async function confirmarRisco(): Promise<boolean> {
+  console.log("AVISO: o Google sinalizou esta automação com CAPTCHA em 18/08/2026.");
+  console.log("Insistir pode restringir a conta gerente. Recomendado: aguardar a API oficial.");
+  const rl = createInterface({ input: stdin, output: stdout });
+  const resposta = await rl.question('Digite "ENTENDO O RISCO" para rodar mesmo assim: ');
+  rl.close();
+  return resposta.trim().toUpperCase() === "ENTENDO O RISCO";
+}
 
 /**
  * Uma passada de sincronização em todos os perfis conectados.
@@ -14,6 +34,10 @@ import { db } from "../src/supabase.js";
  * uma VPS pequena — e é o padrão de tráfego que menos parece gente.
  */
 async function main(): Promise<void> {
+  if (!(await confirmarRisco())) {
+    console.log("Cancelado. As respostas continuam disponíveis no painel para copiar e colar.");
+    return;
+  }
   const { data, error } = await db()
     .from("google_perfis")
     .select("*")

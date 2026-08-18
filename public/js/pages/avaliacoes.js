@@ -168,8 +168,28 @@ export async function avaliacoes(raiz, ctx) {
       a.comentario ? el("p", { texto: `"${a.comentario}"` }) : el("p", { classe: "muted", texto: "Sem comentário, só a nota." }),
       el("p", { classe: "muted", style: "margin-top:12px", texto: "Resposta sugerida — edite se quiser:" }),
       texto,
-      el("div", { classe: "reserva-acoes" }, [btnAprovar, btnDescartar]),
+      el("div", { classe: "reserva-acoes" }, [btnAprovar, botaoCopiar(() => texto.value), btnDescartar]),
     ]);
+  }
+
+  /** Copiar para colar no Google — é assim que a resposta chega lá hoje. */
+  function botaoCopiar(pegarTexto) {
+    const btn = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Copiar resposta",
+      onclick: async () => {
+        const texto = (typeof pegarTexto === "function" ? pegarTexto() : pegarTexto)?.trim();
+        if (!texto) return avisar("Não há resposta para copiar.", "erro");
+        try {
+          await navigator.clipboard.writeText(texto);
+          avisar("Copiada! Agora cole na resposta da avaliação, no Google.", "ok");
+        } catch {
+          avisar("Não consegui copiar sozinho — selecione o texto e use Ctrl+C.", "erro");
+        }
+      },
+    });
+    return btn;
   }
 
   function cabecalhoDaAvaliacao(a) {
@@ -201,6 +221,11 @@ export async function avaliacoes(raiz, ctx) {
       a.comentario ? el("p", { texto: `"${a.comentario}"` }) : null,
       a.resposta ? el("p", { classe: "muted", texto: `Resposta: ${a.resposta}` }) : null,
       a.ultimo_erro ? el("p", { classe: "muted", texto: `Erro: ${a.ultimo_erro}` }) : null,
+      // Aprovada ainda não colada no Google: o botão fica à mão até alguém
+      // publicar de verdade e marcar como publicada.
+      a.resposta && (a.resposta_status === "aprovada" || a.resposta_status === "rascunho")
+        ? el("div", { classe: "reserva-acoes" }, [botaoCopiar(a.resposta)])
+        : null,
     ]);
   }
 
@@ -445,12 +470,13 @@ export async function avaliacoes(raiz, ctx) {
       },
     });
 
-    return el("details", { style: "margin-top:16px" }, [
-      el("summary", { texto: "Testar com uma avaliação de mentira" }),
+    return el("details", { style: "margin-top:16px", open: true }, [
+      el("summary", { texto: "Chegou avaliação? Cole aqui que a IA responde" }),
       el("p", {
         classe: "muted",
         texto:
-          "Lança uma avaliação só no seu painel — nada é enviado ao Google. Use para ver o tom antes de conectar de verdade.",
+          "Copie a avaliação do Google e cole aqui. A IA escreve a resposta no tom da casa; " +
+          "você aprova, copia e cola de volta no Google. Nada é enviado sozinho.",
       }),
       campo("Autor", autor),
       campo("Nota", nota),
