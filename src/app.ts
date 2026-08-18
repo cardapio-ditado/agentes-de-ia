@@ -680,17 +680,21 @@ async function roteasApi(
       const corpo = await lerJson(req);
       const nota = Number(corpo.nota_automatica);
 
+      // Só o que veio no corpo entra na configuração. A tela salva em partes —
+      // o dono aperta "já adicionei" só com a conta, o operador salva só o
+      // local_id — e campo ausente não pode apagar o que já foi configurado.
+      const configuracao: Record<string, unknown> = {};
+      if (Number.isInteger(nota)) configuracao.nota_automatica = nota;
+      if ("assinatura" in corpo) configuracao.assinatura = textoOpcional(corpo, "assinatura") ?? "";
+      if ("tom" in corpo) configuracao.tom = textoOpcional(corpo, "tom") ?? "";
+
       return ok(
         res,
         await salvarPerfil({
           venueId: venue.id,
           contaGerente: texto(corpo, "conta_gerente"),
-          localId: textoOpcional(corpo, "local_id") ?? null,
-          configuracao: {
-            ...(Number.isInteger(nota) ? { nota_automatica: nota } : {}),
-            assinatura: textoOpcional(corpo, "assinatura") ?? "",
-            tom: textoOpcional(corpo, "tom") ?? "",
-          },
+          ...("local_id" in corpo ? { localId: textoOpcional(corpo, "local_id") ?? null } : {}),
+          configuracao,
         }),
       );
     }

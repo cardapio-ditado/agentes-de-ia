@@ -13,6 +13,12 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
  * servidor decide isso — a tela só mostra o que foi decidido.
  */
 
+/**
+ * A conta que os donos adicionam como gerente dos perfis. Uma para todos os
+ * clientes: o dono nunca cria conta nem entrega senha — só autoriza esta.
+ */
+const CONTA_GERENTE_PADRAO = "agente@brasafood.app";
+
 const SITUACOES = {
   pendente: ["aguardando redação", ""],
   rascunho: ["esperando você", "etiqueta-alerta"],
@@ -202,11 +208,20 @@ export async function avaliacoes(raiz, ctx) {
 
   function formularioDeConexao(perfil) {
     const config = perfil?.configuracao ?? {};
+    // A conta que o dono adiciona como gerente. Vem do perfil quando já
+    // existe; o padrão cobre o caso do primeiro acesso.
+    const conta = perfil?.conta_gerente || CONTA_GERENTE_PADRAO;
 
-    const contaGerente = el("input", {
-      placeholder: "agente@brasafood.app",
-      value: perfil?.conta_gerente ?? "",
-    });
+    const partes = [estadoDaConexao(perfil)];
+
+    // Sem conexão ainda: o passo a passo é a tela. O dono não instala nada e
+    // não entrega senha — ele adiciona um e-mail como gerente, dentro do
+    // Google que ele já usa, e pode remover quando quiser.
+    if (!perfil || perfil.status === "pendente") {
+      partes.push(passoAPasso(conta, perfil));
+    }
+
+    // ---- Regras: essas são do dono, sempre visíveis ----
     const notaAutomatica = el("select", {}, [
       el("option", { value: "5", texto: "Só 5 estrelas" }),
       el("option", { value: "4", texto: "4 e 5 estrelas (recomendado)" }),
@@ -226,17 +241,12 @@ export async function avaliacoes(raiz, ctx) {
     const salvar = el("button", {
       classe: "btn btn-primario btn-peq",
       type: "button",
-      texto: "Salvar",
+      texto: "Salvar regras",
       onclick: async () => {
-        if (!contaGerente.value.trim()) {
-          avisar("Informe a conta gerente.", "erro");
-          contaGerente.focus();
-          return;
-        }
         salvar.disabled = true;
         try {
           await put(`/v1/venues/${ctx.venue}/avaliacoes-perfil`, {
-            conta_gerente: contaGerente.value.trim(),
+            conta_gerente: conta,
             nota_automatica: Number(notaAutomatica.value),
             assinatura: assinatura.value.trim(),
             tom: tom.value.trim(),
@@ -250,21 +260,157 @@ export async function avaliacoes(raiz, ctx) {
       },
     });
 
-    return [
-      el("p", { classe: "muted" }, [
-        document.createTextNode(
-          "O dono do restaurante adiciona esta conta como Gerente do perfil dele no Google. " +
-            "Ele nunca entrega a senha, e revoga o acesso quando quiser.",
-        ),
-      ]),
-      campo("Conta gerente", contaGerente),
+    partes.push(
       campo("Publicar sem revisão", notaAutomatica),
       el("p", { classe: "muted", texto: "Nota 1 e 2 sempre passam por você — não há como desligar." }),
       campo("Assinatura", assinatura),
       campo("Tom da casa", tom),
       el("div", { classe: "reserva-acoes" }, [salvar]),
       testarComAvaliacaoManual(),
-    ];
+      blocoTecnico(perfil, conta),
+    );
+    return partes;
+  }
+
+  /**
+   * O estado da conexão em linguagem de dono de bar.
+   *
+   * Sessão expirada e erro são problema da equipe Brasa Food, não do cliente —
+   * as mensagens dizem "nossa equipe resolve" em vez de vazar comando de
+   * terminal. O detalhe técnico existe, mas mora no bloco técnico.
+   */
+  function estadoDaConexao(perfil) {
+    const estados = {
+      pendente: [
+        "🟡",
+        "Quase lá",
+        "Recebemos seu pedido de conexão. Nossa equipe ativa em até 1 dia útil e você não precisa fazer mais nada.",
+      ],
+      conectado: [
+        "🟢",
+        "Conectado",
+        perfil?.ultima_sincronizacao
+          ? `Suas avaliações estão sendo acompanhadas. Última verificação: ${dataHora(perfil.ultima_sincronizacao)}.`
+          : "Suas avaliações estão sendo acompanhadas.",
+      ],
+      sessao_expirada: [
+        "🟠",
+        "Reconectando",
+        "A conexão com o Google precisa ser renovada. Nossa equipe já foi avisada — nada muda para você.",
+      ],
+      erro: [
+        "🔴",
+        "Problema na conexão",
+        "Encontramos um problema e nossa equipe está verificando. Suas avaliações não se perdem.",
+      ],
+    };
+    const [icone, titulo, texto] = perfil
+      ? (estados[perfil.status] ?? estados.erro)
+      : ["⚪", "Ainda não conectado", "Siga os passos abaixo — leva uns 2 minutos e você não instala nada."];
+
+    return el("div", { style: "margin-bottom:14px" }, [
+      el("h3", { texto: `${icone} ${titulo}` }),
+      el("p", { classe: "muted", texto }),
+    ]);
+  }
+
+  /** Os três passos do dono. Tudo dentro do Google que ele já conhece. */
+  function passoAPasso(conta, perfil) {
+    const copiar = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Copiar e-mail",
+      onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(conta);
+          avisar("E-mail copiado.", "ok");
+        } catch {
+          avisar(`Copie manualmente: ${conta}`, "info");
+        }
+      },
+    });
+
+    const jaAdicionei = el("button", {
+      classe: "btn btn-primario btn-peq",
+      type: "button",
+      texto: "Pronto, já adicionei",
+      onclick: async () => {
+        jaAdicionei.disabled = true;
+        try {
+          await put(`/v1/venues/${ctx.venue}/avaliacoes-perfil`, { conta_gerente: conta });
+          avisar("Recebido! Nossa equipe ativa a conexão em até 1 dia útil.", "ok");
+          await carregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          jaAdicionei.disabled = false;
+        }
+      },
+    });
+
+    return el("ol", { style: "margin:0 0 16px;padding-left:20px;display:grid;gap:10px" }, [
+      el("li", {}, [
+        document.createTextNode("Abra o "),
+        el("a", { href: "https://business.google.com/", target: "_blank", rel: "noopener", texto: "perfil da sua empresa no Google" }),
+        document.createTextNode(" com a conta que administra o seu negócio."),
+      ]),
+      el("li", {}, [
+        document.createTextNode(
+          "Nas configurações do perfil, entre em “Pessoas e acesso” e clique em Adicionar.",
+        ),
+      ]),
+      el("li", {}, [
+        document.createTextNode("Adicione este e-mail como "),
+        el("strong", { texto: "Gerente" }),
+        document.createTextNode(`: ${conta} `),
+        copiar,
+      ]),
+      el("li", {}, [
+        document.createTextNode("Você não entrega senha nenhuma e pode remover o acesso quando quiser. "),
+        perfil ? document.createTextNode("") : jaAdicionei,
+      ]),
+    ]);
+  }
+
+  /**
+   * O que só a equipe Brasa Food mexe. Fica na tela — atrás de um "detalhes" —
+   * porque o operador usa o MESMO painel; mas nada aqui é pedido ao dono.
+   */
+  function blocoTecnico(perfil, conta) {
+    const contaGerente = el("input", { value: conta });
+    const localId = el("input", {
+      placeholder: "https://business.google.com/…/reviews",
+      value: perfil?.local_id ?? "",
+    });
+
+    const salvar = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Salvar configuração técnica",
+      onclick: async () => {
+        salvar.disabled = true;
+        try {
+          await put(`/v1/venues/${ctx.venue}/avaliacoes-perfil`, {
+            conta_gerente: contaGerente.value.trim() || conta,
+            local_id: localId.value.trim(),
+          });
+          avisar("Configuração salva.", "ok");
+          await carregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          salvar.disabled = false;
+        }
+      },
+    });
+
+    return el("details", { style: "margin-top:16px" }, [
+      el("summary", { texto: "Configuração técnica (equipe Brasa Food)" }),
+      campo("Conta gerente", contaGerente),
+      campo("Página de avaliações (local_id)", localId),
+      perfil?.ultimo_erro
+        ? el("p", { classe: "muted", texto: `Último erro: ${perfil.ultimo_erro}` })
+        : null,
+      el("div", { classe: "reserva-acoes" }, [salvar]),
+    ]);
   }
 
   /** Lançamento manual: serve para ajustar o tom antes de ligar a automação. */
