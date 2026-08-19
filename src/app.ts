@@ -131,6 +131,7 @@ import {
   listarCategorias,
   divergenciasDaCompra,
   enviarPedido,
+  excluirInsumo,
   extratoInsumo,
   garantirInsumo,
   lancarFaturamento,
@@ -898,6 +899,14 @@ async function roteasApi(
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       await comErroDeEstoque(() => desativarLocal(venue.id, p[3]!));
       return ok(res, { desativado: true });
+    }
+
+    // DELETE /v1/venues/:slug/insumos/:id — apaga (só item sem movimento)
+    if (metodo === "DELETE" && recurso === "insumos" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => excluirInsumo(venue.id, p[3]!));
+      return ok(res, { excluido: true });
     }
 
     // PATCH /v1/venues/:slug/insumos/:id — edita cadastro

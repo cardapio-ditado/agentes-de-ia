@@ -545,6 +545,38 @@ export async function atualizarInsumo(params: {
   if (error) throw traduzir(error);
 }
 
+/**
+ * Apaga um item de vez — mas só o que nunca se moveu.
+ *
+ * Item com movimento no estoque não se apaga: o razão é append-only, e
+ * apagar o item levaria os movimentos junto (cascade) — seis meses depois
+ * ninguém explica o saldo. Para esses, o caminho é desativar: some das
+ * telas, o passado fica. Item criado por engano, sem histórico, some de
+ * verdade.
+ */
+export async function excluirInsumo(venueId: string, insumoId: string): Promise<void> {
+  const movimento = await cliente()
+    .from("estoque_movimentos")
+    .select("id")
+    .eq("venue_id", venueId)
+    .eq("insumo_id", insumoId)
+    .limit(1);
+  if (movimento.error) throw traduzir(movimento.error);
+  if ((movimento.data ?? []).length > 0) {
+    throw new ErroDoEstoque(
+      409,
+      "Este item já tem movimento no estoque — o histórico não se apaga. Desative-o: ele some das telas e o passado fica guardado.",
+    );
+  }
+
+  const { error } = await cliente()
+    .from("insumos")
+    .delete()
+    .eq("venue_id", venueId)
+    .eq("id", insumoId);
+  if (error) throw traduzir(error);
+}
+
 /* ---------- compras: listagem ---------- */
 
 export async function listarCompras(params: {
@@ -1169,6 +1201,11 @@ export function traduzir(erro: { message?: string; code?: string } | Error): Err
       /duplicate key|unique/i,
       409,
       "Já existe um insumo com esse nome. Use o que já está cadastrado — dois cadastros do mesmo item viram dois saldos.",
+    ],
+    [
+      /violates foreign key|23503/i,
+      409,
+      "Este registro aparece em compras, fichas ou movimentos — apagar quebraria o histórico. Desative-o em vez de excluir.",
     ],
     [
       /42P01|PGRST205|does not exist|schema cache/i,

@@ -255,9 +255,26 @@ export async function cadastros(raiz, ctx) {
                   type: "button",
                   texto: "Desativar item",
                   onclick: async () => {
-                    if (!confirm(`Desativar ${existente.nome}? O histórico fica.`)) return;
+                    if (!confirm(`Desativar ${existente.nome}? Ele some das telas e o histórico fica.`)) return;
                     try {
                       await patch(`/v1/venues/${ctx.venue}/insumos/${existente.id}`, { ativo: false });
+                      desenhar();
+                    } catch (e) {
+                      avisar(e.message, "erro");
+                    }
+                  },
+                })
+              : null,
+            existente
+              ? el("button", {
+                  classe: "btn btn-peq",
+                  type: "button",
+                  texto: "🗑 Excluir item",
+                  onclick: async () => {
+                    if (!confirm(`Excluir ${existente.nome} DE VEZ? Só funciona para item sem movimento no estoque — com histórico, use Desativar.`)) return;
+                    try {
+                      await del(`/v1/venues/${ctx.venue}/insumos/${existente.id}`);
+                      avisar("Item excluído.", "ok");
                       desenhar();
                     } catch (e) {
                       avisar(e.message, "erro");
