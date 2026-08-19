@@ -1,4 +1,4 @@
-import { get, post, put } from "../api.js";
+import { del, get, patch, post, put } from "../api.js";
 import { avisar, buscador, dataHora, dinheiro, el, etiqueta, ICONES, indicador, limpar, vazio } from "../ui.js";
 
 /**
@@ -205,6 +205,17 @@ export async function compras(raiz, ctx) {
           }),
         );
       }
+      if (c.status !== "recebida") {
+        acoes.push(
+          el("button", {
+            classe: "btn-icone",
+            type: "button",
+            title: "Excluir esta compra",
+            texto: "🗑",
+            onclick: () => excluirCompraInteira(c),
+          }),
+        );
+      }
 
       return el("tr", {}, [
         el("td", {}, [
@@ -219,6 +230,103 @@ export async function compras(raiz, ctx) {
         el("td", {}, [etiqueta(rotulo, variante)]),
         el("td", { classe: "col-acoes" }, acoes),
       ]);
+    }
+
+    /**
+     * Excluir some com a compra e os itens dela — por isso só existe para o
+     * que nunca entrou no estoque (o servidor confere de novo). Cancelar
+     * guarda o histórico; excluir é para o pedido criado por engano.
+     */
+    async function excluirCompraInteira(c) {
+      const nome = c.fornecedor || (c.origem === "avulsa" ? "compra avulsa" : "esta compra");
+      if (!confirm(`Excluir ${nome} de ${dataCurta(c.data_compra)}? Some da lista e do histórico — para guardar o registro, use Cancelar.`)) return;
+      try {
+        await del(`/v1/venues/${ctx.venue}/compras/${c.id}`);
+        avisar("Compra excluída.", "ok");
+        desenhar();
+      } catch (e) {
+        avisar(e.message, "erro");
+      }
+    }
+
+    /* ---------- alterar os dados da compra ---------- */
+
+    function editarDadosCompra(c) {
+      limpar(conteudo);
+
+      let fornecedorEscolhido = null;
+      const fornecedorAtual = el("p", { texto: `Fornecedor: ${c.fornecedor || "—"}` });
+      const lupaFornecedor = buscador(
+        fornecedoresLista.map((f) => ({ rotulo: f.nome, valor: f })),
+        {
+          placeholder: "🔍  Trocar o fornecedor…",
+          aoEscolher: (o) => {
+            fornecedorEscolhido = o.valor;
+            fornecedorAtual.textContent = `Fornecedor: ${o.valor.nome}`;
+          },
+        },
+      );
+      const documento = el("input", { classe: "campo", value: c.documento ?? "", placeholder: "Nº do pedido ou da nota" });
+      const dataCompra = el("input", { classe: "campo", type: "date", value: c.data_compra ?? "" });
+      const dataPrevista = el("input", { classe: "campo", type: "date", value: c.data_prevista ?? "" });
+      const seletorLocal = el(
+        "select",
+        { classe: "select" },
+        locais.map((l) => el("option", { value: l.id, texto: l.nome, selected: l.id === c.local_id })),
+      );
+      const observacoes = el("input", { classe: "campo", value: c.observacoes ?? "", placeholder: "Observações" });
+
+      conteudo.append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("h2", { texto: "Alterar dados da compra" }),
+            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => detalheCompra(c.id) }),
+          ]),
+          el("div", { classe: "cartao pilha" }, [
+            el("label", { classe: "campo-rotulado" }, [
+              el("span", { texto: "Fornecedor (do cadastro)" }),
+              lupaFornecedor,
+              fornecedorAtual,
+            ]),
+            el("div", { classe: "linha-campos" }, [
+              el("label", {}, [el("span", { texto: "Nº nota / documento" }), documento]),
+              el("label", {}, [el("span", { texto: "Destino padrão" }), seletorLocal]),
+            ]),
+            el("div", { classe: "linha-campos" }, [
+              el("label", {}, [el("span", { texto: "Data da compra" }), dataCompra]),
+              el("label", {}, [el("span", { texto: "Entrega prevista" }), dataPrevista]),
+            ]),
+            el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Observações" }), observacoes]),
+            el("button", {
+              classe: "btn btn-primario btn-grande",
+              type: "button",
+              texto: "Salvar dados",
+              onclick: async (ev) => {
+                ev.target.disabled = true;
+                try {
+                  const corpoReq = {
+                    documento: documento.value || null,
+                    data_compra: dataCompra.value || null,
+                    data_prevista: dataPrevista.value || null,
+                    local_id: seletorLocal.value,
+                    observacoes: observacoes.value || null,
+                  };
+                  if (fornecedorEscolhido) {
+                    corpoReq.fornecedor = fornecedorEscolhido.nome;
+                    corpoReq.fornecedor_id = fornecedorEscolhido.id;
+                  }
+                  await patch(`/v1/venues/${ctx.venue}/compras/${c.id}`, corpoReq);
+                  avisar("Dados da compra alterados.", "ok");
+                  detalheCompra(c.id);
+                } catch (e) {
+                  avisar(e.message, "erro");
+                  ev.target.disabled = false;
+                }
+              },
+            }),
+          ]),
+        ]),
+      );
     }
 
     /* ---------- receber ao lado da compra ---------- */
@@ -534,6 +642,12 @@ export async function compras(raiz, ctx) {
                   el("button", {
                     classe: "btn btn-peq",
                     type: "button",
+                    texto: "✏️ Alterar dados",
+                    onclick: () => editarDadosCompra(c),
+                  }),
+                  el("button", {
+                    classe: "btn btn-peq",
+                    type: "button",
                     texto: "Cancelar pedido",
                     onclick: async () => {
                       if (!confirm("Cancelar este pedido? Ele fica no histórico como cancelado e não entra no estoque.")) return;
@@ -545,6 +659,12 @@ export async function compras(raiz, ctx) {
                         avisar(e.message, "erro");
                       }
                     },
+                  }),
+                  el("button", {
+                    classe: "btn btn-peq",
+                    type: "button",
+                    texto: "🗑 Excluir compra",
+                    onclick: () => excluirCompraInteira(c),
                   }),
                 ])
               : null,

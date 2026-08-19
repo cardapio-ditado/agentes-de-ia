@@ -117,9 +117,11 @@ import {
   ErroDoEstoque,
   apagarFicha,
   aprenderApelido,
+  atualizarCompra,
   atualizarInsumo,
   atualizarLocal,
   cancelarCompra,
+  excluirCompra,
   casarLinhas,
   criarCompra,
   criarLocal,
@@ -1238,6 +1240,35 @@ async function roteasApi(
       await findVenueBySlugInOrg(chave.org_id, slug);
       await comErroDeEstoque(() => enviarPedido(p[3]!));
       return ok(res, { enviado: true });
+    }
+
+    // PATCH /v1/venues/:slug/compras/:id — altera os dados de cabeçalho
+    if (metodo === "PATCH" && recurso === "compras" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        atualizarCompra({
+          venueId: venue.id,
+          compraId: p[3]!,
+          fornecedor: "fornecedor" in corpo ? (corpo.fornecedor as string | null) : undefined,
+          fornecedorId: "fornecedor_id" in corpo ? (corpo.fornecedor_id as string | null) : undefined,
+          documento: "documento" in corpo ? (corpo.documento as string | null) : undefined,
+          dataCompra: "data_compra" in corpo ? (corpo.data_compra as string | null) : undefined,
+          dataPrevista: "data_prevista" in corpo ? (corpo.data_prevista as string | null) : undefined,
+          localId: typeof corpo.local_id === "string" ? corpo.local_id : undefined,
+          observacoes: "observacoes" in corpo ? (corpo.observacoes as string | null) : undefined,
+        }),
+      );
+      return ok(res, { salvo: true });
+    }
+
+    // DELETE /v1/venues/:slug/compras/:id — apaga (só o que nunca entrou)
+    if (metodo === "DELETE" && recurso === "compras" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => excluirCompra(venue.id, p[3]!));
+      return ok(res, { excluida: true });
     }
 
     // POST /v1/venues/:slug/compras/:id/cancelar — só antes de receber

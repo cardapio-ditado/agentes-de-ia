@@ -597,6 +597,82 @@ export async function cancelarCompra(venueId: string, compraId: string): Promise
   if (error) throw traduzir(error);
 }
 
+/**
+ * Apaga a compra inteira — mas só a que nunca entrou no estoque.
+ *
+ * Rascunho, pedido e cancelada podem sumir: não deixaram rastro no razão.
+ * Recebida não: os movimentos dela existem, e apagar a compra deixaria o
+ * estoque dizendo "entrou" sem ninguém saber de onde.
+ */
+export async function excluirCompra(venueId: string, compraId: string): Promise<void> {
+  const atual = await cliente()
+    .from("compras")
+    .select("status")
+    .eq("venue_id", venueId)
+    .eq("id", compraId)
+    .maybeSingle();
+  if (atual.error) throw traduzir(atual.error);
+  if (!atual.data) throw new ErroDoEstoque(404, "Compra não encontrada.");
+  if (atual.data.status === "recebida") {
+    throw new ErroDoEstoque(409, "Compra recebida não se exclui — ela já entrou no estoque. Se a mercadoria voltou, registre como perda.");
+  }
+  // Os itens caem junto pela chave estrangeira (on delete cascade).
+  const { error } = await cliente()
+    .from("compras")
+    .delete()
+    .eq("venue_id", venueId)
+    .eq("id", compraId);
+  if (error) throw traduzir(error);
+}
+
+/**
+ * Altera os dados de cabeçalho de uma compra ainda não recebida:
+ * fornecedor, documento, datas, destino, observações.
+ */
+export async function atualizarCompra(params: {
+  venueId: string;
+  compraId: string;
+  fornecedor?: string | null;
+  fornecedorId?: string | null;
+  documento?: string | null;
+  dataCompra?: string | null;
+  dataPrevista?: string | null;
+  localId?: string;
+  observacoes?: string | null;
+}): Promise<void> {
+  const atual = await cliente()
+    .from("compras")
+    .select("status")
+    .eq("venue_id", params.venueId)
+    .eq("id", params.compraId)
+    .maybeSingle();
+  if (atual.error) throw traduzir(atual.error);
+  if (!atual.data) throw new ErroDoEstoque(404, "Compra não encontrada.");
+  if (atual.data.status === "recebida") {
+    throw new ErroDoEstoque(409, "Compra recebida não se altera — a entrada já foi feita com esses dados.");
+  }
+  if (atual.data.status === "cancelada") {
+    throw new ErroDoEstoque(409, "Compra cancelada não se altera. Crie um pedido novo.");
+  }
+
+  const mudancas: Record<string, unknown> = {};
+  if (params.fornecedor !== undefined) mudancas.fornecedor = params.fornecedor?.trim() || null;
+  if (params.fornecedorId !== undefined) mudancas.fornecedor_id = params.fornecedorId;
+  if (params.documento !== undefined) mudancas.documento = params.documento?.trim() || null;
+  if (params.dataCompra !== undefined) mudancas.data_compra = params.dataCompra || null;
+  if (params.dataPrevista !== undefined) mudancas.data_prevista = params.dataPrevista || null;
+  if (params.localId !== undefined) mudancas.local_id = params.localId;
+  if (params.observacoes !== undefined) mudancas.observacoes = params.observacoes?.trim() || null;
+  if (Object.keys(mudancas).length === 0) return;
+
+  const { error } = await cliente()
+    .from("compras")
+    .update(mudancas)
+    .eq("venue_id", params.venueId)
+    .eq("id", params.compraId);
+  if (error) throw traduzir(error);
+}
+
 export async function obterCompra(venueId: string, compraId: string): Promise<unknown> {
   const { data, error } = await cliente()
     .from("compras")

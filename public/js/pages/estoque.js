@@ -194,6 +194,24 @@ export async function estoque(raiz, ctx) {
                   etiqueta(rotulo, variante),
                 ]),
                 el("span", { classe: "linha-detalhes" }, [
+                  el("button", {
+                    classe: "btn-icone",
+                    type: "button",
+                    title: "Renomear este estoque",
+                    texto: "✏️",
+                    onclick: async () => {
+                      const novo = prompt(`Novo nome para "${l.nome}":`, l.nome);
+                      if (!novo || novo.trim().length < 2 || novo.trim() === l.nome) return;
+                      try {
+                        await patch(`/v1/venues/${ctx.venue}/estoque-locais/${l.id}`, { nome: novo });
+                        avisar(`Renomeado para ${novo.trim()}.`, "ok");
+                        locais = await get(`/v1/venues/${ctx.venue}/estoque-locais`);
+                        gerenciarLocais();
+                      } catch (e) {
+                        avisar(e.message, "erro");
+                      }
+                    },
+                  }),
                   seletorTipo,
                   el("button", {
                     classe: "btn btn-peq",
