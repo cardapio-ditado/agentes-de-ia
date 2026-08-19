@@ -14,6 +14,7 @@ import { organizacao } from "./pages/organizacao.js";
 import { checklists } from "./pages/checklists.js";
 import { execucoes } from "./pages/execucoes.js";
 import { avaliacoes } from "./pages/avaliacoes.js";
+import { recebimento } from "./pages/recebimento.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -39,6 +40,8 @@ const PAGINAS = [
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
 
   { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
+
+  { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
 
   // Módulo da equipe Brasa Food. Administrar a plataforma não é uma seção do
   // produto do cliente: são perguntas de negócios diferentes, e misturar as
@@ -119,6 +122,14 @@ const MODULOS = [
     pos: { x: 0.75, y: -0.5 },
   },
   {
+    id: "cmv",
+    nome: "CMV Inteligente",
+    descricao:
+      "Estoque, compras e fichas técnicas. Foto da nota vira entrada, e o custo de cada prato aparece sozinho.",
+    icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+    pos: { x: -0.75, y: -0.5 },
+  },
+  {
     id: "plataforma",
     nome: "Administração",
     descricao:
@@ -131,7 +142,7 @@ const MODULOS = [
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
-const FAVOS_VAZIOS = [{ x: -0.75, y: -0.5 }];
+const FAVOS_VAZIOS = [];
 
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");

@@ -1845,3 +1845,93 @@ textarea:focus {
   font-size: 13px;
   min-width: 130px;
 }
+
+/* ============================================================
+   Recebimento de mercadoria — desenhado para a doca
+   ============================================================
+   De pé, com o entregador esperando, às vezes com a mão suja e o celular na
+   outra. Tudo aqui é medida grande de propósito: alvo pequeno em tela de
+   celular segurada com uma mão é toque errado, e toque errado no recebimento
+   é quantidade errada no estoque. */
+
+.btn-grande {
+  width: 100%;
+  /* 56px é o alvo confortável para o polegar; abaixo disso o erro sobe
+     rápido em quem está de pé. */
+  min-height: 56px;
+  font-size: 1.05rem;
+  margin-top: 10px;
+}
+
+/* Quantidade e preço: os dois campos que a pessoa realmente digita. Fonte
+   grande porque conferir o que se digitou é metade do trabalho. */
+.campo-numero {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 8px 12px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--texto);
+}
+.campo-numero:focus {
+  outline: 2px solid var(--marca);
+  outline-offset: 1px;
+}
+
+.linha-campos {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+}
+.linha-campos > label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+/* O item que veio diferente do pedido. Borda e faixa lateral, não só cor de
+   fundo: sob a luz de um depósito, fundo colorido some. */
+.cartao-atencao {
+  border-color: var(--ambar);
+  border-left: 4px solid var(--ambar);
+}
+
+/* O total fica grudado no rodapé no celular: a pessoa rola a lista de itens
+   e o botão de dar entrada continua ao alcance do polegar. */
+.cartao-total {
+  position: sticky;
+  bottom: 0;
+  background: var(--superficie);
+  border-top: 2px solid var(--borda-forte);
+  box-shadow: 0 -6px 18px rgb(0 0 0 / 8%);
+}
+.cartao-total strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Avisos da leitura da nota: o que a pessoa precisa saber ANTES de conferir. */
+.aviso {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  margin: 0;
+}
+.aviso-alerta {
+  background: #fff6e0;
+  border: 1px solid var(--ambar);
+  color: #6b4a00;
+}
+.aviso-perigo {
+  background: var(--marca-suave);
+  border: 1px solid var(--marca-forte);
+  color: var(--marca-forte);
+  font-weight: 600;
+}
