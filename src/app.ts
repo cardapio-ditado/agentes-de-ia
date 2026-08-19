@@ -113,6 +113,21 @@ import {
   type DadosVenue,
 } from "./venues.js";
 import { definirModulo, listarModulos } from "./modulos.js";
+import {
+  ErroDoEstoque,
+  aprenderApelido,
+  casarLinhas,
+  criarCompra,
+  divergenciasDaCompra,
+  enviarPedido,
+  garantirInsumo,
+  listarInsumos,
+  listarLocais,
+  receberCompra,
+  substituirItens,
+  type ItemDaCompra,
+} from "./cmv/estoque.js";
+import { lerNota, somaConfere, tipoAceito } from "./cmv/lerNota.js";
 
 /**
  * Roteamento da API, sem servidor.
@@ -340,6 +355,59 @@ function exigirModulo(acesso: Acesso, modulo: string): void {
   if (acesso.plataformaAdmin) return;
   if (acesso.modulos === null || acesso.modulos.includes(modulo)) return;
   throw erro(403, "forbidden", "Seu acesso não inclui este módulo. Fale com o dono da conta.");
+}
+
+/**
+ * Executa uma operação do estoque traduzindo a falha para a resposta HTTP.
+ *
+ * As funções do CMV levantam `ErroDoEstoque` com status e mensagem já
+ * pensados para quem está na doca. Sem esta ponte, cada rota repetiria o
+ * mesmo try/catch — e a que esquecesse devolveria 500 com texto de Postgres.
+ */
+async function comErroDeEstoque<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDoEstoque) {
+      throw erro(e.status, e.status === 404 ? "not_found" : "invalid_request", e.message);
+    }
+    throw e;
+  }
+}
+
+/**
+ * Lê os itens de uma compra do corpo da requisição.
+ *
+ * Números vêm como `null` quando ausentes, e não como zero: no recebimento,
+ * nulo é "não conferido" e zero é "não veio" — a diferença decide se o item
+ * entra no estoque ou aparece como falta.
+ */
+function itensDaCompra(corpo: unknown): ItemDaCompra[] {
+  const bruto = (corpo as Record<string, unknown>).itens;
+  if (!Array.isArray(bruto)) {
+    throw erro(400, "invalid_request", 'Informe "itens" com as linhas da compra.');
+  }
+  return bruto.map((linha) => {
+    const i = linha as Record<string, unknown>;
+    return {
+      insumoId: typeof i.insumo_id === "string" ? i.insumo_id : null,
+      descricaoNota: typeof i.descricao_nota === "string" ? i.descricao_nota : null,
+      quantidadePedida: numeroOuNulo(i.quantidade_pedida),
+      custoUnitarioPedido: numeroOuNulo(i.custo_unitario_pedido),
+      quantidadeRecebida: numeroOuNulo(i.quantidade_recebida),
+      custoUnitarioRecebido: numeroOuNulo(i.custo_unitario_recebido),
+      divergenciaMotivo: typeof i.divergencia_motivo === "string" ? i.divergencia_motivo : null,
+    };
+  });
+}
+
+function numeroOuNulo(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const n = Number(valor);
+  if (!Number.isFinite(n)) {
+    throw erro(400, "invalid_request", `Quantidade ou valor inválido: ${String(valor)}`);
+  }
+  return n;
 }
 
 /** Rotas de administração da plataforma exigem mais que estar logado. */
@@ -669,6 +737,9 @@ async function roteasApi(
       "avaliacoes-perfil": "avaliacoes",
       checklists: "checklist",
       "checklist-runs": "checklist",
+      insumos: "cmv",
+      "estoque-locais": "cmv",
+      compras: "cmv",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -681,6 +752,159 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await listarModulos(venue.id));
+    }
+
+
+    // ---- CMV: estoque, compras e recebimento ----
+
+    // GET /v1/venues/:slug/estoque-locais
+    if (metodo === "GET" && recurso === "estoque-locais" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => listarLocais(venue.id)));
+    }
+
+    // GET /v1/venues/:slug/insumos?busca=&local=
+    if (metodo === "GET" && recurso === "insumos" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDeEstoque(() =>
+          listarInsumos({
+            venueId: venue.id,
+            busca: url.searchParams.get("busca") ?? undefined,
+            localId: url.searchParams.get("local") ?? undefined,
+          }),
+        ),
+      );
+    }
+
+    // POST /v1/venues/:slug/insumos — cria, ou devolve o que já existe
+    if (metodo === "POST" && recurso === "insumos" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      const resultado = await comErroDeEstoque(() =>
+        garantirInsumo({
+          venueId: venue.id,
+          nome: texto(corpo, "nome"),
+          unidade: textoOpcional(corpo, "unidade"),
+          codigo: textoOpcional(corpo, "codigo") ?? null,
+          categoria: textoOpcional(corpo, "categoria") ?? null,
+        }),
+      );
+      // 200 e não 201 quando já existia: para a tela saber que não criou
+      // nada, e poder dizer "esse já estava cadastrado" em vez de fingir.
+      return ok(res, resultado, resultado.criado ? 201 : 200);
+    }
+
+    // POST /v1/venues/:slug/insumos/:id/apelido — ensina a grafia do fornecedor
+    if (metodo === "POST" && recurso === "insumos" && p[4] === "apelido" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      await comErroDeEstoque(() =>
+        aprenderApelido({
+          venueId: venue.id,
+          insumoId: p[3]!,
+          descricao: texto(corpo, "descricao"),
+        }),
+      );
+      return ok(res, { aprendido: true });
+    }
+
+    // POST /v1/venues/:slug/compras/ler-nota?media_type=image/jpeg
+    //
+    // A foto vai crua no corpo, como nas outras rotas de arquivo do painel:
+    // ~25% menos bytes que base64 dentro de JSON, e a doca costuma estar num
+    // canto de sinal ruim.
+    if (metodo === "POST" && recurso === "compras" && p[3] === "ler-nota" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      const mediaType = url.searchParams.get("media_type") ?? "";
+      if (!tipoAceito(mediaType)) {
+        throw erro(400, "invalid_request", "Mande uma foto (JPG, PNG ou WebP).");
+      }
+      const imagem = await lerBinario(req, LIMITE_FOTO_BYTES);
+      if (imagem.length === 0) throw erro(400, "invalid_request", "A foto chegou vazia.");
+
+      const nota = await lerNota({ imagem, mediaType });
+      const linhas = await comErroDeEstoque(() =>
+        casarLinhas({ venueId: venue.id, linhas: nota.linhas }),
+      );
+      const soma = somaConfere(nota);
+
+      return ok(res, {
+        fornecedor: nota.fornecedor,
+        documento: nota.documento,
+        data_emissao: nota.dataEmissao,
+        valor_total: nota.valorTotal,
+        linhas,
+        avisos: nota.avisos,
+        // A tela avisa quando a soma não fecha: é o sinal de linha pulada, o
+        // erro que ninguém percebe olhando a mercadoria.
+        soma_confere: soma.confere,
+        soma_das_linhas: soma.soma,
+      });
+    }
+
+    // POST /v1/venues/:slug/compras — pedido ou compra avulsa
+    if (metodo === "POST" && recurso === "compras" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+
+      const origem = textoOpcional(corpo, "origem") ?? "pedido";
+      if (origem !== "pedido" && origem !== "avulsa") {
+        throw erro(400, "invalid_request", 'Origem deve ser "pedido" ou "avulsa".');
+      }
+      const id = await comErroDeEstoque(() =>
+        criarCompra({
+          venueId: venue.id,
+          localId: texto(corpo, "local_id"),
+          origem,
+          fornecedor: textoOpcional(corpo, "fornecedor") ?? null,
+          documento: textoOpcional(corpo, "documento") ?? null,
+          dataCompra: textoOpcional(corpo, "data_compra") ?? null,
+          extracaoIa: (corpo as Record<string, unknown>).extracao_ia,
+          itens: itensDaCompra(corpo),
+          criadoPor: null,
+        }),
+      );
+      return ok(res, { id }, 201);
+    }
+
+    // PUT /v1/venues/:slug/compras/:id/itens — o que a doca conferiu
+    if (metodo === "PUT" && recurso === "compras" && p[4] === "itens" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      await comErroDeEstoque(() => substituirItens(p[3]!, itensDaCompra(corpo)));
+      return ok(res, { salvo: true });
+    }
+
+    // POST /v1/venues/:slug/compras/:id/enviar
+    if (metodo === "POST" && recurso === "compras" && p[4] === "enviar" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => enviarPedido(p[3]!));
+      return ok(res, { enviado: true });
+    }
+
+    // POST /v1/venues/:slug/compras/:id/receber — dá entrada no estoque
+    if (metodo === "POST" && recurso === "compras" && p[4] === "receber" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => receberCompra(p[3]!, null));
+      // As divergências voltam junto: quem acabou de receber é quem pode
+      // cobrar o fornecedor, e mandá-la procurar noutra tela é garantir que
+      // ninguém cobre.
+      return ok(res, {
+        recebida: true,
+        divergencias: await comErroDeEstoque(() => divergenciasDaCompra(p[3]!)),
+      });
     }
 
     // ---- Avaliações do Google ----
