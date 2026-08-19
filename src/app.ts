@@ -118,10 +118,14 @@ import {
   apagarFicha,
   aprenderApelido,
   atualizarInsumo,
+  atualizarLocal,
   casarLinhas,
   criarCompra,
   criarLocal,
+  desativarCategoria,
   desativarLocal,
+  garantirCategoria,
+  listarCategorias,
   divergenciasDaCompra,
   enviarPedido,
   extratoInsumo,
@@ -759,6 +763,7 @@ async function roteasApi(
       checklists: "checklist",
       "checklist-runs": "checklist",
       insumos: "cmv",
+      categorias: "cmv",
       "estoque-locais": "cmv",
       compras: "cmv",
       fichas: "cmv",
@@ -836,10 +841,52 @@ async function roteasApi(
         criarLocal({
           venueId: venue.id,
           nome: texto(corpo, "nome"),
-          principal: (corpo as Record<string, unknown>).principal === true,
+          tipo: textoOpcional(corpo, "tipo"),
         }),
       );
       return ok(res, local, 201);
+    }
+
+    // PATCH /v1/venues/:slug/estoque-locais/:id — renomeia ou muda o tipo
+    if (metodo === "PATCH" && recurso === "estoque-locais" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        atualizarLocal({
+          venueId: venue.id,
+          localId: p[3]!,
+          nome: typeof corpo.nome === "string" ? corpo.nome : undefined,
+          tipo: typeof corpo.tipo === "string" ? corpo.tipo : undefined,
+        }),
+      );
+      return ok(res, { salvo: true });
+    }
+
+    // GET | POST /v1/venues/:slug/categorias — o cadastro de categorias
+    if (recurso === "categorias" && p.length === 3) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDeEstoque(() => listarCategorias(venue.id)));
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = await lerJson(req);
+        const resultado = await comErroDeEstoque(() =>
+          garantirCategoria({ venueId: venue.id, nome: texto(corpo, "nome") }),
+        );
+        return ok(res, resultado, resultado.criada ? 201 : 200);
+      }
+    }
+
+    // DELETE /v1/venues/:slug/categorias/:id — desativa e solta os itens
+    if (metodo === "DELETE" && recurso === "categorias" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => desativarCategoria(venue.id, p[3]!));
+      return ok(res, { desativada: true });
     }
 
     // DELETE /v1/venues/:slug/estoque-locais/:id — desativa (nunca apaga)
@@ -866,6 +913,7 @@ async function roteasApi(
           estoqueMinimo: "estoque_minimo" in corpo ? numeroOuNulo(corpo.estoque_minimo) : undefined,
           toleranciaPct: "tolerancia_pct" in corpo ? (numeroOuNulo(corpo.tolerancia_pct) ?? 0) : undefined,
           fornecedorId: "fornecedor_id" in corpo ? (corpo.fornecedor_id as string | null) : undefined,
+          entraNoCmv: typeof corpo.entra_no_cmv === "boolean" ? corpo.entra_no_cmv : undefined,
           ativo: typeof corpo.ativo === "boolean" ? corpo.ativo : undefined,
         }),
       );

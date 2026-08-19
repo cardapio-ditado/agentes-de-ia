@@ -1973,3 +1973,94 @@ textarea:focus {
 }
 .buscador-opcao:hover { background: var(--marca-suave); }
 .buscador-nada { padding: 12px; }
+
+/* ============ Cadastros: listas densas e abas ============ */
+
+/* Abas internas de uma tela (Itens | Categorias | Fornecedores). */
+.abas {
+  display: flex;
+  gap: 6px;
+  border-bottom: 2px solid var(--borda);
+  overflow-x: auto;
+}
+.aba {
+  border: 0;
+  background: none;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+}
+.aba-ativa {
+  color: var(--marca-forte);
+  border-bottom-color: var(--marca-forte);
+}
+
+/* Lista densa: uma LINHA por registro, não um cartão gordo. Duzentos itens
+   cadastráveis pedem densidade — o cartão fica para o que é raro e importante. */
+.tabela {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--superficie);
+  overflow: hidden;
+}
+.linha-tabela {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--borda);
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: var(--texto);
+}
+.linha-tabela:last-child { border-bottom: 0; }
+button.linha-tabela { cursor: pointer; }
+button.linha-tabela:hover { background: var(--marca-suave); }
+.linha-principal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.linha-principal strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.linha-detalhes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.linha-atencao {
+  border-left: 4px solid var(--ambar);
+  background: #fff6e0;
+}
+
+/* Checkbox com explicação ao lado — o "entra no CMV". */
+.campo-caixa {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.campo-caixa input { margin-top: 3px; width: 18px; height: 18px; }
+
+.select-peq {
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}

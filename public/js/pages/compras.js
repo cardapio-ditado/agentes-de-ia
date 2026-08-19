@@ -84,20 +84,116 @@ export async function compras(raiz, ctx) {
 
     function cartaoCompra(c) {
       const [rotulo, variante] = SITUACAO[c.status] ?? [c.status, ""];
-      return el("article", { classe: "cartao" }, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("strong", { texto: c.fornecedor || "Sem fornecedor" }),
-            el("p", {
+      const dia = c.data_compra ? c.data_compra.split("-").reverse().join("/") : dataHora(c.created_at);
+      return el("button", { classe: "linha-tabela", type: "button", onclick: () => detalheCompra(c.id) }, [
+        el("span", { classe: "linha-principal" }, [
+          el("strong", { texto: c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "Sem fornecedor") }),
+          el("small", {
+            classe: "muted",
+            texto: `${dia}${c.estoque_locais?.nome ? ` · ${c.estoque_locais.nome}` : ""}${c.documento ? ` · doc ${c.documento}` : ""}`,
+          }),
+        ]),
+        el("span", { classe: "linha-detalhes" }, [
+          Number(c.valor_total) > 0 ? el("strong", { texto: dinheiro(Number(c.valor_total)) }) : null,
+          etiqueta(rotulo, variante),
+        ].filter(Boolean)),
+      ]);
+    }
+
+    /**
+     * A compra por dentro: fornecedor, datas, destino e cada item — pedido
+     * contra recebido, com a divergência gritando em vez de escondida.
+     */
+    async function detalheCompra(compraId) {
+      limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo a compra…" }));
+      let c;
+      try {
+        c = await get(`/v1/venues/${ctx.venue}/compras/${compraId}`);
+      } catch (e) {
+        avisar(e.message, "erro");
+        return desenhar();
+      }
+      limpar(conteudo);
+
+      const [rotulo, variante] = SITUACAO[c.status] ?? [c.status, ""];
+      const itensCompra = c.compra_itens ?? [];
+      const recebida = c.status === "recebida";
+      const dado = (nome, valor) =>
+        valor
+          ? el("div", { classe: "cabecalho-secao" }, [el("span", { classe: "muted", texto: nome }), el("strong", { texto: valor })])
+          : null;
+
+      const linhaItem = (it) => {
+        const pedida = it.quantidade_pedida === null ? null : Number(it.quantidade_pedida);
+        const veio = it.quantidade_recebida === null ? null : Number(it.quantidade_recebida);
+        const custo = Number(it.custo_unitario_recebido ?? it.custo_unitario_pedido ?? 0);
+        const qtdParaTotal = veio ?? pedida ?? 0;
+        const divergente = recebida && pedida !== null && veio !== null && veio !== pedida;
+        const unidade = it.insumos?.unidade ?? "";
+        return el("div", { classe: `linha-tabela ${divergente ? "linha-atencao" : ""}`.trim() }, [
+          el("span", { classe: "linha-principal" }, [
+            el("strong", { texto: it.insumos?.nome ?? it.descricao_nota ?? "?" }),
+            el("small", {
               classe: "muted",
-              texto: `${c.estoque_locais?.nome ?? ""} · ${dataHora(c.created_at)}${
-                c.status === "recebida" ? ` · ${dinheiro(Number(c.valor_total))}` : ""
-              }`,
+              texto: [
+                pedida !== null ? `pedido ${pedida} ${unidade}` : null,
+                veio !== null ? `veio ${veio} ${unidade}` : (recebida ? null : `${qtdParaTotal} ${unidade}`),
+                it.estoque_locais?.nome ? `→ ${it.estoque_locais.nome}` : null,
+                it.divergencia_motivo || null,
+              ].filter(Boolean).join(" · "),
             }),
           ]),
-          etiqueta(rotulo, variante),
+          el("span", { classe: "linha-detalhes" }, [
+            divergente ? etiqueta(veio > pedida ? "veio a mais" : "veio a menos", "etiqueta-perigo") : null,
+            el("span", { classe: "muted", texto: custo ? `${dinheiro(custo)}/un` : "" }),
+            el("strong", { texto: dinheiro(qtdParaTotal * custo) }),
+          ].filter(Boolean)),
+        ]);
+      };
+
+      conteudo.append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("div", {}, [
+              el("h2", { texto: c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "Compra") }),
+              el("p", { classe: "muted", texto: `Criada em ${dataHora(c.created_at)}` }),
+            ]),
+            el("div", {}, [
+              etiqueta(rotulo, variante),
+              el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            ]),
+          ]),
+          el("div", { classe: "cartao" }, [
+            dado("Destino padrão", c.estoque_locais?.nome),
+            dado("Documento", c.documento),
+            dado("Data da compra", c.data_compra ? c.data_compra.split("-").reverse().join("/") : null),
+            dado("Entrega prevista", c.data_prevista ? c.data_prevista.split("-").reverse().join("/") : null),
+            dado("Recebida em", c.recebida_em ? dataHora(c.recebida_em) : null),
+            c.observacoes ? el("p", { classe: "muted", texto: c.observacoes }) : null,
+          ].filter(Boolean)),
+          el("div", {}, [
+            el("h3", { texto: `Itens (${itensCompra.length})` }),
+            el("div", { classe: "tabela" }, itensCompra.map(linhaItem)),
+          ]),
+          el("div", { classe: "cartao cartao-total" }, [
+            el("div", { classe: "cabecalho-secao" }, [
+              el("span", { texto: recebida ? "Total recebido" : "Total estimado" }),
+              el("strong", {
+                texto: dinheiro(
+                  Number(c.valor_total) ||
+                    itensCompra.reduce((t, it) => {
+                      const q = Number(it.quantidade_recebida ?? it.quantidade_pedida ?? 0);
+                      return t + q * Number(it.custo_unitario_recebido ?? it.custo_unitario_pedido ?? 0);
+                    }, 0),
+                ),
+              }),
+            ]),
+            c.status === "pedido"
+              ? el("p", { classe: "muted", texto: "Aguardando entrega — quando chegar, dê entrada em Receber." })
+              : null,
+          ].filter(Boolean)),
         ]),
-      ]);
+      );
     }
 
     function formularioPedido(prePreenchidas) {

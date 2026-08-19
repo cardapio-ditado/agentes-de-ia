@@ -16,11 +16,10 @@ import { execucoes } from "./pages/execucoes.js";
 import { avaliacoes } from "./pages/avaliacoes.js";
 import { recebimento } from "./pages/recebimento.js";
 import { compras } from "./pages/compras.js";
-import { insumos } from "./pages/insumos.js";
+import { cadastros } from "./pages/cadastros.js";
 import { fichas } from "./pages/fichas.js";
 import { contagem } from "./pages/contagem.js";
 import { estoque } from "./pages/estoque.js";
-import { fornecedores } from "./pages/fornecedores.js";
 import { cmvPainel } from "./pages/cmvPainel.js";
 import { producao } from "./pages/producao.js";
 
@@ -57,9 +56,8 @@ const PAGINAS = [
   { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
   { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
-  { id: "estoque", modulo: "cmv", rotulo: "Posição do estoque", icone: ICONES.painel, render: estoque, subtitulo: "O que há, onde, quanto vale — com extrato, transferência e perda" },
-  { id: "fornecedores", modulo: "cmv", rotulo: "Fornecedores", icone: ICONES.pessoa, render: fornecedores, subtitulo: "De quem se compra, e a cada quantos dias entrega" },
-  { id: "insumos", modulo: "cmv", rotulo: "Insumos e estoques", icone: ICONES.organizacao, render: insumos, subtitulo: "O que a casa compra, e onde guarda" },
+  { id: "estoque", modulo: "cmv", rotulo: "Estoque", icone: ICONES.painel, render: estoque, subtitulo: "Posição, extrato, transferência, perda — e os locais de estoque" },
+  { id: "cadastros", modulo: "cmv", rotulo: "Cadastros", icone: ICONES.organizacao, render: cadastros, subtitulo: "Itens, categorias e fornecedores — a base de tudo" },
   { id: "fichas", modulo: "cmv", rotulo: "Fichas técnicas", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
 
   // Módulo da equipe Brasa Food. Administrar a plataforma não é uma seção do

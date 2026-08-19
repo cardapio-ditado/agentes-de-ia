@@ -24,6 +24,7 @@ export interface Local {
   id: string;
   nome: string;
   principal: boolean;
+  tipo: "principal" | "producao" | "geral";
 }
 
 export interface Insumo extends InsumoConhecido {
@@ -33,18 +34,102 @@ export interface Insumo extends InsumoConhecido {
   toleranciaPct: number;
   saldo: number;
   fornecedorId: string | null;
+  entraNoCmv: boolean;
 }
 
 export async function listarLocais(venueId: string): Promise<Local[]> {
   const { data, error } = await cliente()
     .from("estoque_locais")
-    .select("id, nome, principal")
+    .select("id, nome, principal, tipo")
     .eq("venue_id", venueId)
     .eq("ativo", true)
     .order("principal", { ascending: false })
     .order("nome");
   if (error) throw traduzir(error);
   return (data ?? []) as Local[];
+}
+
+/* ---------- categorias de item ---------- */
+
+export interface Categoria {
+  id: string;
+  nome: string;
+}
+
+export async function listarCategorias(venueId: string): Promise<Categoria[]> {
+  const { data, error } = await cliente()
+    .from("insumo_categorias")
+    .select("id, nome")
+    .eq("venue_id", venueId)
+    .eq("ativa", true)
+    .order("nome");
+  if (error) throw traduzir(error);
+  return (data ?? []) as Categoria[];
+}
+
+/**
+ * Cria a categoria, ou devolve a que já existe com esse nome — a mesma
+ * cortesia do insumo: "Bebidas" digitado de novo não vira erro nem duplicata.
+ */
+export async function garantirCategoria(params: {
+  venueId: string;
+  nome: string;
+}): Promise<{ categoria: Categoria; criada: boolean }> {
+  const alvo = normalizar(params.nome);
+  const existentes = await cliente()
+    .from("insumo_categorias")
+    .select("id, nome, nome_normalizado, ativa")
+    .eq("venue_id", params.venueId)
+    .eq("nome_normalizado", alvo)
+    .maybeSingle();
+  if (existentes.error) throw traduzir(existentes.error);
+  if (existentes.data) {
+    // Reativa se estava desativada — reaproveitar bate criar de novo.
+    if (!existentes.data.ativa) {
+      await cliente()
+        .from("insumo_categorias")
+        .update({ ativa: true })
+        .eq("id", existentes.data.id);
+    }
+    return { categoria: { id: existentes.data.id, nome: existentes.data.nome }, criada: false };
+  }
+
+  const { data, error } = await cliente()
+    .from("insumo_categorias")
+    .insert({ venue_id: params.venueId, nome: params.nome.trim() })
+    .select("id, nome")
+    .single();
+  if (error) throw traduzir(error);
+  return { categoria: data as Categoria, criada: true };
+}
+
+/**
+ * Desativa a categoria e SOLTA os itens dela (categoria = null): o item
+ * continua existindo — categoria é etiqueta, não gaveta.
+ */
+export async function desativarCategoria(venueId: string, categoriaId: string): Promise<void> {
+  const cat = await cliente()
+    .from("insumo_categorias")
+    .select("nome")
+    .eq("venue_id", venueId)
+    .eq("id", categoriaId)
+    .maybeSingle();
+  if (cat.error) throw traduzir(cat.error);
+  if (!cat.data) throw new ErroDoEstoque(404, "Categoria não encontrada.");
+
+  const solta = await cliente()
+    .from("insumos")
+    .update({ categoria: null })
+    .eq("venue_id", venueId)
+    .eq("categoria", cat.data.nome);
+  if (solta.error) throw traduzir(solta.error);
+
+  const { error } = await cliente()
+    .from("insumo_categorias")
+    .update({ ativa: false })
+    .eq("venue_id", venueId)
+    .eq("id", categoriaId);
+  if (error) throw traduzir(error);
 }
 
 /**
@@ -61,7 +146,7 @@ export async function listarInsumos(params: {
   const { data, error } = await cliente()
     .from("insumos")
     .select(
-      "id, nome, nome_normalizado, unidade, categoria, codigo, custo_medio, estoque_minimo, tolerancia_divergencia_pct, fornecedor_id, estoque_saldos(quantidade, local_id)",
+      "id, nome, nome_normalizado, unidade, categoria, codigo, custo_medio, estoque_minimo, tolerancia_divergencia_pct, fornecedor_id, entra_no_cmv, estoque_saldos(quantidade, local_id)",
     )
     .eq("venue_id", params.venueId)
     .eq("ativo", true)
@@ -83,6 +168,7 @@ export async function listarInsumos(params: {
       toleranciaPct: Number(linha.tolerancia_divergencia_pct ?? 0),
       saldo: doLocal.reduce((total, s) => total + Number(s.quantidade), 0),
       fornecedorId: linha.fornecedor_id ?? null,
+      entraNoCmv: linha.entra_no_cmv !== false,
     };
   });
 
@@ -143,6 +229,7 @@ export async function garantirInsumo(params: {
       toleranciaPct: 0,
       saldo: 0,
       fornecedorId: null,
+      entraNoCmv: true,
     },
     criado: true,
   };
@@ -353,26 +440,61 @@ export async function divergenciasDaCompra(compraId: string): Promise<unknown[]>
  * o desmarque acontece aqui, antes do insert — a regra "um principal por
  * casa" mora no banco, e este é o jeito de respeitá-la sem stacktrace.
  */
+const TIPOS_DE_LOCAL = new Set(["principal", "producao", "geral"]);
+
 export async function criarLocal(params: {
   venueId: string;
   nome: string;
-  principal?: boolean;
+  tipo?: string;
 }): Promise<Local> {
-  if (params.principal) {
+  const tipo = TIPOS_DE_LOCAL.has(params.tipo ?? "") ? params.tipo! : "geral";
+  // Só existe um principal por casa (índice único garante). Criar um novo
+  // principal rebaixa o atual para "geral" em vez de estourar na cara de quem
+  // está montando o cadastro.
+  if (tipo === "principal") {
     const { error } = await cliente()
       .from("estoque_locais")
-      .update({ principal: false })
+      .update({ tipo: "geral" })
       .eq("venue_id", params.venueId)
-      .eq("principal", true);
+      .eq("tipo", "principal");
     if (error) throw traduzir(error);
   }
   const { data, error } = await cliente()
     .from("estoque_locais")
-    .insert({ venue_id: params.venueId, nome: params.nome.trim(), principal: params.principal ?? false })
-    .select("id, nome, principal")
+    .insert({ venue_id: params.venueId, nome: params.nome.trim(), tipo })
+    .select("id, nome, principal, tipo")
     .single();
   if (error) throw traduzir(error);
   return data as Local;
+}
+
+export async function atualizarLocal(params: {
+  venueId: string;
+  localId: string;
+  nome?: string;
+  tipo?: string;
+}): Promise<void> {
+  const mudancas: Record<string, unknown> = {};
+  if (params.nome !== undefined) mudancas.nome = params.nome.trim();
+  if (params.tipo !== undefined && TIPOS_DE_LOCAL.has(params.tipo)) {
+    if (params.tipo === "principal") {
+      const { error } = await cliente()
+        .from("estoque_locais")
+        .update({ tipo: "geral" })
+        .eq("venue_id", params.venueId)
+        .eq("tipo", "principal")
+        .neq("id", params.localId);
+      if (error) throw traduzir(error);
+    }
+    mudancas.tipo = params.tipo;
+  }
+  if (Object.keys(mudancas).length === 0) return;
+  const { error } = await cliente()
+    .from("estoque_locais")
+    .update(mudancas)
+    .eq("venue_id", params.venueId)
+    .eq("id", params.localId);
+  if (error) throw traduzir(error);
 }
 
 /**
@@ -398,6 +520,7 @@ export async function atualizarInsumo(params: {
   estoqueMinimo?: number | null;
   toleranciaPct?: number;
   fornecedorId?: string | null;
+  entraNoCmv?: boolean;
   ativo?: boolean;
 }): Promise<void> {
   const mudancas: Record<string, unknown> = {};
@@ -408,6 +531,7 @@ export async function atualizarInsumo(params: {
   if (params.estoqueMinimo !== undefined) mudancas.estoque_minimo = params.estoqueMinimo;
   if (params.toleranciaPct !== undefined) mudancas.tolerancia_divergencia_pct = params.toleranciaPct;
   if (params.fornecedorId !== undefined) mudancas.fornecedor_id = params.fornecedorId;
+  if (params.entraNoCmv !== undefined) mudancas.entra_no_cmv = params.entraNoCmv;
   if (params.ativo !== undefined) mudancas.ativo = params.ativo;
   if (Object.keys(mudancas).length === 0) return;
 
@@ -440,7 +564,7 @@ export async function listarCompras(params: {
 export async function obterCompra(venueId: string, compraId: string): Promise<unknown> {
   const { data, error } = await cliente()
     .from("compras")
-    .select("*, compra_itens(*, insumos(nome, unidade))")
+    .select("*, estoque_locais(nome), compra_itens(*, insumos(nome, unidade), estoque_locais(nome))")
     .eq("venue_id", venueId)
     .eq("id", compraId)
     .maybeSingle();
@@ -937,7 +1061,7 @@ export function traduzir(erro: { message?: string; code?: string } | Error): Err
     [
       /42P01|PGRST205|does not exist|schema cache/i,
       503,
-      "O módulo CMV ainda não foi instalado neste banco. Rode a migração 20260820000000_cmv_estoque_fundacao.",
+      "O banco está uma migração atrás do código. Rode a última migração do CMV no Supabase.",
     ],
   ];
 

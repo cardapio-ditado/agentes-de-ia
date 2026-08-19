@@ -1,5 +1,5 @@
-import { get, post } from "../api.js";
-import { avisar, buscador, dataHora, dinheiro, el, limpar, vazio } from "../ui.js";
+import { del, get, patch, post } from "../api.js";
+import { avisar, buscador, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Posição do estoque: o que há, onde, e quanto vale.
@@ -96,6 +96,7 @@ export async function estoque(raiz, ctx) {
         el("div", { classe: "linha-campos" }, [
           el("button", { classe: "btn", type: "button", texto: "⇄ Transferir", onclick: () => movimentar("transferir") }),
           el("button", { classe: "btn", type: "button", texto: "🗑 Registrar perda", onclick: () => movimentar("perda") }),
+          el("button", { classe: "btn", type: "button", texto: "🏬 Locais de estoque", onclick: gerenciarLocais }),
         ]),
         busca,
         lista,
@@ -135,6 +136,109 @@ export async function estoque(raiz, ctx) {
               ]),
             ),
           ),
+        ]),
+      );
+    }
+
+    /**
+     * Os lugares onde o estoque mora, com TIPO: principal (recebe compras
+     * por padrão), produção (de onde a cozinha baixa) e geral. Só existe um
+     * principal por casa — marcar um novo rebaixa o atual.
+     */
+    function gerenciarLocais() {
+      limpar(conteudo);
+
+      const ROTULO_DO_TIPO = {
+        principal: ["Principal — recebe compras", "etiqueta-ok"],
+        producao: ["Produção", "etiqueta-alerta"],
+        geral: ["Geral", ""],
+      };
+
+      const nomeNovo = el("input", { classe: "campo", placeholder: "Depósito, Cozinha, Adega…", style: "flex:2" });
+      const tipoNovo = el("select", { classe: "select", style: "flex:1" }, [
+        el("option", { value: "geral", texto: "Geral" }),
+        el("option", { value: "principal", texto: "Principal (recebe compras)" }),
+        el("option", { value: "producao", texto: "Produção" }),
+      ]);
+
+      conteudo.append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("div", {}, [
+              el("h2", { texto: "Locais de estoque" }),
+              el("p", { classe: "muted", texto: "Cada lugar tem saldo próprio: a garrafa do bar não conta para a cozinha." }),
+            ]),
+            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+          ]),
+          el("div", { classe: "tabela" },
+            locais.map((l) => {
+              const [rotulo, variante] = ROTULO_DO_TIPO[l.tipo] ?? [l.tipo, ""];
+              const seletorTipo = el("select", { classe: "select select-peq" },
+                Object.keys(ROTULO_DO_TIPO).map((t) =>
+                  el("option", { value: t, texto: t === "principal" ? "principal" : t, selected: l.tipo === t }),
+                ),
+              );
+              seletorTipo.addEventListener("change", async () => {
+                try {
+                  await patch(`/v1/venues/${ctx.venue}/estoque-locais/${l.id}`, { tipo: seletorTipo.value });
+                  avisar(`${l.nome} agora é ${seletorTipo.value}.`, "ok");
+                  locais = await get(`/v1/venues/${ctx.venue}/estoque-locais`);
+                  gerenciarLocais();
+                } catch (e) {
+                  avisar(e.message, "erro");
+                }
+              });
+              return el("div", { classe: "linha-tabela" }, [
+                el("span", { classe: "linha-principal" }, [
+                  el("strong", { texto: l.nome }),
+                  etiqueta(rotulo, variante),
+                ]),
+                el("span", { classe: "linha-detalhes" }, [
+                  seletorTipo,
+                  el("button", {
+                    classe: "btn btn-peq",
+                    type: "button",
+                    texto: "Desativar",
+                    onclick: async () => {
+                      if (!confirm(`Desativar ${l.nome}? O histórico fica; o local some das telas.`)) return;
+                      try {
+                        await del(`/v1/venues/${ctx.venue}/estoque-locais/${l.id}`);
+                        locais = await get(`/v1/venues/${ctx.venue}/estoque-locais`);
+                        gerenciarLocais();
+                      } catch (e) {
+                        avisar(e.message, "erro");
+                      }
+                    },
+                  }),
+                ]),
+              ]);
+            }),
+          ),
+          el("div", { classe: "cartao pilha" }, [
+            el("h3", { texto: "Novo local" }),
+            el("div", { classe: "linha-campos" }, [
+              nomeNovo,
+              tipoNovo,
+              el("button", {
+                classe: "btn btn-primario",
+                type: "button",
+                texto: "+ Criar",
+                onclick: async () => {
+                  if (nomeNovo.value.trim().length < 2) return avisar("Dê um nome ao local.", "erro");
+                  try {
+                    await post(`/v1/venues/${ctx.venue}/estoque-locais`, {
+                      nome: nomeNovo.value,
+                      tipo: tipoNovo.value,
+                    });
+                    locais = await get(`/v1/venues/${ctx.venue}/estoque-locais`);
+                    gerenciarLocais();
+                  } catch (e) {
+                    avisar(e.message, "erro");
+                  }
+                },
+              }),
+            ]),
+          ]),
         ]),
       );
     }

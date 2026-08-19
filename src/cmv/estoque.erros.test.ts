@@ -41,10 +41,10 @@ test("nome duplicado avisa da consequência, não só do erro", () => {
   assert.match(r.texto, /dois saldos/i);
 });
 
-test("módulo não instalado diz qual migração falta", () => {
+test("módulo não instalado manda rodar a migração", () => {
   const r = mensagemDe('relation "public.insumos" does not exist');
   assert.equal(r.status, 503);
-  assert.match(r.texto, /20260820000000/);
+  assert.match(r.texto, /migração/i);
 });
 
 test("pedido já enviado é conflito, não erro de digitação", () => {
