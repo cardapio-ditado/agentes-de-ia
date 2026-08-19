@@ -156,6 +156,7 @@ import {
   type ItemDaCompra,
 } from "./cmv/estoque.js";
 import { lerNota, somaConfere, tipoAceito } from "./cmv/lerNota.js";
+import { sugerirFicha } from "./cmv/sugerirFicha.js";
 
 /**
  * Roteamento da API, sem servidor.
@@ -930,6 +931,33 @@ async function roteasApi(
         }),
       );
       return ok(res, { salvo: true });
+    }
+
+    // POST /v1/venues/:slug/fichas/sugerir — a IA propõe a receita
+    //
+    // Só PROPÕE: devolve para a tela preencher o formulário, e quem salva é
+    // a pessoa. Gravar direto criaria fichas que ninguém olhou, e ficha não
+    // olhada é custo inventado esperando virar preço de cardápio.
+    if (metodo === "POST" && recurso === "fichas" && p[3] === "sugerir" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      const cadastrados = await comErroDeEstoque(() => listarInsumos({ venueId: venue.id }));
+      try {
+        const sugestao = await sugerirFicha({
+          prato: texto(corpo, "prato"),
+          observacao: textoOpcional(corpo, "observacao") ?? null,
+          vocabulario: cadastrados.map((i) => ({
+            id: i.id,
+            nome: i.nome,
+            unidade: i.unidade,
+            categoria: i.categoria,
+          })),
+        });
+        return ok(res, sugestao);
+      } catch (e) {
+        throw erro(422, "sugestao_falhou", e instanceof Error ? e.message : "A IA não conseguiu propor a ficha.");
+      }
     }
 
     // GET /v1/venues/:slug/fichas — com custo por porção

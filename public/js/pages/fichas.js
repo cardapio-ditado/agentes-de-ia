@@ -37,12 +37,20 @@ export async function fichas(raiz, ctx) {
             el("h2", { texto: "Fichas técnicas" }),
             el("p", { classe: "muted", texto: "O que cada prato consome — e quanto custa cada porção." }),
           ]),
-          el("button", {
-            classe: "btn btn-primario",
-            type: "button",
-            texto: "+ Nova ficha",
-            onclick: () => formulario(null),
-          }),
+          el("div", { classe: "linha-campos" }, [
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "✨ Sugerir com IA",
+              onclick: () => pedirSugestao(),
+            }),
+            el("button", {
+              classe: "btn btn-primario",
+              type: "button",
+              texto: "+ Nova ficha",
+              onclick: () => formulario(null),
+            }),
+          ]),
         ]),
         el("div", { classe: "lista" },
           lista.length === 0
@@ -80,17 +88,84 @@ export async function fichas(raiz, ctx) {
       ]);
     }
 
-    function formulario(existente) {
+    /**
+     * Pede a receita à IA.
+     *
+     * O nome do prato é o suficiente; "como a casa faz" existe porque a
+     * mesma isca de tilápia é empanada em Cuiabá e grelhada em outro lugar,
+     * e uma frase muda a ficha inteira.
+     */
+    function pedirSugestao() {
       limpar(conteudo);
-      const ingredientes = (existente?.ficha_insumos ?? []).map((fi) => ({
-        insumoId: fi.insumos?.id,
-        quantidade: Number(fi.quantidade),
-      }));
+      const prato = el("input", { classe: "campo", placeholder: "Isca de tilápia" });
+      const comoFaz = el("input", {
+        classe: "campo",
+        placeholder: "empanada na farinha de trigo, servida com limão (opcional)",
+      });
 
-      const nome = el("input", { classe: "campo", value: existente?.nome ?? "", placeholder: "Isca de tilápia" });
+      conteudo.append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("div", {}, [
+              el("h2", { texto: "Sugerir ficha com IA" }),
+              el("p", { classe: "muted", texto: "Diga o prato; a IA propõe os ingredientes com o que a casa tem cadastrado." }),
+            ]),
+            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+          ]),
+          el("div", { classe: "cartao pilha" }, [
+            el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Nome do prato" }), prato]),
+            el("label", { classe: "campo-rotulado" }, [
+              el("span", { texto: "Como a casa faz" }),
+              comoFaz,
+              el("small", { classe: "muted", texto: "Uma frase basta — muda bastante a receita proposta." }),
+            ]),
+            el("button", {
+              classe: "btn btn-primario btn-grande",
+              type: "button",
+              texto: "✨ Propor ficha",
+              onclick: async (ev) => {
+                if (prato.value.trim().length < 2) return avisar("Diga o nome do prato.", "erro");
+                ev.target.disabled = true;
+                ev.target.textContent = "Pensando na receita…";
+                try {
+                  const sugestao = await post(`/v1/venues/${ctx.venue}/fichas/sugerir`, {
+                    prato: prato.value,
+                    observacao: comoFaz.value || null,
+                  });
+                  formulario(null, { ...sugestao, prato: prato.value.trim() });
+                } catch (e) {
+                  avisar(e.message, "erro");
+                  ev.target.disabled = false;
+                  ev.target.textContent = "✨ Propor ficha";
+                }
+              },
+            }),
+          ]),
+        ]),
+      );
+    }
+
+    function formulario(existente, sugestao) {
+      limpar(conteudo);
+      const ingredientes = sugestao
+        ? sugestao.ingredientes.map((i) => ({
+            insumoId: i.insumoId,
+            quantidade: Number(i.quantidade),
+            observacao: i.observacao ?? null,
+          }))
+        : (existente?.ficha_insumos ?? []).map((fi) => ({
+            insumoId: fi.insumos?.id,
+            quantidade: Number(fi.quantidade),
+          }));
+
+      const nome = el("input", {
+        classe: "campo",
+        value: sugestao?.prato ?? existente?.nome ?? "",
+        placeholder: "Isca de tilápia",
+      });
       const rendimento = el("input", {
         classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.1", min: "0.1",
-        value: existente?.rendimento ?? 1,
+        value: sugestao?.rendimento ?? existente?.rendimento ?? 1,
       });
       const precoVenda = el("input", {
         classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.01",
@@ -115,7 +190,10 @@ export async function fichas(raiz, ctx) {
           const insumo = insumos.find((x) => x.id === ing.insumoId);
           listaIng.append(
             el("div", { classe: "cabecalho-secao" }, [
-              el("span", { texto: `${insumo?.nome ?? "?"}` }),
+              el("span", {}, [
+                el("span", { texto: `${insumo?.nome ?? "?"}` }),
+                ing.observacao ? el("small", { classe: "muted", texto: ` — ${ing.observacao}` }) : null,
+              ].filter(Boolean)),
               el("div", { classe: "linha-campos" }, [
                 el("input", {
                   classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.001", min: "0",
@@ -158,7 +236,11 @@ export async function fichas(raiz, ctx) {
             nome: nome.value,
             rendimento: Number(rendimento.value) || 1,
             preco_venda: precoVenda.value === "" ? null : Number(precoVenda.value),
-            ingredientes: validos.map((i) => ({ insumo_id: i.insumoId, quantidade: i.quantidade })),
+            ingredientes: validos.map((i) => ({
+              insumo_id: i.insumoId,
+              quantidade: i.quantidade,
+              observacao: i.observacao ?? null,
+            })),
             confirmar,
           });
           avisar(confirmar ? "Ficha conferida — o custo já vale." : "Ficha salva.", "ok");
@@ -168,12 +250,84 @@ export async function fichas(raiz, ctx) {
         }
       };
 
+      // O que a receita pede e a casa não cadastrou. Fica à vista, com o
+      // botão de cadastrar ao lado: sem isso a pessoa salva uma ficha pela
+      // metade sem perceber, e o custo por porção sai menor que a verdade.
+      const faltando = (sugestao?.faltando ?? []).slice();
+      const listaFaltando = el("div", { classe: "tabela" });
+      const blocoFaltando = el("div", { classe: "cartao pilha", hidden: faltando.length === 0 }, [
+        el("strong", { texto: "Falta cadastrar" }),
+        el("p", { classe: "muted", texto: "A receita usa isto, e a casa ainda não tem no cadastro. Sem eles, o custo sai menor que o real." }),
+        listaFaltando,
+      ]);
+
+      const desenharFaltando = () => {
+        limpar(listaFaltando);
+        blocoFaltando.hidden = faltando.length === 0;
+        faltando.forEach((f, i) => {
+          listaFaltando.append(
+            el("div", { classe: "linha-tabela" }, [
+              el("span", { classe: "linha-principal" }, [
+                el("strong", { texto: f.nome }),
+                el("small", { classe: "muted", texto: `${f.quantidade || "?"} ${f.unidade} no lote` }),
+              ]),
+              el("span", { classe: "linha-detalhes" }, [
+                el("button", {
+                  classe: "btn btn-peq",
+                  type: "button",
+                  texto: "+ Cadastrar e usar",
+                  onclick: async (ev) => {
+                    ev.target.disabled = true;
+                    try {
+                      const r = await post(`/v1/venues/${ctx.venue}/insumos`, {
+                        nome: f.nome,
+                        unidade: f.unidade,
+                      });
+                      // Entra na lista em memória para o cálculo do custo
+                      // achar o insumo sem recarregar a tela e perder o que
+                      // já foi digitado.
+                      if (!insumos.some((x) => x.id === r.insumo.id)) insumos.push(r.insumo);
+                      ingredientes.push({ insumoId: r.insumo.id, quantidade: f.quantidade || null });
+                      faltando.splice(i, 1);
+                      desenharFaltando();
+                      desenharIngredientes();
+                      avisar(`${f.nome} cadastrado. Confira o custo dele depois da primeira compra.`, "ok");
+                    } catch (e) {
+                      avisar(e.message, "erro");
+                      ev.target.disabled = false;
+                    }
+                  },
+                }),
+                el("button", {
+                  classe: "btn-icone",
+                  type: "button",
+                  title: "Não uso este ingrediente",
+                  texto: "✕",
+                  onclick: () => {
+                    faltando.splice(i, 1);
+                    desenharFaltando();
+                  },
+                }),
+              ]),
+            ]),
+          );
+        });
+      };
+
       conteudo.append(
         el("section", { classe: "pilha" }, [
           el("div", { classe: "cabecalho-secao" }, [
-            el("h2", { texto: existente ? `Editar ${existente.nome}` : "Nova ficha" }),
+            el("h2", { texto: existente ? `Editar ${existente.nome}` : sugestao ? "Ficha proposta pela IA" : "Nova ficha" }),
             el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
           ]),
+          sugestao
+            ? el("p", {
+                classe: "aviso aviso-alerta",
+                texto: "Isto é uma sugestão. Confira quantidade por quantidade com quem cozinha — é este número que vira o custo do prato e o preço no cardápio.",
+              })
+            : null,
+          ...(sugestao?.avisos ?? []).map((a) => el("p", { classe: "aviso aviso-alerta", texto: a })),
+          blocoFaltando,
           el("div", { classe: "cartao pilha" }, [
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Nome do prato ou preparo" }), nome]),
             el("div", { classe: "linha-campos" }, [
@@ -216,6 +370,7 @@ export async function fichas(raiz, ctx) {
         ].filter(Boolean)),
       );
       desenharIngredientes();
+      desenharFaltando();
     }
   }
 }
