@@ -91,6 +91,18 @@ create table if not exists public.insumos (
   custo_medio numeric(12,4) not null default 0 check (custo_medio >= 0),
   -- Abaixo disso, entra na sugestão de compra.
   estoque_minimo numeric(12,3),
+  -- Quanto a entrega pode divergir do pedido sem virar reclamação.
+  --
+  -- Carne pesada no açougue varia sempre: pediu 5 kg, veio 4,9 — 2% é a
+  -- vida, não é falta. Já refrigerante em lata não varia: 24 pedidas, 20
+  -- recebidas são 4 latas que alguém tem que explicar.
+  --
+  -- ATENÇÃO: a tolerância NÃO muda o que entra no estoque. O que entra é
+  -- sempre a quantidade recebida, exata. Ela decide apenas se a diferença
+  -- aparece como algo a cobrar do fornecedor. Confundir as duas coisas foi
+  -- exatamente o erro da contagem no Gorjeta, que deixava resíduo.
+  tolerancia_divergencia_pct numeric(5,2) not null default 0
+    check (tolerancia_divergencia_pct >= 0),
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -355,6 +367,17 @@ $$;
 -- Compras
 -- ============================================================
 
+-- São DOIS momentos, e confundi-los é o que faz o estoque mentir.
+--
+--   rascunho -> pedido -> recebida
+--
+-- No PEDIDO registra-se o que foi encomendado. No RECEBIMENTO, o que de fato
+-- chegou — e os dois quase nunca são iguais. Carne é o caso clássico: pede-se
+-- 5 kg, vêm 4,9. Se o estoque receber a quantidade PEDIDA, aqueles 100 g
+-- somem sem deixar rastro e reaparecem na próxima contagem como quebra sem
+-- explicação, junto com o desvio de verdade — e aí não dá mais para separar
+-- um do outro.
+
 create table if not exists public.compras (
   id uuid primary key default gen_random_uuid(),
   venue_id uuid not null references public.venues(id) on delete cascade,
@@ -362,15 +385,20 @@ create table if not exists public.compras (
   fornecedor text,
   documento text,
   data_compra date not null default current_date,
+  -- Quando o fornecedor prometeu entregar.
+  data_prevista date,
   valor_total numeric(12,2) not null default 0,
   status text not null default 'rascunho'
-    check (status in ('rascunho', 'recebida', 'cancelada')),
+    check (status in ('rascunho', 'pedido', 'recebida', 'cancelada')),
   -- Extração da nota por IA: o JSON cru, para conferir depois o que a IA leu
   -- contra o que a pessoa corrigiu. Sem isso não há como melhorar o prompt.
   extracao_ia jsonb,
+  observacoes text,
   criado_por uuid,
   created_at timestamptz not null default now(),
-  recebida_em timestamptz
+  pedido_em timestamptz,
+  recebida_em timestamptz,
+  recebida_por uuid
 );
 
 create table if not exists public.compra_itens (
@@ -381,9 +409,69 @@ create table if not exists public.compra_itens (
   -- mesmo depois do vínculo: é a memória de como aquele fornecedor escreve,
   -- e é o que faz o casamento da próxima nota ser automático.
   descricao_nota text,
-  quantidade numeric(12,3) not null check (quantidade > 0),
-  custo_unitario numeric(12,4) not null check (custo_unitario >= 0)
+
+  -- O que foi PEDIDO.
+  quantidade_pedida numeric(12,3) not null check (quantidade_pedida > 0),
+  custo_unitario_pedido numeric(12,4) not null default 0 check (custo_unitario_pedido >= 0),
+
+  -- O que CHEGOU. Nulo enquanto a compra não foi recebida.
+  --
+  -- Zero é um valor legítimo e diferente de nulo: significa "não veio", e
+  -- precisa aparecer na conferência como falta — não como item ainda não
+  -- conferido.
+  quantidade_recebida numeric(12,3) check (quantidade_recebida >= 0),
+  custo_unitario_recebido numeric(12,4) check (custo_unitario_recebido >= 0),
+
+  -- Preenchido por quem recebeu, quando a diferença merece explicação:
+  -- "faltou 1 caixa", "peso do açougue", "veio vencido, devolvi 2".
+  divergencia_motivo text
 );
+
+comment on column public.compra_itens.quantidade_recebida is
+  'O que de fato chegou. É ESTA quantidade que entra no estoque — nunca a pedida. Nulo = ainda não conferido; zero = não veio.';
+
+/**
+ * A diferença entre o que se pediu e o que chegou.
+ *
+ * Positiva veio a mais, negativa veio a menos. Em percentual porque é assim
+ * que se julga: 100 g a menos num pedido de 5 kg é o açougue; 100 g a menos
+ * num pedido de 200 g é outra conversa.
+ */
+create or replace function public.cmv_divergencias(p_compra_id uuid)
+returns table (
+  item_id uuid,
+  insumo_nome text,
+  quantidade_pedida numeric,
+  quantidade_recebida numeric,
+  diferenca numeric,
+  diferenca_pct numeric,
+  valor_pedido numeric,
+  valor_recebido numeric,
+  acima_da_tolerancia boolean,
+  motivo text
+)
+language sql
+stable
+as $$
+  select
+    ci.id,
+    coalesce(i.nome, ci.descricao_nota),
+    ci.quantidade_pedida,
+    ci.quantidade_recebida,
+    ci.quantidade_recebida - ci.quantidade_pedida,
+    round((ci.quantidade_recebida - ci.quantidade_pedida) / ci.quantidade_pedida * 100, 2),
+    round(ci.quantidade_pedida * ci.custo_unitario_pedido, 2),
+    round(ci.quantidade_recebida * coalesce(ci.custo_unitario_recebido, ci.custo_unitario_pedido), 2),
+    abs((ci.quantidade_recebida - ci.quantidade_pedida) / ci.quantidade_pedida * 100)
+      > coalesce(i.tolerancia_divergencia_pct, 0),
+    ci.divergencia_motivo
+  from public.compra_itens ci
+  left join public.insumos i on i.id = ci.insumo_id
+  where ci.compra_id = p_compra_id
+    and ci.quantidade_recebida is not null
+    and ci.quantidade_recebida <> ci.quantidade_pedida
+  order by abs((ci.quantidade_recebida - ci.quantidade_pedida) / ci.quantidade_pedida) desc;
+$$;
 
 -- Como cada fornecedor escreve cada insumo. Aprendido uma vez, usado sempre.
 create table if not exists public.insumo_apelidos (
@@ -400,7 +488,17 @@ comment on table public.insumo_apelidos is
   'Como fornecedor e PDV escrevem cada insumo. É o que faz a segunda nota do mesmo fornecedor casar sozinha.';
 
 /**
- * Recebe a compra: lança as entradas e recalcula o custo médio. Tudo ou nada.
+ * Recebe a compra: entra no estoque O QUE CHEGOU, e recalcula o custo médio.
+ * Tudo ou nada.
+ *
+ * A quantidade que entra é a RECEBIDA, nunca a pedida. Pedir 5 kg de carne e
+ * receber 4,9 é rotina; lançar os 5 faria 100 g sumirem sem rastro e
+ * reaparecerem na contagem seguinte como quebra — misturados ao desvio de
+ * verdade, sem como separar um do outro depois.
+ *
+ * Item sem quantidade recebida informada NÃO entra: nulo ali significa "não
+ * conferido", e adivinhar que veio tudo é justamente a suposição que produz
+ * estoque mentiroso.
  *
  * O custo médio é PONDERADO pelo saldo existente. A conta ingênua (média
  * simples dos preços pagos) faz uma compra de 2 unidades a preço alto pesar
@@ -415,6 +513,7 @@ declare
   v_item record;
   v_saldo numeric;
   v_custo_atual numeric;
+  v_custo numeric;
 begin
   select * into v_compra from public.compras where id = p_compra_id for update;
   if not found then
@@ -428,14 +527,31 @@ begin
     raise exception 'compra_cancelada';
   end if;
 
+  -- Receber sem ter conferido nada é o caminho mais curto para o estoque
+  -- mentir. Ao menos um item precisa ter quantidade recebida informada.
+  if not exists (
+    select 1 from public.compra_itens
+     where compra_id = p_compra_id and quantidade_recebida is not null
+  ) then
+    raise exception 'nada_conferido';
+  end if;
+
   for v_item in
-    select * from public.compra_itens where compra_id = p_compra_id and insumo_id is not null
+    select * from public.compra_itens
+     where compra_id = p_compra_id
+       and insumo_id is not null
+       and quantidade_recebida is not null
+       and quantidade_recebida > 0
   loop
+    -- O preço da nota vence o do pedido quando os dois diferem: é o que a
+    -- casa vai pagar.
+    v_custo := coalesce(v_item.custo_unitario_recebido, v_item.custo_unitario_pedido);
+
     insert into public.estoque_movimentos
       (venue_id, insumo_id, local_id, quantidade, tipo, custo_unitario, origem_tipo, origem_id, criado_por)
     values
-      (v_compra.venue_id, v_item.insumo_id, v_compra.local_id, v_item.quantidade,
-       'compra', v_item.custo_unitario, 'compra', p_compra_id, p_usuario);
+      (v_compra.venue_id, v_item.insumo_id, v_compra.local_id, v_item.quantidade_recebida,
+       'compra', v_custo, 'compra', p_compra_id, p_usuario);
 
     -- Média ponderada: (saldo_antigo * custo_antigo + entrada * custo_novo)
     -- dividido pelo total. O saldo é lido DEPOIS do movimento, então o que
@@ -446,10 +562,10 @@ begin
 
     update public.insumos
        set custo_medio = case
-             when v_saldo <= 0 then v_item.custo_unitario
+             when v_saldo <= 0 then v_custo
              else round(
-               (greatest(v_saldo - v_item.quantidade, 0) * coalesce(v_custo_atual, 0)
-                + v_item.quantidade * v_item.custo_unitario)
+               (greatest(v_saldo - v_item.quantidade_recebida, 0) * coalesce(v_custo_atual, 0)
+                + v_item.quantidade_recebida * v_custo)
                / v_saldo, 4)
            end
      where id = v_item.insumo_id;
@@ -458,10 +574,36 @@ begin
   update public.compras
      set status = 'recebida',
          recebida_em = now(),
+         recebida_por = p_usuario,
+         -- O valor da compra é o do que CHEGOU: é ele que bate com a nota e
+         -- com o que sai do caixa.
          valor_total = coalesce((
-           select sum(quantidade * custo_unitario) from public.compra_itens where compra_id = p_compra_id
+           select sum(quantidade_recebida * coalesce(custo_unitario_recebido, custo_unitario_pedido))
+             from public.compra_itens
+            where compra_id = p_compra_id and quantidade_recebida is not null
          ), 0)
    where id = p_compra_id;
+end;
+$$;
+
+/**
+ * Marca o pedido como enviado ao fornecedor.
+ *
+ * Existe para separar "estou montando a lista" de "o fornecedor já foi
+ * avisado". Sem essa fronteira, editar um pedido já enviado parece inofensivo
+ * — e o que chega não confere com o que a tela mostra.
+ */
+create or replace function public.cmv_enviar_pedido(p_compra_id uuid)
+returns void
+language plpgsql
+as $$
+begin
+  update public.compras
+     set status = 'pedido', pedido_em = now()
+   where id = p_compra_id and status = 'rascunho';
+  if not found then
+    raise exception 'pedido_nao_esta_em_rascunho';
+  end if;
 end;
 $$;
 

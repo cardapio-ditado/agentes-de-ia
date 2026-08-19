@@ -25,14 +25,14 @@ end $$;
 \echo '--- 2. CUSTO MÉDIO PONDERADO ---'
 -- Compra 1: 10 kg a R$ 20
 insert into compras (id, venue_id, local_id) values ('44444444-4444-4444-4444-444444444441','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222221');
-insert into compra_itens (compra_id, insumo_id, quantidade, custo_unitario) values
-  ('44444444-4444-4444-4444-444444444441','33333333-3333-3333-3333-333333333331',10,20);
+insert into compra_itens (compra_id, insumo_id, quantidade_pedida, custo_unitario_pedido, quantidade_recebida)
+values ('44444444-4444-4444-4444-444444444441','33333333-3333-3333-3333-333333333331',10,20,10);
 select cmv_receber_compra('44444444-4444-4444-4444-444444444441');
 
 -- Compra 2: 10 kg a R$ 30 → média tem que ser 25, não 30
 insert into compras (id, venue_id, local_id) values ('44444444-4444-4444-4444-444444444442','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222221');
-insert into compra_itens (compra_id, insumo_id, quantidade, custo_unitario) values
-  ('44444444-4444-4444-4444-444444444442','33333333-3333-3333-3333-333333333331',10,30);
+insert into compra_itens (compra_id, insumo_id, quantidade_pedida, custo_unitario_pedido, quantidade_recebida)
+values ('44444444-4444-4444-4444-444444444442','33333333-3333-3333-3333-333333333331',10,30,10);
 select cmv_receber_compra('44444444-4444-4444-4444-444444444442');
 
 select case when custo_medio = 25 then 'ok   custo médio 25,00 (10kg a 20 + 10kg a 30)'
@@ -131,3 +131,70 @@ begin
 exception when unique_violation then
   raise notice 'ok   um faturamento por dia — relançar corrige, não soma';
 end $$;
+
+\echo '--- 12. PEDIDO E RECEBIMENTO SÃO MOMENTOS DIFERENTES ---'
+-- Carne com 3% de tolerância: variação de açougue é rotina.
+insert into insumos (id, venue_id, nome, unidade, tolerancia_divergencia_pct)
+values ('33333333-3333-3333-3333-333333333334','11111111-1111-1111-1111-111111111111','Picanha','kg',3);
+-- Refrigerante sem tolerância: lata não varia de peso.
+insert into insumos (id, venue_id, nome, unidade)
+values ('33333333-3333-3333-3333-333333333335','11111111-1111-1111-1111-111111111111','Refrigerante lata','un');
+
+insert into compras (id, venue_id, local_id, fornecedor, status)
+values ('44444444-4444-4444-4444-444444444443','11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222221','Açougue Central','rascunho');
+select cmv_enviar_pedido('44444444-4444-4444-4444-444444444443');
+select case when status = 'pedido' and pedido_em is not null then 'ok   rascunho virou pedido enviado'
+            else 'FALHA status ' || status end from compras where id='44444444-4444-4444-4444-444444444443';
+
+do $$
+begin
+  perform cmv_enviar_pedido('44444444-4444-4444-4444-444444444443');
+  raise exception 'FALHA: reenviou pedido já enviado';
+exception when others then
+  if sqlerrm = 'pedido_nao_esta_em_rascunho' then raise notice 'ok   pedido já enviado não é reenviado';
+  else raise; end if;
+end $$;
+
+\echo '--- 13. RECEBER SEM CONFERIR NADA É RECUSADO ---'
+insert into compra_itens (compra_id, insumo_id, quantidade_pedida, custo_unitario_pedido) values
+  ('44444444-4444-4444-4444-444444444443','33333333-3333-3333-3333-333333333334',5,80),
+  ('44444444-4444-4444-4444-444444444443','33333333-3333-3333-3333-333333333335',24,4);
+do $$
+begin
+  perform cmv_receber_compra('44444444-4444-4444-4444-444444444443');
+  raise exception 'FALHA: recebeu sem ninguém conferir';
+exception when others then
+  if sqlerrm = 'nada_conferido' then raise notice 'ok   recusado: nenhum item foi conferido';
+  else raise; end if;
+end $$;
+
+\echo '--- 14. O QUE ENTRA NO ESTOQUE É O QUE CHEGOU ---'
+-- Pediu 5kg de picanha, veio 4,900. Pediu 24 latas, vieram 20.
+update compra_itens set quantidade_recebida = 4.9
+ where compra_id='44444444-4444-4444-4444-444444444443' and insumo_id='33333333-3333-3333-3333-333333333334';
+update compra_itens set quantidade_recebida = 20, divergencia_motivo = 'faltaram 4 latas'
+ where compra_id='44444444-4444-4444-4444-444444444443' and insumo_id='33333333-3333-3333-3333-333333333335';
+select cmv_receber_compra('44444444-4444-4444-4444-444444444443');
+
+select case when quantidade = 4.9 then 'ok   entrou 4,900 kg de picanha — não os 5 pedidos'
+            else 'FALHA saldo ' || quantidade end
+  from estoque_saldos where insumo_id='33333333-3333-3333-3333-333333333334';
+select case when quantidade = 20 then 'ok   entraram 20 latas — não as 24 pedidas'
+            else 'FALHA saldo ' || quantidade end
+  from estoque_saldos where insumo_id='33333333-3333-3333-3333-333333333335';
+-- 4,9 x 80 + 20 x 4 = 392 + 80 = 472
+select case when valor_total = 472 then 'ok   valor da compra = o que chegou (472,00), bate com a nota'
+            else 'FALHA valor ' || valor_total end from compras where id='44444444-4444-4444-4444-444444444443';
+
+\echo '--- 15. DIVERGÊNCIAS: A TOLERÂNCIA SÓ DECIDE SE COBRA ---'
+select insumo_nome || ': pediu ' || quantidade_pedida || ', veio ' || quantidade_recebida
+       || ' (' || diferenca_pct || '%) ' || case when acima_da_tolerancia then '-> COBRAR' else '-> normal' end
+  from cmv_divergencias('44444444-4444-4444-4444-444444444443');
+
+select case when not acima_da_tolerancia then 'ok   picanha -2% dentro da tolerância de 3% — não vira cobrança'
+            else 'FALHA' end
+  from cmv_divergencias('44444444-4444-4444-4444-444444444443') where insumo_nome='Picanha';
+select case when acima_da_tolerancia and motivo = 'faltaram 4 latas'
+            then 'ok   refrigerante -16,67% acima da tolerância 0% — vira cobrança, com motivo'
+            else 'FALHA' end
+  from cmv_divergencias('44444444-4444-4444-4444-444444444443') where insumo_nome='Refrigerante lata';
