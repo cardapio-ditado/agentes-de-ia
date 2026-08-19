@@ -126,6 +126,7 @@ import {
   enviarPedido,
   extratoInsumo,
   garantirInsumo,
+  lancarFaturamento,
   listarCompras,
   listarContagens,
   listarFichas,
@@ -133,10 +134,12 @@ import {
   listarInsumos,
   listarLocais,
   obterCompra,
+  painelCmv,
   posicaoEstoque,
   receberCompra,
   registrarContagem,
   registrarPerda,
+  registrarProducao,
   salvarFicha,
   salvarFornecedor,
   sugestaoCompra,
@@ -762,6 +765,9 @@ async function roteasApi(
       contagens: "cmv",
       fornecedores: "cmv",
       estoque: "cmv",
+      cmv: "cmv",
+      producoes: "cmv",
+      faturamento: "cmv",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -1014,6 +1020,47 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await comErroDeEstoque(() => sugestaoCompra(venue.id)));
+    }
+
+    // GET /v1/venues/:slug/cmv?inicio=AAAA-MM-DD&fim=AAAA-MM-DD — o painel
+    if (metodo === "GET" && recurso === "cmv" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const hoje = new Date().toISOString().slice(0, 10);
+      const inicio = url.searchParams.get("inicio") ?? hoje.slice(0, 8) + "01";
+      const fim = url.searchParams.get("fim") ?? hoje;
+      return ok(res, await comErroDeEstoque(() => painelCmv({ venueId: venue.id, inicio, fim })));
+    }
+
+    // POST /v1/venues/:slug/faturamento — o denominador do CMV
+    if (metodo === "POST" && recurso === "faturamento" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        lancarFaturamento({
+          venueId: venue.id,
+          data: texto(corpo, "data"),
+          valor: numeroOuNulo(corpo.valor) ?? -1,
+        }),
+      );
+      return ok(res, { lancado: true });
+    }
+
+    // POST /v1/venues/:slug/producoes — baixa os insumos da ficha
+    if (metodo === "POST" && recurso === "producoes" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        registrarProducao({
+          venueId: venue.id,
+          fichaId: texto(corpo, "ficha_id"),
+          localId: texto(corpo, "local_id"),
+          lotes: numeroOuNulo(corpo.lotes) ?? 0,
+        }),
+      );
+      return ok(res, { registrada: true }, 201);
     }
 
     // GET /v1/venues/:slug/contagens — histórico, com a quebra em reais

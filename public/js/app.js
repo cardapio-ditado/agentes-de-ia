@@ -21,6 +21,8 @@ import { fichas } from "./pages/fichas.js";
 import { contagem } from "./pages/contagem.js";
 import { estoque } from "./pages/estoque.js";
 import { fornecedores } from "./pages/fornecedores.js";
+import { cmvPainel } from "./pages/cmvPainel.js";
+import { producao } from "./pages/producao.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -47,10 +49,13 @@ const PAGINAS = [
 
   { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
 
-  // A ordem é a do dia de trabalho: recebe-se toda manhã; pede-se algumas
-  // vezes por semana; cadastra-se uma vez e esquece.
+  // A ordem é a do dia de trabalho: o número primeiro, depois o que se faz
+  // toda manhã, depois o que se faz às vezes, por fim o que se cadastra uma
+  // vez e esquece.
+  { id: "cmv-painel", modulo: "cmv", rotulo: "Painel do CMV", icone: ICONES.painel, render: cmvPainel, subtitulo: "O percentual do período, com a conta aberta" },
   { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
   { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
+  { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
   { id: "estoque", modulo: "cmv", rotulo: "Posição do estoque", icone: ICONES.painel, render: estoque, subtitulo: "O que há, onde, quanto vale — com extrato, transferência e perda" },
   { id: "fornecedores", modulo: "cmv", rotulo: "Fornecedores", icone: ICONES.pessoa, render: fornecedores, subtitulo: "De quem se compra, e a cada quantos dias entrega" },

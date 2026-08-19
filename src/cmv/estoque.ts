@@ -810,6 +810,89 @@ export async function listarContagens(venueId: string): Promise<unknown[]> {
   });
 }
 
+/* ---------- painel do CMV ---------- */
+
+/**
+ * Os números do período, na forma que o dono olha.
+ *
+ * Antes de calcular, tira a foto do estoque de hoje: o CMV de amanhã precisa
+ * do estoque final de hoje, e esse número não existe retroativamente.
+ */
+export async function painelCmv(params: {
+  venueId: string;
+  inicio: string;
+  fim: string;
+}): Promise<unknown> {
+  const { error: erroFoto } = await cliente().rpc("cmv_registrar_snapshot", {
+    p_venue_id: params.venueId,
+  });
+  if (erroFoto) throw traduzir(erroFoto);
+
+  const { data, error } = await cliente().rpc("cmv_do_periodo", {
+    p_venue_id: params.venueId,
+    p_inicio: params.inicio,
+    p_fim: params.fim,
+  });
+  if (error) throw traduzir(error);
+
+  const { data: faturamentos, error: erroFat } = await cliente()
+    .from("faturamento_diario")
+    .select("data_referencia, valor, origem")
+    .eq("venue_id", params.venueId)
+    .gte("data_referencia", params.inicio)
+    .lte("data_referencia", params.fim)
+    .order("data_referencia", { ascending: false });
+  if (erroFat) throw traduzir(erroFat);
+
+  return { periodo: (data ?? [])[0] ?? null, faturamentos: faturamentos ?? [] };
+}
+
+/**
+ * Lança o faturamento de um dia. Relançar corrige, não soma.
+ *
+ * Upsert de propósito: o gerente que digita duas vezes não pode dobrar o
+ * denominador e derrubar o CMV pela metade.
+ */
+export async function lancarFaturamento(params: {
+  venueId: string;
+  data: string;
+  valor: number;
+  criadoPor?: string | null;
+}): Promise<void> {
+  if (!(params.valor >= 0)) throw new ErroDoEstoque(400, "Informe o valor do dia.");
+  const { error } = await cliente()
+    .from("faturamento_diario")
+    .upsert(
+      {
+        venue_id: params.venueId,
+        data_referencia: params.data,
+        valor: params.valor,
+        origem: "manual",
+        criado_por: params.criadoPor ?? null,
+      },
+      { onConflict: "venue_id,data_referencia" },
+    );
+  if (error) throw traduzir(error);
+}
+
+/* ---------- produção ---------- */
+
+export async function registrarProducao(params: {
+  venueId: string;
+  fichaId: string;
+  localId: string;
+  lotes: number;
+}): Promise<void> {
+  const { error } = await cliente().rpc("cmv_registrar_producao", {
+    p_venue_id: params.venueId,
+    p_ficha_id: params.fichaId,
+    p_local_id: params.localId,
+    p_lotes: params.lotes,
+    p_usuario: null,
+  });
+  if (error) throw traduzir(error);
+}
+
 /* ---------- erros ---------- */
 
 export class ErroDoEstoque extends Error {
