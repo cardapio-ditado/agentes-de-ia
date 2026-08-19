@@ -390,6 +390,17 @@ create table if not exists public.compras (
   valor_total numeric(12,2) not null default 0,
   status text not null default 'rascunho'
     check (status in ('rascunho', 'pedido', 'recebida', 'cancelada')),
+  -- De onde veio esta compra.
+  --
+  -- 'pedido'  encomendado ao fornecedor e conferido na chegada.
+  -- 'avulsa'  comprado primeiro, lançado depois — a compra do dia na rua,
+  --           feira, mercado, o fornecedor que apareceu. Não tem o que
+  --           conferir contra: a nota É o pedido.
+  --
+  -- Sem essa distinção, a tela de conferência mostraria divergência de 100%
+  -- em toda compra de rua (pediu nada, veio tudo), e o pessoal da doca
+  -- aprenderia a ignorar o alerta — que é como se perde um alerta útil.
+  origem text not null default 'pedido' check (origem in ('pedido', 'avulsa')),
   -- Extração da nota por IA: o JSON cru, para conferir depois o que a IA leu
   -- contra o que a pessoa corrigiu. Sem isso não há como melhorar o prompt.
   extracao_ia jsonb,
@@ -410,9 +421,11 @@ create table if not exists public.compra_itens (
   -- e é o que faz o casamento da próxima nota ser automático.
   descricao_nota text,
 
-  -- O que foi PEDIDO.
-  quantidade_pedida numeric(12,3) not null check (quantidade_pedida > 0),
-  custo_unitario_pedido numeric(12,4) not null default 0 check (custo_unitario_pedido >= 0),
+  -- O que foi PEDIDO. Nulo em compra avulsa: não houve pedido, e preencher
+  -- com a quantidade recebida inventaria uma encomenda que nunca existiu —
+  -- o histórico do fornecedor passaria a dizer que ele sempre entrega certo.
+  quantidade_pedida numeric(12,3) check (quantidade_pedida > 0),
+  custo_unitario_pedido numeric(12,4) check (custo_unitario_pedido >= 0),
 
   -- O que CHEGOU. Nulo enquanto a compra não foi recebida.
   --
@@ -424,7 +437,11 @@ create table if not exists public.compra_itens (
 
   -- Preenchido por quem recebeu, quando a diferença merece explicação:
   -- "faltou 1 caixa", "peso do açougue", "veio vencido, devolvi 2".
-  divergencia_motivo text
+  divergencia_motivo text,
+
+  -- Linha sem nenhuma das duas quantidades não é item de compra, é lixo.
+  constraint compra_item_tem_quantidade
+    check (quantidade_pedida is not null or quantidade_recebida is not null)
 );
 
 comment on column public.compra_itens.quantidade_recebida is
@@ -460,14 +477,15 @@ as $$
     ci.quantidade_recebida,
     ci.quantidade_recebida - ci.quantidade_pedida,
     round((ci.quantidade_recebida - ci.quantidade_pedida) / ci.quantidade_pedida * 100, 2),
-    round(ci.quantidade_pedida * ci.custo_unitario_pedido, 2),
-    round(ci.quantidade_recebida * coalesce(ci.custo_unitario_recebido, ci.custo_unitario_pedido), 2),
+    round(ci.quantidade_pedida * coalesce(ci.custo_unitario_pedido, 0), 2),
+    round(ci.quantidade_recebida * coalesce(ci.custo_unitario_recebido, ci.custo_unitario_pedido, 0), 2),
     abs((ci.quantidade_recebida - ci.quantidade_pedida) / ci.quantidade_pedida * 100)
       > coalesce(i.tolerancia_divergencia_pct, 0),
     ci.divergencia_motivo
   from public.compra_itens ci
   left join public.insumos i on i.id = ci.insumo_id
   where ci.compra_id = p_compra_id
+    and ci.quantidade_pedida is not null
     and ci.quantidade_recebida is not null
     and ci.quantidade_recebida <> ci.quantidade_pedida
   order by abs((ci.quantidade_recebida - ci.quantidade_pedida) / ci.quantidade_pedida) desc;
@@ -545,7 +563,7 @@ begin
   loop
     -- O preço da nota vence o do pedido quando os dois diferem: é o que a
     -- casa vai pagar.
-    v_custo := coalesce(v_item.custo_unitario_recebido, v_item.custo_unitario_pedido);
+    v_custo := coalesce(v_item.custo_unitario_recebido, v_item.custo_unitario_pedido, 0);
 
     insert into public.estoque_movimentos
       (venue_id, insumo_id, local_id, quantidade, tipo, custo_unitario, origem_tipo, origem_id, criado_por)
@@ -578,7 +596,7 @@ begin
          -- O valor da compra é o do que CHEGOU: é ele que bate com a nota e
          -- com o que sai do caixa.
          valor_total = coalesce((
-           select sum(quantidade_recebida * coalesce(custo_unitario_recebido, custo_unitario_pedido))
+           select sum(quantidade_recebida * coalesce(custo_unitario_recebido, custo_unitario_pedido, 0))
              from public.compra_itens
             where compra_id = p_compra_id and quantidade_recebida is not null
          ), 0)
@@ -600,7 +618,7 @@ as $$
 begin
   update public.compras
      set status = 'pedido', pedido_em = now()
-   where id = p_compra_id and status = 'rascunho';
+   where id = p_compra_id and status = 'rascunho' and origem = 'pedido';
   if not found then
     raise exception 'pedido_nao_esta_em_rascunho';
   end if;

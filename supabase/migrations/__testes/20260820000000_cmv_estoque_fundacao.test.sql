@@ -198,3 +198,41 @@ select case when acima_da_tolerancia and motivo = 'faltaram 4 latas'
             then 'ok   refrigerante -16,67% acima da tolerância 0% — vira cobrança, com motivo'
             else 'FALHA' end
   from cmv_divergencias('44444444-4444-4444-4444-444444444443') where insumo_nome='Refrigerante lata';
+
+\echo '--- 16. COMPRA AVULSA: comprou na rua, lança depois ---'
+insert into compras (id, venue_id, local_id, fornecedor, origem, status)
+values ('44444444-4444-4444-4444-444444444444','11111111-1111-1111-1111-111111111111',
+        '22222222-2222-2222-2222-222222222221','Mercado da esquina','avulsa','rascunho');
+-- Sem quantidade pedida: não houve pedido.
+insert into compra_itens (compra_id, insumo_id, descricao_nota, quantidade_recebida, custo_unitario_recebido)
+values ('44444444-4444-4444-4444-444444444444','33333333-3333-3333-3333-333333333333','FARINHA TRIGO 5KG', 3, 18);
+select cmv_receber_compra('44444444-4444-4444-4444-444444444444');
+
+select case when quantidade = 3 then 'ok   3 kg de farinha entraram sem nunca ter sido pedidos'
+            else 'FALHA saldo ' || quantidade end
+  from estoque_saldos where insumo_id='33333333-3333-3333-3333-333333333333';
+select case when count(*) = 0 then 'ok   compra avulsa não gera divergência — não há pedido contra o que comparar'
+            else 'FALHA: ' || count(*) || ' divergências' end
+  from cmv_divergencias('44444444-4444-4444-4444-444444444444');
+
+\echo '--- 17. AVULSA NÃO VIRA PEDIDO ---'
+insert into compras (id, venue_id, local_id, origem, status)
+values ('44444444-4444-4444-4444-444444444445','11111111-1111-1111-1111-111111111111',
+        '22222222-2222-2222-2222-222222222221','avulsa','rascunho');
+do $$
+begin
+  perform cmv_enviar_pedido('44444444-4444-4444-4444-444444444445');
+  raise exception 'FALHA: enviou compra avulsa como pedido';
+exception when others then
+  if sqlerrm = 'pedido_nao_esta_em_rascunho' then raise notice 'ok   avulsa não pode ser "enviada ao fornecedor"';
+  else raise; end if;
+end $$;
+
+\echo '--- 18. LINHA SEM QUANTIDADE NENHUMA É RECUSADA ---'
+do $$
+begin
+  insert into compra_itens (compra_id, descricao_nota) values ('44444444-4444-4444-4444-444444444445','LIXO');
+  raise exception 'FALHA: aceitou linha sem quantidade';
+exception when check_violation then
+  raise notice 'ok   linha sem pedida nem recebida barrada pela constraint';
+end $$;
