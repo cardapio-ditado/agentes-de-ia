@@ -24,6 +24,15 @@ export interface Sessao {
   email: string | null;
   orgId: string;
   papel: string;
+  /**
+   * Módulos que esta pessoa pode abrir, ou null para "todos os que a casa
+   * contratou".
+   *
+   * Separado do papel de propósito: são perguntas diferentes. O papel diz O
+   * QUE a pessoa pode fazer (ler, escrever, administrar); esta lista diz
+   * ONDE. Um conferente de doca escreve, mas só no CMV.
+   */
+  modulos: string[] | null;
   /** Administrador da plataforma enxerga e cria todas as organizações. */
   plataformaAdmin: boolean;
 }
@@ -107,7 +116,9 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
   const [vinculo, admin] = await Promise.all([
     db()
       .from("org_members")
-      .select("org_id, role")
+      // `modulos` é a restrição de acesso por módulo. Sem ela na seleção, a
+      // sessão nasceria sempre sem restrição e a trava não valeria nada.
+      .select("org_id, role, modulos")
       .eq("user_id", userId)
       .order("created_at", { ascending: true })
       .limit(1)
@@ -152,6 +163,9 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
     email: data.user.email ?? null,
     orgId: membro?.org_id ?? "",
     papel: membro?.role ?? "plataforma",
+    // A coluna pode não existir num banco que ainda não recebeu a migração;
+    // ausente vira null, que é "sem restrição" — o comportamento de antes.
+    modulos: (membro as { modulos?: string[] | null } | null)?.modulos ?? null,
     plataformaAdmin,
   };
 
@@ -176,6 +190,23 @@ const PODEM_ESCREVER = new Set(["owner", "admin", "member", "plataforma"]);
 
 export function podeEscrever(sessao: Sessao): boolean {
   return sessao.plataformaAdmin || PODEM_ESCREVER.has(sessao.papel);
+}
+
+/**
+ * Esta sessão pode abrir este módulo?
+ *
+ * Só a metade da pergunta que depende da PESSOA. A outra metade — se o
+ * estabelecimento contratou o módulo — vive em `modulos.ts` e é conferida
+ * junto na rota. Separadas porque as mensagens de recusa são diferentes:
+ * "sua casa não assina isso" manda falar com o comercial; "você não tem
+ * acesso" manda falar com o dono.
+ */
+export function podeAbrirModulo(sessao: Sessao, modulo: string): boolean {
+  if (sessao.plataformaAdmin) return true;
+  // Null é "todos": mantém quem já usa o sistema sem mudança, e faz módulo
+  // novo contratado aparecer sozinho para quem tem acesso amplo.
+  if (sessao.modulos === null) return true;
+  return sessao.modulos.includes(modulo);
 }
 
 /**

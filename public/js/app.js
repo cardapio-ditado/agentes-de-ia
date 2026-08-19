@@ -52,6 +52,15 @@ const PAGINAS = [
 let souPlataforma = false;
 
 /**
+ * Módulos que ESTA PESSOA pode abrir. Null = sem restrição.
+ *
+ * Diferente de `modulosDoCliente`, que é o que a CASA contratou. As duas
+ * perguntas são independentes e as duas precisam valer: o conferente de doca
+ * trabalha numa casa que tem cinco módulos e só enxerga um.
+ */
+let meusModulos = null;
+
+/**
  * Módulos contratados pelo estabelecimento aberto agora.
  *
  * Mapa de id -> { ativo, url }. Vazio significa "ainda não carregou", não
@@ -322,7 +331,9 @@ const DICA_PADRAO = "Toque num favo aceso para entrar.";
  */
 function moduloAceso(m) {
   if (m.somentePlataforma) return true;
-  return modulosDoCliente.get(m.id)?.ativo === true;
+  if (modulosDoCliente.get(m.id)?.ativo !== true) return false;
+  // A restrição da pessoa, por cima da contratação da casa.
+  return meusModulos === null || meusModulos.includes(m.id);
 }
 
 /**
@@ -696,8 +707,10 @@ async function iniciar() {
   try {
     const eu = await get("/v1/auth/me");
     souPlataforma = eu.plataforma_admin === true;
+    meusModulos = Array.isArray(eu.modulos) ? eu.modulos : null;
   } catch {
     souPlataforma = false;
+    meusModulos = null;
   }
 
   await carregarModulos();

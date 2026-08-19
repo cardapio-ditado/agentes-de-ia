@@ -259,6 +259,13 @@ interface Acesso {
   name: string;
   scopes: string[];
   plataformaAdmin: boolean;
+  /**
+   * Módulos que este acesso pode abrir; null = todos.
+   *
+   * Chave de máquina não tem restrição por módulo: ela já nasce com escopos
+   * declarados, que é o mecanismo de limite dela.
+   */
+  modulos: string[] | null;
 }
 
 /** Papel de pessoa vira escopo. `viewer` olha, não mexe. */
@@ -293,6 +300,7 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso
       name: apiKey.name,
       scopes: apiKey.scopes,
       plataformaAdmin: false,
+      modulos: null,
     };
   }
 
@@ -317,7 +325,21 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso
     name: sessao.email ?? "painel",
     scopes,
     plataformaAdmin: sessao.plataformaAdmin,
+    modulos: sessao.modulos,
   };
+}
+
+/**
+ * Exige que o acesso possa abrir o módulo, além de estar autenticado.
+ *
+ * Esconder o favo na colmeia é conveniência; a trava é aqui. Quem guardou o
+ * endereço de uma tela entraria por ele com o favo apagado — e no CMV isso
+ * significaria mexer no estoque de uma casa cujo módulo a pessoa não tem.
+ */
+function exigirModulo(acesso: Acesso, modulo: string): void {
+  if (acesso.plataformaAdmin) return;
+  if (acesso.modulos === null || acesso.modulos.includes(modulo)) return;
+  throw erro(403, "forbidden", "Seu acesso não inclui este módulo. Fale com o dono da conta.");
 }
 
 /** Rotas de administração da plataforma exigem mais que estar logado. */
@@ -639,6 +661,20 @@ async function roteasApi(
       return ok(res, await listPendingReservations(venue.id));
     }
 
+    // A trava de módulo fica aqui, no reconhecimento do recurso, e não rota a
+    // rota: assim uma rota nova do mesmo módulo já nasce protegida, em vez de
+    // depender de alguém lembrar de repetir a linha.
+    const MODULO_DO_RECURSO: Record<string, string> = {
+      avaliacoes: "avaliacoes",
+      "avaliacoes-perfil": "avaliacoes",
+      checklists: "checklist",
+      "checklist-runs": "checklist",
+    };
+    const moduloExigido = MODULO_DO_RECURSO[recurso];
+    if (moduloExigido) {
+      exigirModulo(await exigirChave(req, "reservations:read"), moduloExigido);
+    }
+
     // GET /v1/venues/:slug/modulos — quais favos acendem na colmeia deste
     // cliente, e para onde vão os que moram fora do painel.
     if (metodo === "GET" && recurso === "modulos" && p.length === 3) {
@@ -939,6 +975,10 @@ async function roteasApi(
         org_id: acesso.org_id,
         plataforma_admin: acesso.plataformaAdmin,
         escopos: acesso.scopes,
+        // Null = sem restrição. O painel usa para apagar da colmeia os favos
+        // que esta pessoa não pode abrir — esconder é conveniência; a trava
+        // de verdade é conferida em cada rota.
+        modulos: acesso.modulos ?? null,
       });
     }
   }
