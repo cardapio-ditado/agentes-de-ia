@@ -51,6 +51,18 @@
             placeholder="••••••••"
             required
           />
+          <!--
+            Aparelho compartilhado: a sessão morre ao fechar o navegador.
+            Marcado por padrão porque o caso comum é o celular da pessoa —
+            e exigir senha a cada turno produz senha fraca escrita num papel.
+          -->
+          <label class="acesso-lembrar">
+            <input id="campo-lembrar" type="checkbox" checked />
+            <span>
+              Continuar conectado neste aparelho
+              <small>Desmarque se for um computador que outras pessoas usam.</small>
+            </span>
+          </label>
           <button type="submit" class="btn-fogo">Entrar</button>
           <div class="acesso-links">
             <button type="button" id="btn-esqueci" class="link-acesso">Esqueci minha senha</button>

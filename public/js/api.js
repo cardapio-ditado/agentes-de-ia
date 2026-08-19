@@ -8,17 +8,45 @@
 const GUARDA = "agentes.chave";
 const GUARDA_REFRESH = "brasa.refresh";
 
+/**
+ * Onde a sessão fica: no aparelho ou só nesta janela.
+ *
+ * O mesmo painel é usado no celular da pessoa e no computador do estoque, e
+ * os dois pedem coisas opostas. No celular, exigir senha a cada turno produz
+ * senha fraca colada em algum lugar. No computador compartilhado, manter a
+ * sessão faz o próximo que sentar lançar recebimento no nome do anterior —
+ * e aí o histórico de quem conferiu o quê deixa de valer.
+ *
+ * `sessionStorage` morre quando a janela fecha; `localStorage` sobrevive. A
+ * pessoa escolhe no login, e o padrão é lembrar — porque o caso comum é o
+ * celular próprio.
+ */
+function guarda() {
+  // A de sessão vem primeiro: se existe token aqui, este aparelho foi
+  // marcado como compartilhado, e o do localStorage seria sobra de antes.
+  return sessionStorage.getItem(GUARDA) ? sessionStorage : localStorage;
+}
+
 export function chaveSalva() {
-  return localStorage.getItem(GUARDA);
+  return sessionStorage.getItem(GUARDA) ?? localStorage.getItem(GUARDA);
 }
 
-export function salvarChave(chave) {
-  localStorage.setItem(GUARDA, chave);
+export function salvarChave(chave, { lembrar = true } = {}) {
+  (lembrar ? localStorage : sessionStorage).setItem(GUARDA, chave);
 }
 
+/**
+ * Apaga dos DOIS lugares.
+ *
+ * Limpar só um deixaria a sessão antiga ressuscitar no próximo carregamento
+ * — o pior tipo de "saí do sistema": a pessoa vê a tela de login, acredita
+ * que saiu, e o aparelho continua com a conta dela dentro.
+ */
 export function esquecerChave() {
-  localStorage.removeItem(GUARDA);
-  localStorage.removeItem(GUARDA_REFRESH);
+  for (const onde of [localStorage, sessionStorage]) {
+    onde.removeItem(GUARDA);
+    onde.removeItem(GUARDA_REFRESH);
+  }
 }
 
 /**
@@ -28,13 +56,18 @@ export function esquecerChave() {
  * resto do painel, "o que vai no Authorization" continua sendo uma coisa só.
  * Quem sabe a diferença é o servidor, que decide pelo prefixo.
  */
-export function salvarSessao({ access_token, refresh_token }) {
-  localStorage.setItem(GUARDA, access_token);
-  if (refresh_token) localStorage.setItem(GUARDA_REFRESH, refresh_token);
+export function salvarSessao({ access_token, refresh_token }, { lembrar = true } = {}) {
+  // Trocar de modo não pode deixar rastro no outro lugar: sem a limpeza,
+  // entrar como "compartilhado" num aparelho que já teve login lembrado
+  // manteria o token antigo vivo no localStorage.
+  esquecerChave();
+  const onde = lembrar ? localStorage : sessionStorage;
+  onde.setItem(GUARDA, access_token);
+  if (refresh_token) onde.setItem(GUARDA_REFRESH, refresh_token);
 }
 
 export function entrouComSenha() {
-  return Boolean(localStorage.getItem(GUARDA_REFRESH));
+  return Boolean(sessionStorage.getItem(GUARDA_REFRESH) ?? localStorage.getItem(GUARDA_REFRESH));
 }
 
 /**
@@ -46,7 +79,7 @@ export function entrouComSenha() {
 let renovacaoEmCurso = null;
 
 async function renovarSessao() {
-  const refresh = localStorage.getItem(GUARDA_REFRESH);
+  const refresh = sessionStorage.getItem(GUARDA_REFRESH) ?? localStorage.getItem(GUARDA_REFRESH);
   if (!refresh) return false;
 
   // Várias telas podem levar 401 ao mesmo tempo; uma renovação só atende
@@ -61,7 +94,11 @@ async function renovarSessao() {
         });
         const corpo = await resposta.json();
         if (!resposta.ok || corpo?.success === false) return false;
-        salvarSessao(corpo.data);
+        // O token novo vai para o MESMO lugar de onde veio o antigo. Sem
+        // isto, a primeira renovação promoveria a sessão do computador
+        // compartilhado para permanente — a escolha da pessoa no login
+        // duraria uma hora e ninguém saberia que ela expirou.
+        salvarSessao(corpo.data, { lembrar: guarda() === localStorage });
         return true;
       } catch {
         return false;

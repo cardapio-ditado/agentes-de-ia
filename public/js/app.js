@@ -515,6 +515,7 @@ formAcesso.addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = document.getElementById("campo-email").value.trim();
   const senha = document.getElementById("campo-senha").value;
+  const lembrar = document.getElementById("campo-lembrar")?.checked ?? true;
   if (!email || !senha) return;
 
   const botao = formAcesso.querySelector("button[type=submit]");
@@ -533,7 +534,7 @@ formAcesso.addEventListener("submit", async (e) => {
     if (!resposta.ok || corpo?.success === false) {
       throw new Error(corpo?.error?.message ?? "Não deu para entrar.");
     }
-    salvarSessao(corpo.data);
+    salvarSessao(corpo.data, { lembrar });
     await iniciar();
   } catch (erro) {
     mostrarErroAcesso("erro-acesso", erro.message);

@@ -1787,6 +1787,36 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+/*
+ * A escolha de aparelho, no login.
+ *
+ * Alvo de toque grande de propósito: quem marca isto costuma estar no
+ * computador do estoque, de pé e com pressa.
+ */
+.acesso-lembrar {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.acesso-lembrar input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--marca);
+  cursor: pointer;
+}
+.acesso-lembrar small {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.7;
+  font-size: 0.82rem;
+}
+
 /* Links secundários do acesso: "esqueci a senha" e a troca para chave. */
 .acesso-links {
   display: flex;
