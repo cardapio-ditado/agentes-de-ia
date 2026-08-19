@@ -157,6 +157,16 @@ import {
 } from "./cmv/estoque.js";
 import { lerNota, somaConfere, tipoAceito } from "./cmv/lerNota.js";
 import { sugerirFicha } from "./cmv/sugerirFicha.js";
+import { tipoDeVendasAceito } from "./cmv/lerVendas.js";
+import {
+  baixarVendas,
+  corrigirItem,
+  descartarImportacao,
+  importarVendas,
+  listarImportacoes,
+  obterImportacao,
+  teoricoVersusReal,
+} from "./cmv/vendas.js";
 
 /**
  * Roteamento da API, sem servidor.
@@ -778,6 +788,8 @@ async function roteasApi(
       cmv: "cmv",
       producoes: "cmv",
       faturamento: "cmv",
+      vendas: "cmv",
+      consumo: "cmv",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -1196,6 +1208,105 @@ async function roteasApi(
         }),
       );
       return ok(res, { aprendido: true });
+    }
+
+    // ---- Vendas: o relatório do PDV baixa o estoque ----
+
+    // POST /v1/venues/:slug/vendas/importar?media_type=&nome=&data=
+    //
+    // O arquivo vai cru no corpo, como as outras rotas de upload. Aqui só
+    // lê, casa e guarda para revisão — a baixa é um segundo passo, e essa
+    // separação é o que garante que alguém viu o que a IA entendeu.
+    if (metodo === "POST" && recurso === "vendas" && p[3] === "importar" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      const mediaType = url.searchParams.get("media_type") ?? "";
+      if (!tipoDeVendasAceito(mediaType)) {
+        throw erro(400, "invalid_request", "Mande CSV, Excel, PDF ou uma foto do relatório.");
+      }
+      const arquivo = await lerBinario(req, LIMITE_ARQUIVO_BYTES);
+      if (arquivo.length === 0) throw erro(400, "invalid_request", "O arquivo chegou vazio.");
+
+      const hoje = new Date().toISOString().slice(0, 10);
+      const resultado = await comErroDeEstoque(() =>
+        importarVendas({
+          venueId: venue.id,
+          arquivo,
+          mediaType,
+          arquivoNome: url.searchParams.get("nome") ?? "relatório",
+          dataPadrao: url.searchParams.get("data") ?? hoje,
+          criadoPor: null,
+        }),
+      );
+      return ok(res, resultado, 201);
+    }
+
+    // GET /v1/venues/:slug/vendas — histórico de importações
+    if (metodo === "GET" && recurso === "vendas" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => listarImportacoes(venue.id)));
+    }
+
+    // GET /v1/venues/:slug/vendas/:id — a importação com as linhas
+    if (metodo === "GET" && recurso === "vendas" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => obterImportacao(venue.id, p[3]!)));
+    }
+
+    // PATCH /v1/venues/:slug/vendas/itens/:id — corrige o alvo e ENSINA
+    if (metodo === "PATCH" && recurso === "vendas" && p[3] === "itens" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        corrigirItem({
+          venueId: venue.id,
+          itemId: p[4]!,
+          fichaId: typeof corpo.ficha_id === "string" ? corpo.ficha_id : null,
+          insumoId: typeof corpo.insumo_id === "string" ? corpo.insumo_id : null,
+          ignorar: corpo.ignorar === true,
+          aprender: corpo.aprender !== false,
+        }),
+      );
+      return ok(res, { salvo: true });
+    }
+
+    // POST /v1/venues/:slug/vendas/:id/baixar — mexe no estoque
+    if (metodo === "POST" && recurso === "vendas" && p[4] === "baixar" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const r = await comErroDeEstoque(() =>
+        baixarVendas({ venueId: venue.id, importacaoId: p[3]!, usuario: null }),
+      );
+      return ok(res, r);
+    }
+
+    // DELETE /v1/venues/:slug/vendas/:id — descarta antes de baixar
+    if (metodo === "DELETE" && recurso === "vendas" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => descartarImportacao(venue.id, p[3]!));
+      return ok(res, { descartada: true });
+    }
+
+    // GET /v1/venues/:slug/consumo?inicio=&fim= — teórico × real
+    if (metodo === "GET" && recurso === "consumo" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const hoje = new Date().toISOString().slice(0, 10);
+      return ok(
+        res,
+        await comErroDeEstoque(() =>
+          teoricoVersusReal({
+            venueId: venue.id,
+            inicio: url.searchParams.get("inicio") ?? hoje.slice(0, 8) + "01",
+            fim: url.searchParams.get("fim") ?? hoje,
+          }),
+        ),
+      );
     }
 
     // POST /v1/venues/:slug/compras/ler-nota?media_type=image/jpeg

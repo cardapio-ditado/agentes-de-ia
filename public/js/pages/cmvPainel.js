@@ -30,8 +30,12 @@ export async function cmvPainel(raiz, ctx) {
   async function desenhar() {
     limpar(conteudo).append(el("p", { classe: "muted", texto: "Calculando…" }));
     let dados;
+    let consumo = [];
     try {
       dados = await get(`/v1/venues/${ctx.venue}/cmv?inicio=${inicio}&fim=${fim}`);
+      // O comparativo é bônus: se a casa ainda não importa vendas, ele vem
+      // vazio e a tela segue inteira.
+      consumo = await get(`/v1/venues/${ctx.venue}/consumo?inicio=${inicio}&fim=${fim}`).catch(() => []);
     } catch (e) {
       limpar(conteudo).append(vazio("CMV indisponível", e.message));
       return;
@@ -137,6 +141,48 @@ export async function cmvPainel(raiz, ctx) {
             },
           }),
         ]),
+
+        // Teórico × real: o número que só existe quando a venda baixa por
+        // ficha. As receitas dizem que os pratos vendidos consumiram tanto;
+        // a contagem diz que sumiu tanto. A diferença tem nome, item a item.
+        consumo.filter((c) => Math.abs(Number(c.diferenca_valor)) >= 1).length > 0
+          ? el("div", { classe: "cartao pilha" }, [
+              el("h3", { texto: "Onde o dinheiro está escapando" }),
+              el("p", {
+                classe: "muted",
+                texto: "As fichas dizem quanto os pratos vendidos consumiram; o estoque diz quanto sumiu. A diferença é quebra, porção passada do ponto, ficha desatualizada ou desvio.",
+              }),
+              el("div", { classe: "rolagem-x" }, [
+                el("table", { classe: "planilha" }, [
+                  el("thead", {}, [
+                    el("tr", {}, [
+                      el("th", { texto: "Item" }),
+                      el("th", { classe: "col-num", texto: "Fichas dizem" }),
+                      el("th", { classe: "col-num", texto: "Sumiu" }),
+                      el("th", { classe: "col-num", texto: "Diferença" }),
+                      el("th", { classe: "col-num", texto: "Em reais" }),
+                    ]),
+                  ]),
+                  el("tbody", {},
+                    consumo
+                      .filter((c) => Math.abs(Number(c.diferenca_valor)) >= 1)
+                      .slice(0, 15)
+                      .map((c) =>
+                        el("tr", { classe: Number(c.diferenca_valor) > 0 ? "linha-atencao" : "" }, [
+                          el("td", { texto: c.insumo }),
+                          el("td", { classe: "col-num", texto: `${Number(c.teorico)} ${c.unidade}` }),
+                          el("td", { classe: "col-num", texto: `${Number(c.real_consumido)} ${c.unidade}` }),
+                          el("td", { classe: "col-num", texto: `${Number(c.diferenca) > 0 ? "+" : ""}${Number(c.diferenca)}` }),
+                          el("td", { classe: "col-num" }, [
+                            el("strong", { texto: dinheiro(Number(c.diferenca_valor)) }),
+                          ]),
+                        ]),
+                      ),
+                  ),
+                ]),
+              ]),
+            ])
+          : null,
 
         dados.faturamentos.length > 0
           ? el("div", { classe: "cartao" }, [

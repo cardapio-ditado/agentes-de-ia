@@ -21,6 +21,7 @@ import { fichas } from "./pages/fichas.js";
 import { contagem } from "./pages/contagem.js";
 import { estoque } from "./pages/estoque.js";
 import { cmvPainel } from "./pages/cmvPainel.js";
+import { vendas } from "./pages/vendas.js";
 import { producao } from "./pages/producao.js";
 
 /**
@@ -55,6 +56,7 @@ const PAGINAS = [
   { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
   { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
   { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },
+  { id: "vendas", modulo: "cmv", rotulo: "Vendas", icone: ICONES.raio, render: vendas, subtitulo: "O relatório do seu PDV baixa o estoque pelas fichas" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
   { id: "estoque", modulo: "cmv", rotulo: "Estoque", icone: ICONES.painel, render: estoque, subtitulo: "Posição, extrato, transferência, perda — e os locais de estoque" },
   { id: "cadastros", modulo: "cmv", rotulo: "Cadastros", icone: ICONES.organizacao, render: cadastros, subtitulo: "Itens, categorias e fornecedores — a base de tudo" },
