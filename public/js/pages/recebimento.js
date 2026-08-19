@@ -1,5 +1,5 @@
 import { get, post, postArquivo, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, buscador, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Recebimento de mercadoria.
@@ -251,29 +251,26 @@ export async function recebimento(raiz, ctx) {
       // toque — quem confere não deve reler o que já está resolvido.
       let trocando = linha.trocando === true;
 
-      const seletorInsumo = el(
-        "select",
+      const seletorInsumo = buscador(
+        insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
         {
-          classe: "select",
-          onchange: (ev) => {
-            linha.insumoId = ev.target.value || null;
+          placeholder: "🔍  Digite o nome do insumo…",
+          aoEscolher: (o) => {
+            linha.insumoId = o.valor.id;
+            linha.insumoNome = o.valor.nome;
+            linha.trocando = false;
             // Corrigir o casamento ENSINA o sistema: a próxima nota deste
             // fornecedor com a mesma grafia entra sozinha.
-            if (linha.insumoId && linha.descricao) {
+            if (linha.descricao) {
               post(`/v1/venues/${ctx.venue}/insumos/${linha.insumoId}/apelido`, {
                 descricao: linha.descricao,
               }).catch(() => {
                 /* aprender é bônus; não pode travar a conferência */
               });
             }
+            desenharLinhas();
           },
         },
-        [
-          el("option", { value: "", texto: "— escolha o insumo —" }),
-          ...insumos.map((i) =>
-            el("option", { value: i.id, texto: i.nome, selected: i.id === linha.insumoId }),
-          ),
-        ],
       );
 
       const campoQtd = el("input", {

@@ -124,16 +124,23 @@ import {
   desativarLocal,
   divergenciasDaCompra,
   enviarPedido,
+  extratoInsumo,
   garantirInsumo,
   listarCompras,
   listarContagens,
   listarFichas,
+  listarFornecedores,
   listarInsumos,
   listarLocais,
   obterCompra,
+  posicaoEstoque,
   receberCompra,
   registrarContagem,
+  registrarPerda,
   salvarFicha,
+  salvarFornecedor,
+  sugestaoCompra,
+  transferir,
   substituirItens,
   type ItemDaCompra,
 } from "./cmv/estoque.js";
@@ -753,6 +760,8 @@ async function roteasApi(
       compras: "cmv",
       fichas: "cmv",
       contagens: "cmv",
+      fornecedores: "cmv",
+      estoque: "cmv",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -850,6 +859,7 @@ async function roteasApi(
           codigo: "codigo" in corpo ? (corpo.codigo as string | null) : undefined,
           estoqueMinimo: "estoque_minimo" in corpo ? numeroOuNulo(corpo.estoque_minimo) : undefined,
           toleranciaPct: "tolerancia_pct" in corpo ? (numeroOuNulo(corpo.tolerancia_pct) ?? 0) : undefined,
+          fornecedorId: "fornecedor_id" in corpo ? (corpo.fornecedor_id as string | null) : undefined,
           ativo: typeof corpo.ativo === "boolean" ? corpo.ativo : undefined,
         }),
       );
@@ -918,6 +928,92 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await comErroDeEstoque(() => obterCompra(venue.id, p[3]!)));
+    }
+
+    // GET | POST /v1/venues/:slug/fornecedores
+    if (recurso === "fornecedores" && p.length === 3) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDeEstoque(() => listarFornecedores(venue.id)));
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = await lerJson(req) as Record<string, unknown>;
+        const id = await comErroDeEstoque(() =>
+          salvarFornecedor({
+            venueId: venue.id,
+            fornecedorId: typeof corpo.id === "string" ? corpo.id : null,
+            nome: texto(corpo, "nome"),
+            cnpj: textoOpcional(corpo, "cnpj") ?? null,
+            telefone: textoOpcional(corpo, "telefone") ?? null,
+            email: textoOpcional(corpo, "email") ?? null,
+            cicloCompraDias: numeroOuNulo(corpo.ciclo_compra_dias) ?? 7,
+            observacoes: textoOpcional(corpo, "observacoes") ?? null,
+            ativo: typeof corpo.ativo === "boolean" ? corpo.ativo : undefined,
+          }),
+        );
+        return ok(res, { id });
+      }
+    }
+
+    // GET /v1/venues/:slug/estoque/posicao — valorizada, por local
+    if (metodo === "GET" && recurso === "estoque" && p[3] === "posicao" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => posicaoEstoque(venue.id)));
+    }
+
+    // GET /v1/venues/:slug/estoque/extrato/:insumoId — o kardex
+    if (metodo === "GET" && recurso === "estoque" && p[3] === "extrato" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:read");
+      await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDeEstoque(() => extratoInsumo(p[4]!, url.searchParams.get("local"))),
+      );
+    }
+
+    // POST /v1/venues/:slug/estoque/transferir
+    if (metodo === "POST" && recurso === "estoque" && p[3] === "transferir" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        transferir({
+          venueId: venue.id,
+          insumoId: texto(corpo, "insumo_id"),
+          deLocal: texto(corpo, "de_local"),
+          paraLocal: texto(corpo, "para_local"),
+          quantidade: numeroOuNulo(corpo.quantidade) ?? 0,
+        }),
+      );
+      return ok(res, { transferido: true });
+    }
+
+    // POST /v1/venues/:slug/estoque/perda
+    if (metodo === "POST" && recurso === "estoque" && p[3] === "perda" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        registrarPerda({
+          venueId: venue.id,
+          insumoId: texto(corpo, "insumo_id"),
+          localId: texto(corpo, "local_id"),
+          quantidade: numeroOuNulo(corpo.quantidade) ?? 0,
+          motivo: texto(corpo, "motivo"),
+        }),
+      );
+      return ok(res, { registrada: true });
+    }
+
+    // GET /v1/venues/:slug/estoque/sugestao-compra — o que pedir, por consumo
+    if (metodo === "GET" && recurso === "estoque" && p[3] === "sugestao-compra" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => sugestaoCompra(venue.id)));
     }
 
     // GET /v1/venues/:slug/contagens — histórico, com a quebra em reais
@@ -1019,6 +1115,7 @@ async function roteasApi(
           localId: texto(corpo, "local_id"),
           origem,
           fornecedor: textoOpcional(corpo, "fornecedor") ?? null,
+          fornecedorId: textoOpcional(corpo, "fornecedor_id") ?? null,
           documento: textoOpcional(corpo, "documento") ?? null,
           dataCompra: textoOpcional(corpo, "data_compra") ?? null,
           extracaoIa: (corpo as Record<string, unknown>).extracao_ia,

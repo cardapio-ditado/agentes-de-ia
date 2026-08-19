@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, buscador, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Fichas técnicas: o que cada prato consome.
@@ -134,16 +134,16 @@ export async function fichas(raiz, ctx) {
         recalcular();
       };
 
-      const seletor = el("select", { classe: "select" }, [
-        el("option", { value: "", texto: "— adicionar ingrediente —" }),
-        ...insumos.map((i) => el("option", { value: i.id, texto: `${i.nome} (${i.unidade})` })),
-      ]);
-      seletor.addEventListener("change", () => {
-        if (!seletor.value) return;
-        ingredientes.push({ insumoId: seletor.value, quantidade: null });
-        seletor.value = "";
-        desenharIngredientes();
-      });
+      const seletor = buscador(
+        insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
+        {
+          placeholder: "🔍  Adicionar ingrediente…",
+          aoEscolher: (o) => {
+            ingredientes.push({ insumoId: o.valor.id, quantidade: null });
+            desenharIngredientes();
+          },
+        },
+      );
 
       const salvar = async (confirmar) => {
         if (nome.value.trim().length < 2) return avisar("Dê um nome à ficha.", "erro");

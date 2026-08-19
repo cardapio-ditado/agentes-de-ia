@@ -131,3 +131,55 @@ export function dinheiro(valor) {
 export function numero(valor) {
   return (valor ?? 0).toLocaleString("pt-BR");
 }
+
+/**
+ * Seletor com lupa: um campo de busca que escolhe da lista.
+ *
+ * Substitui o <select> nas listas grandes. Com trinta insumos o select
+ * serve; com trezentos, achar "Tilápia" rolando é o que faz a pessoa
+ * desistir e escolher o primeiro parecido — que no estoque vira entrada no
+ * item errado. Digitar três letras resolve.
+ *
+ * Busca sem acento: "acai" acha "Açaí".
+ */
+export function buscador(opcoes, { placeholder = "Buscar…", aoEscolher }) {
+  const norm = (t) =>
+    (t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  const campo = el("input", { classe: "campo", placeholder, autocomplete: "off" });
+  const lista = el("div", { classe: "buscador-lista", hidden: true });
+  const caixa = el("div", { classe: "buscador" }, [campo, lista]);
+
+  const desenhar = () => {
+    const alvo = norm(campo.value.trim());
+    const achadas = alvo
+      ? opcoes.filter((o) => norm(o.rotulo).includes(alvo)).slice(0, 12)
+      : opcoes.slice(0, 12);
+    limpar(lista);
+    if (achadas.length === 0) {
+      lista.append(el("p", { classe: "muted buscador-nada", texto: "Nada com esse nome." }));
+    }
+    for (const o of achadas) {
+      lista.append(
+        el("button", {
+          type: "button",
+          classe: "buscador-opcao",
+          texto: o.rotulo,
+          // mousedown e não click: o blur do campo esconde a lista antes de
+          // o click chegar, e a escolha se perderia.
+          onmousedown: (ev) => {
+            ev.preventDefault();
+            campo.value = "";
+            lista.hidden = true;
+            aoEscolher(o);
+          },
+        }),
+      );
+    }
+  };
+
+  campo.addEventListener("input", () => { lista.hidden = false; desenhar(); });
+  campo.addEventListener("focus", () => { lista.hidden = false; desenhar(); });
+  campo.addEventListener("blur", () => setTimeout(() => { lista.hidden = true; }, 150));
+  return caixa;
+}

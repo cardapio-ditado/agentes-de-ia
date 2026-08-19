@@ -1,5 +1,5 @@
 import { get, post, put } from "../api.js";
-import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, buscador, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Compras: o pedido ANTES da mercadoria.
@@ -21,22 +21,36 @@ const SITUACAO = {
 export async function compras(raiz, ctx) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
+
+  /** Linhas vindas da sugestão, esperando o formulário abrir com elas. */
+  let prePreenchimento = null;
+
   await desenhar();
 
   async function desenhar() {
     limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
-    let lista, locais, insumos;
+    let lista, locais, insumos, fornecedoresLista;
     try {
-      [lista, locais, insumos] = await Promise.all([
+      [lista, locais, insumos, fornecedoresLista] = await Promise.all([
         get(`/v1/venues/${ctx.venue}/compras`),
         get(`/v1/venues/${ctx.venue}/estoque-locais`),
         get(`/v1/venues/${ctx.venue}/insumos`),
+        get(`/v1/venues/${ctx.venue}/fornecedores`),
       ]);
     } catch (e) {
       limpar(conteudo).append(vazio("Compras indisponíveis", e.message));
       return;
     }
     limpar(conteudo);
+
+    // A sugestão aceita virou pedido: abre direto no formulário preenchido,
+    // sem passar pela lista — um toque a menos.
+    if (prePreenchimento) {
+      const linhas = prePreenchimento;
+      prePreenchimento = null;
+      formularioPedido(linhas);
+      return;
+    }
 
     conteudo.append(
       el("section", { classe: "pilha" }, [
@@ -45,12 +59,20 @@ export async function compras(raiz, ctx) {
             el("h2", { texto: "Compras" }),
             el("p", { classe: "muted", texto: "Monte o pedido aqui; a entrada acontece em Receber, quando chegar." }),
           ]),
-          el("button", {
-            classe: "btn btn-primario",
-            type: "button",
-            texto: "+ Novo pedido",
-            onclick: () => formularioPedido(),
-          }),
+          el("div", { classe: "linha-campos" }, [
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "✨ Sugerir pedido",
+              onclick: sugerirPedido,
+            }),
+            el("button", {
+              classe: "btn btn-primario",
+              type: "button",
+              texto: "+ Novo pedido",
+              onclick: () => formularioPedido(),
+            }),
+          ]),
         ]),
         el("div", { classe: "lista" },
           lista.length === 0
@@ -78,11 +100,25 @@ export async function compras(raiz, ctx) {
       ]);
     }
 
-    function formularioPedido() {
+    function formularioPedido(prePreenchidas) {
       limpar(conteudo);
-      const linhas = [];
+      const linhas = prePreenchidas ?? [];
 
-      const fornecedor = el("input", { classe: "campo", placeholder: "Fornecedor" });
+      // Do cadastro, com lupa — e quem não cadastrou ainda digita livre.
+      let fornecedorEscolhido = null;
+      const fornecedor = el("input", { classe: "campo", placeholder: "Fornecedor (ou escolha abaixo)" });
+      const lupaFornecedor = fornecedoresLista.length > 0
+        ? buscador(
+            fornecedoresLista.map((f) => ({ rotulo: `${f.nome} · entrega a cada ${f.cicloCompraDias}d`, valor: f })),
+            {
+              placeholder: "🔍  Buscar fornecedor cadastrado…",
+              aoEscolher: (o) => {
+                fornecedorEscolhido = o.valor;
+                fornecedor.value = o.valor.nome;
+              },
+            },
+          )
+        : null;
       const seletorLocal = el(
         "select",
         { classe: "select" },
@@ -142,21 +178,16 @@ export async function compras(raiz, ctx) {
         recalcular();
       };
 
-      const seletorInsumo = el(
-        "select",
-        { classe: "select" },
-        [
-          el("option", { value: "", texto: "— adicionar insumo —" }),
-          ...insumos.map((i) => el("option", { value: i.id, texto: `${i.nome} (${i.unidade})` })),
-        ],
+      const seletorInsumo = buscador(
+        insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
+        {
+          placeholder: "🔍  Adicionar insumo…",
+          aoEscolher: (o) => {
+            linhas.push({ insumoId: o.valor.id, qtd: null, custo: o.valor.custoMedio || null });
+            desenharItens();
+          },
+        },
       );
-      seletorInsumo.addEventListener("change", () => {
-        if (!seletorInsumo.value) return;
-        const insumo = insumos.find((x) => x.id === seletorInsumo.value);
-        linhas.push({ insumoId: insumo.id, qtd: null, custo: insumo.custoMedio || null });
-        seletorInsumo.value = "";
-        desenharItens();
-      });
 
       conteudo.append(
         el("section", { classe: "pilha" }, [
@@ -166,6 +197,7 @@ export async function compras(raiz, ctx) {
           ]),
           el("div", { classe: "cartao pilha" }, [
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Fornecedor" }), fornecedor]),
+            lupaFornecedor,
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Destino padrão" }), seletorLocal]),
             seletorInsumo,
           ]),
@@ -185,6 +217,7 @@ export async function compras(raiz, ctx) {
                     local_id: seletorLocal.value,
                     origem: "pedido",
                     fornecedor: fornecedor.value || null,
+                    fornecedor_id: fornecedorEscolhido?.id ?? null,
                     itens: validas.map((l) => ({
                       insumo_id: l.insumoId,
                       quantidade_pedida: l.qtd,
@@ -205,5 +238,77 @@ export async function compras(raiz, ctx) {
       );
       desenharItens();
     }
+  }
+
+  /**
+   * Monta o pedido a partir do consumo real.
+   *
+   * O algoritmo prevê por DIA DA SEMANA (sábado não consome como terça) e
+   * pede para o horizonte do ciclo do fornecedor. A pessoa corta o que não
+   * quer — a sugestão preenche, não decide.
+   */
+  async function sugerirPedido() {
+    limpar(conteudo).append(
+      el("p", { classe: "muted", texto: "Calculando pelo consumo das últimas 4 semanas…" }),
+    );
+    let sugestoes;
+    try {
+      sugestoes = await get(`/v1/venues/${ctx.venue}/estoque/sugestao-compra`);
+    } catch (e) {
+      avisar(e.message, "erro");
+      return desenhar();
+    }
+    if (sugestoes.length === 0) {
+      avisar("Nada a pedir por enquanto: o estoque cobre o consumo previsto.", "info");
+      return desenhar();
+    }
+    limpar(conteudo);
+    conteudo.append(
+      el("section", { classe: "pilha" }, [
+        el("div", { classe: "cabecalho-secao" }, [
+          el("div", {}, [
+            el("h2", { texto: "Sugestão de pedido" }),
+            el("p", { classe: "muted", texto: "Pelo consumo real, dia da semana a dia da semana. Corte o que não quiser." }),
+          ]),
+          el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => desenhar() }),
+        ]),
+        el("div", { classe: "lista" },
+          sugestoes.map((s) =>
+            el("article", { classe: "cartao" }, [
+              el("div", { classe: "cabecalho-secao" }, [
+                el("div", {}, [
+                  el("strong", { texto: s.insumo }),
+                  el("p", {
+                    classe: "muted",
+                    texto: `consumo ${s.consumo_medio_diario}/dia · previsto ${s.demanda_prevista} · em estoque ${s.saldo_atual}` +
+                      (s.fornecedor ? ` · ${s.fornecedor}` : ""),
+                  }),
+                ]),
+                el("strong", { texto: `${s.quantidade_sugerida} ${s.unidade}` }),
+              ]),
+            ]),
+          ),
+        ),
+        el("div", { classe: "cartao cartao-total" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("span", { texto: "Custo estimado" }),
+            el("strong", { texto: dinheiro(sugestoes.reduce((t, s) => t + Number(s.custo_estimado), 0)) }),
+          ]),
+          el("button", {
+            classe: "btn btn-primario btn-grande",
+            type: "button",
+            texto: "Usar como pedido",
+            onclick: () => {
+              prePreenchimento = sugestoes.map((s) => ({
+                insumoId: s.insumo_id,
+                qtd: Number(s.quantidade_sugerida),
+                custo: Number(s.custo_estimado) / Number(s.quantidade_sugerida) || null,
+              }));
+              desenhar();
+            },
+          }),
+        ]),
+      ]),
+    );
   }
 }

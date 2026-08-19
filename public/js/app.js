@@ -19,6 +19,8 @@ import { compras } from "./pages/compras.js";
 import { insumos } from "./pages/insumos.js";
 import { fichas } from "./pages/fichas.js";
 import { contagem } from "./pages/contagem.js";
+import { estoque } from "./pages/estoque.js";
+import { fornecedores } from "./pages/fornecedores.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -50,6 +52,8 @@ const PAGINAS = [
   { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
   { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
+  { id: "estoque", modulo: "cmv", rotulo: "Posição do estoque", icone: ICONES.painel, render: estoque, subtitulo: "O que há, onde, quanto vale — com extrato, transferência e perda" },
+  { id: "fornecedores", modulo: "cmv", rotulo: "Fornecedores", icone: ICONES.pessoa, render: fornecedores, subtitulo: "De quem se compra, e a cada quantos dias entrega" },
   { id: "insumos", modulo: "cmv", rotulo: "Insumos e estoques", icone: ICONES.organizacao, render: insumos, subtitulo: "O que a casa compra, e onde guarda" },
   { id: "fichas", modulo: "cmv", rotulo: "Fichas técnicas", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
 

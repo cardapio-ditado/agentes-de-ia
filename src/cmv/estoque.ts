@@ -32,6 +32,7 @@ export interface Insumo extends InsumoConhecido {
   estoqueMinimo: number | null;
   toleranciaPct: number;
   saldo: number;
+  fornecedorId: string | null;
 }
 
 export async function listarLocais(venueId: string): Promise<Local[]> {
@@ -60,7 +61,7 @@ export async function listarInsumos(params: {
   const { data, error } = await cliente()
     .from("insumos")
     .select(
-      "id, nome, nome_normalizado, unidade, categoria, codigo, custo_medio, estoque_minimo, tolerancia_divergencia_pct, estoque_saldos(quantidade, local_id)",
+      "id, nome, nome_normalizado, unidade, categoria, codigo, custo_medio, estoque_minimo, tolerancia_divergencia_pct, fornecedor_id, estoque_saldos(quantidade, local_id)",
     )
     .eq("venue_id", params.venueId)
     .eq("ativo", true)
@@ -81,6 +82,7 @@ export async function listarInsumos(params: {
       estoqueMinimo: linha.estoque_minimo === null ? null : Number(linha.estoque_minimo),
       toleranciaPct: Number(linha.tolerancia_divergencia_pct ?? 0),
       saldo: doLocal.reduce((total, s) => total + Number(s.quantidade), 0),
+      fornecedorId: linha.fornecedor_id ?? null,
     };
   });
 
@@ -140,6 +142,7 @@ export async function garantirInsumo(params: {
       estoqueMinimo: null,
       toleranciaPct: 0,
       saldo: 0,
+      fornecedorId: null,
     },
     criado: true,
   };
@@ -245,6 +248,7 @@ export async function criarCompra(params: {
   localId: string;
   origem: "pedido" | "avulsa";
   fornecedor?: string | null;
+  fornecedorId?: string | null;
   documento?: string | null;
   dataCompra?: string | null;
   extracaoIa?: unknown;
@@ -258,6 +262,7 @@ export async function criarCompra(params: {
       local_id: params.localId,
       origem: params.origem,
       fornecedor: params.fornecedor?.trim() || null,
+      fornecedor_id: params.fornecedorId ?? null,
       documento: params.documento?.trim() || null,
       data_compra: params.dataCompra || new Date().toISOString().slice(0, 10),
       extracao_ia: params.extracaoIa ?? null,
@@ -392,6 +397,7 @@ export async function atualizarInsumo(params: {
   codigo?: string | null;
   estoqueMinimo?: number | null;
   toleranciaPct?: number;
+  fornecedorId?: string | null;
   ativo?: boolean;
 }): Promise<void> {
   const mudancas: Record<string, unknown> = {};
@@ -401,6 +407,7 @@ export async function atualizarInsumo(params: {
   if (params.codigo !== undefined) mudancas.codigo = params.codigo?.trim() || null;
   if (params.estoqueMinimo !== undefined) mudancas.estoque_minimo = params.estoqueMinimo;
   if (params.toleranciaPct !== undefined) mudancas.tolerancia_divergencia_pct = params.toleranciaPct;
+  if (params.fornecedorId !== undefined) mudancas.fornecedor_id = params.fornecedorId;
   if (params.ativo !== undefined) mudancas.ativo = params.ativo;
   if (Object.keys(mudancas).length === 0) return;
 
@@ -547,6 +554,136 @@ export async function apagarFicha(venueId: string, fichaId: string): Promise<voi
     .eq("venue_id", venueId)
     .eq("id", fichaId);
   if (error) throw traduzir(error);
+}
+
+/* ---------- fornecedores ---------- */
+
+export interface Fornecedor {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+  telefone: string | null;
+  email: string | null;
+  cicloCompraDias: number;
+  observacoes: string | null;
+}
+
+export async function listarFornecedores(venueId: string): Promise<Fornecedor[]> {
+  const { data, error } = await cliente()
+    .from("fornecedores")
+    .select("id, nome, cnpj, telefone, email, ciclo_compra_dias, observacoes")
+    .eq("venue_id", venueId)
+    .eq("ativo", true)
+    .order("nome");
+  if (error) throw traduzir(error);
+  return (data ?? []).map((f: any) => ({
+    id: f.id,
+    nome: f.nome,
+    cnpj: f.cnpj,
+    telefone: f.telefone,
+    email: f.email,
+    cicloCompraDias: Number(f.ciclo_compra_dias),
+    observacoes: f.observacoes,
+  }));
+}
+
+export async function salvarFornecedor(params: {
+  venueId: string;
+  fornecedorId?: string | null;
+  nome: string;
+  cnpj?: string | null;
+  telefone?: string | null;
+  email?: string | null;
+  cicloCompraDias?: number;
+  observacoes?: string | null;
+  ativo?: boolean;
+}): Promise<string> {
+  if (!params.nome.trim()) throw new ErroDoEstoque(400, "O fornecedor precisa de um nome.");
+  const corpo: Record<string, unknown> = {
+    venue_id: params.venueId,
+    nome: params.nome.trim(),
+    cnpj: params.cnpj?.trim() || null,
+    telefone: params.telefone?.trim() || null,
+    email: params.email?.trim() || null,
+    ciclo_compra_dias: params.cicloCompraDias ?? 7,
+    observacoes: params.observacoes?.trim() || null,
+  };
+  if (params.ativo !== undefined) corpo.ativo = params.ativo;
+
+  if (params.fornecedorId) {
+    const { error } = await cliente()
+      .from("fornecedores")
+      .update(corpo)
+      .eq("venue_id", params.venueId)
+      .eq("id", params.fornecedorId);
+    if (error) throw traduzir(error);
+    return params.fornecedorId;
+  }
+  const { data, error } = await cliente().from("fornecedores").insert(corpo).select("id").single();
+  if (error) throw traduzir(error);
+  return data.id as string;
+}
+
+/* ---------- movimentos avulsos ---------- */
+
+export async function transferir(params: {
+  venueId: string;
+  insumoId: string;
+  deLocal: string;
+  paraLocal: string;
+  quantidade: number;
+}): Promise<void> {
+  const { error } = await cliente().rpc("cmv_transferir", {
+    p_venue_id: params.venueId,
+    p_insumo_id: params.insumoId,
+    p_de_local: params.deLocal,
+    p_para_local: params.paraLocal,
+    p_quantidade: params.quantidade,
+    p_usuario: null,
+  });
+  if (error) throw traduzir(error);
+}
+
+export async function registrarPerda(params: {
+  venueId: string;
+  insumoId: string;
+  localId: string;
+  quantidade: number;
+  motivo: string;
+}): Promise<void> {
+  const { error } = await cliente().rpc("cmv_registrar_perda", {
+    p_venue_id: params.venueId,
+    p_insumo_id: params.insumoId,
+    p_local_id: params.localId,
+    p_quantidade: params.quantidade,
+    p_motivo: params.motivo,
+    p_usuario: null,
+  });
+  if (error) throw traduzir(error);
+}
+
+export async function extratoInsumo(insumoId: string, localId?: string | null): Promise<unknown[]> {
+  const { data, error } = await cliente().rpc("cmv_extrato_insumo", {
+    p_insumo_id: insumoId,
+    p_local_id: localId ?? null,
+    p_limite: 50,
+  });
+  if (error) throw traduzir(error);
+  return data ?? [];
+}
+
+export async function posicaoEstoque(venueId: string): Promise<unknown[]> {
+  const { data, error } = await cliente().rpc("cmv_posicao_estoque", { p_venue_id: venueId });
+  if (error) throw traduzir(error);
+  return data ?? [];
+}
+
+export async function sugestaoCompra(venueId: string): Promise<unknown[]> {
+  const { data, error } = await cliente().rpc("cmv_sugestao_compra", { p_venue_id: venueId });
+  if (error) throw traduzir(error);
+  // Só o que tem algo a pedir: mandar a lista inteira com zeros faria a
+  // pessoa rolar cem linhas para achar as cinco que importam.
+  return (data ?? []).filter((s: any) => Number(s.quantidade_sugerida) > 0);
 }
 
 /* ---------- contagem ---------- */
@@ -705,6 +842,10 @@ export function traduzir(erro: { message?: string; code?: string } | Error): Err
     [/ficha_nao_encontrada/, 404, "Ficha técnica não encontrada."],
     [/contagem_ja_processada/, 409, "Esta contagem já foi processada."],
     [/lotes_invalidos/, 400, "Informe quantas vezes a receita foi feita."],
+    [/saldo_insuficiente/, 400, "Não há saldo suficiente nesse local para transferir essa quantidade."],
+    [/mesmo_local/, 400, "Origem e destino são o mesmo local."],
+    [/quantidade_invalida/, 400, "Informe uma quantidade maior que zero."],
+    [/motivo_obrigatorio/, 400, "Diga o motivo da perda — é ele que separa quebra conhecida de desvio."],
     [
       /duplicate key|unique/i,
       409,

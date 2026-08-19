@@ -1944,3 +1944,32 @@ textarea:focus {
   font-size: 0.9rem;
 }
 .campo-rotulado small { margin-top: 2px; }
+
+/* Seletor com lupa: a lista abre colada no campo, por cima do resto. */
+.buscador { position: relative; }
+.buscador-lista {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.buscador-opcao {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.buscador-opcao:hover { background: var(--marca-suave); }
+.buscador-nada { padding: 12px; }
