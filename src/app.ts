@@ -119,6 +119,7 @@ import {
   aprenderApelido,
   atualizarInsumo,
   atualizarLocal,
+  cancelarCompra,
   casarLinhas,
   criarCompra,
   criarLocal,
@@ -1213,6 +1214,7 @@ async function roteasApi(
           fornecedorId: textoOpcional(corpo, "fornecedor_id") ?? null,
           documento: textoOpcional(corpo, "documento") ?? null,
           dataCompra: textoOpcional(corpo, "data_compra") ?? null,
+          dataPrevista: textoOpcional(corpo, "data_prevista") ?? null,
           extracaoIa: (corpo as Record<string, unknown>).extracao_ia,
           itens: itensDaCompra(corpo),
           criadoPor: null,
@@ -1236,6 +1238,14 @@ async function roteasApi(
       await findVenueBySlugInOrg(chave.org_id, slug);
       await comErroDeEstoque(() => enviarPedido(p[3]!));
       return ok(res, { enviado: true });
+    }
+
+    // POST /v1/venues/:slug/compras/:id/cancelar — só antes de receber
+    if (metodo === "POST" && recurso === "compras" && p[4] === "cancelar" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => cancelarCompra(venue.id, p[3]!));
+      return ok(res, { cancelada: true });
     }
 
     // POST /v1/venues/:slug/compras/:id/receber — dá entrada no estoque

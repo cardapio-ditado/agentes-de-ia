@@ -338,6 +338,7 @@ export async function criarCompra(params: {
   fornecedorId?: string | null;
   documento?: string | null;
   dataCompra?: string | null;
+  dataPrevista?: string | null;
   extracaoIa?: unknown;
   itens: ItemDaCompra[];
   criadoPor?: string | null;
@@ -352,6 +353,7 @@ export async function criarCompra(params: {
       fornecedor_id: params.fornecedorId ?? null,
       documento: params.documento?.trim() || null,
       data_compra: params.dataCompra || new Date().toISOString().slice(0, 10),
+      data_prevista: params.dataPrevista || null,
       extracao_ia: params.extracaoIa ?? null,
       criado_por: params.criadoPor ?? null,
     })
@@ -551,7 +553,12 @@ export async function listarCompras(params: {
 }): Promise<unknown[]> {
   let consulta = cliente()
     .from("compras")
-    .select("id, fornecedor, documento, data_compra, data_prevista, valor_total, status, origem, created_at, recebida_em, estoque_locais(nome)")
+    .select(
+      "id, fornecedor, documento, data_compra, data_prevista, valor_total, status, origem, created_at, recebida_em, estoque_locais(nome), " +
+        // O suficiente para a lista mostrar quantos itens e ESTIMAR o valor
+        // do que ainda não chegou — sem carregar a compra inteira.
+        "compra_itens(quantidade_pedida, custo_unitario_pedido, quantidade_recebida)",
+    )
     .eq("venue_id", params.venueId)
     .order("created_at", { ascending: false })
     .limit(60);
@@ -559,6 +566,35 @@ export async function listarCompras(params: {
   const { data, error } = await consulta;
   if (error) throw traduzir(error);
   return data ?? [];
+}
+
+/**
+ * Cancela uma compra que ainda não entrou no estoque.
+ *
+ * Recebida não se cancela: a entrada já virou movimento no razão, e razão
+ * não se apaga — o caminho é perda ou contagem. Cancelar aqui é só para o
+ * pedido que o fornecedor não vai atender.
+ */
+export async function cancelarCompra(venueId: string, compraId: string): Promise<void> {
+  const atual = await cliente()
+    .from("compras")
+    .select("status")
+    .eq("venue_id", venueId)
+    .eq("id", compraId)
+    .maybeSingle();
+  if (atual.error) throw traduzir(atual.error);
+  if (!atual.data) throw new ErroDoEstoque(404, "Compra não encontrada.");
+  if (atual.data.status === "recebida") {
+    throw new ErroDoEstoque(409, "Esta compra já entrou no estoque — entrada não se cancela. Se a mercadoria voltou, registre como perda.");
+  }
+  if (atual.data.status === "cancelada") return;
+
+  const { error } = await cliente()
+    .from("compras")
+    .update({ status: "cancelada" })
+    .eq("venue_id", venueId)
+    .eq("id", compraId);
+  if (error) throw traduzir(error);
 }
 
 export async function obterCompra(venueId: string, compraId: string): Promise<unknown> {

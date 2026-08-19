@@ -1,14 +1,15 @@
 import { get, post, put } from "../api.js";
-import { avisar, buscador, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, buscador, dataHora, dinheiro, el, etiqueta, ICONES, indicador, limpar, vazio } from "../ui.js";
 
 /**
- * Compras: o pedido ANTES da mercadoria.
+ * Compras — a tela cheia, no desenho do Gorjeta.
  *
- * Aqui se monta e envia o pedido ao fornecedor; o recebimento acontece na
- * tela de Receber, quando o caminhão chega. A separação espelha a vida:
- * quem pede (gerente, no escritório, com calma) não é quem recebe
- * (conferente, na doca, com pressa) — e as duas telas são desenhadas para
- * pessoas diferentes em momentos diferentes.
+ * Indicadores do mês em cima, filtros no meio, e a tabela embaixo com TUDO
+ * que uma compra tem: fornecedor, documento, data, destino, itens, valor,
+ * situação — e as AÇÕES na própria linha. Receber mercadoria fica ao lado
+ * da compra: o caminhão chegou, acha-se o pedido, toca em Receber e confere
+ * ali. A tela "Receber" continua existindo para a doca (foto da nota e
+ * compra avulsa), mas o caminho pedido→entrega mora aqui.
  */
 
 const SITUACAO = {
@@ -18,12 +19,27 @@ const SITUACAO = {
   cancelada: ["cancelada", ""],
 };
 
+/** Valor da compra para a lista: o real quando recebida, o estimado antes. */
+function valorDaCompra(c) {
+  if (Number(c.valor_total) > 0) return Number(c.valor_total);
+  return (c.compra_itens ?? []).reduce(
+    (t, it) => t + Number(it.quantidade_pedida ?? 0) * Number(it.custo_unitario_pedido ?? 0),
+    0,
+  );
+}
+
+function dataCurta(iso) {
+  return iso ? iso.split("-").reverse().join("/") : "—";
+}
+
 export async function compras(raiz, ctx) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
 
   /** Linhas vindas da sugestão, esperando o formulário abrir com elas. */
   let prePreenchimento = null;
+  let filtroStatus = "";
+  let filtroTexto = "";
 
   await desenhar();
 
@@ -43,8 +59,7 @@ export async function compras(raiz, ctx) {
     }
     limpar(conteudo);
 
-    // A sugestão aceita virou pedido: abre direto no formulário preenchido,
-    // sem passar pela lista — um toque a menos.
+    // A sugestão aceita virou pedido: abre direto no formulário preenchido.
     if (prePreenchimento) {
       const linhas = prePreenchimento;
       prePreenchimento = null;
@@ -52,58 +67,286 @@ export async function compras(raiz, ctx) {
       return;
     }
 
+    // ---- Indicadores do mês (o desenho do Gorjeta) ----
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const doMes = lista.filter((c) => (c.data_compra ?? c.created_at ?? "").startsWith(mesAtual));
+    const aguardando = lista.filter((c) => c.status === "pedido");
+    const recebidasMes = doMes.filter((c) => c.status === "recebida");
+    const valorAguardando = aguardando.reduce((t, c) => t + valorDaCompra(c), 0);
+    const valorRecebidoMes = recebidasMes.reduce((t, c) => t + Number(c.valor_total), 0);
+
+    // ---- Filtros ----
+    const busca = el("input", {
+      classe: "campo",
+      placeholder: "🔍  Fornecedor ou documento…",
+      style: "flex:2",
+      value: filtroTexto,
+    });
+    const seletorStatus = el("select", { classe: "select", style: "flex:1" }, [
+      el("option", { value: "", texto: "Todas as situações" }),
+      el("option", { value: "pedido", texto: "Aguardando entrega", selected: filtroStatus === "pedido" }),
+      el("option", { value: "recebida", texto: "Recebidas", selected: filtroStatus === "recebida" }),
+      el("option", { value: "rascunho", texto: "Montando", selected: filtroStatus === "rascunho" }),
+      el("option", { value: "cancelada", texto: "Canceladas", selected: filtroStatus === "cancelada" }),
+    ]);
+
+    const tabela = el("div", { classe: "tabela" });
+    const norm = (t) => (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+    const desenharTabela = () => {
+      filtroTexto = busca.value;
+      filtroStatus = seletorStatus.value;
+      const alvo = norm(filtroTexto.trim());
+      let filtradas = lista;
+      if (filtroStatus) filtradas = filtradas.filter((c) => c.status === filtroStatus);
+      if (alvo) {
+        filtradas = filtradas.filter(
+          (c) => norm(c.fornecedor).includes(alvo) || norm(c.documento).includes(alvo),
+        );
+      }
+      limpar(tabela);
+      if (filtradas.length === 0) {
+        tabela.append(vazio("Nenhuma compra aqui", filtroStatus || alvo ? "Ajuste os filtros." : "O primeiro pedido leva um minuto."));
+        return;
+      }
+      for (const c of filtradas) tabela.append(linhaCompra(c));
+    };
+    busca.addEventListener("input", desenharTabela);
+    seletorStatus.addEventListener("change", desenharTabela);
+
     conteudo.append(
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
             el("h2", { texto: "Compras" }),
-            el("p", { classe: "muted", texto: "Monte o pedido aqui; a entrada acontece em Receber, quando chegar." }),
+            el("p", { classe: "muted", texto: "Pedido, entrega e conferência — tudo na mesma linha." }),
           ]),
           el("div", { classe: "linha-campos" }, [
-            el("button", {
-              classe: "btn",
-              type: "button",
-              texto: "✨ Sugerir pedido",
-              onclick: sugerirPedido,
-            }),
-            el("button", {
-              classe: "btn btn-primario",
-              type: "button",
-              texto: "+ Novo pedido",
-              onclick: () => formularioPedido(),
-            }),
+            el("button", { classe: "btn", type: "button", texto: "✨ Sugerir pedido", onclick: sugerirPedido }),
+            el("button", { classe: "btn btn-primario", type: "button", texto: "+ Novo pedido", onclick: () => formularioPedido() }),
           ]),
         ]),
-        el("div", { classe: "lista" },
-          lista.length === 0
-            ? [vazio("Nenhuma compra ainda", "O primeiro pedido leva um minuto.")]
-            : lista.map(cartaoCompra),
-        ),
+        el("div", { classe: "grade" }, [
+          indicador({
+            rotulo: "Compras no mês",
+            valor: String(doMes.length),
+            nota: `${recebidasMes.length} recebida(s)`,
+            iconePath: ICONES.reservas,
+          }),
+          indicador({
+            rotulo: "Aguardando entrega",
+            valor: String(aguardando.length),
+            nota: valorAguardando > 0 ? `${dinheiro(valorAguardando)} a caminho` : "nada pendente",
+            iconePath: ICONES.relogio,
+            destaque: aguardando.length > 0,
+          }),
+          indicador({
+            rotulo: "Comprado no mês",
+            valor: dinheiro(valorRecebidoMes),
+            nota: "o que já entrou no estoque",
+            iconePath: ICONES.caixa,
+          }),
+          indicador({
+            rotulo: "Fornecedores",
+            valor: String(fornecedoresLista.length),
+            nota: "cadastrados",
+            iconePath: ICONES.pessoa,
+          }),
+        ]),
+        el("div", { classe: "linha-campos" }, [busca, seletorStatus]),
+        tabela,
       ]),
     );
+    desenharTabela();
 
-    function cartaoCompra(c) {
+    /* ---------- a linha da tabela, com as ações ---------- */
+
+    function linhaCompra(c) {
       const [rotulo, variante] = SITUACAO[c.status] ?? [c.status, ""];
-      const dia = c.data_compra ? c.data_compra.split("-").reverse().join("/") : dataHora(c.created_at);
-      return el("button", { classe: "linha-tabela", type: "button", onclick: () => detalheCompra(c.id) }, [
+      const nItens = (c.compra_itens ?? []).length;
+      const valor = valorDaCompra(c);
+      const estimado = c.status !== "recebida" && Number(c.valor_total) === 0 && valor > 0;
+
+      const acoes = [];
+      if (c.status === "pedido" || c.status === "rascunho") {
+        acoes.push(
+          el("button", {
+            classe: "btn btn-peq btn-receber",
+            type: "button",
+            texto: "📦 Receber",
+            onclick: (ev) => {
+              ev.stopPropagation();
+              receberInline(c.id);
+            },
+          }),
+        );
+      }
+      acoes.push(
+        el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: "Ver",
+          onclick: (ev) => {
+            ev.stopPropagation();
+            detalheCompra(c.id);
+          },
+        }),
+      );
+
+      return el("div", { classe: "linha-tabela linha-clicavel", onclick: () => detalheCompra(c.id) }, [
         el("span", { classe: "linha-principal" }, [
           el("strong", { texto: c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "Sem fornecedor") }),
           el("small", {
             classe: "muted",
-            texto: `${dia}${c.estoque_locais?.nome ? ` · ${c.estoque_locais.nome}` : ""}${c.documento ? ` · doc ${c.documento}` : ""}`,
+            texto: [
+              dataCurta(c.data_compra),
+              c.documento ? `doc ${c.documento}` : null,
+              c.estoque_locais?.nome ?? null,
+              nItens > 0 ? `${nItens} item(ns)` : null,
+              c.data_prevista && c.status === "pedido" ? `previsto ${dataCurta(c.data_prevista)}` : null,
+            ].filter(Boolean).join(" · "),
           }),
         ]),
         el("span", { classe: "linha-detalhes" }, [
-          Number(c.valor_total) > 0 ? el("strong", { texto: dinheiro(Number(c.valor_total)) }) : null,
+          valor > 0 ? el("strong", { texto: `${estimado ? "~" : ""}${dinheiro(valor)}` }) : null,
           etiqueta(rotulo, variante),
+          ...acoes,
         ].filter(Boolean)),
       ]);
     }
 
+    /* ---------- receber ao lado da compra ---------- */
+
     /**
-     * A compra por dentro: fornecedor, datas, destino e cada item — pedido
-     * contra recebido, com a divergência gritando em vez de escondida.
+     * A conferência do pedido, sem sair de Compras: cada item com o que foi
+     * pedido, o que veio (já preenchido com o pedido — o normal é bater) e o
+     * custo. Divergiu, pede o motivo. Confirmou, entra no estoque.
      */
+    async function receberInline(compraId) {
+      limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo a conferência…" }));
+      let c;
+      try {
+        c = await get(`/v1/venues/${ctx.venue}/compras/${compraId}`);
+      } catch (e) {
+        avisar(e.message, "erro");
+        return desenhar();
+      }
+      limpar(conteudo);
+
+      const itens = (c.compra_itens ?? []).map((it) => ({
+        insumoId: it.insumo_id,
+        nome: it.insumos?.nome ?? it.descricao_nota ?? "?",
+        unidade: it.insumos?.unidade ?? "",
+        descricao: it.descricao_nota ?? null,
+        localId: it.local_id ?? null,
+        pedida: it.quantidade_pedida === null ? null : Number(it.quantidade_pedida),
+        recebida: Number(it.quantidade_recebida ?? it.quantidade_pedida ?? 0),
+        custo: Number(it.custo_unitario_recebido ?? it.custo_unitario_pedido ?? 0),
+        motivo: it.divergencia_motivo ?? "",
+      }));
+
+      const total = el("strong", {});
+      const recalcular = () => {
+        total.textContent = dinheiro(itens.reduce((t, i) => t + i.recebida * i.custo, 0));
+      };
+
+      const cartaoItem = (i) => {
+        const divergiu = () => i.pedida !== null && i.recebida !== i.pedida;
+        const campoMotivo = el("input", {
+          classe: "campo",
+          placeholder: "faltou 1 caixa, peso do açougue, veio vencido…",
+          value: i.motivo,
+          onchange: (ev) => { i.motivo = ev.target.value; },
+        });
+        const linhaMotivo = el("label", { classe: "campo-rotulado", hidden: !divergiu() }, [
+          el("span", { texto: "O que houve?" }),
+          campoMotivo,
+        ]);
+        const campoRecebida = el("input", {
+          classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.001", min: "0",
+          value: i.recebida,
+          onchange: (ev) => {
+            i.recebida = Number(ev.target.value);
+            linhaMotivo.hidden = !divergiu();
+            cartao.classList.toggle("cartao-atencao", divergiu());
+            recalcular();
+          },
+        });
+        const campoCusto = el("input", {
+          classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.01", min: "0",
+          value: i.custo || "",
+          onchange: (ev) => { i.custo = Number(ev.target.value); recalcular(); },
+        });
+        const cartao = el("article", { classe: "cartao pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("strong", { texto: i.nome }),
+            i.pedida !== null ? el("span", { classe: "muted", texto: `pedido: ${i.pedida} ${i.unidade}` }) : null,
+          ].filter(Boolean)),
+          el("div", { classe: "linha-campos" }, [
+            el("label", {}, [el("span", { texto: `Veio (${i.unidade || "un"})` }), campoRecebida]),
+            el("label", {}, [el("span", { texto: "R$/un" }), campoCusto]),
+          ]),
+          linhaMotivo,
+        ]);
+        return cartao;
+      };
+
+      conteudo.append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("div", {}, [
+              el("h2", { texto: `Receber de ${c.fornecedor || "fornecedor"}` }),
+              el("p", { classe: "muted", texto: `Pedido de ${dataCurta(c.data_compra)} · destino ${c.estoque_locais?.nome ?? ""}` }),
+            ]),
+            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+          ]),
+          el("p", { classe: "aviso aviso-alerta", texto: "Confira o que CHEGOU. Zero significa \"não veio\" — e vira cobrança, não entrada." }),
+          ...itens.map(cartaoItem),
+          el("div", { classe: "cartao cartao-total" }, [
+            el("div", { classe: "cabecalho-secao" }, [el("span", { texto: "Total recebido" }), total]),
+            el("button", {
+              classe: "btn btn-primario btn-grande",
+              type: "button",
+              texto: "Confirmar recebimento",
+              onclick: async (ev) => {
+                ev.target.disabled = true;
+                ev.target.textContent = "Dando entrada…";
+                try {
+                  await put(`/v1/venues/${ctx.venue}/compras/${c.id}/itens`, {
+                    itens: itens.map((i) => ({
+                      insumo_id: i.insumoId,
+                      local_id: i.localId,
+                      descricao_nota: i.descricao,
+                      quantidade_pedida: i.pedida,
+                      quantidade_recebida: i.recebida,
+                      custo_unitario_recebido: i.custo,
+                      divergencia_motivo: i.motivo || null,
+                    })),
+                  });
+                  const r = await post(`/v1/venues/${ctx.venue}/compras/${c.id}/receber`, {});
+                  const divergencias = r.divergencias ?? [];
+                  avisar(
+                    divergencias.length > 0
+                      ? `Entrada feita — ${divergencias.length} divergência(s) para cobrar do fornecedor.`
+                      : "Entrada feita. Pedido e entrega bateram.",
+                    divergencias.length > 0 ? "alerta" : "ok",
+                  );
+                  detalheCompra(c.id);
+                } catch (e) {
+                  avisar(e.message, "erro");
+                  ev.target.disabled = false;
+                  ev.target.textContent = "Confirmar recebimento";
+                }
+              },
+            }),
+          ]),
+        ]),
+      );
+      recalcular();
+    }
+
+    /* ---------- a compra por dentro ---------- */
+
     async function detalheCompra(compraId) {
       limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo a compra…" }));
       let c;
@@ -166,8 +409,8 @@ export async function compras(raiz, ctx) {
           el("div", { classe: "cartao" }, [
             dado("Destino padrão", c.estoque_locais?.nome),
             dado("Documento", c.documento),
-            dado("Data da compra", c.data_compra ? c.data_compra.split("-").reverse().join("/") : null),
-            dado("Entrega prevista", c.data_prevista ? c.data_prevista.split("-").reverse().join("/") : null),
+            dado("Data da compra", dataCurta(c.data_compra)),
+            dado("Entrega prevista", c.data_prevista ? dataCurta(c.data_prevista) : null),
             dado("Recebida em", c.recebida_em ? dataHora(c.recebida_em) : null),
             c.observacoes ? el("p", { classe: "muted", texto: c.observacoes }) : null,
           ].filter(Boolean)),
@@ -188,13 +431,37 @@ export async function compras(raiz, ctx) {
                 ),
               }),
             ]),
-            c.status === "pedido"
-              ? el("p", { classe: "muted", texto: "Aguardando entrega — quando chegar, dê entrada em Receber." })
+            c.status === "pedido" || c.status === "rascunho"
+              ? el("div", { classe: "linha-campos" }, [
+                  el("button", {
+                    classe: "btn btn-primario btn-grande",
+                    type: "button",
+                    texto: "📦 Receber esta compra",
+                    onclick: () => receberInline(c.id),
+                  }),
+                  el("button", {
+                    classe: "btn btn-peq",
+                    type: "button",
+                    texto: "Cancelar pedido",
+                    onclick: async () => {
+                      if (!confirm("Cancelar este pedido? Ele fica no histórico como cancelado e não entra no estoque.")) return;
+                      try {
+                        await post(`/v1/venues/${ctx.venue}/compras/${c.id}/cancelar`, {});
+                        avisar("Pedido cancelado.", "ok");
+                        desenhar();
+                      } catch (e) {
+                        avisar(e.message, "erro");
+                      }
+                    },
+                  }),
+                ])
               : null,
           ].filter(Boolean)),
         ]),
       );
     }
+
+    /* ---------- novo pedido ---------- */
 
     function formularioPedido(prePreenchidas) {
       limpar(conteudo);
@@ -215,6 +482,8 @@ export async function compras(raiz, ctx) {
             },
           )
         : null;
+      const documento = el("input", { classe: "campo", placeholder: "Nº do pedido ou da nota (opcional)" });
+      const dataPrevista = el("input", { classe: "campo", type: "date" });
       const seletorLocal = el(
         "select",
         { classe: "select" },
@@ -294,6 +563,10 @@ export async function compras(raiz, ctx) {
           el("div", { classe: "cartao pilha" }, [
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Fornecedor" }), fornecedor]),
             lupaFornecedor,
+            el("div", { classe: "linha-campos" }, [
+              el("label", {}, [el("span", { texto: "Documento" }), documento]),
+              el("label", {}, [el("span", { texto: "Entrega prevista" }), dataPrevista]),
+            ]),
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Destino padrão" }), seletorLocal]),
             seletorInsumo,
           ]),
@@ -314,6 +587,8 @@ export async function compras(raiz, ctx) {
                     origem: "pedido",
                     fornecedor: fornecedor.value || null,
                     fornecedor_id: fornecedorEscolhido?.id ?? null,
+                    documento: documento.value || null,
+                    data_prevista: dataPrevista.value || null,
                     itens: validas.map((l) => ({
                       insumo_id: l.insumoId,
                       quantidade_pedida: l.qtd,
@@ -321,7 +596,7 @@ export async function compras(raiz, ctx) {
                     })),
                   });
                   await post(`/v1/venues/${ctx.venue}/compras/${r.id}/enviar`, {});
-                  avisar("Pedido enviado. Quando chegar, confira em Receber.", "ok");
+                  avisar("Pedido enviado. Quando o caminhão chegar, toque em Receber na linha dele.", "ok");
                   desenhar();
                 } catch (e) {
                   avisar(e.message, "erro");

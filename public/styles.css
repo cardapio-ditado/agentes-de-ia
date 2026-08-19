@@ -2064,3 +2064,15 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   padding: 6px 8px;
   font-size: 0.85rem;
 }
+
+/* Linha de tabela clicável (div com botões dentro — botão em botão é inválido). */
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover { background: var(--marca-suave); }
+
+/* A ação principal da linha de compra: receber. Verde, como no Gorjeta. */
+.btn-receber {
+  border-color: #14532d;
+  color: #14532d;
+  font-weight: 700;
+}
+.btn-receber:hover { background: #e7f5ec; }
