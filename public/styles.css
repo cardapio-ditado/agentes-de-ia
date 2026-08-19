@@ -2076,3 +2076,56 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   font-weight: 700;
 }
 .btn-receber:hover { background: #e7f5ec; }
+
+/* ============ Planilha (a tabela de compras, como no Gorjeta) ============ */
+
+/* A tabela larga rola dentro da própria caixa; a página nunca rola de lado. */
+.rolagem-x {
+  overflow-x: auto;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--superficie);
+}
+.planilha {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  min-width: 720px;
+}
+.planilha th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-suave);
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--borda-forte);
+  background: var(--fundo);
+  white-space: nowrap;
+}
+.planilha td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borda);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.planilha tbody tr:last-child td { border-bottom: 0; }
+.planilha tbody tr:hover { background: var(--marca-suave); }
+.planilha td small { display: block; }
+.planilha .col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.planilha .col-acoes { text-align: right; }
+
+/* Botão-ícone das ações da linha: alvo grande, sem moldura. */
+.btn-icone {
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.btn-icone:hover { background: var(--marca-suave); }

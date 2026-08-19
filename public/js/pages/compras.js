@@ -90,7 +90,7 @@ export async function compras(raiz, ctx) {
       el("option", { value: "cancelada", texto: "Canceladas", selected: filtroStatus === "cancelada" }),
     ]);
 
-    const tabela = el("div", { classe: "tabela" });
+    const tabela = el("div", { classe: "rolagem-x" });
     const norm = (t) => (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
     const desenharTabela = () => {
@@ -109,7 +109,25 @@ export async function compras(raiz, ctx) {
         tabela.append(vazio("Nenhuma compra aqui", filtroStatus || alvo ? "Ajuste os filtros." : "O primeiro pedido leva um minuto."));
         return;
       }
-      for (const c of filtradas) tabela.append(linhaCompra(c));
+      // Planilha de verdade, como no Gorjeta: colunas fixas, uma compra por
+      // linha, e o olho abre os itens da nota.
+      tabela.append(
+        el("table", { classe: "planilha" }, [
+          el("thead", {}, [
+            el("tr", {}, [
+              el("th", { texto: "Fornecedor" }),
+              el("th", { texto: "Nº nota" }),
+              el("th", { texto: "Pedido" }),
+              el("th", { texto: "Previsto" }),
+              el("th", { texto: "Recebido" }),
+              el("th", { classe: "col-num", texto: "Valor" }),
+              el("th", { texto: "Situação" }),
+              el("th", { texto: "Ações" }),
+            ]),
+          ]),
+          el("tbody", {}, filtradas.map(linhaCompra)),
+        ]),
+      );
     };
     busca.addEventListener("input", desenharTabela);
     seletorStatus.addEventListener("change", desenharTabela);
@@ -167,51 +185,39 @@ export async function compras(raiz, ctx) {
       const valor = valorDaCompra(c);
       const estimado = c.status !== "recebida" && Number(c.valor_total) === 0 && valor > 0;
 
-      const acoes = [];
+      const acoes = [
+        el("button", {
+          classe: "btn-icone",
+          type: "button",
+          title: "Ver os itens desta nota",
+          texto: "👁",
+          onclick: () => detalheCompra(c.id),
+        }),
+      ];
       if (c.status === "pedido" || c.status === "rascunho") {
         acoes.push(
           el("button", {
-            classe: "btn btn-peq btn-receber",
+            classe: "btn-icone",
             type: "button",
-            texto: "📦 Receber",
-            onclick: (ev) => {
-              ev.stopPropagation();
-              receberInline(c.id);
-            },
+            title: "Receber esta compra",
+            texto: "📦",
+            onclick: () => receberInline(c.id),
           }),
         );
       }
-      acoes.push(
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: "Ver",
-          onclick: (ev) => {
-            ev.stopPropagation();
-            detalheCompra(c.id);
-          },
-        }),
-      );
 
-      return el("div", { classe: "linha-tabela linha-clicavel", onclick: () => detalheCompra(c.id) }, [
-        el("span", { classe: "linha-principal" }, [
-          el("strong", { texto: c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "Sem fornecedor") }),
-          el("small", {
-            classe: "muted",
-            texto: [
-              dataCurta(c.data_compra),
-              c.documento ? `doc ${c.documento}` : null,
-              c.estoque_locais?.nome ?? null,
-              nItens > 0 ? `${nItens} item(ns)` : null,
-              c.data_prevista && c.status === "pedido" ? `previsto ${dataCurta(c.data_prevista)}` : null,
-            ].filter(Boolean).join(" · "),
-          }),
+      return el("tr", {}, [
+        el("td", {}, [
+          el("strong", { texto: c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "—") }),
+          el("small", { classe: "muted", texto: nItens > 0 ? ` ${nItens} item(ns) · ${c.estoque_locais?.nome ?? ""}` : ` ${c.estoque_locais?.nome ?? ""}` }),
         ]),
-        el("span", { classe: "linha-detalhes" }, [
-          valor > 0 ? el("strong", { texto: `${estimado ? "~" : ""}${dinheiro(valor)}` }) : null,
-          etiqueta(rotulo, variante),
-          ...acoes,
-        ].filter(Boolean)),
+        el("td", { texto: c.documento || "—" }),
+        el("td", { texto: dataCurta(c.data_compra) }),
+        el("td", { texto: c.data_prevista ? dataCurta(c.data_prevista) : "—" }),
+        el("td", { texto: c.recebida_em ? dataCurta(c.recebida_em.slice(0, 10)) : "—" }),
+        el("td", { classe: "col-num" }, [el("strong", { texto: valor > 0 ? `${estimado ? "~" : ""}${dinheiro(valor)}` : "—" })]),
+        el("td", {}, [etiqueta(rotulo, variante)]),
+        el("td", { classe: "col-acoes" }, acoes),
       ]);
     }
 
@@ -467,21 +473,39 @@ export async function compras(raiz, ctx) {
       limpar(conteudo);
       const linhas = prePreenchidas ?? [];
 
-      // Do cadastro, com lupa — e quem não cadastrou ainda digita livre.
+      // Pedido só sai com fornecedor DO CADASTRO: pedido é compromisso com
+      // alguém que existe — nome digitado solto vira "Frigorifico", "frigo",
+      // "Frigorífico Silva" e três históricos para o mesmo CNPJ. Nota sem
+      // pedido (compra de rua) continua livre, mas isso é na tela Receber.
+      if (fornecedoresLista.length === 0) {
+        conteudo.append(
+          el("section", { classe: "pilha" }, [
+            el("div", { classe: "cabecalho-secao" }, [
+              el("h2", { texto: "Novo pedido" }),
+              el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            ]),
+            vazio(
+              "Cadastre um fornecedor primeiro",
+              "Pedido é para fornecedor cadastrado. Vá em Cadastros → Fornecedores, leva um minuto — compra avulsa (de rua) continua na tela Receber.",
+            ),
+          ]),
+        );
+        return;
+      }
+
       let fornecedorEscolhido = null;
-      const fornecedor = el("input", { classe: "campo", placeholder: "Fornecedor (ou escolha abaixo)" });
-      const lupaFornecedor = fornecedoresLista.length > 0
-        ? buscador(
-            fornecedoresLista.map((f) => ({ rotulo: `${f.nome} · entrega a cada ${f.cicloCompraDias}d`, valor: f })),
-            {
-              placeholder: "🔍  Buscar fornecedor cadastrado…",
-              aoEscolher: (o) => {
-                fornecedorEscolhido = o.valor;
-                fornecedor.value = o.valor.nome;
-              },
-            },
-          )
-        : null;
+      const fornecedorEscolhidoLinha = el("p", { classe: "muted", texto: "Nenhum fornecedor escolhido ainda." });
+      const lupaFornecedor = buscador(
+        fornecedoresLista.map((f) => ({ rotulo: `${f.nome} · entrega a cada ${f.cicloCompraDias}d`, valor: f })),
+        {
+          placeholder: "🔍  Escolher fornecedor cadastrado…",
+          aoEscolher: (o) => {
+            fornecedorEscolhido = o.valor;
+            fornecedorEscolhidoLinha.textContent = `Fornecedor: ${o.valor.nome}`;
+            fornecedorEscolhidoLinha.classList.remove("muted");
+          },
+        },
+      );
       const documento = el("input", { classe: "campo", placeholder: "Nº do pedido ou da nota (opcional)" });
       const dataPrevista = el("input", { classe: "campo", type: "date" });
       const seletorLocal = el(
@@ -561,8 +585,11 @@ export async function compras(raiz, ctx) {
             el("button", { classe: "btn btn-peq", type: "button", texto: "Cancelar", onclick: desenhar }),
           ]),
           el("div", { classe: "cartao pilha" }, [
-            el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Fornecedor" }), fornecedor]),
-            lupaFornecedor,
+            el("label", { classe: "campo-rotulado" }, [
+              el("span", { texto: "Fornecedor (do cadastro)" }),
+              lupaFornecedor,
+              fornecedorEscolhidoLinha,
+            ]),
             el("div", { classe: "linha-campos" }, [
               el("label", {}, [el("span", { texto: "Documento" }), documento]),
               el("label", {}, [el("span", { texto: "Entrega prevista" }), dataPrevista]),
@@ -578,6 +605,7 @@ export async function compras(raiz, ctx) {
               type: "button",
               texto: "Enviar pedido",
               onclick: async (ev) => {
+                if (!fornecedorEscolhido) return avisar("Escolha o fornecedor — pedido é para fornecedor cadastrado.", "erro");
                 const validas = linhas.filter((l) => l.insumoId && l.qtd > 0);
                 if (validas.length === 0) return avisar("Adicione ao menos um item com quantidade.", "erro");
                 ev.target.disabled = true;
@@ -585,8 +613,8 @@ export async function compras(raiz, ctx) {
                   const r = await post(`/v1/venues/${ctx.venue}/compras`, {
                     local_id: seletorLocal.value,
                     origem: "pedido",
-                    fornecedor: fornecedor.value || null,
-                    fornecedor_id: fornecedorEscolhido?.id ?? null,
+                    fornecedor: fornecedorEscolhido.nome,
+                    fornecedor_id: fornecedorEscolhido.id,
                     documento: documento.value || null,
                     data_prevista: dataPrevista.value || null,
                     itens: validas.map((l) => ({
