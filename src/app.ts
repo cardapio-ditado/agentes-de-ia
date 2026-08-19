@@ -126,11 +126,13 @@ import {
   enviarPedido,
   garantirInsumo,
   listarCompras,
+  listarContagens,
   listarFichas,
   listarInsumos,
   listarLocais,
   obterCompra,
   receberCompra,
+  registrarContagem,
   salvarFicha,
   substituirItens,
   type ItemDaCompra,
@@ -750,6 +752,7 @@ async function roteasApi(
       "estoque-locais": "cmv",
       compras: "cmv",
       fichas: "cmv",
+      contagens: "cmv",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -915,6 +918,38 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await comErroDeEstoque(() => obterCompra(venue.id, p[3]!)));
+    }
+
+    // GET /v1/venues/:slug/contagens — histórico, com a quebra em reais
+    if (metodo === "GET" && recurso === "contagens" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => listarContagens(venue.id)));
+    }
+
+    // POST /v1/venues/:slug/contagens — cria, processa e devolve os ajustes
+    if (metodo === "POST" && recurso === "contagens" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      const itens = Array.isArray(corpo.itens)
+        ? corpo.itens.map((i) => {
+            const item = i as Record<string, unknown>;
+            return {
+              insumoId: String(item.insumo_id ?? ""),
+              quantidade: Number(item.quantidade ?? NaN),
+            };
+          })
+        : [];
+      const resultado = await comErroDeEstoque(() =>
+        registrarContagem({
+          venueId: venue.id,
+          localId: texto(corpo, "local_id"),
+          itens,
+          observacoes: textoOpcional(corpo, "observacoes") ?? null,
+        }),
+      );
+      return ok(res, resultado, 201);
     }
 
     // POST /v1/venues/:slug/insumos/:id/apelido — ensina a grafia do fornecedor

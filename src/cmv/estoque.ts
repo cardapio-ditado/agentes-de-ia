@@ -549,6 +549,130 @@ export async function apagarFicha(venueId: string, fichaId: string): Promise<voi
   if (error) throw traduzir(error);
 }
 
+/* ---------- contagem ---------- */
+
+export interface ItemContado {
+  insumoId: string;
+  quantidade: number;
+}
+
+export interface AjusteDaContagem {
+  insumo: string;
+  unidade: string;
+  contado: number;
+  sistema: number;
+  diferenca: number;
+  /** Em reais, ao custo médio: é o número que dói e o que se investiga. */
+  valor: number;
+}
+
+/**
+ * Cria e processa a contagem numa tacada.
+ *
+ * Duas etapas no banco (criar aberta, processar depois) existem para o dia em
+ * que a contagem for pausável; a tela de hoje conta e fecha, e expor a pausa
+ * antes de alguém precisar dela só criaria contagens abertas esquecidas —
+ * que envelhecem mal: processar uma contagem de anteontem sobrescreve o
+ * estoque de hoje com o de anteontem.
+ *
+ * Item NÃO contado fica de fora e permanece como está. Não contado é
+ * diferente de zero: zerar o que ninguém olhou transformaria toda contagem
+ * parcial num massacre de saldos.
+ */
+export async function registrarContagem(params: {
+  venueId: string;
+  localId: string;
+  itens: ItemContado[];
+  observacoes?: string | null;
+  criadoPor?: string | null;
+}): Promise<{ ajustes: AjusteDaContagem[]; contados: number }> {
+  const validos = params.itens.filter((i) => i.insumoId && i.quantidade >= 0);
+  if (validos.length === 0) {
+    throw new ErroDoEstoque(400, "Conte ao menos um item antes de processar.");
+  }
+
+  const { data: contagem, error } = await cliente()
+    .from("contagens")
+    .insert({
+      venue_id: params.venueId,
+      local_id: params.localId,
+      observacoes: params.observacoes ?? null,
+      criado_por: params.criadoPor ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw traduzir(error);
+
+  const { error: erroItens } = await cliente()
+    .from("contagem_itens")
+    .insert(validos.map((i) => ({
+      contagem_id: contagem.id,
+      insumo_id: i.insumoId,
+      quantidade_contada: i.quantidade,
+    })));
+  if (erroItens) throw traduzir(erroItens);
+
+  const { error: erroRpc } = await cliente().rpc("cmv_processar_contagem", {
+    p_contagem_id: contagem.id,
+    p_usuario: params.criadoPor ?? null,
+  });
+  if (erroRpc) throw traduzir(erroRpc);
+
+  // O saldo_sistema foi congelado pela função no instante do processamento —
+  // é dele que sai a diferença que a tela mostra.
+  const { data: resultado, error: erroLeitura } = await cliente()
+    .from("contagem_itens")
+    .select("quantidade_contada, saldo_sistema, insumos(nome, unidade, custo_medio)")
+    .eq("contagem_id", contagem.id);
+  if (erroLeitura) throw traduzir(erroLeitura);
+
+  const ajustes: AjusteDaContagem[] = (resultado ?? [])
+    .map((r: any) => {
+      const diferenca = Number(r.quantidade_contada) - Number(r.saldo_sistema ?? 0);
+      return {
+        insumo: r.insumos?.nome ?? "?",
+        unidade: r.insumos?.unidade ?? "un",
+        contado: Number(r.quantidade_contada),
+        sistema: Number(r.saldo_sistema ?? 0),
+        diferenca,
+        valor: diferenca * Number(r.insumos?.custo_medio ?? 0),
+      };
+    })
+    .filter((a: AjusteDaContagem) => a.diferenca !== 0)
+    // A maior perda primeiro: é a que merece investigação hoje, não em ordem
+    // alfabética.
+    .sort((a: AjusteDaContagem, b: AjusteDaContagem) => a.valor - b.valor);
+
+  return { ajustes, contados: validos.length };
+}
+
+export async function listarContagens(venueId: string): Promise<unknown[]> {
+  const { data, error } = await cliente()
+    .from("contagens")
+    .select("id, status, created_at, processada_em, observacoes, estoque_locais(nome), contagem_itens(quantidade_contada, saldo_sistema, insumos(custo_medio))")
+    .eq("venue_id", venueId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw traduzir(error);
+
+  return (data ?? []).map((c: any) => {
+    // A quebra da contagem em reais: só o que faltou (diferença negativa).
+    // Sobra é erro de lançamento; falta é o que se investiga.
+    const quebra = (c.contagem_itens ?? []).reduce((t: number, i: any) => {
+      const d = Number(i.quantidade_contada) - Number(i.saldo_sistema ?? 0);
+      return d < 0 ? t + d * Number(i.insumos?.custo_medio ?? 0) : t;
+    }, 0);
+    return {
+      id: c.id,
+      status: c.status,
+      created_at: c.created_at,
+      local: c.estoque_locais?.nome ?? "",
+      itens: (c.contagem_itens ?? []).length,
+      quebra,
+    };
+  });
+}
+
 /* ---------- erros ---------- */
 
 export class ErroDoEstoque extends Error {

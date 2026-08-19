@@ -18,6 +18,7 @@ import { recebimento } from "./pages/recebimento.js";
 import { compras } from "./pages/compras.js";
 import { insumos } from "./pages/insumos.js";
 import { fichas } from "./pages/fichas.js";
+import { contagem } from "./pages/contagem.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -48,6 +49,7 @@ const PAGINAS = [
   // vezes por semana; cadastra-se uma vez e esquece.
   { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
   { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
+  { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
   { id: "insumos", modulo: "cmv", rotulo: "Insumos e estoques", icone: ICONES.organizacao, render: insumos, subtitulo: "O que a casa compra, e onde guarda" },
   { id: "fichas", modulo: "cmv", rotulo: "Fichas técnicas", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
 
