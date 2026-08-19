@@ -106,3 +106,28 @@ select 'EI=' || estoque_inicial || ' compras=' || compras || ' EF=' || round(est
   from cmv_do_periodo('11111111-1111-1111-1111-111111111111', current_date, current_date);
 select case when compras = 500 then 'ok   compras do período somam 500,00' else 'FALHA' end
   from cmv_do_periodo('11111111-1111-1111-1111-111111111111', current_date, current_date);
+
+\echo '--- 10. CMV PERCENTUAL (o número que o dono olha) ---'
+select case when cmv_percentual is null then 'ok   sem faturamento lançado, percentual NULL (não 0%)'
+            else 'FALHA: ' || cmv_percentual end
+  from cmv_do_periodo('11111111-1111-1111-1111-111111111111', current_date, current_date);
+
+insert into faturamento_diario (venue_id, data_referencia, valor)
+values ('11111111-1111-1111-1111-111111111111', current_date, 200);
+
+-- CMV 50 sobre faturamento 200 = 25,00%
+select 'CMV=' || round(cmv,2) || ' faturamento=' || faturamento || ' -> ' || cmv_percentual || '%'
+  from cmv_do_periodo('11111111-1111-1111-1111-111111111111', current_date, current_date);
+select case when cmv_percentual = 25.00 then 'ok   50 sobre 200 = 25,00%'
+            else 'FALHA percentual ' || cmv_percentual end
+  from cmv_do_periodo('11111111-1111-1111-1111-111111111111', current_date, current_date);
+
+\echo '--- 11. FATURAMENTO NÃO DUPLICA NO MESMO DIA ---'
+do $$
+begin
+  insert into faturamento_diario (venue_id, data_referencia, valor)
+  values ('11111111-1111-1111-1111-111111111111', current_date, 999);
+  raise exception 'FALHA: aceitou dois faturamentos no mesmo dia';
+exception when unique_violation then
+  raise notice 'ok   um faturamento por dia — relançar corrige, não soma';
+end $$;

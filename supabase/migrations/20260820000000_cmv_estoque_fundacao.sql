@@ -646,6 +646,36 @@ create table if not exists public.estoque_snapshots (
 comment on table public.estoque_snapshots is
   'Valor do estoque por dia. O CMV precisa do estoque inicial do período, e esse número não existe retroativamente — ou foi fotografado no dia, ou está perdido.';
 
+-- ============================================================
+-- Faturamento
+-- ============================================================
+-- O CMV que o dono olha é PERCENTUAL. "CMV de R$ 8.400" não diz nada; "CMV
+-- de 32%" diz se a casa está saudável, e é o número que ele compara com o
+-- mês passado e com o vizinho. Sem faturamento não há denominador, e o
+-- módulo entrega meia resposta.
+--
+-- Tabela própria e não uma coluna em algum lugar porque a origem varia: hoje
+-- o gerente digita o fechamento do dia; amanhã vem de arquivo do PDV; um dia
+-- vem do próprio Cardápio Digital. Todas escrevem aqui, e o CMV não muda.
+
+create table if not exists public.faturamento_diario (
+  id uuid primary key default gen_random_uuid(),
+  venue_id uuid not null references public.venues(id) on delete cascade,
+  data_referencia date not null,
+  -- Líquido, sem gorjeta e sem taxa de serviço. Incluir a gorjeta infla o
+  -- denominador e faz o CMV parecer melhor do que é — o erro mais comum de
+  -- quem calcula isso na planilha.
+  valor numeric(14,2) not null check (valor >= 0),
+  origem text not null default 'manual' check (origem in ('manual', 'pdv', 'cardapio')),
+  observacao text,
+  criado_por uuid,
+  created_at timestamptz not null default now(),
+  unique (venue_id, data_referencia)
+);
+
+comment on column public.faturamento_diario.valor is
+  'Faturamento LÍQUIDO do dia, sem gorjeta nem taxa de serviço: incluí-las infla o denominador e faz o CMV parecer melhor do que é.';
+
 create or replace function public.cmv_valor_do_estoque(p_venue_id uuid)
 returns numeric
 language sql
@@ -658,12 +688,21 @@ as $$
 $$;
 
 /**
- * CMV do período: Estoque Inicial + Compras − Estoque Final.
+ * CMV do período: (Estoque Inicial + Compras − Estoque Final) ÷ Faturamento.
  *
  * A fórmula contábil, e não "soma do que as fichas dizem que foi consumido".
  * A diferença entre as duas é justamente o que o dono precisa enxergar:
  * quebra, perda, desvio e ficha desatualizada. O consumo teórico é bom para
  * comparar; o CMV real é o que sai do caixa.
+ *
+ * O PERCENTUAL é o número que se olha. "CMV de R$ 8.400" não diz nada; "CMV
+ * de 32%" diz se a casa está saudável e serve para comparar com o mês
+ * passado. O valor absoluto vem junto porque é ele que se confere contra o
+ * extrato quando o percentual assusta.
+ *
+ * Sem faturamento lançado no período, o percentual é NULL — não zero. Zero
+ * seria "CMV de 0%", a melhor notícia possível, dada justamente a quem não
+ * lançou o faturamento ainda.
  */
 create or replace function public.cmv_do_periodo(
   p_venue_id uuid,
@@ -674,7 +713,9 @@ returns table (
   estoque_inicial numeric,
   compras numeric,
   estoque_final numeric,
-  cmv numeric
+  cmv numeric,
+  faturamento numeric,
+  cmv_percentual numeric
 )
 language sql
 stable
@@ -700,9 +741,25 @@ as $$
       and m.tipo = 'compra'
       and m.criado_em >= p_inicio
       and m.criado_em < (p_fim + 1)
+  ),
+  faturado as (
+    select sum(valor) as valor
+    from public.faturamento_diario
+    where venue_id = p_venue_id
+      and data_referencia between p_inicio and p_fim
   )
-  select i.valor, c.valor, f.valor, i.valor + c.valor - f.valor
-  from inicial i, compradas c, final f;
+  select
+    i.valor,
+    c.valor,
+    f.valor,
+    i.valor + c.valor - f.valor,
+    coalesce(fat.valor, 0),
+    case
+      when coalesce(fat.valor, 0) > 0
+        then round((i.valor + c.valor - f.valor) / fat.valor * 100, 2)
+      else null
+    end
+  from inicial i, compradas c, final f, faturado fat;
 $$;
 
 -- ============================================================
@@ -725,5 +782,6 @@ alter table public.producoes         enable row level security;
 alter table public.contagens         enable row level security;
 alter table public.contagem_itens    enable row level security;
 alter table public.estoque_snapshots enable row level security;
+alter table public.faturamento_diario enable row level security;
 
 notify pgrst, 'reload schema';
