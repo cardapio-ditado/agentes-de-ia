@@ -16,7 +16,7 @@
     "criar-chave": "tsx scripts/criar-chave.ts",
     "whatsapp": "tsx scripts/whatsapp.ts",
     "reenviar-notificacoes": "tsx scripts/reenviar-notificacoes.ts",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "google:login": "tsx scripts/google-sessao.ts login",

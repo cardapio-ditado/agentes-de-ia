@@ -158,5 +158,8 @@ export function pendentes<T>(
 ): Array<{ indice: number; linha: T }> {
   return linhas
     .map((linha, indice) => ({ indice, linha }))
-    .filter(({ indice }) => casamentos[indice].confianca < CONFIANCA_AUTOMATICA);
+    // Linha sem casamento correspondente conta como pendente: um descompasso
+    // de tamanho entre as duas listas é bug, e mandar a linha para conferência
+    // humana erra menos do que tratá-la como já resolvida.
+    .filter(({ indice }) => (casamentos[indice]?.confianca ?? 0) < CONFIANCA_AUTOMATICA);
 }
