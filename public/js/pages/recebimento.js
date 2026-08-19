@@ -36,10 +36,12 @@ export async function recebimento(raiz, ctx) {
 
   let locais = [];
   let insumos = [];
+  let pedidos = [];
   try {
-    [locais, insumos] = await Promise.all([
+    [locais, insumos, pedidos] = await Promise.all([
       get(`/v1/venues/${ctx.venue}/estoque-locais`),
       get(`/v1/venues/${ctx.venue}/insumos`),
+      get(`/v1/venues/${ctx.venue}/compras?status=pedido`),
     ]);
   } catch (e) {
     conteudo.append(vazio("Estoque indisponível", e.message));
@@ -114,8 +116,57 @@ export async function recebimento(raiz, ctx) {
             onclick: () => comecarNaMao(seletorLocal.value),
           }),
         ]),
-      ]),
+
+        // Pedidos que já foram ao fornecedor e ainda não chegaram. Conferir
+        // contra o pedido é o caminho nobre: é ele que revela o "pedi 5,
+        // veio 4,9".
+        pedidos.length > 0
+          ? el("div", { classe: "cartao" }, [
+              el("h3", { texto: "Pedidos aguardando entrega" }),
+              ...pedidos.map((c) =>
+                el("button", {
+                  classe: "btn btn-grande",
+                  type: "button",
+                  texto: `${c.fornecedor || "Sem fornecedor"} — conferir chegada`,
+                  onclick: () => abrirPedido(c.id),
+                }),
+              ),
+            ])
+          : null,
+      ].filter(Boolean)),
     );
+  }
+
+  async function abrirPedido(compraId) {
+    limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo o pedido…" }));
+    try {
+      const c = await get(`/v1/venues/${ctx.venue}/compras/${compraId}`);
+      compra = { id: c.id };
+      linhas = (c.compra_itens ?? []).map((item) => ({
+        descricao: item.insumos?.nome ?? item.descricao_nota ?? "",
+        insumoId: item.insumo_id,
+        insumoNome: item.insumos?.nome ?? null,
+        como: "codigo",
+        confianca: 1,
+        quantidade: item.quantidade_pedida,
+        // O pedido preenche o recebido: quase sempre veio o combinado, e a
+        // pessoa só corrige a exceção — o 4,9 no lugar do 5.
+        quantidadeRecebida: item.quantidade_pedida,
+        custoRecebido: item.custo_unitario_pedido,
+        localId: item.local_id ?? null,
+        motivo: "",
+      }));
+      desenharConferencia({
+        localId: c.local_id,
+        origem: "pedido",
+        fornecedor: c.fornecedor,
+        documento: c.documento,
+        avisos: [],
+        somaConfere: true,
+      });
+    } catch (e) {
+      limpar(conteudo).append(vazio("Não deu para abrir o pedido", e.message));
+    }
   }
 
   async function lerFoto(arquivo, localId) {
@@ -195,6 +246,10 @@ export async function recebimento(raiz, ctx) {
 
     function cartaoDaLinha(linha, indice) {
       const [rotulo, variante] = ORIGEM_DO_CASAMENTO[linha.como] ?? ORIGEM_DO_CASAMENTO.nenhum;
+      // A IA acerta o casamento na maioria das vezes, mas "na maioria" não é
+      // sempre: a linha certa também pode ser trocada, só que atrás de um
+      // toque — quem confere não deve reler o que já está resolvido.
+      let trocando = linha.trocando === true;
 
       const seletorInsumo = el(
         "select",
@@ -265,9 +320,44 @@ export async function recebimento(raiz, ctx) {
           etiqueta(rotulo, variante),
         ].filter(Boolean)),
 
-        // Só aparece quando o casamento não é certo: quem confere não deve
-        // reler o que já está resolvido.
-        linha.confianca < 0.9 ? seletorInsumo : null,
+        // Aparece quando o casamento não é certo, ou quando a pessoa pediu
+        // para trocar um que a IA deu como certo.
+        linha.confianca < 0.9 || trocando ? seletorInsumo : null,
+        linha.confianca >= 0.9 && !trocando
+          ? el("button", {
+              classe: "btn btn-peq",
+              type: "button",
+              texto: "Trocar insumo",
+              onclick: () => {
+                linha.trocando = true;
+                desenharLinhas();
+              },
+            })
+          : null,
+
+        // Destino desta linha: só quando a casa tem mais de um lugar. Na
+        // mesma nota, a cerveja vai pro bar e a carne pra cozinha.
+        locais.length > 1
+          ? el("label", { classe: "campo-rotulado" }, [
+              el("span", { texto: "Vai para" }),
+              el(
+                "select",
+                {
+                  classe: "select",
+                  onchange: (ev) => {
+                    linha.localId = ev.target.value || null;
+                  },
+                },
+                locais.map((l) =>
+                  el("option", {
+                    value: l.id,
+                    texto: l.nome,
+                    selected: (linha.localId ?? ctxConferencia.localId) === l.id,
+                  }),
+                ),
+              ),
+            ])
+          : null,
 
         el("div", { classe: "linha-campos" }, [
           el("label", {}, [
@@ -391,7 +481,11 @@ export async function recebimento(raiz, ctx) {
     try {
       const itens = linhas.map((l) => ({
         insumo_id: l.insumoId,
+        // Só viaja quando difere do padrão da compra: nulo herda, e herdar é
+        // o caso comum.
+        local_id: l.localId && l.localId !== ctxConferencia.localId ? l.localId : null,
         descricao_nota: l.descricao || null,
+        quantidade_pedida: ctxConferencia.origem === "pedido" ? l.quantidade : null,
         quantidade_recebida: l.quantidadeRecebida,
         custo_unitario_recebido: l.custoRecebido,
         divergencia_motivo: l.motivo || null,

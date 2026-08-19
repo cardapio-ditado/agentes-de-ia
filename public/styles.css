@@ -1935,3 +1935,12 @@ textarea:focus {
   color: var(--marca-forte);
   font-weight: 600;
 }
+
+/* Campo com rótulo em cima — o padrão dos formulários do CMV. */
+.campo-rotulado {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+.campo-rotulado small { margin-top: 2px; }

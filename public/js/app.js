@@ -15,6 +15,9 @@ import { checklists } from "./pages/checklists.js";
 import { execucoes } from "./pages/execucoes.js";
 import { avaliacoes } from "./pages/avaliacoes.js";
 import { recebimento } from "./pages/recebimento.js";
+import { compras } from "./pages/compras.js";
+import { insumos } from "./pages/insumos.js";
+import { fichas } from "./pages/fichas.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -41,7 +44,12 @@ const PAGINAS = [
 
   { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
 
+  // A ordem é a do dia de trabalho: recebe-se toda manhã; pede-se algumas
+  // vezes por semana; cadastra-se uma vez e esquece.
   { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
+  { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
+  { id: "insumos", modulo: "cmv", rotulo: "Insumos e estoques", icone: ICONES.organizacao, render: insumos, subtitulo: "O que a casa compra, e onde guarda" },
+  { id: "fichas", modulo: "cmv", rotulo: "Fichas técnicas", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
 
   // Módulo da equipe Brasa Food. Administrar a plataforma não é uma seção do
   // produto do cliente: são perguntas de negócios diferentes, e misturar as

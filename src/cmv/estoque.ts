@@ -230,6 +230,8 @@ export async function aprenderApelido(params: {
 
 export interface ItemDaCompra {
   insumoId: string | null;
+  /** Destino DESTA linha; nulo herda o local da compra. */
+  localId?: string | null;
   descricaoNota?: string | null;
   quantidadePedida?: number | null;
   custoUnitarioPedido?: number | null;
@@ -276,6 +278,7 @@ async function gravarItens(compraId: string, itens: ItemDaCompra[]): Promise<voi
     .map((i) => ({
       compra_id: compraId,
       insumo_id: i.insumoId,
+      local_id: i.localId ?? null,
       descricao_nota: i.descricaoNota?.trim() || null,
       quantidade_pedida: i.quantidadePedida ?? null,
       custo_unitario_pedido: i.custoUnitarioPedido ?? null,
@@ -335,6 +338,215 @@ export async function divergenciasDaCompra(compraId: string): Promise<unknown[]>
   const { data, error } = await cliente().rpc("cmv_divergencias", { p_compra_id: compraId });
   if (error) throw traduzir(error);
   return data ?? [];
+}
+
+/**
+ * Cria um local de estoque.
+ *
+ * Marcar como principal desmarca o anterior na mesma transação de quem
+ * chama? Não: o índice único parcial recusaria o segundo principal. Por isso
+ * o desmarque acontece aqui, antes do insert — a regra "um principal por
+ * casa" mora no banco, e este é o jeito de respeitá-la sem stacktrace.
+ */
+export async function criarLocal(params: {
+  venueId: string;
+  nome: string;
+  principal?: boolean;
+}): Promise<Local> {
+  if (params.principal) {
+    const { error } = await cliente()
+      .from("estoque_locais")
+      .update({ principal: false })
+      .eq("venue_id", params.venueId)
+      .eq("principal", true);
+    if (error) throw traduzir(error);
+  }
+  const { data, error } = await cliente()
+    .from("estoque_locais")
+    .insert({ venue_id: params.venueId, nome: params.nome.trim(), principal: params.principal ?? false })
+    .select("id, nome, principal")
+    .single();
+  if (error) throw traduzir(error);
+  return data as Local;
+}
+
+/**
+ * Desativa um local sem apagar: os movimentos históricos apontam para ele, e
+ * apagar quebraria o razão — que é justamente o que nunca se quebra.
+ */
+export async function desativarLocal(venueId: string, localId: string): Promise<void> {
+  const { error } = await cliente()
+    .from("estoque_locais")
+    .update({ ativo: false, principal: false })
+    .eq("venue_id", venueId)
+    .eq("id", localId);
+  if (error) throw traduzir(error);
+}
+
+export async function atualizarInsumo(params: {
+  venueId: string;
+  insumoId: string;
+  nome?: string;
+  unidade?: string;
+  categoria?: string | null;
+  codigo?: string | null;
+  estoqueMinimo?: number | null;
+  toleranciaPct?: number;
+  ativo?: boolean;
+}): Promise<void> {
+  const mudancas: Record<string, unknown> = {};
+  if (params.nome !== undefined) mudancas.nome = params.nome.trim();
+  if (params.unidade !== undefined) mudancas.unidade = params.unidade.trim() || "un";
+  if (params.categoria !== undefined) mudancas.categoria = params.categoria?.trim() || null;
+  if (params.codigo !== undefined) mudancas.codigo = params.codigo?.trim() || null;
+  if (params.estoqueMinimo !== undefined) mudancas.estoque_minimo = params.estoqueMinimo;
+  if (params.toleranciaPct !== undefined) mudancas.tolerancia_divergencia_pct = params.toleranciaPct;
+  if (params.ativo !== undefined) mudancas.ativo = params.ativo;
+  if (Object.keys(mudancas).length === 0) return;
+
+  const { error } = await cliente()
+    .from("insumos")
+    .update(mudancas)
+    .eq("venue_id", params.venueId)
+    .eq("id", params.insumoId);
+  if (error) throw traduzir(error);
+}
+
+/* ---------- compras: listagem ---------- */
+
+export async function listarCompras(params: {
+  venueId: string;
+  status?: string;
+}): Promise<unknown[]> {
+  let consulta = cliente()
+    .from("compras")
+    .select("id, fornecedor, documento, data_compra, data_prevista, valor_total, status, origem, created_at, recebida_em, estoque_locais(nome)")
+    .eq("venue_id", params.venueId)
+    .order("created_at", { ascending: false })
+    .limit(60);
+  if (params.status) consulta = consulta.eq("status", params.status);
+  const { data, error } = await consulta;
+  if (error) throw traduzir(error);
+  return data ?? [];
+}
+
+export async function obterCompra(venueId: string, compraId: string): Promise<unknown> {
+  const { data, error } = await cliente()
+    .from("compras")
+    .select("*, compra_itens(*, insumos(nome, unidade))")
+    .eq("venue_id", venueId)
+    .eq("id", compraId)
+    .maybeSingle();
+  if (error) throw traduzir(error);
+  if (!data) throw new ErroDoEstoque(404, "Compra não encontrada.");
+  return data;
+}
+
+/* ---------- fichas técnicas ---------- */
+
+export interface IngredienteDaFicha {
+  insumoId: string;
+  quantidade: number;
+  observacao?: string | null;
+}
+
+export async function listarFichas(venueId: string): Promise<unknown[]> {
+  const { data, error } = await cliente()
+    .from("fichas_tecnicas")
+    .select("id, nome, rendimento, preco_venda, sugerida_por_ia, confirmada_em, ativa, item_id, ficha_insumos(quantidade, insumos(id, nome, unidade, custo_medio))")
+    .eq("venue_id", venueId)
+    .eq("ativa", true)
+    .order("nome");
+  if (error) throw traduzir(error);
+
+  // O custo é calculado aqui com os MESMOS dados que a tela mostra, e não
+  // pela função do banco em N chamadas: uma ida só, e o número que aparece
+  // ao lado dos ingredientes é a soma exata deles.
+  return (data ?? []).map((f: any) => {
+    const confirmada = f.confirmada_em !== null;
+    const custoTotal = (f.ficha_insumos ?? []).reduce(
+      (t: number, fi: any) => t + Number(fi.quantidade) * Number(fi.insumos?.custo_medio ?? 0),
+      0,
+    );
+    return {
+      ...f,
+      // NULL enquanto não confirmada — a mesma regra da função do banco.
+      custo_porcao: confirmada ? custoTotal / Number(f.rendimento) : null,
+    };
+  });
+}
+
+export async function salvarFicha(params: {
+  venueId: string;
+  fichaId?: string | null;
+  nome: string;
+  rendimento: number;
+  precoVenda?: number | null;
+  itemId?: string | null;
+  ingredientes: IngredienteDaFicha[];
+  confirmar?: boolean;
+}): Promise<string> {
+  if (!params.nome.trim()) throw new ErroDoEstoque(400, "A ficha precisa de um nome.");
+  if (!(params.rendimento > 0)) throw new ErroDoEstoque(400, "Rendimento precisa ser maior que zero.");
+
+  const corpo = {
+    venue_id: params.venueId,
+    nome: params.nome.trim(),
+    rendimento: params.rendimento,
+    preco_venda: params.precoVenda ?? null,
+    item_id: params.itemId ?? null,
+    // Editar à mão torna a ficha da pessoa, não da IA. E confirmar registra
+    // o instante — é o que libera custo e produção.
+    sugerida_por_ia: false,
+    ...(params.confirmar ? { confirmada_em: new Date().toISOString() } : {}),
+  };
+
+  let fichaId = params.fichaId ?? null;
+  if (fichaId) {
+    const { error } = await cliente()
+      .from("fichas_tecnicas")
+      .update(corpo)
+      .eq("venue_id", params.venueId)
+      .eq("id", fichaId);
+    if (error) throw traduzir(error);
+  } else {
+    const { data, error } = await cliente()
+      .from("fichas_tecnicas")
+      .insert(corpo)
+      .select("id")
+      .single();
+    if (error) throw traduzir(error);
+    fichaId = data.id as string;
+  }
+
+  // Regrava o conjunto: a edição pode tirar e pôr ingredientes, e casar
+  // linha a linha pelo id daria mais chance de erro do que regravar.
+  const { error: erroLimpa } = await cliente().from("ficha_insumos").delete().eq("ficha_id", fichaId);
+  if (erroLimpa) throw traduzir(erroLimpa);
+
+  const linhas = params.ingredientes
+    .filter((i) => i.insumoId && i.quantidade > 0)
+    .map((i) => ({
+      ficha_id: fichaId,
+      insumo_id: i.insumoId,
+      quantidade: i.quantidade,
+      observacao: i.observacao?.trim() || null,
+    }));
+  if (linhas.length > 0) {
+    const { error } = await cliente().from("ficha_insumos").insert(linhas);
+    if (error) throw traduzir(error);
+  }
+  return fichaId!;
+}
+
+export async function apagarFicha(venueId: string, fichaId: string): Promise<void> {
+  // Desativa em vez de apagar: produções passadas apontam para ela.
+  const { error } = await cliente()
+    .from("fichas_tecnicas")
+    .update({ ativa: false })
+    .eq("venue_id", venueId)
+    .eq("id", fichaId);
+  if (error) throw traduzir(error);
 }
 
 /* ---------- erros ---------- */

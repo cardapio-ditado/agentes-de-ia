@@ -115,15 +115,23 @@ import {
 import { definirModulo, listarModulos } from "./modulos.js";
 import {
   ErroDoEstoque,
+  apagarFicha,
   aprenderApelido,
+  atualizarInsumo,
   casarLinhas,
   criarCompra,
+  criarLocal,
+  desativarLocal,
   divergenciasDaCompra,
   enviarPedido,
   garantirInsumo,
+  listarCompras,
+  listarFichas,
   listarInsumos,
   listarLocais,
+  obterCompra,
   receberCompra,
+  salvarFicha,
   substituirItens,
   type ItemDaCompra,
 } from "./cmv/estoque.js";
@@ -391,6 +399,7 @@ function itensDaCompra(corpo: unknown): ItemDaCompra[] {
     const i = linha as Record<string, unknown>;
     return {
       insumoId: typeof i.insumo_id === "string" ? i.insumo_id : null,
+      localId: typeof i.local_id === "string" ? i.local_id : null,
       descricaoNota: typeof i.descricao_nota === "string" ? i.descricao_nota : null,
       quantidadePedida: numeroOuNulo(i.quantidade_pedida),
       custoUnitarioPedido: numeroOuNulo(i.custo_unitario_pedido),
@@ -740,6 +749,7 @@ async function roteasApi(
       insumos: "cmv",
       "estoque-locais": "cmv",
       compras: "cmv",
+      fichas: "cmv",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -797,6 +807,114 @@ async function roteasApi(
       // 200 e não 201 quando já existia: para a tela saber que não criou
       // nada, e poder dizer "esse já estava cadastrado" em vez de fingir.
       return ok(res, resultado, resultado.criado ? 201 : 200);
+    }
+
+    // POST /v1/venues/:slug/estoque-locais — cria um local
+    if (metodo === "POST" && recurso === "estoque-locais" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req);
+      const local = await comErroDeEstoque(() =>
+        criarLocal({
+          venueId: venue.id,
+          nome: texto(corpo, "nome"),
+          principal: (corpo as Record<string, unknown>).principal === true,
+        }),
+      );
+      return ok(res, local, 201);
+    }
+
+    // DELETE /v1/venues/:slug/estoque-locais/:id — desativa (nunca apaga)
+    if (metodo === "DELETE" && recurso === "estoque-locais" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => desativarLocal(venue.id, p[3]!));
+      return ok(res, { desativado: true });
+    }
+
+    // PATCH /v1/venues/:slug/insumos/:id — edita cadastro
+    if (metodo === "PATCH" && recurso === "insumos" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      await comErroDeEstoque(() =>
+        atualizarInsumo({
+          venueId: venue.id,
+          insumoId: p[3]!,
+          nome: typeof corpo.nome === "string" ? corpo.nome : undefined,
+          unidade: typeof corpo.unidade === "string" ? corpo.unidade : undefined,
+          categoria: "categoria" in corpo ? (corpo.categoria as string | null) : undefined,
+          codigo: "codigo" in corpo ? (corpo.codigo as string | null) : undefined,
+          estoqueMinimo: "estoque_minimo" in corpo ? numeroOuNulo(corpo.estoque_minimo) : undefined,
+          toleranciaPct: "tolerancia_pct" in corpo ? (numeroOuNulo(corpo.tolerancia_pct) ?? 0) : undefined,
+          ativo: typeof corpo.ativo === "boolean" ? corpo.ativo : undefined,
+        }),
+      );
+      return ok(res, { salvo: true });
+    }
+
+    // GET /v1/venues/:slug/fichas — com custo por porção
+    if (metodo === "GET" && recurso === "fichas" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => listarFichas(venue.id)));
+    }
+
+    // POST /v1/venues/:slug/fichas — cria ou atualiza (id no corpo)
+    if (metodo === "POST" && recurso === "fichas" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = await lerJson(req) as Record<string, unknown>;
+      const ingredientes = Array.isArray(corpo.ingredientes)
+        ? corpo.ingredientes.map((i) => {
+            const ing = i as Record<string, unknown>;
+            return {
+              insumoId: String(ing.insumo_id ?? ""),
+              quantidade: Number(ing.quantidade ?? 0),
+              observacao: typeof ing.observacao === "string" ? ing.observacao : null,
+            };
+          })
+        : [];
+      const id = await comErroDeEstoque(() =>
+        salvarFicha({
+          venueId: venue.id,
+          fichaId: typeof corpo.id === "string" ? corpo.id : null,
+          nome: texto(corpo, "nome"),
+          rendimento: Number(corpo.rendimento ?? 1),
+          precoVenda: numeroOuNulo(corpo.preco_venda),
+          itemId: typeof corpo.item_id === "string" ? corpo.item_id : null,
+          ingredientes,
+          confirmar: corpo.confirmar === true,
+        }),
+      );
+      return ok(res, { id });
+    }
+
+    // DELETE /v1/venues/:slug/fichas/:id — desativa
+    if (metodo === "DELETE" && recurso === "fichas" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDeEstoque(() => apagarFicha(venue.id, p[3]!));
+      return ok(res, { removida: true });
+    }
+
+    // GET /v1/venues/:slug/compras?status= — pedidos e histórico
+    if (metodo === "GET" && recurso === "compras" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDeEstoque(() =>
+          listarCompras({ venueId: venue.id, status: url.searchParams.get("status") ?? undefined }),
+        ),
+      );
+    }
+
+    // GET /v1/venues/:slug/compras/:id — com itens, para conferir na doca
+    if (metodo === "GET" && recurso === "compras" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => obterCompra(venue.id, p[3]!)));
     }
 
     // POST /v1/venues/:slug/insumos/:id/apelido — ensina a grafia do fornecedor
