@@ -2129,3 +2129,16 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   margin-left: 4px;
 }
 .btn-icone:hover { background: var(--marca-suave); }
+
+/* Campo dentro de célula de planilha: compacto, do tamanho de um número. */
+.campo-celula {
+  width: 96px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+/* A linha do motivo da divergência, colada na linha do item. */
+.linha-motivo td {
+  padding-top: 0;
+  background: #fff6e0;
+}
+.linha-motivo .campo { width: 100%; }

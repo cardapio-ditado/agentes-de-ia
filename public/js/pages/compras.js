@@ -256,46 +256,96 @@ export async function compras(raiz, ctx) {
         total.textContent = dinheiro(itens.reduce((t, i) => t + i.recebida * i.custo, 0));
       };
 
-      const cartaoItem = (i) => {
-        const divergiu = () => i.pedida !== null && i.recebida !== i.pedida;
-        const campoMotivo = el("input", {
-          classe: "campo",
-          placeholder: "faltou 1 caixa, peso do açougue, veio vencido…",
-          value: i.motivo,
-          onchange: (ev) => { i.motivo = ev.target.value; },
+      // Itens em planilha, não em caixas: uma nota tem vinte linhas, e a
+      // conferência é correr o dedo por elas — não rolar vinte cartões.
+      const corpoTabela = el("tbody", {});
+      const desenharItens = () => {
+        limpar(corpoTabela);
+        itens.forEach((i, idx) => {
+          const divergiu = () => i.pedida !== null && i.recebida !== i.pedida;
+          const celulaTotal = el("td", { classe: "col-num", texto: dinheiro(i.recebida * i.custo) });
+          const linhaMotivo = el("tr", { classe: "linha-motivo", hidden: !divergiu() }, [
+            el("td", { colspan: "6" }, [
+              el("input", {
+                classe: "campo",
+                placeholder: "O que houve? faltou 1 caixa, peso do açougue, veio vencido…",
+                value: i.motivo,
+                onchange: (ev) => { i.motivo = ev.target.value; },
+              }),
+            ]),
+          ]);
+          const linha = el("tr", { classe: divergiu() ? "linha-atencao" : "" }, [
+            el("td", {}, [
+              el("strong", { texto: i.nome }),
+              el("small", { classe: "muted", texto: i.unidade ? ` ${i.unidade}` : "" }),
+            ]),
+            el("td", { classe: "col-num", texto: i.pedida !== null ? String(i.pedida) : "—" }),
+            el("td", {}, [
+              el("input", {
+                classe: "campo-numero campo-celula", type: "number", inputmode: "decimal", step: "0.001", min: "0",
+                value: i.recebida,
+                onchange: (ev) => {
+                  i.recebida = Number(ev.target.value);
+                  linhaMotivo.hidden = !divergiu();
+                  linha.classList.toggle("linha-atencao", divergiu());
+                  celulaTotal.textContent = dinheiro(i.recebida * i.custo);
+                  recalcular();
+                },
+              }),
+            ]),
+            el("td", {}, [
+              el("input", {
+                classe: "campo-numero campo-celula", type: "number", inputmode: "decimal", step: "0.01", min: "0",
+                value: i.custo || "",
+                onchange: (ev) => {
+                  i.custo = Number(ev.target.value);
+                  celulaTotal.textContent = dinheiro(i.recebida * i.custo);
+                  recalcular();
+                },
+              }),
+            ]),
+            celulaTotal,
+            el("td", { classe: "col-acoes" }, [
+              el("button", {
+                classe: "btn-icone",
+                type: "button",
+                title: "Tirar este item da nota",
+                texto: "✕",
+                onclick: () => {
+                  itens.splice(idx, 1);
+                  desenharItens();
+                  recalcular();
+                },
+              }),
+            ]),
+          ]);
+          corpoTabela.append(linha, linhaMotivo);
         });
-        const linhaMotivo = el("label", { classe: "campo-rotulado", hidden: !divergiu() }, [
-          el("span", { texto: "O que houve?" }),
-          campoMotivo,
-        ]);
-        const campoRecebida = el("input", {
-          classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.001", min: "0",
-          value: i.recebida,
-          onchange: (ev) => {
-            i.recebida = Number(ev.target.value);
-            linhaMotivo.hidden = !divergiu();
-            cartao.classList.toggle("cartao-atencao", divergiu());
+      };
+      desenharItens();
+
+      // Veio coisa fora do pedido? Acontece — o caminhão traz o que tem.
+      const lupaAdicionar = buscador(
+        insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
+        {
+          placeholder: "🔍  Veio algo fora do pedido? Adicione aqui…",
+          aoEscolher: (o) => {
+            itens.push({
+              insumoId: o.valor.id,
+              nome: o.valor.nome,
+              unidade: o.valor.unidade,
+              descricao: null,
+              localId: null,
+              pedida: null,
+              recebida: 0,
+              custo: o.valor.custoMedio || 0,
+              motivo: "",
+            });
+            desenharItens();
             recalcular();
           },
-        });
-        const campoCusto = el("input", {
-          classe: "campo-numero", type: "number", inputmode: "decimal", step: "0.01", min: "0",
-          value: i.custo || "",
-          onchange: (ev) => { i.custo = Number(ev.target.value); recalcular(); },
-        });
-        const cartao = el("article", { classe: "cartao pilha" }, [
-          el("div", { classe: "cabecalho-secao" }, [
-            el("strong", { texto: i.nome }),
-            i.pedida !== null ? el("span", { classe: "muted", texto: `pedido: ${i.pedida} ${i.unidade}` }) : null,
-          ].filter(Boolean)),
-          el("div", { classe: "linha-campos" }, [
-            el("label", {}, [el("span", { texto: `Veio (${i.unidade || "un"})` }), campoRecebida]),
-            el("label", {}, [el("span", { texto: "R$/un" }), campoCusto]),
-          ]),
-          linhaMotivo,
-        ]);
-        return cartao;
-      };
+        },
+      );
 
       conteudo.append(
         el("section", { classe: "pilha" }, [
@@ -307,7 +357,22 @@ export async function compras(raiz, ctx) {
             el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
           ]),
           el("p", { classe: "aviso aviso-alerta", texto: "Confira o que CHEGOU. Zero significa \"não veio\" — e vira cobrança, não entrada." }),
-          ...itens.map(cartaoItem),
+          el("div", { classe: "rolagem-x" }, [
+            el("table", { classe: "planilha" }, [
+              el("thead", {}, [
+                el("tr", {}, [
+                  el("th", { texto: "Item" }),
+                  el("th", { classe: "col-num", texto: "Pedido" }),
+                  el("th", { texto: "Veio" }),
+                  el("th", { texto: "R$/un" }),
+                  el("th", { classe: "col-num", texto: "Total" }),
+                  el("th", { texto: "" }),
+                ]),
+              ]),
+              corpoTabela,
+            ]),
+          ]),
+          lupaAdicionar,
           el("div", { classe: "cartao cartao-total" }, [
             el("div", { classe: "cabecalho-secao" }, [el("span", { texto: "Total recebido" }), total]),
             el("button", {
@@ -379,26 +444,41 @@ export async function compras(raiz, ctx) {
         const qtdParaTotal = veio ?? pedida ?? 0;
         const divergente = recebida && pedida !== null && veio !== null && veio !== pedida;
         const unidade = it.insumos?.unidade ?? "";
-        return el("div", { classe: `linha-tabela ${divergente ? "linha-atencao" : ""}`.trim() }, [
-          el("span", { classe: "linha-principal" }, [
+        return el("tr", { classe: divergente ? "linha-atencao" : "" }, [
+          el("td", {}, [
             el("strong", { texto: it.insumos?.nome ?? it.descricao_nota ?? "?" }),
-            el("small", {
-              classe: "muted",
-              texto: [
-                pedida !== null ? `pedido ${pedida} ${unidade}` : null,
-                veio !== null ? `veio ${veio} ${unidade}` : (recebida ? null : `${qtdParaTotal} ${unidade}`),
-                it.estoque_locais?.nome ? `→ ${it.estoque_locais.nome}` : null,
-                it.divergencia_motivo || null,
-              ].filter(Boolean).join(" · "),
-            }),
-          ]),
-          el("span", { classe: "linha-detalhes" }, [
-            divergente ? etiqueta(veio > pedida ? "veio a mais" : "veio a menos", "etiqueta-perigo") : null,
-            el("span", { classe: "muted", texto: custo ? `${dinheiro(custo)}/un` : "" }),
-            el("strong", { texto: dinheiro(qtdParaTotal * custo) }),
+            it.divergencia_motivo || it.estoque_locais?.nome
+              ? el("small", {
+                  classe: "muted",
+                  texto: [it.estoque_locais?.nome ? `→ ${it.estoque_locais.nome}` : null, it.divergencia_motivo || null]
+                    .filter(Boolean).join(" · "),
+                })
+              : null,
           ].filter(Boolean)),
+          el("td", { classe: "col-num", texto: pedida !== null ? `${pedida} ${unidade}` : "—" }),
+          el("td", { classe: "col-num" }, [
+            el("span", { texto: veio !== null ? `${veio} ${unidade}` : "—" }),
+            divergente ? etiqueta(veio > pedida ? " a mais" : " a menos", "etiqueta-perigo") : null,
+          ].filter(Boolean)),
+          el("td", { classe: "col-num", texto: custo ? dinheiro(custo) : "—" }),
+          el("td", { classe: "col-num" }, [el("strong", { texto: dinheiro(qtdParaTotal * custo) })]),
         ]);
       };
+
+      const tabelaItens = el("div", { classe: "rolagem-x" }, [
+        el("table", { classe: "planilha" }, [
+          el("thead", {}, [
+            el("tr", {}, [
+              el("th", { texto: "Item" }),
+              el("th", { classe: "col-num", texto: "Pedido" }),
+              el("th", { classe: "col-num", texto: "Recebido" }),
+              el("th", { classe: "col-num", texto: "R$/un" }),
+              el("th", { classe: "col-num", texto: "Total" }),
+            ]),
+          ]),
+          el("tbody", {}, itensCompra.map(linhaItem)),
+        ]),
+      ]);
 
       conteudo.append(
         el("section", { classe: "pilha" }, [
@@ -420,9 +500,9 @@ export async function compras(raiz, ctx) {
             dado("Recebida em", c.recebida_em ? dataHora(c.recebida_em) : null),
             c.observacoes ? el("p", { classe: "muted", texto: c.observacoes }) : null,
           ].filter(Boolean)),
-          el("div", {}, [
+          el("div", { classe: "pilha" }, [
             el("h3", { texto: `Itens (${itensCompra.length})` }),
-            el("div", { classe: "tabela" }, itensCompra.map(linhaItem)),
+            tabelaItens,
           ]),
           el("div", { classe: "cartao cartao-total" }, [
             el("div", { classe: "cabecalho-secao" }, [
@@ -448,6 +528,12 @@ export async function compras(raiz, ctx) {
                   el("button", {
                     classe: "btn btn-peq",
                     type: "button",
+                    texto: "✏️ Alterar itens",
+                    onclick: () => editarPedido(c),
+                  }),
+                  el("button", {
+                    classe: "btn btn-peq",
+                    type: "button",
                     texto: "Cancelar pedido",
                     onclick: async () => {
                       if (!confirm("Cancelar este pedido? Ele fica no histórico como cancelado e não entra no estoque.")) return;
@@ -463,6 +549,161 @@ export async function compras(raiz, ctx) {
                 ])
               : null,
           ].filter(Boolean)),
+        ]),
+      );
+    }
+
+    /* ---------- alterar um pedido que ainda não chegou ---------- */
+
+    /**
+     * Mexer no pedido antes da entrega: mudar quantidade, tirar item, pôr
+     * item. Depois de recebida não se altera — a entrada já é movimento no
+     * razão, e razão não se reescreve.
+     */
+    function editarPedido(c) {
+      limpar(conteudo);
+      const linhas = (c.compra_itens ?? []).map((it) => ({
+        insumoId: it.insumo_id,
+        nome: it.insumos?.nome ?? it.descricao_nota ?? "?",
+        unidade: it.insumos?.unidade ?? "",
+        descricao: it.descricao_nota ?? null,
+        localId: it.local_id ?? null,
+        qtd: it.quantidade_pedida === null ? null : Number(it.quantidade_pedida),
+        custo: Number(it.custo_unitario_pedido ?? 0),
+      }));
+
+      const total = el("strong", {});
+      const recalcular = () => {
+        total.textContent = dinheiro(linhas.reduce((t, l) => t + (l.qtd ?? 0) * (l.custo || 0), 0));
+      };
+
+      const corpoTabela = el("tbody", {});
+      const desenharLinhas = () => {
+        limpar(corpoTabela);
+        linhas.forEach((l, idx) => {
+          const celulaTotal = el("td", { classe: "col-num", texto: dinheiro((l.qtd ?? 0) * (l.custo || 0)) });
+          corpoTabela.append(
+            el("tr", {}, [
+              el("td", {}, [
+                el("strong", { texto: l.nome }),
+                el("small", { classe: "muted", texto: l.unidade ? ` ${l.unidade}` : "" }),
+              ]),
+              el("td", {}, [
+                el("input", {
+                  classe: "campo-numero campo-celula", type: "number", inputmode: "decimal", step: "0.001", min: "0",
+                  value: l.qtd ?? "",
+                  onchange: (ev) => {
+                    l.qtd = Number(ev.target.value);
+                    celulaTotal.textContent = dinheiro((l.qtd ?? 0) * (l.custo || 0));
+                    recalcular();
+                  },
+                }),
+              ]),
+              el("td", {}, [
+                el("input", {
+                  classe: "campo-numero campo-celula", type: "number", inputmode: "decimal", step: "0.01", min: "0",
+                  value: l.custo || "",
+                  onchange: (ev) => {
+                    l.custo = Number(ev.target.value);
+                    celulaTotal.textContent = dinheiro((l.qtd ?? 0) * (l.custo || 0));
+                    recalcular();
+                  },
+                }),
+              ]),
+              celulaTotal,
+              el("td", { classe: "col-acoes" }, [
+                el("button", {
+                  classe: "btn-icone",
+                  type: "button",
+                  title: "Tirar este item do pedido",
+                  texto: "✕",
+                  onclick: () => {
+                    linhas.splice(idx, 1);
+                    desenharLinhas();
+                    recalcular();
+                  },
+                }),
+              ]),
+            ]),
+          );
+        });
+      };
+      desenharLinhas();
+      recalcular();
+
+      const lupaAdicionar = buscador(
+        insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
+        {
+          placeholder: "🔍  Adicionar item ao pedido…",
+          aoEscolher: (o) => {
+            linhas.push({
+              insumoId: o.valor.id,
+              nome: o.valor.nome,
+              unidade: o.valor.unidade,
+              descricao: null,
+              localId: null,
+              qtd: null,
+              custo: o.valor.custoMedio || 0,
+            });
+            desenharLinhas();
+            recalcular();
+          },
+        },
+      );
+
+      conteudo.append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("div", {}, [
+              el("h2", { texto: `Alterar pedido — ${c.fornecedor || "sem fornecedor"}` }),
+              el("p", { classe: "muted", texto: "Mude quantidades, tire ou acrescente itens. Vale até a entrega chegar." }),
+            ]),
+            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => detalheCompra(c.id) }),
+          ]),
+          el("div", { classe: "rolagem-x" }, [
+            el("table", { classe: "planilha" }, [
+              el("thead", {}, [
+                el("tr", {}, [
+                  el("th", { texto: "Item" }),
+                  el("th", { texto: "Quantidade" }),
+                  el("th", { texto: "R$/un" }),
+                  el("th", { classe: "col-num", texto: "Total" }),
+                  el("th", { texto: "" }),
+                ]),
+              ]),
+              corpoTabela,
+            ]),
+          ]),
+          lupaAdicionar,
+          el("div", { classe: "cartao cartao-total" }, [
+            el("div", { classe: "cabecalho-secao" }, [el("span", { texto: "Total estimado" }), total]),
+            el("button", {
+              classe: "btn btn-primario btn-grande",
+              type: "button",
+              texto: "Salvar alterações",
+              onclick: async (ev) => {
+                const validas = linhas.filter((l) => l.insumoId && l.qtd > 0);
+                if (validas.length === 0) return avisar("O pedido precisa de ao menos um item com quantidade.", "erro");
+                ev.target.disabled = true;
+                try {
+                  await put(`/v1/venues/${ctx.venue}/compras/${c.id}/itens`, {
+                    itens: validas.map((l) => ({
+                      insumo_id: l.insumoId,
+                      local_id: l.localId,
+                      descricao_nota: l.descricao,
+                      quantidade_pedida: l.qtd,
+                      custo_unitario_pedido: l.custo || null,
+                    })),
+                  });
+                  avisar("Pedido alterado.", "ok");
+                  detalheCompra(c.id);
+                } catch (e) {
+                  avisar(e.message, "erro");
+                  ev.target.disabled = false;
+                }
+              },
+            }),
+          ]),
         ]),
       );
     }
