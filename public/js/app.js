@@ -7,6 +7,8 @@ import { conversas } from "./pages/conversas.js";
 import { reservas } from "./pages/reservas.js";
 import { programacao } from "./pages/programacao.js";
 import { canais } from "./pages/canais.js";
+import { canaisDaCasa } from "./pages/canaisDaCasa.js";
+import { pessoas } from "./pages/pessoas.js";
 import { agentes } from "./pages/agentes.js";
 import { agente } from "./pages/agente.js";
 import { empresa } from "./pages/empresa.js";
@@ -38,11 +40,20 @@ const PAGINAS = [
   { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "Atendimentos do agente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
   { id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
-  { id: "empresa", modulo: "agentes-ia", rotulo: "Empresa", icone: ICONES.organizacao, render: empresa, subtitulo: "Endereço, horários e informações da casa" },
   { id: "agentes", modulo: "agentes-ia", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
-  { id: "canais", modulo: "agentes-ia", rotulo: "Canais", icone: ICONES.canais, render: canais, subtitulo: "Por onde o agente atende" },
+  { id: "canais", modulo: "agentes-ia", rotulo: "Canais do agente", icone: ICONES.canais, render: canais, subtitulo: "O número que o agente atende, e o Instagram" },
   { id: "agente", modulo: "agentes-ia", rotulo: "Testar agente", icone: ICONES.raio, render: agente, subtitulo: "Converse como se fosse um cliente" },
-  { id: "organizacao", modulo: "agentes-ia", rotulo: "Organização", icone: ICONES.pessoa, render: organizacao, subtitulo: "Estabelecimentos, agentes e chaves" },
+
+  // ---- Ajustes da casa: fora de qualquer módulo ----
+  //
+  // Empresa, pessoas, canais e chaves não são produto — são o que toda casa
+  // tem. Moravam dentro de "Agentes de IA" por acidente histórico (o agente
+  // foi o primeiro módulo), e por causa disso um cliente que comprasse só o
+  // CMV não tinha onde cadastrar a própria casa nem criar login de gerente.
+  { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Endereço, horários e informações do estabelecimento" },
+  { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
+  { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número que envia checklist, avisos e confirmações" },
+  { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
 
   { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
@@ -148,20 +159,33 @@ const MODULOS = [
     icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
     pos: { x: -0.75, y: -0.5 },
   },
+  // ---- Fora da colmeia ----
+  //
+  // A colmeia é a vitrine do que a casa COMPROU. Estes dois não são produto:
+  // um é a mesa da equipe Brasa Food, o outro é a configuração da própria
+  // casa — que existe para todo cliente, tenha comprado o que tiver
+  // comprado. Ambos vivem em botões no cabeçalho.
+  {
+    id: "ajustes",
+    nome: "Ajustes da casa",
+    descricao: "Dados da casa, pessoas com acesso, canais de WhatsApp e chaves.",
+    icone: "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.6 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V8a1.65 1.65 0 001.51 1H22a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z",
+    // Não é módulo contratado: toda casa tem.
+    interno: true,
+  },
   {
     id: "plataforma",
     nome: "Administração",
     descricao:
       "Carteira de clientes, receita, custo de IA e cadastro de cliente novo. Só a equipe Brasa Food.",
     icone: "M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01",
-    // Só aparece na colmeia para administrador da plataforma.
     somentePlataforma: true,
-    pos: { x: 0, y: 1 },
+    interno: true,
   },
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
-const FAVOS_VAZIOS = [];
+const FAVOS_VAZIOS = [{ x: 0, y: 1 }];
 
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");
@@ -361,6 +385,10 @@ const DICA_PADRAO = "Toque num favo aceso para entrar.";
  */
 function moduloAceso(m) {
   if (m.somentePlataforma) return true;
+  // Ajustes da casa não se compra: toda casa tem a sua configuração, e sem
+  // ela um cliente que só comprou Checklist não teria como conectar o
+  // WhatsApp nem criar o login do gerente.
+  if (m.interno) return true;
   if (modulosDoCliente.get(m.id)?.ativo !== true) return false;
   // A restrição da pessoa, por cima da contratação da casa.
   return meusModulos === null || meusModulos.includes(m.id);
@@ -391,13 +419,11 @@ function montarHub() {
     linha.setAttribute("class", classe);
     linhas.append(linha);
   };
-  // O favo de administração só existe para a equipe; para o cliente aquele
-  // espaço volta a ser um favo vazio, como era antes.
-  const visiveis = MODULOS.filter((m) => !m.somentePlataforma || souPlataforma);
-  const vazios = [
-    ...FAVOS_VAZIOS,
-    ...MODULOS.filter((m) => m.somentePlataforma && !souPlataforma).map((m) => m.pos),
-  ];
+  // Só produto entra na colmeia. Ajustes e Administração vivem em botões no
+  // cabeçalho: um é configuração da casa, o outro é a mesa da equipe — nenhum
+  // dos dois é coisa que o cliente comprou.
+  const visiveis = MODULOS.filter((m) => !m.interno);
+  const vazios = [...FAVOS_VAZIOS];
 
   for (const m of visiveis) ligar(m.pos, moduloAceso(m) ? "linha linha-viva" : "linha");
   for (const f of vazios) ligar(f, "linha linha-apagada");
@@ -530,6 +556,9 @@ document.getElementById("btn-sair-hub").addEventListener("click", () => {
   esquecerChave();
   location.reload();
 });
+// Os dois que não são favo: configuração da casa e a mesa da equipe.
+document.getElementById("btn-ajustes").addEventListener("click", () => entrarNoModulo("ajustes"));
+document.getElementById("btn-plataforma").addEventListener("click", () => entrarNoModulo("plataforma"));
 
 // ---------- Entrada por e-mail e senha ----------
 const formAcesso = document.getElementById("form-acesso");
@@ -743,6 +772,7 @@ async function iniciar() {
     souPlataforma = false;
     meusModulos = null;
   }
+  document.getElementById("btn-plataforma").hidden = !souPlataforma;
 
   await carregarModulos();
 

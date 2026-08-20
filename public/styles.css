@@ -2142,3 +2142,15 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   background: #fff6e0;
 }
 .linha-motivo .campo { width: 100%; }
+
+/* Comando para copiar (conector administrativo, chaves). */
+.bloco-codigo {
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin: 8px 0;
+}

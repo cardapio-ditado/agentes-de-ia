@@ -113,7 +113,9 @@ export async function canais(raiz, ctx) {
 
   async function atualizar() {
     try {
-      const estado = await get(`/v1/whatsapp/status?venue=${encodeURIComponent(ctx.venue)}`);
+      const estado = await get(
+        `/v1/whatsapp/status?venue=${encodeURIComponent(ctx.venue)}&papel=agente`,
+      );
       desenharConectado(estado);
     } catch (e) {
       clearInterval(timer);
@@ -204,6 +206,7 @@ export async function canais(raiz, ctx) {
                 const res = await post("/v1/whatsapp/conectar", {
                   venue: ctx.venue,
                   agent: seletorAgente.value,
+                  papel: "agente",
                 });
                 avisar(
                   res.na_fila
@@ -225,7 +228,10 @@ export async function canais(raiz, ctx) {
             onclick: async (e) => {
               e.target.disabled = true;
               try {
-                const res = await post("/v1/whatsapp/desconectar", { venue: ctx.venue });
+                const res = await post("/v1/whatsapp/desconectar", {
+                  venue: ctx.venue,
+                  papel: "agente",
+                });
                 avisar(res.na_fila ? "Comando de desconexão enviado." : "Conector parado.", "ok");
               } catch (err) {
                 avisar(err.message, "erro");

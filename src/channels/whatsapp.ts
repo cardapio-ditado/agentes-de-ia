@@ -11,6 +11,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
+import type { PapelWhatsapp } from "../ponteWhatsapp.js";
 import {
   jidConhecidoDoTelefone,
   listPendingNotifications,
@@ -30,7 +31,15 @@ import {
  * Em troca: sem burocracia de aprovação e sem a janela de 24h da Cloud API.
  */
 
-const PASTA_SESSAO = resolve(process.cwd(), process.env.WHATSAPP_SESSION_DIR ?? ".whatsapp");
+/**
+ * A pasta da sessão é POR PAPEL.
+ *
+ * Duas conexões dividindo a mesma pasta significam uma sobrescrevendo as
+ * credenciais da outra — e as duas caem, alternadamente, sem que ninguém
+ * entenda por quê.
+ */
+const RAIZ_SESSAO = resolve(process.cwd(), process.env.WHATSAPP_SESSION_DIR ?? ".whatsapp");
+const pastaDaSessao = (papel: PapelWhatsapp) => resolve(RAIZ_SESSAO, papel);
 
 export type ConexaoStatus = "desconectado" | "aguardando_qr" | "conectando" | "conectado";
 
@@ -44,6 +53,15 @@ interface EstadoConector {
   /** Qual agente e estabelecimento este número está atendendo agora. */
   agentSlug: string | null;
   venueSlug: string | null;
+  /**
+   * O que este número faz: atender com IA ou só enviar.
+   *
+   * É a única coisa que separa as duas conexões. O administrativo recebe
+   * mensagem e não responde — o funcionário que manda "ok" depois do
+   * checklist fala com o vazio, em vez de ser atendido pela recepcionista
+   * virtual como se fosse cliente novo.
+   */
+  papel: PapelWhatsapp;
 }
 
 const estado: EstadoConector = {
@@ -54,6 +72,7 @@ const estado: EstadoConector = {
   iniciadoEm: 0,
   agentSlug: null,
   venueSlug: null,
+  papel: "agente",
 };
 
 let socket: WASocket | null = null;
@@ -64,8 +83,10 @@ export function estadoWhatsapp(): Readonly<EstadoConector> {
 }
 
 export interface OpcoesWhatsapp {
+  /** Vazio no papel administrativo: lá ninguém responde. */
   agentSlug: string;
   venueSlug: string;
+  papel?: PapelWhatsapp;
 }
 
 /**
@@ -74,13 +95,16 @@ export interface OpcoesWhatsapp {
  */
 export async function iniciarWhatsapp(opcoes: OpcoesWhatsapp): Promise<void> {
   parando = false;
-  await mkdir(PASTA_SESSAO, { recursive: true });
-  const { state, saveCreds } = await useMultiFileAuthState(PASTA_SESSAO);
+  const papel = opcoes.papel ?? "agente";
+  const pasta = pastaDaSessao(papel);
+  await mkdir(pasta, { recursive: true });
+  const { state, saveCreds } = await useMultiFileAuthState(pasta);
 
   estado.status = "conectando";
   estado.iniciadoEm = Date.now();
   estado.agentSlug = opcoes.agentSlug;
   estado.venueSlug = opcoes.venueSlug;
+  estado.papel = papel;
 
   socket = makeWASocket({
     auth: state,
@@ -121,10 +145,16 @@ async function aoAtualizarConexao(
     estado.qr = null;
     estado.ultimoErro = null;
     estado.telefone = socket?.user?.id?.split(":")[0] ?? null;
-    // A partir daqui as notificações de reserva saem por este número.
-    registrarProvedorWhatsapp(enviarPeloWhatsapp);
+    // Notificação sai preferencialmente pelo administrativo — é o número que
+    // a equipe conhece e para o qual pode responder sem ser atendida por uma
+    // IA. Sem administrativo conectado, o agente serve: melhor a mensagem
+    // sair pelo número do atendimento do que não sair.
+    registrarProvedorWhatsapp(enviarPeloWhatsapp, estado.papel);
     iniciarFilaDeNotificacoes();
-    console.log(`[whatsapp] conectado como ${estado.telefone ?? "?"}`);
+    console.log(
+      `[whatsapp:${estado.papel}] conectado como ${estado.telefone ?? "?"}` +
+        (estado.papel === "administrativo" ? " — só envia, não responde." : ""),
+    );
   }
 
   if (connection === "close") {
@@ -133,8 +163,10 @@ async function aoAtualizarConexao(
 
     estado.status = "desconectado";
     estado.ultimoErro = lastDisconnect?.error?.message ?? null;
-    // Sem conexão, as notificações voltam para a fila até reconectar.
-    registrarProvedorWhatsapp(null);
+    // Sem conexão, as notificações voltam para a fila até reconectar. Com o
+    // papel: derrubar o administrativo não pode apagar o provedor do agente,
+    // que continua vivo e serve de rede.
+    registrarProvedorWhatsapp(null, estado.papel);
     pararFilaDeNotificacoes();
 
     if (parando) return;
@@ -167,6 +199,20 @@ async function aoReceberMensagem(
   // agente responderia conversas de dias atrás como se fossem novas.
   const timestamp = normalizarTimestamp(mensagem.messageTimestamp);
   if (timestamp && timestamp * 1000 < estado.iniciadoEm) return;
+
+  // O NÚMERO ADMINISTRATIVO NÃO RESPONDE.
+  //
+  // Ele existe para enviar: link de checklist, confirmação de reserva, aviso
+  // de ruptura. Quem recebe é a equipe, e a equipe responde "ok" — se a IA
+  // atendesse, o cozinheiro seria tratado como cliente novo querendo reserva.
+  // Registrar em log basta: mensagem importante ("não abre o link") aparece
+  // para quem lê o log do conector, e o funcionário fala com o gerente pelo
+  // caminho de sempre.
+  if ((opcoes.papel ?? "agente") === "administrativo") {
+    const de = mensagem.pushName?.trim() || jid.split("@")[0];
+    console.log(`[whatsapp:adm] ${de} respondeu — número administrativo não atende.`);
+    return;
+  }
 
   const texto = extrairTexto(mensagem.message);
   if (!texto) {
@@ -371,7 +417,7 @@ export async function pararWhatsapp(): Promise<void> {
   estado.qr = null;
   estado.agentSlug = null;
   estado.venueSlug = null;
-  registrarProvedorWhatsapp(null);
+  registrarProvedorWhatsapp(null, estado.papel);
   pararFilaDeNotificacoes();
 }
 

@@ -4,6 +4,7 @@ import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whats
 import { dispararChecklistsAgendados } from "./checklists.js";
 import {
   consumirComandoPonte,
+  papelValido,
   primeiroVenueAtivo,
   publicarEstadoPonte,
 } from "./ponteWhatsapp.js";
@@ -40,21 +41,38 @@ const CICLO_PONTE_MS = 5_000;
 let venueDaPonte: { id: string; slug: string } | null = null;
 let cicloEmAndamento = false;
 
+/**
+ * Que número este processo é.
+ *
+ * Cada papel roda em SEU processo, com sua pasta de sessão e sua fila de
+ * comandos — dois processos também isolam falha: a sessão do agente cair não
+ * para o disparo de checklist.
+ *
+ *   WHATSAPP_PAPEL=administrativo  → só envia; mensagem recebida não é atendida
+ *   WHATSAPP_PAPEL=agente (padrão) → atende o cliente com IA
+ */
+const PAPEL_DESTE_CONECTOR = papelValido(process.env.WHATSAPP_PAPEL);
+
 async function cicloDaPonte(): Promise<void> {
   if (cicloEmAndamento) return;
   cicloEmAndamento = true;
   try {
-    const recebido = await consumirComandoPonte();
+    const recebido = await consumirComandoPonte(PAPEL_DESTE_CONECTOR);
     if (recebido) {
       venueDaPonte = { id: recebido.venueId, slug: recebido.venueSlug };
       const { comando } = recebido;
       console.log(`[ponte] comando "${comando.acao}" recebido do site.`);
 
-      if (comando.acao === "conectar" && comando.agent) {
+      if (comando.acao === "conectar") {
         // Reiniciar em vez de empilhar: um segundo iniciar() com socket vivo
         // criaria duas conexões brigando pela mesma sessão.
         if (estadoWhatsapp().status !== "desconectado") await pararWhatsapp();
-        await iniciarWhatsapp({ agentSlug: comando.agent, venueSlug: recebido.venueSlug });
+        await iniciarWhatsapp({
+          // No administrativo não há agente — e não precisa: ninguém responde.
+          agentSlug: comando.agent ?? "",
+          venueSlug: recebido.venueSlug,
+          papel: PAPEL_DESTE_CONECTOR,
+        });
       } else if (comando.acao === "desconectar") {
         await pararWhatsapp();
       }
@@ -65,7 +83,7 @@ async function cicloDaPonte(): Promise<void> {
     if (!venueDaPonte) venueDaPonte = await primeiroVenueAtivo();
     if (venueDaPonte) {
       const e = estadoWhatsapp();
-      await publicarEstadoPonte(venueDaPonte.id, {
+      await publicarEstadoPonte(venueDaPonte.id, PAPEL_DESTE_CONECTOR, {
         status: e.status,
         qr: e.qr,
         telefone: e.telefone,

@@ -66,7 +66,23 @@ export interface ResultadoEnvio {
 
 export type EnvioWhatsapp = (telefone: string, corpo: string) => Promise<ResultadoEnvio>;
 
-let provedorWhatsapp: EnvioWhatsapp | null = null;
+/**
+ * Um provedor por papel.
+ *
+ * Com duas conexões vivas (o número administrativo e o do agente), guardar um
+ * provedor só faria o ÚLTIMO a conectar virar o remetente de tudo — inclusive
+ * dos checklists, que sairiam pelo número do atendimento ao cliente. Quem
+ * envia é escolhido por prioridade, não por ordem de chegada.
+ */
+const provedores: { administrativo: EnvioWhatsapp | null; agente: EnvioWhatsapp | null } = {
+  administrativo: null,
+  agente: null,
+};
+
+/** O administrativo é o remetente natural; o do agente é a rede de segurança. */
+function provedorWhatsappAtivo(): EnvioWhatsapp | null {
+  return provedores.administrativo ?? provedores.agente;
+}
 
 /**
  * O conector Baileys se registra aqui ao conectar.
@@ -74,8 +90,11 @@ let provedorWhatsapp: EnvioWhatsapp | null = null;
  * A inversão existe para evitar ciclo de import: o conector já depende deste
  * módulo (e do agente), então este módulo não pode depender dele.
  */
-export function registrarProvedorWhatsapp(envio: EnvioWhatsapp | null): void {
-  provedorWhatsapp = envio;
+export function registrarProvedorWhatsapp(
+  envio: EnvioWhatsapp | null,
+  papel: "agente" | "administrativo" = "agente",
+): void {
+  provedores[papel] = envio;
 }
 
 function temCloudApi(): boolean {
@@ -89,7 +108,7 @@ function temCloudApi(): boolean {
  * impressa no log em vez de sumir silenciosamente.
  */
 export function canalAtivo(): "whatsapp" | "console" {
-  return provedorWhatsapp || temCloudApi() ? "whatsapp" : "console";
+  return provedorWhatsappAtivo() || temCloudApi() ? "whatsapp" : "console";
 }
 
 async function enviarPorConsole(destino: string, corpo: string): Promise<ResultadoEnvio> {
@@ -99,7 +118,8 @@ async function enviarPorConsole(destino: string, corpo: string): Promise<Resulta
 
 /** Baileys quando conectado; senão, Cloud API da Meta. */
 async function enviarPorWhatsapp(destino: string, corpo: string): Promise<ResultadoEnvio> {
-  if (provedorWhatsapp) return await provedorWhatsapp(destino, corpo);
+  const provedor = provedorWhatsappAtivo();
+  if (provedor) return await provedor(destino, corpo);
   if (!temCloudApi()) {
     return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado." };
   }

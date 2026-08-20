@@ -86,7 +86,7 @@ import {
   type MensagemGeracao,
   type RespostaItem,
 } from "./checklists.js";
-import { criarComandoPonte, lerEstadoPonte } from "./ponteWhatsapp.js";
+import { criarComandoPonte, lerEstadoPonte, papelValido } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
 import { versaoDoCodigo } from "./version.js";
 import {
@@ -157,6 +157,16 @@ import {
 } from "./cmv/estoque.js";
 import { lerNota, somaConfere, tipoAceito } from "./cmv/lerNota.js";
 import { sugerirFicha } from "./cmv/sugerirFicha.js";
+import {
+  atualizarPessoa,
+  criarPessoa,
+  ErroDeEquipe,
+  listarEquipe,
+  PAPEIS,
+  podeGerirEquipe,
+  redefinirSenha,
+  removerPessoa,
+} from "./equipe.js";
 import { tipoDeVendasAceito } from "./cmv/lerVendas.js";
 import {
   baixarVendas,
@@ -195,7 +205,11 @@ const PUBLIC_DIR = resolve(process.cwd(), "public");
  */
 export interface ConectorWhatsapp {
   estado(): unknown;
-  iniciar(opcoes: { agentSlug: string; venueSlug: string }): Promise<void>;
+  iniciar(opcoes: {
+    agentSlug: string;
+    venueSlug: string;
+    papel?: "agente" | "administrativo";
+  }): Promise<void>;
   parar(): Promise<void>;
 }
 
@@ -320,6 +334,14 @@ interface Acesso {
    * declarados, que é o mecanismo de limite dela.
    */
   modulos: string[] | null;
+  /**
+   * Papel e id de quem está agindo — só existem quando é gente, não máquina.
+   *
+   * A gestão de acessos precisa dos dois: o papel para saber quem pode mexer,
+   * o id para impedir que alguém remova o próprio acesso e fique de fora.
+   */
+  papel: string | null;
+  userId: string | null;
 }
 
 /** Papel de pessoa vira escopo. `viewer` olha, não mexe. */
@@ -355,6 +377,8 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso
       scopes: apiKey.scopes,
       plataformaAdmin: false,
       modulos: null,
+      papel: null,
+      userId: null,
     };
   }
 
@@ -380,6 +404,8 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso
     scopes,
     plataformaAdmin: sessao.plataformaAdmin,
     modulos: sessao.modulos,
+    papel: sessao.papel,
+    userId: sessao.userId,
   };
 }
 
@@ -408,6 +434,18 @@ async function comErroDeEstoque<T>(acao: () => Promise<T>): Promise<T> {
     return await acao();
   } catch (e) {
     if (e instanceof ErroDoEstoque) {
+      throw erro(e.status, e.status === 404 ? "not_found" : "invalid_request", e.message);
+    }
+    throw e;
+  }
+}
+
+/** O mesmo tratamento para os erros da gestão de acessos. */
+async function comErroDeEquipe<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDeEquipe) {
       throw erro(e.status, e.status === 404 ? "not_found" : "invalid_request", e.message);
     }
     throw e;
@@ -1741,6 +1779,71 @@ async function roteasApi(
     }
   }
 
+  // ---- Pessoas e acessos da casa ----
+  //
+  // Fora de /venues de propósito: acesso é da ORGANIZAÇÃO, não de um
+  // estabelecimento. E fora de qualquer módulo — toda casa tem gente, tenha
+  // comprado o que tiver comprado.
+  if (p[0] === "equipe") {
+    const chave = await exigirChave(req, "reservations:read");
+    const podeMexer = podeGerirEquipe(chave.papel ?? "", chave.plataformaAdmin);
+
+    if (metodo === "GET" && p.length === 1) {
+      return ok(res, {
+        papeis: PAPEIS,
+        pode_mexer: podeMexer,
+        eu: chave.userId,
+        pessoas: await comErroDeEquipe(() => listarEquipe(chave.org_id)),
+      });
+    }
+
+    // Daqui para baixo, mexe. Operação e leitura não passam.
+    if (!podeMexer) {
+      throw erro(403, "forbidden", "Só o dono e o gerente mexem em acessos.");
+    }
+
+    if (metodo === "POST" && p.length === 1) {
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const r = await comErroDeEquipe(() =>
+        criarPessoa({
+          orgId: chave.org_id,
+          email: texto(corpo, "email"),
+          nome: texto(corpo, "nome"),
+          papel: texto(corpo, "papel"),
+          modulos: Array.isArray(corpo.modulos) ? (corpo.modulos as string[]) : null,
+        }),
+      );
+      return ok(res, r, 201);
+    }
+
+    if (metodo === "PATCH" && p.length === 2) {
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      await comErroDeEquipe(() =>
+        atualizarPessoa({
+          orgId: chave.org_id,
+          userId: p[1]!,
+          papel: typeof corpo.papel === "string" ? corpo.papel : undefined,
+          modulos: "modulos" in corpo ? (corpo.modulos as string[] | null) : undefined,
+        }),
+      );
+      return ok(res, { salvo: true });
+    }
+
+    if (metodo === "DELETE" && p.length === 2) {
+      await comErroDeEquipe(() =>
+        removerPessoa({ orgId: chave.org_id, userId: p[1]!, euMesmo: chave.userId }),
+      );
+      return ok(res, { removida: true });
+    }
+
+    if (metodo === "POST" && p[2] === "senha" && p.length === 3) {
+      const senha = await comErroDeEquipe(() =>
+        redefinirSenha({ orgId: chave.org_id, userId: p[1]! }),
+      );
+      return ok(res, { senha_inicial: senha });
+    }
+  }
+
   // ---- Administração da plataforma (equipe Brasa Food) ----
   // GET /v1/admin/resumo — números da carteira inteira
   if (metodo === "GET" && p[0] === "admin" && p[1] === "resumo" && p.length === 2) {
@@ -2292,7 +2395,8 @@ async function roteasApi(
         ? await findVenueBySlugInOrg(chave.org_id, slug)
         : (await listVenuesInOrg(chave.org_id))[0];
       if (!venue) throw erro(404, "not_found", "Nenhum estabelecimento cadastrado.");
-      const estado = lerEstadoPonte(venue.settings ?? null);
+      const papel = papelValido(url.searchParams.get("papel"));
+      const estado = lerEstadoPonte(venue.settings ?? null, papel);
       if (!estado) {
         // Nunca houve conector publicando: nem heartbeat velho existe.
         return ok(res, {
@@ -2302,30 +2406,38 @@ async function roteasApi(
           agentSlug: null,
           venueSlug: venue.slug,
           versao: null,
+          papel,
           fonte: "ponte",
         });
       }
-      return ok(res, { ...estado, fonte: "ponte" });
+      return ok(res, { ...estado, papel, fonte: "ponte" });
     }
 
     if (metodo === "POST" && p[1] === "conectar") {
       const corpo = await lerJson(req);
       const venueSlug = texto(corpo, "venue");
-      const agentSlug = texto(corpo, "agent");
+      const papel = papelValido(textoOpcional(corpo, "papel"));
+
+      // O número administrativo não tem agente: ele só envia. Exigir um aqui
+      // impediria justamente o cliente que comprou Checklist sem Agente de
+      // conectar — o caso que motivou a separação.
+      const agentSlug = papel === "agente" ? texto(corpo, "agent") : "";
 
       // O conector responde por esta organização: confira antes de subir.
       const venue = await findVenueBySlugInOrg(chave.org_id, venueSlug);
-      const agentes = await listAgentsInOrg(chave.org_id);
-      if (!agentes.some((a) => a.slug === agentSlug)) {
-        throw erro(404, "not_found", `Agente "${agentSlug}" não encontrado nesta organização.`);
+      if (papel === "agente") {
+        const agentes = await listAgentsInOrg(chave.org_id);
+        if (!agentes.some((a) => a.slug === agentSlug)) {
+          throw erro(404, "not_found", `Agente "${agentSlug}" não encontrado nesta organização.`);
+        }
       }
 
       if (conectorWhatsapp) {
-        await conectorWhatsapp.iniciar({ agentSlug, venueSlug });
+        await conectorWhatsapp.iniciar({ agentSlug, venueSlug, papel });
         return ok(res, conectorWhatsapp.estado());
       }
-      await criarComandoPonte(venue.id, { acao: "conectar", agent: agentSlug });
-      return ok(res, { na_fila: true, acao: "conectar" });
+      await criarComandoPonte(venue.id, papel, { acao: "conectar", agent: agentSlug || undefined });
+      return ok(res, { na_fila: true, acao: "conectar", papel });
     }
 
     if (metodo === "POST" && p[1] === "desconectar") {
@@ -2335,12 +2447,13 @@ async function roteasApi(
       }
       const corpo = await lerJson(req);
       const slug = textoOpcional(corpo, "venue");
+      const papel = papelValido(textoOpcional(corpo, "papel"));
       const venue = slug
         ? await findVenueBySlugInOrg(chave.org_id, slug)
         : (await listVenuesInOrg(chave.org_id))[0];
       if (!venue) throw erro(404, "not_found", "Nenhum estabelecimento cadastrado.");
-      await criarComandoPonte(venue.id, { acao: "desconectar" });
-      return ok(res, { na_fila: true, acao: "desconectar" });
+      await criarComandoPonte(venue.id, papel, { acao: "desconectar" });
+      return ok(res, { na_fila: true, acao: "desconectar", papel });
     }
   }
 
