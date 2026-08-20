@@ -76,10 +76,16 @@ como_usuario npx tsc -p tsconfig.build.json
 verde "Código compilado."
 
 azul "== 2/3  Serviço do conector administrativo =="
-# As duas variáveis vêm DEPOIS do EnvironmentFile de propósito: o .env define
-# PORT=3000 (a do agente), e aqui isso precisa ser sobrescrito. Dois processos
-# na mesma porta brigam, e o segundo morre com "address in use" — um erro que
-# não diz nada sobre a causa real.
+# O papel e a porta vão no ExecStart, via `env`, e NÃO em Environment=.
+#
+# Parece a mesma coisa e não é: no systemd, as variáveis lidas de
+# EnvironmentFile sobrescrevem as de Environment=, seja qual for a ordem das
+# linhas. Como o .env define PORT=3000 (a porta do agente), um Environment=
+# aqui era silenciosamente ignorado e este serviço subia na 3000 — brigando
+# com o conector do agente e morrendo em laço com "EADDRINUSE", um erro que
+# fala de porta ocupada sem dizer que a porta pedida nem chegou a ser lida.
+#
+# Variável na linha de comando vence tudo, e não depende de precedência.
 cat > "/etc/systemd/system/$SERVICO.service" <<UNITEOF
 [Unit]
 Description=Brasa Food — WhatsApp da casa (administrativo, só envia)
@@ -91,9 +97,7 @@ Type=simple
 User=$USUARIO
 WorkingDirectory=$DESTINO
 EnvironmentFile=$DESTINO/.env
-Environment=WHATSAPP_PAPEL=administrativo
-Environment=PORT=$PORTA
-ExecStart=/usr/bin/node dist/src/server.js
+ExecStart=/usr/bin/env WHATSAPP_PAPEL=administrativo PORT=$PORTA /usr/bin/node dist/src/server.js
 Restart=always
 RestartSec=5
 StandardOutput=journal
