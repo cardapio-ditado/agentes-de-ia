@@ -102,7 +102,7 @@ export async function jogos(raiz, ctx) {
       if (jogo.jaNaAgenda) {
         return el("div", { classe: "linha-tabela" }, [
           el("span", { classe: "linha-principal" }, [
-            el("strong", { texto: `${jogo.mandante} x ${jogo.visitante}` }),
+            el("strong", { classe: "nome-inteiro", texto: `${jogo.mandante} x ${jogo.visitante}` }),
             el("small", { classe: "muted", texto: `${dia} · ${hora}${jogo.estadio ? ` · ${jogo.estadio}` : ""}` }),
           ]),
           el("span", { classe: "linha-detalhes" }, [etiqueta("já na agenda", "etiqueta-ok")]),
@@ -120,12 +120,14 @@ export async function jogos(raiz, ctx) {
         el("span", { classe: "linha-principal" }, [
           el("span", { style: "display:flex;align-items:center;gap:8px" }, [
             caixa,
-            el("strong", { texto: `${jogo.mandante} x ${jogo.visitante}` }),
+            el("strong", { classe: "nome-inteiro", texto: `${jogo.mandante} x ${jogo.visitante}` }),
           ]),
-          el("small", { classe: "muted", texto: `${dia} · ${hora}${jogo.estadio ? ` · ${jogo.estadio}` : ""}` }),
-        ]),
-        el("span", { classe: "linha-detalhes" }, [
-          el("small", { classe: "muted", texto: jogo.rodada ?? "" }),
+          // Rodada e estádio embaixo, junto da data: à direita eles roubavam
+          // a largura do confronto, que é o que a pessoa lê para decidir.
+          el("small", {
+            classe: "muted",
+            texto: [dia, hora, jogo.rodada, jogo.estadio].filter(Boolean).join(" · "),
+          }),
         ]),
       ]);
     }

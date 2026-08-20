@@ -10,9 +10,20 @@ import { COMPETICOES, converter, tituloDoJogo } from "./jogos.js";
  * a ordem do array não é garantida, e é por isso que o código procura em vez
  * de pegar [0] e [1].
  */
+/**
+ * Datas relativas ao momento do teste, não fixas.
+ *
+ * O conversor descarta jogo que já acabou — com data fixa no código, a suíte
+ * passaria hoje e começaria a falhar sozinha quando aquele dia ficasse no
+ * passado, sem nada ter mudado no comportamento.
+ */
+const emDias = (n: number) => new Date(Date.now() + n * 864e5).toISOString();
+const DEPOIS = emDias(3);
+const ANTES = emDias(-3);
+
 const evento = (extra: Record<string, unknown> = {}) => ({
   id: "704946",
-  date: "2026-08-23T00:00Z",
+  date: DEPOIS,
   name: "Palmeiras at Cuiabá",
   shortName: "CUI vs PAL",
   season: { year: 2026, slug: "brazilian-serie-a" },
@@ -20,7 +31,7 @@ const evento = (extra: Record<string, unknown> = {}) => ({
   competitions: [
     {
       id: "704946",
-      date: "2026-08-23T00:00Z",
+      date: DEPOIS,
       venue: { fullName: "Arena Pantanal" },
       status: { type: { state: "pre", completed: false, description: "Scheduled" } },
       competitors: [
@@ -52,7 +63,7 @@ test("jogo já encerrado não aparece para escolher", () => {
   const encerrado = evento({
     competitions: [
       {
-        date: "2026-08-20T00:00Z",
+        date: ANTES,
         status: { type: { state: "post", completed: true } },
         competitors: [
           { homeAway: "home", team: { displayName: "A" } },
@@ -64,12 +75,47 @@ test("jogo já encerrado não aparece para escolher", () => {
   assert.equal(converter([encerrado]).length, 0);
 });
 
+test("jogo que já terminou some mesmo sem a fonte marcar como encerrado", () => {
+  // O intervalo pedido começa ONTEM, para não perder os jogos desta noite por
+  // causa do fuso — então o corte pelo relógio é o que impede a lista de
+  // abrir com a rodada de ontem no topo.
+  const ontem = evento({
+    id: "velho",
+    competitions: [
+      {
+        date: ANTES,
+        competitors: [
+          { homeAway: "home", team: { displayName: "A" } },
+          { homeAway: "away", team: { displayName: "B" } },
+        ],
+      },
+    ],
+  });
+  assert.equal(converter([ontem]).length, 0);
+});
+
+test("jogo que começou agora ainda aparece — dá para marcar em cima da hora", () => {
+  const jaComecou = evento({
+    id: "agora",
+    competitions: [
+      {
+        date: new Date(Date.now() - 30 * 60_000).toISOString(),
+        competitors: [
+          { homeAway: "home", team: { displayName: "A" } },
+          { homeAway: "away", team: { displayName: "B" } },
+        ],
+      },
+    ],
+  });
+  assert.equal(converter([jaComecou]).length, 1);
+});
+
 test("jogo sem os dois times é descartado", () => {
   // Importar isso criaria um evento que o agente leria em voz alta.
   const semVisitante = evento({
     competitions: [
       {
-        date: "2026-08-23T00:00Z",
+        date: DEPOIS,
         competitors: [{ homeAway: "home", team: { displayName: "Cuiabá" } }],
       },
     ],
@@ -100,8 +146,8 @@ test("jogo sem id ou sem data é descartado", () => {
 test("a data vem da partida, não do evento de fora", () => {
   // Quando os dois divergem, quem manda é a partida — é ela que tem o horário
   // de bola rolando.
-  const [jogo] = converter([evento({ date: "2026-01-01T00:00Z" })]);
-  assert.equal(jogo!.quando, "2026-08-23T00:00Z");
+  const [jogo] = converter([evento({ date: emDias(90) })]);
+  assert.equal(jogo!.quando, DEPOIS);
 });
 
 test("a lista sai do jogo mais próximo para o mais distante", () => {
@@ -118,11 +164,7 @@ test("a lista sai do jogo mais próximo para o mais distante", () => {
         },
       ],
     });
-  const jogos = converter([
-    em("3", "2026-09-01T20:00Z"),
-    em("1", "2026-08-22T21:30Z"),
-    em("2", "2026-08-25T18:00Z"),
-  ]);
+  const jogos = converter([em("3", emDias(20)), em("1", emDias(2)), em("2", emDias(9))]);
   assert.deepEqual(
     jogos.map((j) => j.id),
     ["1", "2", "3"],
@@ -141,7 +183,7 @@ test("campos ausentes viram nulo em vez de 'undefined' na tela", () => {
     id: "9",
     competitions: [
       {
-        date: "2026-08-23T00:00Z",
+        date: DEPOIS,
         competitors: [
           { homeAway: "home", team: { displayName: "A" } },
           { homeAway: "away", team: { displayName: "B" } },

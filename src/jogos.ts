@@ -109,13 +109,18 @@ export async function proximosJogos(params: {
     return guardado.jogos;
   }
 
-  const hoje = new Date();
-  const ate = new Date(hoje.getTime() + dias * 864e5);
+  const agora = new Date();
+  // O intervalo começa ONTEM, de propósito. `dates` é interpretado em UTC, e
+  // no Brasil o dia UTC vira antes do nosso: às 21h de Cuiabá já é o dia
+  // seguinte em UTC, e pedir "de hoje em diante" perderia justamente os jogos
+  // desta noite — os mais prováveis de alguém querer marcar.
+  const de = new Date(agora.getTime() - 864e5);
+  const ate = new Date(agora.getTime() + dias * 864e5);
   // Sem o intervalo, o placar traz só os jogos de HOJE — e a tela existe para
   // escolher o que vai passar nas próximas semanas.
   const url =
     `${HOST}/${params.competicaoId}/scoreboard` +
-    `?dates=${comoDataDoEspn(hoje)}-${comoDataDoEspn(ate)}`;
+    `?dates=${comoDataDoEspn(de)}-${comoDataDoEspn(ate)}`;
 
   let resposta: Response;
   try {
@@ -149,6 +154,9 @@ export async function proximosJogos(params: {
  * aproveitável é justamente o que precisa estar coberto — e verificá-la não
  * deveria depender de a API estar no ar.
  */
+/** Duração de um jogo com intervalo e acréscimos, em minutos. */
+const DURACAO_JOGO_MIN = 120;
+
 export function converter(bruto: unknown[]): JogoDaApi[] {
   const jogos: JogoDaApi[] = [];
 
@@ -170,9 +178,13 @@ export function converter(bruto: unknown[]): JogoDaApi[] {
     // importar isso criaria um evento que o agente leria em voz alta.
     if (!id || typeof quando !== "string" || !nomeCasa || !nomeFora) continue;
 
-    // Jogo que já terminou não serve para escolher o que vai passar. O
-    // intervalo pedido começa hoje, então isto pega só os de mais cedo.
+    // Jogo que já acabou não serve para escolher o que vai passar. São dois
+    // testes porque um só não basta: o `completed` da fonte é a verdade
+    // quando existe, mas o intervalo agora começa ontem para não perder os
+    // jogos desta noite — e sem o corte pelo relógio a lista abriria com a
+    // rodada de ontem no topo.
     if (partida?.status?.type?.completed === true) continue;
+    if (Date.parse(quando) + DURACAO_JOGO_MIN * 60_000 < Date.now()) continue;
 
     jogos.push({
       id: String(id),
@@ -225,9 +237,6 @@ export async function jogosJaNaAgenda(venueId: string, ids: string[]): Promise<S
   }
   return naAgenda;
 }
-
-/** Duração padrão de um jogo com intervalo e acréscimos, em minutos. */
-const DURACAO_JOGO_MIN = 120;
 
 /**
  * Põe os jogos escolhidos na programação.

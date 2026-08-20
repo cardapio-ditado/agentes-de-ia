@@ -2032,11 +2032,22 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  /* Cresce para ocupar a sobra: sem isto a coluna da direita fica com o
+     espaço e o nome principal é cortado cedo demais. */
+  flex: 1;
 }
 .linha-principal strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Nome que precisa ser lido inteiro — "Atlético Goianiense x Vasco da Gama"
+   com reticências não identifica o jogo. Quebra em duas linhas quando não
+   couber, em vez de esconder o final. */
+.linha-principal .nome-inteiro {
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.25;
 }
 .linha-detalhes {
   display: flex;
