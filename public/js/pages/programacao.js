@@ -26,6 +26,13 @@ const AVISO_RENOVACAO_DIAS = 14;
 /** Agenda do estabelecimento: é daqui que o agente tira o que contar. */
 export async function programacao(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
+  const calendario = el("div", { hidden: true });
+
+  /** Tudo que veio do servidor. Os filtros trabalham em cima disto. */
+  let eventosCarregados = [];
+  let visao = "lista";
+  /** Primeiro dia do mês que o calendário mostra. */
+  let mesVisivel = inicioDoMes(new Date());
 
   const campos = {
     titulo: el("input", { required: true, placeholder: "Samba de Raiz — Grupo X" }),
@@ -104,17 +111,84 @@ export async function programacao(raiz, ctx) {
     el("button", { classe: "btn btn-primario", type: "submit", texto: "Adicionar", style: "margin-top:12px" }),
   ]);
 
+  /* ---------- filtros e visões ---------- */
+
+  const filtroTipo = el("select", { classe: "select" }, [
+    el("option", { value: "", texto: "Todos os tipos" }),
+    ...TIPOS.map(([v, r]) => el("option", { value: v, texto: r })),
+  ]);
+  filtroTipo.addEventListener("change", desenhar);
+
+  // Na lista, o período é um recorte pronto — "o que vem por aí" é o que se
+  // olha 90% das vezes. No calendário, o período É o mês na tela, então o
+  // seletor dá lugar à navegação entre meses.
+  const filtroPeriodo = el("select", { classe: "select" }, [
+    el("option", { value: "futuros", texto: "Próximos" }),
+    el("option", { value: "30", texto: "Próximos 30 dias" }),
+    el("option", { value: "passados", texto: "Já aconteceram" }),
+    el("option", { value: "tudo", texto: "Tudo" }),
+  ]);
+  filtroPeriodo.addEventListener("change", desenhar);
+
+  const tituloMes = el("strong", { style: "min-width:11ch;text-align:center" });
+  const navegacaoMes = el("div", { classe: "linha-campos", style: "align-items:center" }, [
+    el("button", {
+      classe: "btn btn-peq", type: "button", texto: "‹", title: "Mês anterior",
+      onclick: () => { mesVisivel = somarMeses(mesVisivel, -1); desenhar(); },
+    }),
+    tituloMes,
+    el("button", {
+      classe: "btn btn-peq", type: "button", texto: "›", title: "Próximo mês",
+      onclick: () => { mesVisivel = somarMeses(mesVisivel, 1); desenhar(); },
+    }),
+    el("button", {
+      classe: "btn btn-peq", type: "button", texto: "Hoje",
+      onclick: () => { mesVisivel = inicioDoMes(new Date()); desenhar(); },
+    }),
+  ]);
+
+  const rotuloPeriodo = el("label", { classe: "campo-rotulado", style: "flex:1" }, [
+    el("span", { texto: "Período" }),
+    filtroPeriodo,
+    navegacaoMes,
+  ]);
+
+  function botaoVisao(id, texto) {
+    return el("button", {
+      classe: `aba ${visao === id ? "aba-ativa" : ""}`.trim(),
+      type: "button",
+      texto,
+      "data-visao": id,
+      onclick: () => {
+        visao = id;
+        for (const b of raiz.querySelectorAll("[data-visao]")) {
+          b.classList.toggle("aba-ativa", b.dataset.visao === id);
+        }
+        desenhar();
+      },
+    });
+  }
+
   raiz.append(
     el("div", { classe: "pilha" }, [
       form,
-      el("section", {}, [
+      el("section", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
             el("h2", { texto: "Agenda" }),
             el("p", { classe: "muted", texto: "O agente cita estes itens quando o cliente pergunta." }),
           ]),
+          el("div", { classe: "abas" }, [botaoVisao("lista", "Lista"), botaoVisao("calendario", "Calendário")]),
+        ]),
+        el("div", { classe: "linha-campos" }, [
+          el("label", { classe: "campo-rotulado", style: "flex:1" }, [
+            el("span", { texto: "Tipo" }),
+            filtroTipo,
+          ]),
+          rotuloPeriodo,
         ]),
         lista,
+        calendario,
       ]),
     ]),
   );
@@ -123,17 +197,155 @@ export async function programacao(raiz, ctx) {
 
   async function carregarEventos() {
     limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
-    const eventos = await get(`/v1/venues/${ctx.venue}/events`);
+    eventosCarregados = await get(`/v1/venues/${ctx.venue}/events`);
+    desenhar();
+  }
+
+  /** Redesenha a visão atual com os filtros aplicados. Não vai ao servidor. */
+  function desenhar() {
+    const noCalendario = visao === "calendario";
+    lista.hidden = noCalendario;
+    calendario.hidden = !noCalendario;
+    // No calendário o período é o mês navegado; o seletor sairia sobrando e
+    // ainda daria a impressão de que os dois recortes se somam.
+    filtroPeriodo.hidden = noCalendario;
+    navegacaoMes.hidden = !noCalendario;
+
+    if (noCalendario) desenharCalendario();
+    else desenharLista();
+  }
+
+  /** Aplica os filtros. O de período só vale na lista. */
+  function filtrados({ comPeriodo }) {
+    const tipo = filtroTipo.value;
+    const agora = new Date();
+    return eventosCarregados.filter((ev) => {
+      if (tipo && ev.kind !== tipo) return false;
+      if (!comPeriodo) return true;
+      const quando = new Date(ev.starts_at);
+      switch (filtroPeriodo.value) {
+        case "futuros":
+          return quando >= agora;
+        case "30":
+          return quando >= agora && quando <= new Date(agora.getTime() + 30 * 864e5);
+        case "passados":
+          return quando < agora;
+        default:
+          return true;
+      }
+    });
+  }
+
+  function desenharLista() {
     limpar(lista);
+    const eventos = filtrados({ comPeriodo: true });
 
     if (eventos.length === 0) {
-      lista.append(vazio("Nada cadastrado", "Sem programação, o agente não tem o que contar da casa."));
+      lista.append(
+        eventosCarregados.length === 0
+          ? vazio("Nada cadastrado", "Sem programação, o agente não tem o que contar da casa.")
+          : vazio("Nada neste recorte", "Nenhum item bate com o tipo e o período escolhidos."),
+      );
       return;
     }
 
     const { solos, series } = agruparPorSerie(eventos);
     for (const ev of solos) lista.append(cartaoSolo(ev));
     for (const ocorrencias of series.values()) lista.append(cartaoSerie(ocorrencias));
+  }
+
+  /**
+   * O mês inteiro numa grade.
+   *
+   * É a visão que responde "que dia está vazio?" — pergunta que a lista não
+   * responde, porque nela um buraco na agenda é a ausência de uma linha, e
+   * ninguém enxerga o que não está escrito.
+   *
+   * A grade começa no domingo da semana do dia 1 e vai até completar a última
+   * semana, para os dias do mês vizinho aparecerem apagados no lugar certo em
+   * vez de a primeira semana começar torta.
+   */
+  function desenharCalendario() {
+    limpar(calendario);
+    tituloMes.textContent = mesVisivel
+      .toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+      .replace(/^./, (c) => c.toUpperCase());
+
+    // Um balde por dia, para a montagem da grade ser uma consulta e não uma
+    // varredura por célula.
+    const porDia = new Map();
+    for (const ev of filtrados({ comPeriodo: false })) {
+      const chave = chaveDoDia(new Date(ev.starts_at));
+      if (!porDia.has(chave)) porDia.set(chave, []);
+      porDia.get(chave).push(ev);
+    }
+    for (const doDia of porDia.values()) {
+      doDia.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+    }
+
+    const primeiro = new Date(mesVisivel);
+    const inicioGrade = new Date(primeiro);
+    inicioGrade.setDate(1 - primeiro.getDay());
+
+    // Semanas INTEIRAS que cobrem o mês: 5 na maioria, 6 quando o mês começa
+    // tarde na semana (agosto/2026 e maio/2027 são assim). Cortar por número
+    // fixo de células deixaria a última linha pela metade, com a grade
+    // desalinhada justamente nos meses mais compridos.
+    const diasNoMes = new Date(mesVisivel.getFullYear(), mesVisivel.getMonth() + 1, 0).getDate();
+    const totalCelulas = Math.ceil((primeiro.getDay() + diasNoMes) / 7) * 7;
+
+    const celulas = [];
+    const hoje = chaveDoDia(new Date());
+    for (let i = 0; i < totalCelulas; i++) {
+      const dia = new Date(inicioGrade);
+      dia.setDate(inicioGrade.getDate() + i);
+
+      const chave = chaveDoDia(dia);
+      const doMes = dia.getMonth() === mesVisivel.getMonth();
+      const doDia = porDia.get(chave) ?? [];
+
+      celulas.push(
+        el("div", { classe: `dia-cal ${doMes ? "" : "dia-fora"} ${chave === hoje ? "dia-hoje" : ""}`.trim() }, [
+          el("span", { classe: "dia-numero", texto: String(dia.getDate()) }),
+          ...doDia.map((ev) =>
+            el("span", {
+              classe: `item-cal item-${ev.kind}`,
+              // O detalhe completo no title: a célula é estreita e cortar o
+              // nome da atração é o mesmo que não mostrar.
+              title: `${horaCurta(ev.starts_at)} — ${ev.title}${ev.description ? `\n${ev.description}` : ""}`,
+              texto: `${horaCurta(ev.starts_at)} ${ev.title}`,
+            }),
+          ),
+        ]),
+      );
+    }
+
+    calendario.append(
+      el("div", { classe: "grade-cal" }, [
+        ...["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) =>
+          el("span", { classe: "cabecalho-cal", texto: d }),
+        ),
+        ...celulas,
+      ]),
+      el("p", { classe: "muted", texto: "Cada faixa é um item da agenda. Passe o mouse para ver o detalhe; para editar ou excluir, use a Lista." }),
+    );
+  }
+
+  // `function` e não `const`: `mesVisivel` é inicializado no topo da tela
+  // chamando `inicioDoMes`, e uma seta declarada aqui embaixo só existe a
+  // partir desta linha — a tela quebraria antes de desenhar.
+  function inicioDoMes(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+  function somarMeses(d, n) {
+    return new Date(d.getFullYear(), d.getMonth() + n, 1);
+  }
+  /** Dia no fuso de quem olha — o mesmo critério que agrupa os eventos. */
+  function chaveDoDia(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  function horaCurta(iso) {
+    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
 
   function agruparPorSerie(eventos) {
