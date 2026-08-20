@@ -1302,7 +1302,7 @@ async function roteasApi(
 
     // ---- Jogos: a agenda esportiva que vira programação ----
 
-    // GET /v1/venues/:slug/jogos?competicao=71 — o que vem por aí
+    // GET /v1/venues/:slug/jogos?competicao=bra.1 — o que vem por aí
     if (metodo === "GET" && recurso === "jogos" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);

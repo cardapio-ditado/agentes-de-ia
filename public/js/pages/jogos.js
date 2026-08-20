@@ -51,7 +51,11 @@ export async function jogos(raiz, ctx) {
       ),
     );
     seletor.addEventListener("change", () => {
-      competicaoAtual = Number(seletor.value);
+      // Sem Number(): o código da competição é texto ("bra.copa_do_brazil"),
+      // e convertê-lo dava NaN — a URL saía com competicao=NaN, o servidor
+      // não reconhecia e caía no primeiro da lista. Trocar de campeonato
+      // sempre voltava para o Brasileirão, sem erro nenhum na tela.
+      competicaoAtual = seletor.value;
       desenhar();
     });
 
