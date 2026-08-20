@@ -12,6 +12,7 @@ import { pessoas } from "./pages/pessoas.js";
 import { agentes } from "./pages/agentes.js";
 import { agente } from "./pages/agente.js";
 import { empresa } from "./pages/empresa.js";
+import { agenteSabe } from "./pages/agenteSabe.js";
 import { organizacao } from "./pages/organizacao.js";
 import { checklists } from "./pages/checklists.js";
 import { execucoes } from "./pages/execucoes.js";
@@ -41,6 +42,7 @@ const PAGINAS = [
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
   { id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
   { id: "agentes", modulo: "agentes-ia", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
+  { id: "agente-sabe", modulo: "agentes-ia", rotulo: "O que o agente sabe", icone: ICONES.organizacao, render: agenteSabe, subtitulo: "Endereço, horários e as respostas às perguntas do cliente" },
   { id: "canais", modulo: "agentes-ia", rotulo: "Canais do agente", icone: ICONES.canais, render: canais, subtitulo: "O número que o agente atende, e o Instagram" },
   { id: "agente", modulo: "agentes-ia", rotulo: "Testar agente", icone: ICONES.raio, render: agente, subtitulo: "Converse como se fosse um cliente" },
 
@@ -50,7 +52,7 @@ const PAGINAS = [
   // tem. Moravam dentro de "Agentes de IA" por acidente histórico (o agente
   // foi o primeiro módulo), e por causa disso um cliente que comprasse só o
   // CMV não tinha onde cadastrar a própria casa nem criar login de gerente.
-  { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Endereço, horários e informações do estabelecimento" },
+  { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Nome, contato e o fuso horário que todos os módulos usam" },
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
   { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número que envia checklist, avisos e confirmações" },
   { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
