@@ -118,7 +118,17 @@ systemctl enable "$SERVICO" >/dev/null
 # botões Conectar/Desconectar do painel param de responder, em silêncio.
 systemctl restart brasa-food
 systemctl restart "$SERVICO"
-sleep 4
+
+# Espera até 30s em vez de um sleep fixo: node com Baileys leva alguns
+# segundos para subir, e um sleep curto declara falha num serviço que só
+# estava demorando — mandando a pessoa depurar um problema que não existe.
+azul "Aguardando os dois responderem…"
+for _ in $(seq 1 30); do
+  if systemctl is-active --quiet brasa-food && systemctl is-active --quiet "$SERVICO"; then
+    break
+  fi
+  sleep 1
+done
 
 echo
 falhou=0
@@ -126,9 +136,13 @@ systemctl is-active --quiet brasa-food || { vermelho "brasa-food (agente) não s
 systemctl is-active --quiet "$SERVICO" || { vermelho "$SERVICO (administrativo) não subiu."; falhou=1; }
 
 if [ "$falhou" -eq 1 ]; then
-  vermelho "Veja o motivo:"
-  echo "  journalctl -u brasa-food -n 30 --no-pager"
-  echo "  journalctl -u $SERVICO -n 30 --no-pager"
+  echo
+  vermelho "---------- últimas linhas do log ----------"
+  # Mostra o motivo aqui mesmo: pedir para a pessoa rodar outro comando é uma
+  # ida e volta a mais entre ela e a resposta, e o erro real fica a um passo
+  # de distância de quem está tentando resolver.
+  journalctl -u brasa-food-admin -n 25 --no-pager || true
+  vermelho "------------------------------------------"
   exit 1
 fi
 
