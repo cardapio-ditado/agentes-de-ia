@@ -25,6 +25,24 @@ vermelho() { printf '\033[31m%s\033[0m\n' "$1"; }
 verde()    { printf '\033[32m%s\033[0m\n' "$1"; }
 azul()     { printf '\033[36m%s\033[0m\n' "$1"; }
 
+# Roda um comando como o usuário do serviço.
+#
+# VPS enxuta costuma não ter `sudo` — você entra como root e pronto. Sem esta
+# ponte, o instalador morre com "sudo: command not found" num passo que não
+# tem nada a ver com o problema real.
+como_usuario() {
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -u "$USUARIO" -H "$@"
+  else
+    # `su` recebe uma STRING, não uma lista: cada argumento é citado para não
+    # quebrar em espaços, e o cd preserva o diretório de trabalho.
+    local cmd=""
+    local arg
+    for arg in "$@"; do cmd="$cmd $(printf '%q' "$arg")"; done
+    su "$USUARIO" -s /bin/bash -c "cd $(printf '%q' "$PWD") &&$cmd"
+  fi
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   vermelho "Rode como root:  sudo bash instalar-vps.sh"
   exit 1
@@ -65,7 +83,7 @@ git config --global --add safe.directory "$DESTINO" 2>/dev/null || true
 
 if [ -d "$DESTINO/.git" ]; then
   # Atualiza como o dono da pasta, para os arquivos não trocarem de dono.
-  sudo -u "$USUARIO" -H git -C "$DESTINO" pull --ff-only
+  como_usuario git -C "$DESTINO" pull --ff-only
 else
   git clone --depth 1 "$REPO" "$DESTINO"
 fi
@@ -124,10 +142,10 @@ fi
 
 azul "== 5/6  Dependências e build =="
 cd "$DESTINO"
-sudo -u "$USUARIO" -H npm ci --omit=dev --no-audit --no-fund 2>/dev/null \
-  || sudo -u "$USUARIO" -H npm install --no-audit --no-fund
-sudo -u "$USUARIO" -H npm install --no-save typescript >/dev/null 2>&1 || true
-sudo -u "$USUARIO" -H npx tsc -p tsconfig.build.json
+como_usuario npm ci --omit=dev --no-audit --no-fund 2>/dev/null \
+  || como_usuario npm install --no-audit --no-fund
+como_usuario npm install --no-save typescript >/dev/null 2>&1 || true
+como_usuario npx tsc -p tsconfig.build.json
 
 azul "== 6/6  Serviço =="
 cat > "/etc/systemd/system/$SERVICO.service" <<UNITEOF
