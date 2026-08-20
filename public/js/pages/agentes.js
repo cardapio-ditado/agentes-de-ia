@@ -41,6 +41,31 @@ export async function agentes(raiz, ctx) {
   raiz.append(conteudo);
   await listar();
 
+  /**
+   * Excluir agente.
+   *
+   * O servidor recusa quem já atendeu alguém — apagar levaria junto todas as
+   * conversas dele. Aqui o aviso é antes: quem está prestes a apagar precisa
+   * saber que existe a alternativa de só desligar, senão descobre pelo erro.
+   */
+  async function excluir(a) {
+    if (
+      !confirm(
+        `Excluir o agente "${a.name}"?\n\n` +
+          "Só funciona para agente que nunca atendeu ninguém. " +
+          "Se ele já conversou com clientes, o caminho é abrir em Editar e desligar — " +
+          "assim ele para de atender e o histórico fica guardado.",
+      )
+    ) return;
+    try {
+      await del(`/v1/agents/${a.slug}`);
+      avisar(`Agente "${a.name}" excluído.`, "ok");
+      await listar();
+    } catch (e) {
+      avisar(e.message, "erro");
+    }
+  }
+
   async function listar() {
     limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
     const lista = await get("/v1/agents?all=1");
@@ -87,6 +112,13 @@ export async function agentes(raiz, ctx) {
                 type: "button",
                 texto: "Editar",
                 onclick: () => editor(a.slug),
+              }),
+              el("button", {
+                classe: "btn-icone",
+                type: "button",
+                title: "Excluir agente",
+                texto: "🗑",
+                onclick: () => excluir(a),
               }),
             ]),
           ]),

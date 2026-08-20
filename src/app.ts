@@ -5,7 +5,9 @@ import { extname, join, normalize, resolve } from "node:path";
 import { contextoDeAgora, runAgent, type AgentStreamEvent } from "./agent.js";
 import { authenticateApiKey, hasScope } from "./apikeys.js";
 import {
+  AgenteEmUso,
   createAgent,
+  excluirAgente,
   getAgentInOrg,
   listAgentsInOrg,
   listAllAgentsInOrg,
@@ -86,7 +88,12 @@ import {
   type MensagemGeracao,
   type RespostaItem,
 } from "./checklists.js";
-import { criarComandoPonte, lerEstadoPonte, papelValido } from "./ponteWhatsapp.js";
+import {
+  criarComandoPonte,
+  lerEstadoPonte,
+  papelValido,
+  primeiroVenueAtivo,
+} from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
 import { versaoDoCodigo } from "./version.js";
 import {
@@ -731,6 +738,35 @@ async function roteasApi(
       const agente = await getAgentInOrg(chave.org_id, slug);
       if (!agente) throw erro(404, "not_found", `Agente "${slug}" não encontrado.`);
       return ok(res, agente);
+    }
+
+    // DELETE /v1/agents/:slug — apaga (só agente que nunca atendeu)
+    if (metodo === "DELETE") {
+      // O agente que está no ar não se apaga: o conector aponta para este
+      // slug, e sumir com ele deixaria a sessão do WhatsApp conectada
+      // atendendo em nome de um agente que não existe mais — o mesmo
+      // 'Agente "" não encontrado' que já nos custou uma tarde.
+      const venue = await primeiroVenueAtivo();
+      if (venue) {
+        const { data } = await db().from("venues").select("settings").eq("id", venue.id).single();
+        const noAr = lerEstadoPonte(data?.settings ?? null, "agente");
+        if (noAr?.agentSlug === slug && noAr.status === "conectado") {
+          throw erro(
+            409,
+            "agente_no_ar",
+            "Este agente está atendendo no WhatsApp agora. Desconecte o WhatsApp dele em Canais do agente antes de excluir.",
+          );
+        }
+      }
+
+      try {
+        await excluirAgente(chave.org_id, slug);
+        return ok(res, { excluido: true });
+      } catch (e) {
+        if (e instanceof AgenteEmUso) throw erro(409, "agente_com_historico", e.message);
+        const msg = e instanceof Error ? e.message : "Falha ao excluir.";
+        throw msg.includes("não encontrado") ? erro(404, "not_found", msg) : erro(400, "invalid_request", msg);
+      }
     }
 
     if (metodo === "PATCH") {

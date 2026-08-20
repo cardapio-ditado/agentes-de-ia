@@ -159,6 +159,46 @@ export async function updateAgent(
   return data;
 }
 
+export class AgenteEmUso extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "AgenteEmUso";
+  }
+}
+
+/**
+ * Apaga um agente — só o que nunca atendeu ninguém.
+ *
+ * `conversations.agent_id` é `on delete cascade`: apagar o agente leva junto
+ * TODAS as conversas dele, e com elas o histórico de atendimento da casa.
+ * Para um agente criado por engano isso é o certo; para o que trabalha há
+ * meses seria destruir o registro de tudo que foi combinado com cliente —
+ * inclusive as reservas, que só perdem o vínculo mas ficam órfãs de contexto.
+ *
+ * Então: sem conversas, some de verdade. Com conversas, o caminho é desligar
+ * (`enabled: false`) — ele para de atender e o histórico fica de pé.
+ */
+export async function excluirAgente(orgId: string, slug: string): Promise<void> {
+  const agente = await getAgentInOrg(orgId, slug);
+  if (!agente) throw new Error(`Agente "${slug}" não encontrado nesta organização.`);
+
+  const { count, error: erroConta } = await db()
+    .from("conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("agent_id", agente.id);
+  if (erroConta) throw new Error(`Falha ao conferir as conversas: ${erroConta.message}`);
+
+  if ((count ?? 0) > 0) {
+    throw new AgenteEmUso(
+      `Este agente já atendeu ${count} conversa(s) — apagá-lo levaria junto todo esse histórico. ` +
+        "Desligue-o: ele para de atender na hora e o que já foi conversado continua guardado.",
+    );
+  }
+
+  const { error } = await db().from("agents").delete().eq("org_id", orgId).eq("id", agente.id);
+  if (error) throw new Error(`Falha ao excluir o agente: ${error.message}`);
+}
+
 /**
  * Retorna a conversa aberta do interlocutor no canal, criando uma se não existir.
  * Sem `externalId` (ex.: execução avulsa via CLI), sempre cria uma conversa nova.
