@@ -45,8 +45,9 @@ Duplo clique em **`iniciar-brasa.bat`**. Ele confere tudo, instala o que
 faltar na primeira vez, abre o painel em `http://localhost:3000` e deixa o
 processo rodando.
 
-No painel: **Canais → Conectar** → aparece o QR → no celular do chip do agente,
-WhatsApp → **Aparelhos conectados → Conectar aparelho** → aponte a câmera.
+No painel: **Canais do agente → Conectar** → aparece o QR → no celular do chip
+do agente, WhatsApp → **Aparelhos conectados → Conectar aparelho** → aponte a
+câmera.
 
 Pronto: mande uma mensagem de outro número para o chip e o agente responde.
 As conversas aparecem na aba **Conversas** — tanto no painel local quanto no
@@ -55,8 +56,38 @@ painel da Vercel, porque os dois leem o mesmo banco.
 - A janela preta precisa ficar aberta. Fechou = agente desligado.
 - Reiniciou o PC? Duplo clique de novo. **Não precisa ler o QR outra vez** — a
   sessão fica salva na pasta `.whatsapp/`.
-- Desconectar o número: painel → Canais → Desconectar (ou apague a pasta
-  `.whatsapp/` com o processo parado).
+- Desconectar o número: painel → Canais do agente → Desconectar (ou apague a
+  pasta `.whatsapp/agente/` com o processo parado).
+
+## O segundo número: o WhatsApp da casa
+
+São **dois números, dois conectores**, e cada um faz uma coisa:
+
+| Conector | Chip | O que faz |
+|---|---|---|
+| `iniciar-brasa.bat` | do agente | atende o cliente com IA |
+| `iniciar-brasa-administrativo.bat` | administrativo | **só envia**: checklist, confirmação, avisos |
+
+O número administrativo **não responde ninguém**. É de propósito: com uma
+conexão só, o funcionário que mandava "ok" depois de receber o link do
+checklist era atendido pela recepcionista virtual como se fosse cliente novo
+querendo reserva.
+
+Duplo clique em **`iniciar-brasa-administrativo.bat`** (janela separada, pode
+rodar junto com o outro) e, no painel, **⚙️ Ajustes → WhatsApp da casa →
+Conectar** → leia o QR com o **chip administrativo**.
+
+- Use um chip **diferente** do agente. Se parear o mesmo nos dois, o agente
+  volta a responder a equipe — o painel avisa quando isso acontece.
+- Cada conector tem a sua pasta de sessão (`.whatsapp/agente/` e
+  `.whatsapp/administrativo/`) e a sua janela. Um cair não derruba o outro.
+- Quem comprou Checklist e **não** comprou Agentes de IA usa só este.
+
+> **Se você já usava a versão anterior:** o número que está conectado hoje
+> continua sendo o do agente, sem precisar parear de novo. Mas **atualize o
+> computador do bar** (feche e abra o `iniciar-brasa.bat`, que baixa a versão
+> nova sozinho) — com o código antigo rodando ali, os botões Conectar e
+> Desconectar do painel deixam de funcionar.
 
 ## Atualizar quando tem coisa nova
 
