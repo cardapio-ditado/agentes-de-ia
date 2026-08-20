@@ -63,6 +63,12 @@ fi
 
 azul "== 1/3  Código na versão mais recente =="
 git config --global --add safe.directory "$DESTINO" 2>/dev/null || true
+# Um `git pull` rodado como root deixa arquivos com dono root, e aí o npm do
+# usuário do serviço morre com EACCES em package-lock.json — um erro que fala
+# de permissão sem dizer que a causa foi um comando inocente de atualização.
+# Devolver a pasta ao dono certo antes de começar torna o passo indiferente a
+# quem rodou o quê antes.
+chown -R "$USUARIO:$USUARIO" "$DESTINO"
 como_usuario git -C "$DESTINO" pull --ff-only
 cd "$DESTINO"
 como_usuario npm install --no-audit --no-fund >/dev/null
