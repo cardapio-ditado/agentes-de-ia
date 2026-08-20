@@ -1,6 +1,7 @@
 import { Boom } from "@hapi/boom";
 import makeWASocket, {
   DisconnectReason,
+  downloadMediaMessage,
   useMultiFileAuthState,
   type proto,
   type WAMessage,
@@ -11,6 +12,7 @@ import { mkdir, readdir, rename, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
+import { longoDemais, transcreverAudio, transcricaoConfigurada } from "../transcrever.js";
 import type { PapelWhatsapp } from "../ponteWhatsapp.js";
 import {
   jidConhecidoDoTelefone,
@@ -270,7 +272,42 @@ async function aoReceberMensagem(
     return;
   }
 
-  const texto = extrairTexto(mensagem.message);
+  let texto = extrairTexto(mensagem.message);
+
+  // Áudio vira texto antes de qualquer coisa: metade das mensagens de bar
+  // chega em voz — o cliente está dirigindo, está na rua, ou não gosta de
+  // digitar. Sem isto o agente pede "pode escrever?", e boa parte dessa
+  // gente não escreve: desiste, e a reserva não acontece.
+  if (!texto && mensagem.message?.audioMessage && transcricaoConfigurada()) {
+    try {
+      const bytes = Number(mensagem.message.audioMessage.fileLength ?? 0);
+      if (longoDemais(bytes)) {
+        await responder(
+          jid,
+          "Esse áudio ficou longo demais para eu ouvir. Me conta em poucas palavras o que você precisa?",
+        );
+        return;
+      }
+      await socket?.sendPresenceUpdate("composing", jid);
+      const audio = (await downloadMediaMessage(mensagem, "buffer", {})) as Buffer;
+      texto = await transcreverAudio({
+        audio,
+        mimeType: mensagem.message.audioMessage.mimetype ?? undefined,
+      });
+      console.log(`[whatsapp:${estado.papel}] áudio transcrito: ${texto.slice(0, 80)}`);
+    } catch (e) {
+      // Falha de transcrição não pode virar silêncio: o cliente mandou algo e
+      // está esperando. Ele é acolhido e convidado a escrever — que é
+      // exatamente o comportamento de quando não há transcrição configurada.
+      console.warn(`[whatsapp:${estado.papel}] não transcrevi o áudio:`, e);
+      await responder(
+        jid,
+        "Não consegui ouvir direito o seu áudio. Pode me escrever o que precisa? 😊",
+      );
+      return;
+    }
+  }
+
   if (!texto) {
     // Resposta específica por tipo: "não entendi" genérico soa quebrado.
     // Áudio ainda não é transcrito — a API do Claude não recebe áudio; quando
