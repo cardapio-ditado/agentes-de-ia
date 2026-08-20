@@ -13,7 +13,8 @@ import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { longoDemais, transcreverAudio, transcricaoConfigurada } from "../transcrever.js";
-import type { PapelWhatsapp } from "../ponteWhatsapp.js";
+import { lerEstadoPonte, primeiroVenueAtivo, type PapelWhatsapp } from "../ponteWhatsapp.js";
+import { db } from "../supabase.js";
 import {
   jidConhecidoDoTelefone,
   listPendingNotifications,
@@ -580,8 +581,49 @@ function pararFilaDeNotificacoes(): void {
   timerFila = null;
 }
 
+/**
+ * O agente cede a fila quando existe um administrativo no ar.
+ *
+ * A preferência pelo administrativo já existia em `notifications.ts`, mas ela
+ * só vale DENTRO de um processo — e cada papel roda no seu, com sua própria
+ * memória. No processo do agente o único provedor registrado é o dele, então
+ * ele varria a mesma fila e mandava o link do checklist pelo número do
+ * atendimento: justamente o que a separação dos dois números existe para
+ * evitar.
+ *
+ * A resposta está na ponte, que os dois publicam no banco. Se há sinal
+ * recente do administrativo, o agente não toca na fila. Se não há — casa que
+ * não contratou o segundo número, ou conector caído — ele volta a enviar, e
+ * o checklist chega de qualquer jeito. Rede, não regra: mensagem não
+ * entregue é pior que mensagem pelo número errado.
+ *
+ * O resultado é lembrado por meio minuto: são 4 ciclos de fila por consulta
+ * ao banco, em vez de uma consulta a cada 15 segundos para sempre.
+ */
+const LEMBRAR_QUEM_ENVIA_MS = 30_000;
+let administrativoNoAr: { valor: boolean; em: number } | null = null;
+
+async function existeAdministrativoNoAr(): Promise<boolean> {
+  if (administrativoNoAr && Date.now() - administrativoNoAr.em < LEMBRAR_QUEM_ENVIA_MS) {
+    return administrativoNoAr.valor;
+  }
+  try {
+    const venue = await primeiroVenueAtivo();
+    if (!venue) return false;
+    const { data } = await db().from("venues").select("settings").eq("id", venue.id).single();
+    const outro = lerEstadoPonte(data?.settings ?? null, "administrativo");
+    const vivo = outro?.status === "conectado";
+    administrativoNoAr = { valor: vivo, em: Date.now() };
+    return vivo;
+  } catch {
+    // Banco fora do ar não pode travar a entrega: na dúvida, envia.
+    return false;
+  }
+}
+
 async function processarFila(): Promise<void> {
   if (processandoFila || estado.status !== "conectado") return;
+  if (estado.papel === "agente" && (await existeAdministrativoNoAr())) return;
   processandoFila = true;
   try {
     const pendentes = await listPendingNotifications();
