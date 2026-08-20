@@ -10,6 +10,7 @@ function sessao(extra: Partial<Sessao> = {}): Sessao {
     papel: "member",
     modulos: null,
     plataformaAdmin: false,
+    senhaProvisoria: false,
     ...extra,
   };
 }

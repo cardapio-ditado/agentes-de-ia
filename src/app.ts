@@ -349,6 +349,13 @@ interface Acesso {
    */
   papel: string | null;
   userId: string | null;
+  /**
+   * A senha atual foi gerada pelo sistema e ditada para a pessoa.
+   *
+   * Só existe para gente; chave de máquina não tem senha. O painel tranca as
+   * telas até a troca.
+   */
+  senhaProvisoria?: boolean;
 }
 
 /** Papel de pessoa vira escopo. `viewer` olha, não mexe. */
@@ -413,6 +420,7 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso
     modulos: sessao.modulos,
     papel: sessao.papel,
     userId: sessao.userId,
+    senhaProvisoria: sessao.senhaProvisoria,
   };
 }
 
@@ -1811,6 +1819,8 @@ async function roteasApi(
         // que esta pessoa não pode abrir — esconder é conveniência; a trava
         // de verdade é conferida em cada rota.
         modulos: acesso.modulos ?? null,
+        // O painel tranca tudo até a troca quando isto é verdadeiro.
+        senha_provisoria: acesso.senhaProvisoria === true,
       });
     }
   }
@@ -1831,6 +1841,13 @@ async function roteasApi(
         eu: chave.userId,
         pessoas: await comErroDeEquipe(() => listarEquipe(chave.org_id)),
       });
+    }
+
+    // Id que não é uuid nunca chega ao banco: sem isto, um `undefined` que
+    // escape da tela vira "invalid input syntax for type uuid" na cara de
+    // quem só queria cadastrar um funcionário.
+    if (p.length >= 2 && !/^[0-9a-f-]{36}$/i.test(p[1] ?? "")) {
+      throw erro(400, "invalid_request", "Pessoa não identificada. Recarregue a página e tente de novo.");
     }
 
     // Daqui para baixo, mexe. Operação e leitura não passam.

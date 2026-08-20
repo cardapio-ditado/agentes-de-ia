@@ -87,6 +87,12 @@ const PAGINAS = [
 let souPlataforma = false;
 
 /**
+ * A pessoa entrou com a senha que alguém ditou para ela e ainda não escolheu
+ * a sua. Enquanto isto for verdade, o painel não abre.
+ */
+let trocaObrigatoria = false;
+
+/**
  * Módulos que ESTA PESSOA pode abrir. Null = sem restrição.
  *
  * Diferente de `modulosDoCliente`, que é o que a CASA contratou. As duas
@@ -653,6 +659,35 @@ function verificarLinkDeRecuperacao() {
   return true;
 }
 
+/**
+ * Tranca o painel na tela de senha até a pessoa escolher a sua.
+ *
+ * Reaproveita o formulário da recuperação: é a mesma pergunta, e manter uma
+ * tela só significa que qualquer melhoria nela vale para os dois caminhos. A
+ * diferença é o token — aqui é o da sessão que acabou de abrir, não o de um
+ * link de e-mail.
+ */
+function exigirTrocaDeSenha() {
+  trocaObrigatoria = true;
+  tokenDeTroca = chaveSalva();
+
+  acenderBrasas(telaAcesso.querySelector(".brasas"));
+  app.hidden = true;
+  telaHub.hidden = true;
+  telaAcesso.hidden = false;
+  formAcesso.hidden = true;
+  formChave.hidden = true;
+  formNovaSenha.hidden = false;
+
+  // O aviso explica POR QUE a tela apareceu. Sem ele, quem acabou de entrar
+  // com a senha certa acha que ela não funcionou.
+  mostrarErroAcesso(
+    "erro-nova-senha",
+    "Sua senha foi criada por outra pessoa e ditada para você. Escolha uma senha sua para continuar.",
+  );
+  document.getElementById("campo-nova-senha").focus();
+}
+
 // Erro some ao digitar. Sem isto, quando o próprio navegador barra o envio
 // (o minlength do campo), a mensagem da tentativa anterior fica na tela
 // contradizendo o que a pessoa acabou de corrigir.
@@ -687,6 +722,15 @@ formNovaSenha.addEventListener("submit", async (e) => {
     const corpo = await resposta.json();
     if (!resposta.ok || corpo?.success === false) {
       throw new Error(corpo?.error?.message ?? "Não deu para salvar a senha.");
+    }
+    // Vindo da troca obrigatória, a pessoa JÁ está logada: mandá-la entrar
+    // de novo seria pedir duas vezes a mesma senha que ela acabou de criar.
+    if (trocaObrigatoria) {
+      trocaObrigatoria = false;
+      tokenDeTroca = null;
+      formNovaSenha.hidden = true;
+      formAcesso.hidden = false;
+      return iniciar();
     }
     tokenDeTroca = null;
     formNovaSenha.hidden = true;
@@ -770,6 +814,11 @@ async function iniciar() {
     const eu = await get("/v1/auth/me");
     souPlataforma = eu.plataforma_admin === true;
     meusModulos = Array.isArray(eu.modulos) ? eu.modulos : null;
+
+    // Senha ditada é senha que outra pessoa sabe. Enquanto ela não trocar, o
+    // painel inteiro fica fechado — não adianta pedir depois, porque "depois"
+    // nunca chega quando a tela já está aberta e o trabalho, começando.
+    if (eu.senha_provisoria === true) return exigirTrocaDeSenha();
   } catch {
     souPlataforma = false;
     meusModulos = null;

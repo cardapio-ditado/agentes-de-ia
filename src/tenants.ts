@@ -177,7 +177,9 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
       email,
       password: senhaInicial,
       email_confirm: true,
-      user_metadata: { nome_do_restaurante: nome },
+      // Provisória: a senha é ditada para o dono na entrega, então o painel
+      // exige a troca antes de abrir qualquer tela.
+      user_metadata: { nome_do_restaurante: nome, senha_provisoria: true },
     });
     if (erroUsuario || !usuario.user) {
       throw new Error(

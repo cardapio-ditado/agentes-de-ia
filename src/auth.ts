@@ -35,6 +35,14 @@ export interface Sessao {
   modulos: string[] | null;
   /** Administrador da plataforma enxerga e cria todas as organizações. */
   plataformaAdmin: boolean;
+  /**
+   * A senha atual foi gerada pelo sistema e ditada para a pessoa.
+   *
+   * Senha que alguém ditou por telefone é senha que alguém sabe. Enquanto
+   * esta marca existir, o painel exige a troca antes de abrir qualquer tela
+   * — e é a troca que a apaga.
+   */
+  senhaProvisoria: boolean;
 }
 
 export interface Tokens {
@@ -167,6 +175,7 @@ export async function sessaoDoToken(token: string): Promise<Sessao> {
     // ausente vira null, que é "sem restrição" — o comportamento de antes.
     modulos: (membro as { modulos?: string[] | null } | null)?.modulos ?? null,
     plataformaAdmin,
+    senhaProvisoria: data.user.user_metadata?.senha_provisoria === true,
   };
 
   memoria.set(token, { quando: Date.now(), sessao });
@@ -227,10 +236,24 @@ export async function trocarSenha(token: string, novaSenha: string): Promise<voi
     throw new ErroDeAcesso(401, "Este link de troca de senha expirou. Peça outro.");
   }
 
+  // Repetir a senha que foi ditada não é trocar: continuaria valendo a que
+  // outra pessoa falou em voz alta.
+  if (/^(brasa|fogo|forno|grelha|carvao|chama|sabor|tempero)-\d{4}$/.test(novaSenha.trim())) {
+    throw new ErroDeAcesso(400, "Essa é a senha provisória. Escolha uma senha sua.");
+  }
+
+  // A marca de provisória sai junto com a troca — é ela que faz o painel
+  // exigir esta tela, e escolher a própria senha é exatamente o que a
+  // resolve. Os outros metadados (nome) são preservados: `user_metadata`
+  // substitui o objeto inteiro, não mescla.
+  const metadados = { ...(data.user.user_metadata ?? {}) };
+  delete metadados.senha_provisoria;
+
   // Pelo admin e não pelo updateUser da sessão: o cliente aqui é descartável
   // e não tem sessão nenhuma — só o token que acabou de ser conferido.
   const { error: erroTroca } = await cliente.auth.admin.updateUserById(data.user.id, {
     password: novaSenha,
+    user_metadata: metadados,
   });
   if (erroTroca) throw new ErroDeAcesso(400, `Não deu para trocar a senha: ${erroTroca.message}`);
 

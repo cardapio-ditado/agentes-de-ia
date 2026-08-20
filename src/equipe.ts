@@ -142,7 +142,9 @@ export async function criarPessoa(params: {
     email,
     password: senhaInicial,
     email_confirm: true,
-    user_metadata: { nome: params.nome.trim() },
+    // A marca é o que faz o painel exigir a troca no primeiro acesso: senha
+    // ditada por telefone é senha que outra pessoa sabe.
+    user_metadata: { nome: params.nome.trim(), senha_provisoria: true },
   });
   if (error || !criado.user) {
     throw new ErroDeEquipe(
@@ -272,7 +274,45 @@ export async function redefinirSenha(params: {
   if (!membro.data) throw new ErroDeEquipe(404, "Pessoa não encontrada nesta casa.");
 
   const senha = senhaLegivel();
-  const { error } = await dbAuth().auth.admin.updateUserById(params.userId, { password: senha });
+  // Provisória de novo: esta senha também vai ser ditada, então também tem
+  // que ser trocada no próximo acesso.
+  const { data: conta } = await dbAuth().auth.admin.getUserById(params.userId);
+  const { error } = await dbAuth().auth.admin.updateUserById(params.userId, {
+    password: senha,
+    user_metadata: { ...(conta?.user?.user_metadata ?? {}), senha_provisoria: true },
+  });
   if (error) throw new ErroDeEquipe(500, `Falha ao trocar a senha: ${error.message}`);
   return senha;
+}
+
+/**
+ * A pessoa troca a própria senha — e com isso some a marca de provisória.
+ *
+ * Separada de `redefinirSenha` de propósito: lá é o dono gerando uma senha
+ * para ditar; aqui é a própria pessoa escolhendo a dela, que é justamente o
+ * que tira o segredo da boca de outra pessoa.
+ */
+export async function trocarPropriaSenha(params: {
+  userId: string;
+  novaSenha: string;
+}): Promise<void> {
+  const senha = params.novaSenha ?? "";
+  if (senha.trim().length < 8) {
+    throw new ErroDeEquipe(400, "A senha precisa de pelo menos 8 caracteres.");
+  }
+  // Repetir a senha ditada não é trocar: continuaria valendo a que o gerente
+  // falou em voz alta.
+  if (/^(brasa|fogo|forno|grelha|carvao|chama|sabor|tempero)-\d{4}$/.test(senha.trim())) {
+    throw new ErroDeEquipe(400, "Essa é a senha provisória. Escolha uma senha sua.");
+  }
+
+  const { data: conta } = await dbAuth().auth.admin.getUserById(params.userId);
+  const metadados = { ...(conta?.user?.user_metadata ?? {}) };
+  delete metadados.senha_provisoria;
+
+  const { error } = await dbAuth().auth.admin.updateUserById(params.userId, {
+    password: senha,
+    user_metadata: metadados,
+  });
+  if (error) throw new ErroDeEquipe(500, `Falha ao trocar a senha: ${error.message}`);
 }
