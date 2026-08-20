@@ -6,6 +6,7 @@ import { plataforma } from "./pages/plataforma.js";
 import { conversas } from "./pages/conversas.js";
 import { reservas } from "./pages/reservas.js";
 import { programacao } from "./pages/programacao.js";
+import { jogos } from "./pages/jogos.js";
 import { canais } from "./pages/canais.js";
 import { canaisDaCasa } from "./pages/canaisDaCasa.js";
 import { pessoas } from "./pages/pessoas.js";
@@ -41,6 +42,7 @@ const PAGINAS = [
   { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "Atendimentos do agente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
   { id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
+  { id: "jogos", modulo: "agentes-ia", rotulo: "Jogos", icone: ICONES.raio, render: jogos, subtitulo: "Escolha os jogos que a casa vai transmitir" },
   { id: "agentes", modulo: "agentes-ia", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
   { id: "agente-sabe", modulo: "agentes-ia", rotulo: "O que o agente sabe", icone: ICONES.organizacao, render: agenteSabe, subtitulo: "Endereço, horários e as respostas às perguntas do cliente" },
   { id: "canais", modulo: "agentes-ia", rotulo: "Canais do agente", icone: ICONES.canais, render: canais, subtitulo: "O número que o agente atende, e o Instagram" },

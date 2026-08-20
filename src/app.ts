@@ -165,6 +165,14 @@ import {
 import { lerNota, somaConfere, tipoAceito } from "./cmv/lerNota.js";
 import { sugerirFicha } from "./cmv/sugerirFicha.js";
 import {
+  COMPETICOES,
+  ErroDeJogos,
+  importarJogos,
+  jogosConfigurados,
+  jogosJaNaAgenda,
+  proximosJogos,
+} from "./jogos.js";
+import {
   atualizarPessoa,
   criarPessoa,
   ErroDeEquipe,
@@ -872,6 +880,7 @@ async function roteasApi(
       faturamento: "cmv",
       vendas: "cmv",
       consumo: "cmv",
+      jogos: "agentes-ia",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -1290,6 +1299,57 @@ async function roteasApi(
         }),
       );
       return ok(res, { aprendido: true });
+    }
+
+    // ---- Jogos: a agenda esportiva que vira programação ----
+
+    // GET /v1/venues/:slug/jogos?competicao=71 — o que vem por aí
+    if (metodo === "GET" && recurso === "jogos" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      if (!jogosConfigurados()) {
+        return ok(res, { configurado: false, competicoes: COMPETICOES, jogos: [] });
+      }
+
+      const pedida = Number(url.searchParams.get("competicao") ?? COMPETICOES[0].id);
+      const competicao = COMPETICOES.find((c) => c.id === pedida) ?? COMPETICOES[0];
+      try {
+        const jogos = await proximosJogos({ competicaoId: competicao.id });
+        // Marcar o que já está na agenda evita o erro mais provável da tela:
+        // importar de novo o jogo de sábado porque ninguém lembra se marcou.
+        const naAgenda = await jogosJaNaAgenda(venue.id, jogos.map((j) => j.id));
+        return ok(res, {
+          configurado: true,
+          competicoes: COMPETICOES,
+          competicao: competicao.id,
+          jogos: jogos.map((j) => ({ ...j, jaNaAgenda: naAgenda.has(j.id) })),
+        });
+      } catch (e) {
+        if (e instanceof ErroDeJogos) throw erro(e.status, "jogos_indisponiveis", e.message);
+        throw e;
+      }
+    }
+
+    // POST /v1/venues/:slug/jogos — põe os escolhidos na programação
+    if (metodo === "POST" && recurso === "jogos" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const escolhidos = Array.isArray(corpo.jogos) ? corpo.jogos : [];
+      try {
+        const r = await importarJogos({
+          venueId: venue.id,
+          // A tela devolve o jogo inteiro, e não só o id: assim a criação não
+          // precisa de uma segunda consulta à API — que gastaria cota para
+          // buscar o que a pessoa está vendo na tela.
+          jogos: escolhidos as Parameters<typeof importarJogos>[0]["jogos"],
+        });
+        return ok(res, r, 201);
+      } catch (e) {
+        if (e instanceof ErroDeJogos) throw erro(e.status, "jogos_indisponiveis", e.message);
+        throw e;
+      }
     }
 
     // ---- Vendas: o relatório do PDV baixa o estoque ----
