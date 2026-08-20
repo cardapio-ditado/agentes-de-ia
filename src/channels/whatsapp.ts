@@ -8,7 +8,7 @@ import makeWASocket, {
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { toDataURL } from "qrcode";
-import { mkdir, readdir, rename, stat } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
@@ -96,6 +96,19 @@ async function herdarSessaoAntiga(papel: PapelWhatsapp, destino: string): Promis
   console.log(
     `[whatsapp:agente] sessão herdada da instalação anterior (${movidos} arquivo(s)) — não precisa ler o QR de novo.`,
   );
+}
+
+/**
+ * Apaga as credenciais salvas deste papel.
+ *
+ * É o que transforma "desconectar" em desconectar de verdade. Sem isto, o
+ * próximo Conectar encontra a sessão antiga no disco e tenta religá-la em
+ * vez de gerar QR — a tela fica esperando um código que nunca aparece, e o
+ * número velho continua no cabeçalho como se nada tivesse mudado.
+ */
+async function esquecerSessaoSalva(papel: PapelWhatsapp): Promise<void> {
+  await rm(pastaDaSessao(papel), { recursive: true, force: true });
+  console.log(`[whatsapp:${papel}] credenciais apagadas — o próximo Conectar vai pedir QR.`);
 }
 
 export type ConexaoStatus = "desconectado" | "aguardando_qr" | "conectando" | "conectado";
@@ -230,10 +243,16 @@ async function aoAtualizarConexao(
     if (parando) return;
 
     if (deslogado) {
-      // Sessão encerrada no celular: as credenciais não valem mais.
+      // Sessão encerrada no celular: as credenciais não valem mais, e guardar
+      // credencial morta só serve para travar o próximo pareamento. Antes
+      // isto pedia para "apagar a pasta de sessão" — instrução que ninguém
+      // executa numa VPS, e que deixava o painel sem gerar QR sem explicar
+      // por quê.
       estado.qr = null;
-      console.error(
-        "[whatsapp] sessão encerrada no aparelho. Apague a pasta de sessão e pareie de novo.",
+      estado.telefone = null;
+      await esquecerSessaoSalva(estado.papel);
+      console.warn(
+        `[whatsapp:${estado.papel}] desconectado pelo aparelho. Use Conectar no painel para parear outro número.`,
       );
       return;
     }
@@ -502,16 +521,35 @@ export async function enviarPeloWhatsapp(
   }
 }
 
-export async function pararWhatsapp(): Promise<void> {
+export async function pararWhatsapp(opcoes: { esquecerSessao?: boolean } = {}): Promise<void> {
   parando = true;
+
+  // Desconexão pedida pela pessoa: avisa o WhatsApp para tirar este aparelho
+  // da lista do celular dela. Falhar aqui é comum e não é problema — quando
+  // ela já desconectou pelo aparelho, não há sessão para encerrar.
+  if (opcoes.esquecerSessao) {
+    try {
+      await socket?.logout();
+    } catch {
+      /* já estava fora */
+    }
+  }
   socket?.end(undefined);
   socket = null;
+
   estado.status = "desconectado";
   estado.qr = null;
   estado.agentSlug = null;
   estado.venueSlug = null;
   registrarProvedorWhatsapp(null, estado.papel);
   pararFilaDeNotificacoes();
+
+  if (opcoes.esquecerSessao) {
+    // O telefone sai junto: ele é o que a tela mostra no cabeçalho, e deixá-lo
+    // faria o painel anunciar um número que não está mais conectado.
+    estado.telefone = null;
+    await esquecerSessaoSalva(estado.papel);
+  }
 }
 
 // ============================================================

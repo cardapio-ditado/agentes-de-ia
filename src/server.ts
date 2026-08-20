@@ -73,7 +73,10 @@ async function cicloDaPonte(): Promise<void> {
 
       if (comando.acao === "conectar") {
         // Reiniciar em vez de empilhar: um segundo iniciar() com socket vivo
-        // criaria duas conexões brigando pela mesma sessão.
+        // criaria duas conexões brigando pela mesma sessão. Aqui a sessão
+        // salva é PRESERVADA — este é um reinício técnico, e apagar as
+        // credenciais faria pedir QR a cada Conectar, inclusive quando a
+        // pessoa só queria religar o mesmo número.
         if (estadoWhatsapp().status !== "desconectado") await pararWhatsapp();
         await iniciarWhatsapp({
           // No administrativo não há agente — e não precisa: ninguém responde.
@@ -82,7 +85,10 @@ async function cicloDaPonte(): Promise<void> {
           papel: PAPEL_DESTE_CONECTOR,
         });
       } else if (comando.acao === "desconectar") {
-        await pararWhatsapp();
+        // Aqui é a pessoa dizendo "não quero mais este número". As
+        // credenciais vão junto: guardá-las faria o próximo Conectar tentar
+        // religar o chip antigo em vez de gerar QR para o novo.
+        await pararWhatsapp({ esquecerSessao: true });
       }
     }
 
