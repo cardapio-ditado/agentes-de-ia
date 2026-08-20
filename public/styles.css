@@ -2154,3 +2154,19 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   overflow-x: auto;
   margin: 8px 0;
 }
+
+/* Bloco recolhido para quem instala. O dono do bar não abre — e é essa a
+   intenção: a informação existe sem virar instrução para quem não tem o que
+   fazer com ela. */
+.detalhes-tecnicos {
+  margin-top: 12px;
+  border-top: 1px solid var(--borda);
+  padding-top: 10px;
+}
+.detalhes-tecnicos summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+}
+.detalhes-tecnicos summary:hover { color: var(--texto); }
+.detalhes-tecnicos .bloco-codigo { margin-top: 8px; }

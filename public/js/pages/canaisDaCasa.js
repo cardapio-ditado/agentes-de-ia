@@ -173,16 +173,36 @@ export async function canaisDaCasa(raiz, ctx) {
           ]),
         ]),
 
-        el("div", { classe: "cartao" }, [
-          el("h3", { texto: "Como ligar o conector administrativo" }),
-          el("p", { classe: "muted", texto: "No computador do bar ou na VPS, rode este comando — é um processo separado do conector do agente:" }),
-          el("pre", { classe: "bloco-codigo", texto: "WHATSAPP_PAPEL=administrativo npm start" }),
-          el("p", {
-            classe: "muted",
-            texto:
-              "Cada papel tem a sua pasta de sessão e a sua fila de comandos. Rodar os dois no mesmo computador funciona; se um cair, o outro segue.",
-          }),
-        ]),
+        // Instrução de instalação só aparece quando não HÁ conector
+        // respondendo — e mesmo assim em linguagem de dono de bar. Com o
+        // conector no ar, mandar alguém rodar comando é ruído: ele não tem o
+        // que fazer, e a tela dá a entender que falta um passo.
+        semConector
+          ? el("div", { classe: "cartao" }, [
+              el("h3", { texto: "O servidor do WhatsApp não está respondendo" }),
+              el("p", {
+                classe: "muted",
+                texto:
+                  "Nada para fazer por aqui: quem liga esse servidor é a equipe Brasa Food. Se os envios pararem (checklist não chega, confirmação não sai), fale com a gente que religamos.",
+              }),
+              // O comando fica recolhido: serve a quem instala, e quem instala
+              // sabe procurar. Aberto, vira instrução para quem não tem o que
+              // fazer com ela.
+              el("details", { classe: "detalhes-tecnicos" }, [
+                el("summary", { texto: "Detalhes técnicos (equipe Brasa Food)" }),
+                el("p", { classe: "muted", texto: "Na VPS, como root:" }),
+                el("pre", {
+                  classe: "bloco-codigo",
+                  texto: "systemctl restart brasa-food-admin\njournalctl -u brasa-food-admin -n 30 --no-pager",
+                }),
+                el("p", {
+                  classe: "muted",
+                  texto:
+                    "Instalação nova: bash scripts/instalar-vps-administrativo.sh — cada papel tem pasta de sessão e porta próprias, e um cair não derruba o outro.",
+                }),
+              ]),
+            ])
+          : null,
       ].filter(Boolean)),
     );
   }
