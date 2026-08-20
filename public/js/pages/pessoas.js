@@ -53,7 +53,11 @@ export async function pessoas(raiz, ctx) {
             el("p", { classe: "muted", texto: "Cada pessoa com o seu login — é o que faz o histórico ter dono." }),
           ]),
           dados.pode_mexer
-            ? el("button", { classe: "btn btn-primario", type: "button", texto: "+ Nova pessoa", onclick: formulario })
+            // A seta importa: `onclick: formulario` passaria o EVENTO do
+            // clique como argumento, e o formulário trataria esse objeto como
+            // "pessoa existente" — abria travado, sem deixar digitar o
+            // e-mail, e salvava contra um id inexistente.
+            ? el("button", { classe: "btn btn-primario", type: "button", texto: "+ Nova pessoa", onclick: () => formulario(null) })
             : null,
         ].filter(Boolean)),
 
@@ -183,6 +187,11 @@ export async function pessoas(raiz, ctx) {
     }
 
     function formulario(existente) {
+      // Só um objeto com userId é uma pessoa. Um evento de clique que escape
+      // de um `onclick: formulario` é truthy e passaria por `existente`,
+      // travando o e-mail e mandando o salvamento para um id inexistente —
+      // o bug que esta linha impede de voltar.
+      if (existente && typeof existente.userId !== "string") existente = null;
       limpar(conteudo);
       const nome = el("input", { classe: "campo", value: existente?.nome ?? "", placeholder: "Maria Souza" });
       const email = el("input", {
