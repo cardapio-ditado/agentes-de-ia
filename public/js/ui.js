@@ -97,11 +97,19 @@ export function indicador({ rotulo, valor, nota, iconePath, destaque }) {
 
 // ============ Formatação ============
 
-// Fixo no fuso da casa, não no fuso de quem está com o painel aberto — sem
-// isso, checar do celular em outro fuso mostraria hora errada. Só há um
-// estabelecimento hoje; se isso mudar, isto precisa virar por-venue.
+/**
+ * O relógio da casa.
+ *
+ * Toda data no painel se lê AQUI, não no fuso de quem está olhando: o dono
+ * conferindo a agenda de outro estado precisa ver o horário em que o show
+ * começa no bar dele, não no relógio do celular dele.
+ *
+ * Só há um estabelecimento hoje; se isso mudar, isto precisa vir do venue.
+ */
+export const FUSO_DA_CASA = "America/Cuiaba";
+
 const DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Cuiaba",
+  timeZone: FUSO_DA_CASA,
   day: "2-digit",
   month: "2-digit",
   hour: "2-digit",
@@ -121,6 +129,45 @@ export function desde(iso) {
   if (seg < 3600) return `${Math.floor(seg / 60)} min`;
   if (seg < 86400) return `${Math.floor(seg / 3600)} h`;
   return `${Math.floor(seg / 86400)} d`;
+}
+
+/**
+ * O dia civil no relógio da casa, como "2026-08-22".
+ *
+ * Serve para agrupar por dia. Usar getDate() em cima de um instante UTC
+ * agruparia pelo fuso do NAVEGADOR: um show de sábado às 22h em Cuiabá é
+ * domingo 02h em UTC, e cairia na casinha errada do calendário para quem
+ * abrisse o painel de um servidor ou de outro país.
+ */
+const DIA_ISO = new Intl.DateTimeFormat("en-CA", {
+  timeZone: FUSO_DA_CASA,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+export function diaNaCasa(iso) {
+  return DIA_ISO.format(new Date(iso));
+}
+
+const HORA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO_DA_CASA,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+export function horaNaCasa(iso) {
+  return HORA.format(new Date(iso));
+}
+
+const DIA_CURTO = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO_DA_CASA,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+});
+/** "sáb., 22/08" — o suficiente para reconhecer o dia numa lista. */
+export function diaCurtoNaCasa(iso) {
+  return DIA_CURTO.format(new Date(iso)).replace(".,", "");
 }
 
 export function dinheiro(valor) {

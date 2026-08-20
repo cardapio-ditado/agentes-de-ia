@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dataHora, diaNaCasa, dinheiro, el, etiqueta, horaNaCasa, limpar, vazio } from "../ui.js";
 
 const TIPOS = [
   ["musica", "Música"],
@@ -275,7 +275,11 @@ export async function programacao(raiz, ctx) {
     // varredura por célula.
     const porDia = new Map();
     for (const ev of filtrados({ comPeriodo: false })) {
-      const chave = chaveDoDia(new Date(ev.starts_at));
+      // O dia do evento no relógio da casa. `chaveDoDia` serve para as
+      // células, que são datas civis montadas por componente; para um
+      // INSTANTE, agrupar pelo fuso do navegador jogaria o show de sábado às
+      // 22h na casinha de domingo.
+      const chave = diaNaCasa(ev.starts_at);
       if (!porDia.has(chave)) porDia.set(chave, []);
       porDia.get(chave).push(ev);
     }
@@ -312,8 +316,8 @@ export async function programacao(raiz, ctx) {
               classe: `item-cal item-${ev.kind}`,
               // O detalhe completo no title: a célula é estreita e cortar o
               // nome da atração é o mesmo que não mostrar.
-              title: `${horaCurta(ev.starts_at)} — ${ev.title}${ev.description ? `\n${ev.description}` : ""}`,
-              texto: `${horaCurta(ev.starts_at)} ${ev.title}`,
+              title: `${horaNaCasa(ev.starts_at)} — ${ev.title}${ev.description ? `\n${ev.description}` : ""}`,
+              texto: `${horaNaCasa(ev.starts_at)} ${ev.title}`,
             }),
           ),
         ]),
@@ -344,9 +348,7 @@ export async function programacao(raiz, ctx) {
   function chaveDoDia(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
-  function horaCurta(iso) {
-    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  }
+
 
   function agruparPorSerie(eventos) {
     const solos = [];

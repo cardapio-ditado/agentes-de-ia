@@ -1,5 +1,5 @@
 import { get, post } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, diaCurtoNaCasa, el, etiqueta, horaNaCasa, limpar, vazio } from "../ui.js";
 
 /**
  * Jogos: a agenda esportiva que vira programação da casa.
@@ -11,8 +11,6 @@ import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
  *
  * Por isso nada entra sozinho: marca-se o que vai passar e clica em incluir.
  */
-
-const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export async function jogos(raiz, ctx) {
   const conteudo = el("div", {});
@@ -105,9 +103,11 @@ export async function jogos(raiz, ctx) {
     );
 
     function linhaJogo(jogo) {
-      const quando = new Date(jogo.quando);
-      const dia = `${DIAS[quando.getDay()]} ${String(quando.getDate()).padStart(2, "0")}/${String(quando.getMonth() + 1).padStart(2, "0")}`;
-      const hora = quando.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      // No relógio da CASA, não no de quem olha: a API entrega o jogo em UTC,
+      // e um jogo de 21h em Cuiabá é meia-noite em UTC — marcado pelo fuso do
+      // navegador, ele apareceria no dia seguinte e com a hora errada.
+      const dia = diaCurtoNaCasa(jogo.quando);
+      const hora = horaNaCasa(jogo.quando);
 
       if (jogo.jaNaAgenda) {
         return el("div", { classe: "linha-tabela" }, [
