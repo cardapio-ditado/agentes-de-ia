@@ -1,13 +1,20 @@
 import { createServer } from "node:http";
 import { criarHandler, registrarConectorWhatsapp } from "./app.js";
-import { estadoWhatsapp, iniciarWhatsapp, pararWhatsapp } from "./channels/whatsapp.js";
+import {
+  estadoWhatsapp,
+  iniciarWhatsapp,
+  pararWhatsapp,
+  temSessaoSalva,
+} from "./channels/whatsapp.js";
 import { dispararChecklistsAgendados } from "./checklists.js";
 import {
   consumirComandoPonte,
+  lerEstadoPonte,
   papelValido,
   primeiroVenueAtivo,
   publicarEstadoPonte,
 } from "./ponteWhatsapp.js";
+import { db } from "./supabase.js";
 
 /**
  * Servidor Node de verdade: local, VPS ou container.
@@ -99,8 +106,46 @@ async function cicloDaPonte(): Promise<void> {
   }
 }
 
+/**
+ * Religa sozinho depois de um reinício.
+ *
+ * Sem isto, reiniciar o serviço (ou a máquina) deixa o WhatsApp mudo até
+ * alguém abrir o painel e clicar em Conectar — e ninguém fica olhando o
+ * painel. Um reboot de madrugada significaria o agente fora do ar até o
+ * primeiro cliente reclamar de não ter sido respondido.
+ *
+ * A sessão em disco continua pareada, então religar não pede QR nenhum. Se
+ * não houver sessão salva, não faz nada: aí é uma instalação nova mesmo, e o
+ * QR é o caminho certo.
+ */
+async function religarSeJaPareado(): Promise<void> {
+  try {
+    if (!(await temSessaoSalva(PAPEL_DESTE_CONECTOR))) return;
+
+    const venue = await primeiroVenueAtivo();
+    if (!venue) return;
+    venueDaPonte = venue;
+
+    // O agente que atendia antes: fica gravado no último estado publicado na
+    // ponte. No papel administrativo não há agente e o campo é ignorado.
+    const { data } = await db().from("venues").select("settings").eq("id", venue.id).single();
+    const anterior = lerEstadoPonte(data?.settings ?? null, PAPEL_DESTE_CONECTOR);
+
+    console.log(`[ponte] sessão salva encontrada — religando o WhatsApp (${PAPEL_DESTE_CONECTOR}).`);
+    await iniciarWhatsapp({
+      agentSlug: anterior?.agentSlug ?? "",
+      venueSlug: anterior?.venueSlug ?? venue.slug,
+      papel: PAPEL_DESTE_CONECTOR,
+    });
+  } catch (e) {
+    // Falhar aqui não pode impedir o servidor de subir: sem religar, o painel
+    // ainda tem o botão Conectar.
+    console.error("[ponte] não consegui religar sozinho:", e instanceof Error ? e.message : e);
+  }
+}
+
 setInterval(() => void cicloDaPonte(), CICLO_PONTE_MS);
-void cicloDaPonte();
+void religarSeJaPareado().then(() => cicloDaPonte());
 
 // ============================================================
 // Agendador de checklists

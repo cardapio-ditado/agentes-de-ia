@@ -51,6 +51,26 @@ const pastaDaSessao = (papel: PapelWhatsapp) => resolve(RAIZ_SESSAO, papel);
  *
  * Só o papel `agente` herda: a conexão antiga sempre foi a que atende.
  */
+/**
+ * Já existe sessão pareada em disco para este papel?
+ *
+ * É o que permite religar sozinho depois de um reinício, sem QR: as
+ * credenciais do WhatsApp continuam válidas até alguém desconectar o
+ * aparelho no celular.
+ */
+export async function temSessaoSalva(papel: PapelWhatsapp): Promise<boolean> {
+  const alvo = resolve(pastaDaSessao(papel), "creds.json");
+  const raiz = resolve(RAIZ_SESSAO, "creds.json");
+  const existe = async (caminho: string) =>
+    await stat(caminho).then(
+      () => true,
+      () => false,
+    );
+  // A raiz conta para o papel `agente`: é onde mora a sessão das instalações
+  // anteriores, que `herdarSessaoAntiga` move na primeira subida.
+  return (await existe(alvo)) || (papel === "agente" && (await existe(raiz)));
+}
+
 async function herdarSessaoAntiga(papel: PapelWhatsapp, destino: string): Promise<void> {
   if (papel !== "agente") return;
 
