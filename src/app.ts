@@ -168,7 +168,6 @@ import {
   COMPETICOES,
   ErroDeJogos,
   importarJogos,
-  jogosConfigurados,
   jogosJaNaAgenda,
   proximosJogos,
 } from "./jogos.js";
@@ -1308,11 +1307,10 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
 
-      if (!jogosConfigurados()) {
-        return ok(res, { configurado: false, competicoes: COMPETICOES, jogos: [] });
-      }
-
-      const pedida = Number(url.searchParams.get("competicao") ?? COMPETICOES[0].id);
+      // O id é o código de liga do ESPN ("bra.1"), então vem como texto — e
+      // procurar na lista é o que impede uma URL com qualquer coisa dentro de
+      // virar requisição para um endereço que não é nosso.
+      const pedida = url.searchParams.get("competicao") ?? COMPETICOES[0].id;
       const competicao = COMPETICOES.find((c) => c.id === pedida) ?? COMPETICOES[0];
       try {
         const jogos = await proximosJogos({ competicaoId: competicao.id });
@@ -1320,7 +1318,6 @@ async function roteasApi(
         // importar de novo o jogo de sábado porque ninguém lembra se marcou.
         const naAgenda = await jogosJaNaAgenda(venue.id, jogos.map((j) => j.id));
         return ok(res, {
-          configurado: true,
           competicoes: COMPETICOES,
           competicao: competicao.id,
           jogos: jogos.map((j) => ({ ...j, jaNaAgenda: naAgenda.has(j.id) })),

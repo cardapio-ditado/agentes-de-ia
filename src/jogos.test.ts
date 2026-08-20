@@ -1,92 +1,158 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { converter, jogosConfigurados, tituloDoJogo, COMPETICOES } from "./jogos.js";
+import { COMPETICOES, converter, tituloDoJogo } from "./jogos.js";
 
-/** Uma partida como a API-Football devolve. */
-const jogoCru = (extra: Record<string, unknown> = {}) => ({
-  fixture: {
-    id: 1198234,
-    date: "2026-08-22T21:30:00+00:00",
-    venue: { name: "Arena Pantanal", city: "Cuiabá" },
-    status: { short: "NS" },
-  },
-  league: { id: 71, name: "Serie A", round: "Regular Season - 20", season: 2026 },
-  teams: {
-    home: { name: "Cuiaba", logo: "https://x/cuiaba.png" },
-    away: { name: "Palmeiras", logo: "https://x/palmeiras.png" },
-  },
+/**
+ * Um jogo como o placar do ESPN devolve.
+ *
+ * O formato é o da API pública deles: o evento por fora, a partida de verdade
+ * em `competitions[0]`, e os times num array onde `homeAway` diz quem é quem —
+ * a ordem do array não é garantida, e é por isso que o código procura em vez
+ * de pegar [0] e [1].
+ */
+const evento = (extra: Record<string, unknown> = {}) => ({
+  id: "704946",
+  date: "2026-08-23T00:00Z",
+  name: "Palmeiras at Cuiabá",
+  shortName: "CUI vs PAL",
+  season: { year: 2026, slug: "brazilian-serie-a" },
+  week: { text: "Rodada 20" },
+  competitions: [
+    {
+      id: "704946",
+      date: "2026-08-23T00:00Z",
+      venue: { fullName: "Arena Pantanal" },
+      status: { type: { state: "pre", completed: false, description: "Scheduled" } },
+      competitors: [
+        { homeAway: "away", team: { displayName: "Palmeiras", logo: "https://x/pal.png" } },
+        { homeAway: "home", team: { displayName: "Cuiabá", logo: "https://x/cui.png" } },
+      ],
+    },
+  ],
   ...extra,
 });
 
-test("partida completa vira jogo aproveitável", () => {
-  const [jogo] = converter([jogoCru()]);
-  assert.equal(jogo!.id, 1198234);
-  assert.equal(jogo!.mandante, "Cuiaba");
+test("jogo completo vira linha aproveitável", () => {
+  const [jogo] = converter([evento()]);
+  assert.equal(jogo!.id, "704946");
+  assert.equal(jogo!.mandante, "Cuiabá");
   assert.equal(jogo!.visitante, "Palmeiras");
   assert.equal(jogo!.estadio, "Arena Pantanal");
-  assert.equal(jogo!.rodada, "Regular Season - 20");
+  assert.equal(jogo!.rodada, "Rodada 20");
 });
 
-test("o título é o que o agente vai falar", () => {
-  const [jogo] = converter([jogoCru()]);
-  assert.equal(tituloDoJogo(jogo!), "Cuiaba x Palmeiras");
+test("mandante e visitante saem de homeAway, não da ordem do array", () => {
+  // No exemplo o visitante vem PRIMEIRO. Confiar na posição inverteria o
+  // confronto — e "Palmeiras x Cuiabá" num bar de Cuiabá é erro que se nota.
+  const [jogo] = converter([evento()]);
+  assert.equal(tituloDoJogo(jogo!), "Cuiabá x Palmeiras");
 });
 
-test("partida sem os dois times é descartada", () => {
-  // Importar isso criaria um evento que o agente leria em voz alta para o
-  // cliente — pior que não ter o jogo.
-  const semVisitante = jogoCru({ teams: { home: { name: "Cuiaba" }, away: {} } });
+test("jogo já encerrado não aparece para escolher", () => {
+  const encerrado = evento({
+    competitions: [
+      {
+        date: "2026-08-20T00:00Z",
+        status: { type: { state: "post", completed: true } },
+        competitors: [
+          { homeAway: "home", team: { displayName: "A" } },
+          { homeAway: "away", team: { displayName: "B" } },
+        ],
+      },
+    ],
+  });
+  assert.equal(converter([encerrado]).length, 0);
+});
+
+test("jogo sem os dois times é descartado", () => {
+  // Importar isso criaria um evento que o agente leria em voz alta.
+  const semVisitante = evento({
+    competitions: [
+      {
+        date: "2026-08-23T00:00Z",
+        competitors: [{ homeAway: "home", team: { displayName: "Cuiabá" } }],
+      },
+    ],
+  });
   assert.equal(converter([semVisitante]).length, 0);
 });
 
-test("partida sem data ou sem id é descartada", () => {
-  assert.equal(converter([jogoCru({ fixture: { id: 1, venue: {} } })]).length, 0);
+test("jogo sem id ou sem data é descartado", () => {
+  assert.equal(converter([evento({ id: undefined })]).length, 0);
   assert.equal(
-    converter([jogoCru({ fixture: { date: "2026-08-22T21:30:00+00:00", venue: {} } })]).length,
+    converter([
+      evento({
+        date: undefined,
+        competitions: [
+          {
+            competitors: [
+              { homeAway: "home", team: { displayName: "A" } },
+              { homeAway: "away", team: { displayName: "B" } },
+            ],
+          },
+        ],
+      }),
+    ]).length,
     0,
   );
 });
 
+test("a data vem da partida, não do evento de fora", () => {
+  // Quando os dois divergem, quem manda é a partida — é ela que tem o horário
+  // de bola rolando.
+  const [jogo] = converter([evento({ date: "2026-01-01T00:00Z" })]);
+  assert.equal(jogo!.quando, "2026-08-23T00:00Z");
+});
+
 test("a lista sai do jogo mais próximo para o mais distante", () => {
+  const em = (id: string, data: string) =>
+    evento({
+      id,
+      competitions: [
+        {
+          date: data,
+          competitors: [
+            { homeAway: "home", team: { displayName: "A" } },
+            { homeAway: "away", team: { displayName: "B" } },
+          ],
+        },
+      ],
+    });
   const jogos = converter([
-    jogoCru({ fixture: { id: 3, date: "2026-09-01T20:00:00+00:00", venue: {} } }),
-    jogoCru({ fixture: { id: 1, date: "2026-08-22T21:30:00+00:00", venue: {} } }),
-    jogoCru({ fixture: { id: 2, date: "2026-08-25T18:00:00+00:00", venue: {} } }),
+    em("3", "2026-09-01T20:00Z"),
+    em("1", "2026-08-22T21:30Z"),
+    em("2", "2026-08-25T18:00Z"),
   ]);
   assert.deepEqual(
     jogos.map((j) => j.id),
-    [1, 2, 3],
+    ["1", "2", "3"],
   );
 });
 
 test("resposta vazia ou estranha não quebra a tela", () => {
+  // Sem contrato com a fonte, o formato pode mudar sem aviso — a tela precisa
+  // sobreviver a isso mostrando "nenhum jogo", não um erro.
   assert.deepEqual(converter([]), []);
-  assert.deepEqual(converter([null as unknown as object, {} as object]), []);
+  assert.deepEqual(converter([null as unknown as object, {} as object, { id: "1" }]), []);
 });
 
 test("campos ausentes viram nulo em vez de 'undefined' na tela", () => {
   const magro = {
-    fixture: { id: 9, date: "2026-08-22T21:30:00+00:00" },
-    league: {},
-    teams: { home: { name: "A" }, away: { name: "B" } },
+    id: "9",
+    competitions: [
+      {
+        date: "2026-08-23T00:00Z",
+        competitors: [
+          { homeAway: "home", team: { displayName: "A" } },
+          { homeAway: "away", team: { displayName: "B" } },
+        ],
+      },
+    ],
   };
   const [jogo] = converter([magro]);
   assert.equal(jogo!.estadio, null);
   assert.equal(jogo!.rodada, null);
   assert.equal(jogo!.escudoMandante, null);
-  assert.equal(jogo!.competicao, "—");
-});
-
-test("sem chave configurada, a busca se declara indisponível", () => {
-  const antes = process.env.API_FOOTBALL_KEY;
-  delete process.env.API_FOOTBALL_KEY;
-  assert.equal(jogosConfigurados(), false);
-  process.env.API_FOOTBALL_KEY = "   ";
-  assert.equal(jogosConfigurados(), false, "chave em branco não conta como configurada");
-  process.env.API_FOOTBALL_KEY = "abc123";
-  assert.equal(jogosConfigurados(), true);
-  if (antes === undefined) delete process.env.API_FOOTBALL_KEY;
-  else process.env.API_FOOTBALL_KEY = antes;
 });
 
 test("as competições oferecidas cobrem o que um bar brasileiro passa", () => {
@@ -94,7 +160,10 @@ test("as competições oferecidas cobrem o que um bar brasileiro passa", () => {
   for (const esperado of ["Brasileirão Série A", "Copa do Brasil", "Libertadores"]) {
     assert.ok(nomes.includes(esperado), `falta ${esperado}`);
   }
-  // Ids não podem repetir: dois itens com o mesmo id fariam a tela consultar
-  // a mesma competição duas vezes e gastar cota à toa.
+  // Códigos não podem repetir: dois itens com o mesmo id consultariam a mesma
+  // competição duas vezes.
   assert.equal(new Set(COMPETICOES.map((c) => c.id)).size, COMPETICOES.length);
+  // O código de liga vai direto na URL; espaço ou barra ali viraria uma
+  // requisição para um endereço diferente do pretendido.
+  for (const c of COMPETICOES) assert.match(c.id, /^[a-z0-9._]+$/);
 });

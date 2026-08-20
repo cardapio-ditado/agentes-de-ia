@@ -41,16 +41,6 @@ export async function jogos(raiz, ctx) {
     limpar(conteudo);
     marcados.clear();
 
-    if (!dados.configurado) {
-      conteudo.append(
-        vazio(
-          "Busca de jogos não configurada",
-          "Falta a chave do serviço de jogos nesta instalação. Fale com a equipe Brasa Food.",
-        ),
-      );
-      return;
-    }
-
     competicaoAtual = dados.competicao;
 
     const seletor = el(

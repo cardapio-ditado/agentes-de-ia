@@ -13,27 +13,40 @@ import { db } from "./supabase.js";
  * de jogos que não vão passar é pior que uma agenda vazia.
  */
 
-const HOST = "https://v3.football.api-sports.io";
+/**
+ * A API pública do ESPN — a mesma que alimenta o placar do site deles.
+ *
+ * Não é oficial no sentido de ter contrato, mas é aberta, não pede chave, não
+ * tem cota e traz a temporada corrente. As alternativas com contrato ou não
+ * servem ou custam: o plano gratuito da API-Football só libera as temporadas
+ * de 2022 a 2024, a API Futebol brasileira dá só a Série B, e o
+ * football-data.org não cobre Copa do Brasil nem Libertadores.
+ *
+ * O risco assumido: sem contrato, o formato pode mudar sem aviso. Por isso a
+ * leitura é defensiva — jogo malformado é descartado e a tela segue com o que
+ * deu para entender. E a aba inteira é um extra: se a API sumir amanhã, a
+ * programação continua sendo cadastrada à mão, como sempre foi.
+ */
+const HOST = "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
 /**
  * As competições que interessam a um bar brasileiro.
  *
- * O plano gratuito dá acesso a todas as 1.236 ligas, então a lista curta é
- * escolha de produto, não limitação: mostrar 1.236 opções para quem quer
- * saber do jogo do Cuiabá é esconder a informação dentro de um catálogo.
+ * O id é o código de liga do ESPN, não um número: é ele que vai na URL.
  */
 export const COMPETICOES = [
-  { id: 71, nome: "Brasileirão Série A" },
-  { id: 72, nome: "Brasileirão Série B" },
-  { id: 73, nome: "Copa do Brasil" },
-  { id: 13, nome: "Libertadores" },
-  { id: 11, nome: "Sul-Americana" },
+  { id: "bra.1", nome: "Brasileirão Série A" },
+  { id: "bra.2", nome: "Brasileirão Série B" },
+  { id: "bra.copa_do_brazil", nome: "Copa do Brasil" },
+  { id: "conmebol.libertadores", nome: "Libertadores" },
+  { id: "conmebol.sudamericana", nome: "Sul-Americana" },
 ] as const;
 
 export interface JogoDaApi {
-  id: number;
+  /** Id do jogo no ESPN. Texto, não número — é o que amarra o evento à fonte. */
+  id: string;
   competicao: string;
-  competicaoId: number;
+  competicaoId: string;
   rodada: string | null;
   /** ISO em UTC. A tela e o evento convertem para o fuso da casa. */
   quando: string;
@@ -59,37 +72,36 @@ export class ErroDeJogos extends Error {
 /**
  * Guarda o que a API respondeu, por competição.
  *
- * O plano gratuito dá 100 requisições por dia — e a tabela de jogos do
- * Brasileirão é a MESMA para todo bar do país. Uma consulta serve todos os
- * clientes, e repetir a cada abertura de tela seria queimar a cota para
- * receber a resposta de sempre.
+ * A API do ESPN não cobra nem impõe cota, mas a tabela de jogos do
+ * Brasileirão é a MESMA para todo bar do país: uma consulta serve todos os
+ * clientes. Repetir a cada abertura de tela seria bater no servidor dos
+ * outros para receber a resposta de sempre.
  *
- * Seis horas: tempo suficiente para pegar adiamento no mesmo dia, e curto o
- * bastante para não gastar mais que algumas requisições diárias.
+ * Seis horas: pega adiamento no mesmo dia e mantém a tela instantânea.
  */
 const VALIDADE_CACHE_MS = 6 * 60 * 60 * 1000;
 const cache = new Map<string, { em: number; jogos: JogoDaApi[] }>();
 
+/**
+ * A busca de jogos não exige configuração nenhuma.
+ *
+ * Fica como função, e não como constante, porque a tela já pergunta isto — e
+ * no dia em que a fonte exigir chave, a resposta muda aqui e em nenhum outro
+ * lugar.
+ */
 export function jogosConfigurados(): boolean {
-  return Boolean(process.env.API_FOOTBALL_KEY?.trim());
+  return true;
 }
 
-/**
- * Os próximos jogos de uma competição.
- *
- * `season` é o ano do campeonato. Competição de calendário europeu (que
- * atravessa o ano) usa o ano de início; as brasileiras usam o ano corrente,
- * que é o caso de tudo que interessa aqui.
- */
+/** AAAAMMDD, o formato de data que o ESPN aceita no parâmetro `dates`. */
+function comoDataDoEspn(d: Date): string {
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
 export async function proximosJogos(params: {
-  competicaoId: number;
+  competicaoId: string;
   dias?: number;
 }): Promise<JogoDaApi[]> {
-  const chave = process.env.API_FOOTBALL_KEY?.trim();
-  if (!chave) {
-    throw new ErroDeJogos(503, "A busca de jogos ainda não foi configurada nesta instalação.");
-  }
-
   const dias = params.dias ?? 30;
   const chaveCache = `${params.competicaoId}:${dias}`;
   const guardado = cache.get(chaveCache);
@@ -99,88 +111,80 @@ export async function proximosJogos(params: {
 
   const hoje = new Date();
   const ate = new Date(hoje.getTime() + dias * 864e5);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-
+  // Sem o intervalo, o placar traz só os jogos de HOJE — e a tela existe para
+  // escolher o que vai passar nas próximas semanas.
   const url =
-    `${HOST}/fixtures?league=${params.competicaoId}` +
-    `&season=${hoje.getFullYear()}` +
-    `&from=${iso(hoje)}&to=${iso(ate)}`;
+    `${HOST}/${params.competicaoId}/scoreboard` +
+    `?dates=${comoDataDoEspn(hoje)}-${comoDataDoEspn(ate)}`;
 
   let resposta: Response;
   try {
-    resposta = await fetch(url, { headers: { "x-apisports-key": chave } });
+    resposta = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
   } catch (e) {
     throw new ErroDeJogos(502, `Não consegui falar com o serviço de jogos: ${(e as Error).message}`);
   }
 
   if (!resposta.ok) {
     throw new ErroDeJogos(
-      resposta.status === 429 ? 429 : 502,
-      resposta.status === 429
-        ? "A cota diária de consultas acabou. Os jogos voltam a aparecer amanhã."
+      502,
+      resposta.status === 404
+        ? "Essa competição não foi encontrada na fonte de jogos."
         : `O serviço de jogos respondeu ${resposta.status}.`,
     );
   }
 
-  const corpo = (await resposta.json().catch(() => null)) as {
-    errors?: unknown;
-    response?: unknown[];
-  } | null;
-
-  // A API responde 200 com os erros DENTRO do corpo — chave inválida, cota
-  // estourada e liga fora do plano chegam todos assim. Sem esta conferência, o
-  // resultado seria uma lista vazia e a tela diria "nenhum jogo", que é a
-  // mensagem mais enganosa possível para "sua chave está errada".
-  const erros = corpo?.errors;
-  const listaDeErros =
-    Array.isArray(erros) ? erros.map(String)
-    : erros && typeof erros === "object" ? Object.values(erros as Record<string, unknown>).map(String)
-    : [];
-  if (listaDeErros.length > 0) {
-    const texto = listaDeErros.join(" · ");
-    throw new ErroDeJogos(
-      /token|key|subscri/i.test(texto) ? 401 : 502,
-      /token|key/i.test(texto)
-        ? "A chave do serviço de jogos não foi aceita. Confira a API_FOOTBALL_KEY."
-        : `O serviço de jogos recusou a consulta: ${texto}`,
-    );
-  }
-
-  const jogos = converter(corpo?.response ?? []);
+  const corpo = (await resposta.json().catch(() => null)) as { events?: unknown[] } | null;
+  const jogos = converter(corpo?.events ?? []);
   cache.set(chaveCache, { em: Date.now(), jogos });
   return jogos;
 }
 
 /**
- * Traduz a resposta da API para o que a tela precisa.
+ * Traduz o placar do ESPN para o que a tela precisa.
  *
- * Exportada para teste: a regra do que é um jogo aproveitável não deveria
- * custar uma requisição da cota para ser verificada.
+ * Exportada para teste: sem contrato com a fonte, a regra do que é um jogo
+ * aproveitável é justamente o que precisa estar coberto — e verificá-la não
+ * deveria depender de a API estar no ar.
  */
 export function converter(bruto: unknown[]): JogoDaApi[] {
   const jogos: JogoDaApi[] = [];
 
   for (const item of bruto as Array<Record<string, any>>) {
-    const id = Number(item?.fixture?.id);
-    const quando = item?.fixture?.date;
-    const casa = item?.teams?.home?.name;
-    const fora = item?.teams?.away?.name;
+    const id = item?.id;
+    // O jogo de verdade vive em competitions[0]; o objeto de fora é o
+    // "evento", que na maioria das ligas tem uma competição só.
+    const partida = Array.isArray(item?.competitions) ? item.competitions[0] : null;
+    const quando = partida?.date ?? item?.date;
+
+    const times = Array.isArray(partida?.competitors) ? partida.competitors : [];
+    const casa = times.find((t: any) => t?.homeAway === "home");
+    const fora = times.find((t: any) => t?.homeAway === "away");
+
+    const nomeCasa = casa?.team?.displayName ?? casa?.team?.name;
+    const nomeFora = fora?.team?.displayName ?? fora?.team?.name;
 
     // Jogo sem id, sem data ou sem os dois times não vira linha na tela:
     // importar isso criaria um evento que o agente leria em voz alta.
-    if (!Number.isFinite(id) || typeof quando !== "string" || !casa || !fora) continue;
+    if (!id || typeof quando !== "string" || !nomeCasa || !nomeFora) continue;
+
+    // Jogo que já terminou não serve para escolher o que vai passar. O
+    // intervalo pedido começa hoje, então isto pega só os de mais cedo.
+    if (partida?.status?.type?.completed === true) continue;
 
     jogos.push({
-      id,
-      competicao: String(item?.league?.name ?? "—"),
-      competicaoId: Number(item?.league?.id ?? 0),
-      rodada: typeof item?.league?.round === "string" ? item.league.round : null,
+      id: String(id),
+      competicao: String(item?.season?.slug ?? "").replace(/-/g, " ") || "—",
+      competicaoId: "",
+      rodada: typeof item?.week?.text === "string" ? item.week.text : null,
       quando,
-      mandante: String(casa),
-      visitante: String(fora),
-      escudoMandante: typeof item?.teams?.home?.logo === "string" ? item.teams.home.logo : null,
-      escudoVisitante: typeof item?.teams?.away?.logo === "string" ? item.teams.away.logo : null,
-      estadio: typeof item?.fixture?.venue?.name === "string" ? item.fixture.venue.name : null,
+      mandante: String(nomeCasa),
+      visitante: String(nomeFora),
+      escudoMandante: typeof casa?.team?.logo === "string" ? casa.team.logo : null,
+      escudoVisitante: typeof fora?.team?.logo === "string" ? fora.team.logo : null,
+      estadio: typeof partida?.venue?.fullName === "string" ? partida.venue.fullName : null,
     });
   }
 
@@ -204,7 +208,7 @@ const cliente = () => db() as any;
  * mesma partida de entrar duas vezes quando alguém marca de novo sem lembrar
  * — e é ele que permitirá, depois, corrigir o horário quando a CBF mudar.
  */
-export async function jogosJaNaAgenda(venueId: string, ids: number[]): Promise<Set<number>> {
+export async function jogosJaNaAgenda(venueId: string, ids: string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const { data, error } = await cliente()
     .from("venue_events")
@@ -214,10 +218,10 @@ export async function jogosJaNaAgenda(venueId: string, ids: number[]): Promise<S
     .eq("active", true);
   if (error) throw new ErroDeJogos(500, `Falha ao conferir a agenda: ${error.message}`);
 
-  const naAgenda = new Set<number>();
+  const naAgenda = new Set<string>();
   for (const linha of data ?? []) {
-    const id = Number((linha.details as Record<string, unknown> | null)?.fixture_id);
-    if (Number.isFinite(id)) naAgenda.add(id);
+    const id = (linha.details as Record<string, unknown> | null)?.fixture_id;
+    if (id !== undefined && id !== null) naAgenda.add(String(id));
   }
   return naAgenda;
 }
@@ -263,7 +267,7 @@ export async function importarJogos(params: {
       details: {
         fonte: "api-football",
         fixture_id: jogo.id,
-        liga_id: jogo.competicaoId,
+        competicao: jogo.competicao,
       },
       active: true,
     };
