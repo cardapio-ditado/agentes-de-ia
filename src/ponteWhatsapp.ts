@@ -213,10 +213,14 @@ export async function consumirComandoPonte(
 }
 
 /** Para o heartbeat antes do primeiro comando: o único venue da organização. */
-export async function primeiroVenueAtivo(): Promise<{ id: string; slug: string } | null> {
+export async function primeiroVenueAtivo(): Promise<
+  { id: string; slug: string; org_id: string } | null
+> {
   const { data, error } = await db()
     .from("venues")
-    .select("id, slug")
+    // A organização vem junto porque o religamento precisa dela para achar o
+    // agente da casa quando o slug não está gravado no estado.
+    .select("id, slug, org_id")
     .eq("active", true)
     .order("created_at", { ascending: true })
     .limit(1);

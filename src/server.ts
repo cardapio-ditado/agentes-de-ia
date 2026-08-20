@@ -7,6 +7,7 @@ import {
   temSessaoSalva,
 } from "./channels/whatsapp.js";
 import { dispararChecklistsAgendados } from "./checklists.js";
+import { listAgentsInOrg } from "./repository.js";
 import {
   consumirComandoPonte,
   lerEstadoPonte,
@@ -131,9 +132,26 @@ async function religarSeJaPareado(): Promise<void> {
     const { data } = await db().from("venues").select("settings").eq("id", venue.id).single();
     const anterior = lerEstadoPonte(data?.settings ?? null, PAPEL_DESTE_CONECTOR);
 
+    // Sem agente gravado, o do papel `agente` é buscado no cadastro em vez de
+    // ir vazio. Instalação que religou antes desta versão (ou casa cujo
+    // estado veio do formato anterior, sem o campo) subia com slug em branco:
+    // a sessão conectava, o cliente mandava mensagem e o log dizia
+    // 'Agente "" não encontrado' — parece agente apagado, e é só o religamento
+    // que não sabia por quem perguntar.
+    let agentSlug = anterior?.agentSlug ?? "";
+    if (!agentSlug && PAPEL_DESTE_CONECTOR === "agente") {
+      const [primeiro] = await listAgentsInOrg(venue.org_id);
+      if (!primeiro) {
+        console.warn("[ponte] nenhum agente ativo nesta organização — não religo sozinho.");
+        return;
+      }
+      agentSlug = primeiro.slug;
+      console.log(`[ponte] sem agente gravado; usando "${agentSlug}", o primeiro ativo da casa.`);
+    }
+
     console.log(`[ponte] sessão salva encontrada — religando o WhatsApp (${PAPEL_DESTE_CONECTOR}).`);
     await iniciarWhatsapp({
-      agentSlug: anterior?.agentSlug ?? "",
+      agentSlug,
       venueSlug: anterior?.venueSlug ?? venue.slug,
       papel: PAPEL_DESTE_CONECTOR,
     });
