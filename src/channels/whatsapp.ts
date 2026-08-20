@@ -7,7 +7,7 @@ import makeWASocket, {
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { toDataURL } from "qrcode";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, rename, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
@@ -40,6 +40,41 @@ import {
  */
 const RAIZ_SESSAO = resolve(process.cwd(), process.env.WHATSAPP_SESSION_DIR ?? ".whatsapp");
 const pastaDaSessao = (papel: PapelWhatsapp) => resolve(RAIZ_SESSAO, papel);
+
+/**
+ * Herda a sessão de quando havia UMA conexão só.
+ *
+ * Antes dos papéis, as credenciais moravam soltas na raiz de `.whatsapp/`.
+ * Sem isto, atualizar o código faria toda casa já instalada pedir QR de novo
+ * — e reparear exige alguém com o celular do chip na mão, o que numa VPS
+ * significa o agente mudo até que alguém perceba e vá até o aparelho.
+ *
+ * Só o papel `agente` herda: a conexão antiga sempre foi a que atende.
+ */
+async function herdarSessaoAntiga(papel: PapelWhatsapp, destino: string): Promise<void> {
+  if (papel !== "agente") return;
+
+  const temCredenciais = async (pasta: string) =>
+    await stat(resolve(pasta, "creds.json")).then(
+      () => true,
+      () => false,
+    );
+
+  if (await temCredenciais(destino)) return;
+  if (!(await temCredenciais(RAIZ_SESSAO))) return;
+
+  const arquivos = await readdir(RAIZ_SESSAO, { withFileTypes: true });
+  let movidos = 0;
+  for (const arquivo of arquivos) {
+    // Só arquivos: as pastas da raiz são os próprios papéis.
+    if (!arquivo.isFile()) continue;
+    await rename(resolve(RAIZ_SESSAO, arquivo.name), resolve(destino, arquivo.name));
+    movidos += 1;
+  }
+  console.log(
+    `[whatsapp:agente] sessão herdada da instalação anterior (${movidos} arquivo(s)) — não precisa ler o QR de novo.`,
+  );
+}
 
 export type ConexaoStatus = "desconectado" | "aguardando_qr" | "conectando" | "conectado";
 
@@ -98,6 +133,7 @@ export async function iniciarWhatsapp(opcoes: OpcoesWhatsapp): Promise<void> {
   const papel = opcoes.papel ?? "agente";
   const pasta = pastaDaSessao(papel);
   await mkdir(pasta, { recursive: true });
+  await herdarSessaoAntiga(papel, pasta);
   const { state, saveCreds } = await useMultiFileAuthState(pasta);
 
   estado.status = "conectando";
