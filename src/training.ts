@@ -135,9 +135,19 @@ async function extrairComModelo(params: {
       };
 
   // Streaming: um PDF grande pode levar mais que o timeout HTTP não-streaming.
+  //
+  // Sonnet e não Opus: aqui a tarefa é TRANSCREVER — ler o cardápio ou o
+  // manual e devolver o texto. Não há julgamento a fazer, e o Opus gastava
+  // minutos num PDF de algumas páginas. Passando do teto da função, a Vercel
+  // corta e devolve uma página HTML de erro; o painel, esperando JSON, dizia
+  // "a API respondeu algo que não é JSON" — uma mensagem que não tem nada a
+  // ver com a causa e não sugere nada a quem está tentando subir um arquivo.
   const stream = anthropic().messages.stream({
-    model: "claude-opus-5",
-    max_tokens: 16000,
+    model: "claude-sonnet-5",
+    // Teto acima do que cabe em MAX_CONTEUDO (30 mil caracteres ≈ 8 mil
+    // tokens), com folga para documento denso — e não tão alto que a geração
+    // se arraste sem nunca ser aproveitada.
+    max_tokens: 12000,
     messages: [{ role: "user", content: [bloco, { type: "text", text: instrucao }] }],
   });
   const resposta = await stream.finalMessage();

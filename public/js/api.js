@@ -144,7 +144,11 @@ export async function api(caminho, opcoes = {}, jaRenovou = false) {
   try {
     corpo = await resposta.json();
   } catch {
-    throw new ErroApi(resposta.status, "resposta_invalida", "A API respondeu algo que não é JSON.");
+    // Resposta que não é JSON quase nunca é "a API quebrou": é a plataforma
+    // devolvendo uma página de erro em HTML antes de a rota rodar. Dizer
+    // "não é JSON" descreve o sintoma para quem só queria subir um arquivo —
+    // o status diz a causa, e é ela que vai para a tela.
+    throw new ErroApi(resposta.status, "resposta_invalida", motivoNaoJson(resposta.status));
   }
 
   if (!resposta.ok || corpo?.success === false) {
@@ -152,6 +156,22 @@ export async function api(caminho, opcoes = {}, jaRenovou = false) {
     throw new ErroApi(resposta.status, e.code ?? "erro", e.message ?? "Falha na requisição.");
   }
   return corpo.data;
+}
+
+function motivoNaoJson(status) {
+  if (status === 413) {
+    return "Arquivo grande demais para enviar. Tente um arquivo menor, ou divida em partes.";
+  }
+  if (status === 504 || status === 502) {
+    return "O arquivo demorou demais para ser processado e o envio foi cortado. Tente um arquivo menor ou com menos páginas.";
+  }
+  if (status === 401 || status === 403) {
+    return "Sua sessão expirou. Entre de novo.";
+  }
+  if (status >= 500) {
+    return `O servidor falhou ao responder (erro ${status}). Tente de novo em instantes.`;
+  }
+  return `Resposta inesperada do servidor (${status}). Tente de novo.`;
 }
 
 export const get = (caminho) => api(caminho);
