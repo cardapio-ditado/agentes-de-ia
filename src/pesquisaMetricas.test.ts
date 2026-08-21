@@ -5,6 +5,7 @@ import {
   classificar,
   contarEtiquetas,
   montarPainel,
+  porCategoria,
   porDia,
   ranking,
   resumoNps,
@@ -234,4 +235,123 @@ test("o painel junta nuvem, ranking e etiquetas da mesma amostra", () => {
   assert.ok(p.nuvem.some((t) => t.termo === "demora"));
   assert.equal(p.ranking.length, 1);
   assert.equal(p.elogios[0]!.etiqueta, "Comida");
+});
+
+/* ---------- notas por categoria ---------- */
+
+let seqNota = 0;
+function nota(over: Partial<import("./pesquisaMetricas.js").NotaBruta> = {}) {
+  seqNota += 1;
+  return {
+    resposta_id: "r1",
+    item_id: `i${seqNota}`,
+    categoria: "Comida",
+    pergunta: "A comida agradou?",
+    tipo: "nota",
+    nota: 8,
+    texto: null,
+    created_at: "2026-08-20T23:00:00.000Z",
+    ...over,
+  };
+}
+
+test("a média de uma categoria junta as perguntas dela", () => {
+  const c = porCategoria([
+    nota({ item_id: "a", categoria: "Comida", nota: 8 }),
+    nota({ item_id: "b", categoria: "Comida", nota: 6 }),
+    nota({ item_id: "c", categoria: "Ambiente", nota: 10 }),
+  ]);
+  const comida = c.find((x) => x.categoria === "Comida");
+  assert.equal(comida?.media, 7);
+  assert.equal(comida?.respostas, 2);
+});
+
+test("a pior categoria vem primeiro — a tela existe para achar problema", () => {
+  // Ordenar por nome poria "Ambiente" antes de "Tempo de espera" mesmo com a
+  // espera em 4,2, e o que precisa de ação ficaria embaixo.
+  const c = porCategoria([
+    nota({ item_id: "a", categoria: "Ambiente", nota: 9 }),
+    nota({ item_id: "b", categoria: "Tempo de espera", nota: 4 }),
+    nota({ item_id: "c", categoria: "Comida", nota: 7 }),
+  ]);
+  assert.deepEqual(c.map((x) => x.categoria), ["Tempo de espera", "Comida", "Ambiente"]);
+});
+
+test("pergunta de texto não entra na média da categoria", () => {
+  const c = porCategoria([
+    nota({ item_id: "a", categoria: "Comida", nota: 8 }),
+    nota({ item_id: "b", categoria: "Comida", nota: null, tipo: "texto", texto: "faltou sal" }),
+  ]);
+  assert.equal(c[0]!.media, 8);
+  assert.equal(c[0]!.respostas, 1);
+});
+
+test("categoria só de texto some da lista em vez de virar média zero", () => {
+  // Média zero num assunto que ninguém pontuou seria lida como "está péssimo".
+  const c = porCategoria([nota({ categoria: "Geral", nota: null, tipo: "texto", texto: "oi" })]);
+  assert.deepEqual(c, []);
+});
+
+test("a comparação com o período anterior é por categoria", () => {
+  const c = porCategoria(
+    [nota({ item_id: "a", categoria: "Comida", nota: 6 })],
+    [nota({ item_id: "a", categoria: "Comida", nota: 9 })],
+  );
+  assert.equal(c[0]!.media, 6);
+  assert.equal(c[0]!.antes, 9);
+});
+
+test("categoria nova não finge que piorou", () => {
+  // Sem base, `antes` é nulo — zero seria lido como despencou.
+  const c = porCategoria([nota({ categoria: "Estacionamento", nota: 7 })], []);
+  assert.equal(c[0]!.antes, null);
+});
+
+test("dentro da categoria, a pior pergunta vem primeiro", () => {
+  // A categoria diz ONDE está o problema; a pergunta diz QUAL é.
+  const c = porCategoria([
+    nota({ item_id: "a", categoria: "Comida", pergunta: "Estava saborosa?", nota: 9 }),
+    nota({ item_id: "b", categoria: "Comida", pergunta: "Chegou quente?", nota: 4 }),
+  ]);
+  assert.deepEqual(c[0]!.perguntas.map((p) => p.pergunta), ["Chegou quente?", "Estava saborosa?"]);
+});
+
+test("a mesma pergunta respondida por várias pessoas vira uma linha só", () => {
+  const c = porCategoria([
+    nota({ resposta_id: "r1", item_id: "a", nota: 10 }),
+    nota({ resposta_id: "r2", item_id: "a", nota: 6 }),
+  ]);
+  assert.equal(c[0]!.perguntas.length, 1);
+  assert.equal(c[0]!.perguntas[0]!.media, 8);
+  assert.equal(c[0]!.perguntas[0]!.respostas, 2);
+});
+
+test("sem nota nenhuma, a lista sai vazia em vez de estourar", () => {
+  assert.deepEqual(porCategoria([]), []);
+});
+
+test("o painel entrega as categorias junto com o resto", () => {
+  const p = montarPainel({
+    respostas: [resposta({ nota: 9, id: "r1" })],
+    notas: [nota({ resposta_id: "r1", categoria: "Comida", nota: 7 })],
+    atendentes: EQUIPE,
+    fuso: CUIABA,
+  });
+  assert.equal(p.categorias.length, 1);
+  assert.equal(p.categorias[0]!.categoria, "Comida");
+});
+
+test("o texto das perguntas abertas alimenta a nuvem", () => {
+  // Quem escreveu em "quer contar mais?" está falando da casa do mesmo jeito;
+  // deixar de fora esvaziaria a nuvem nas pesquisas mais bem montadas.
+  const p = montarPainel({
+    respostas: [resposta({ id: "r1", nota: 4, comentario: null })],
+    notas: [
+      nota({ resposta_id: "r1", nota: null, tipo: "texto", texto: "demora demais na cozinha" }),
+    ],
+    atendentes: EQUIPE,
+    fuso: CUIABA,
+  });
+  assert.ok(p.nuvem.some((t) => t.termo === "demora"));
+  assert.equal(p.nuvem.find((t) => t.termo === "demora")?.tom, "critica");
 });

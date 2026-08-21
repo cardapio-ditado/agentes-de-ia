@@ -70,6 +70,9 @@ export async function pesquisa(raiz, ctx) {
     conteudo.append(
       indicadores(dados),
       dados.aBater.length > 0 ? cartaoDetratores(dados.aBater) : null,
+      // As notas por assunto vêm logo depois do alerta: é a resposta para "o
+      // problema é a cozinha ou o salão?", que a nota geral nunca deu.
+      cartaoCategorias(dados.categorias ?? []),
       linhaDoTempo(dados.linha),
       cartaoNuvem(dados.nuvem),
       el("div", { classe: "grade-2" }, [
@@ -184,6 +187,76 @@ function cartaoDetratores(respostas) {
 function textoDasEtiquetas(r) {
   const criticas = (r.criticas ?? []).join(", ");
   return criticas ? `Marcou: ${criticas}` : "Sem comentário";
+}
+
+/* ---------- as notas por assunto ---------- */
+
+/**
+ * A nota de cada categoria, da pior para a melhor.
+ *
+ * Da pior para a melhor porque a tela existe para achar problema. Em ordem
+ * alfabética, "Ambiente" com 9,1 ficaria acima de "Tempo de espera" com 4,2 —
+ * e o que precisa de ação estaria embaixo, onde ninguém rola.
+ */
+function cartaoCategorias(categorias) {
+  if (categorias.length === 0) {
+    return el("section", { classe: "cartao" }, [
+      el("h3", { texto: "Notas por assunto" }),
+      el("p", {
+        classe: "muted",
+        texto: "Monte a pesquisa da casa em “Ajustes da pesquisa” para ter nota separada por comida, atendimento, ambiente — o que importar para você.",
+      }),
+    ]);
+  }
+
+  return el("section", { classe: "cartao" }, [
+    el("div", { classe: "cabecalho-secao" }, [
+      el("div", {}, [
+        el("h3", { texto: "Notas por assunto" }),
+        el("p", { classe: "muted", texto: "Da pior para a melhor. Abra para ver pergunta por pergunta." }),
+      ]),
+    ]),
+    el("div", { classe: "categorias" }, categorias.map(linhaDaCategoria)),
+  ]);
+}
+
+function linhaDaCategoria(c) {
+  const faixa = c.media >= 9 ? "ok" : c.media >= 7 ? "alerta" : "perigo";
+
+  const detalhe = el(
+    "div",
+    { classe: "categoria-perguntas" },
+    c.perguntas.map((p) =>
+      el("div", { classe: "categoria-pergunta" }, [
+        el("span", { texto: p.pergunta }),
+        el("strong", { texto: virgula(p.media) }),
+        el("small", { classe: "muted", texto: `${p.respostas} resp.` }),
+      ]),
+    ),
+  );
+
+  const resumo = el("summary", { classe: "categoria-linha" }, [
+    el("span", { classe: "categoria-nome", texto: c.categoria }),
+    el("span", { classe: "categoria-trilho" }, [
+      el("span", { classe: `categoria-preenche faixa-${faixa}`, style: `width:${c.media * 10}%` }),
+    ]),
+    el("strong", { classe: `categoria-nota faixa-texto-${faixa}`, texto: virgula(c.media) }),
+    el("small", { classe: "muted categoria-variacao", texto: variacao(c.media, c.antes) }),
+  ]);
+
+  return el("details", { classe: "categoria" }, [resumo, detalhe]);
+}
+
+function virgula(n) {
+  return n.toFixed(1).replace(".", ",");
+}
+
+/** "+0,4" contra o período anterior. Sem base, o campo fica vazio. */
+function variacao(agora, antes) {
+  if (antes === null || antes === undefined) return "";
+  const d = Math.round((agora - antes) * 10) / 10;
+  if (d === 0) return "igual";
+  return `${d > 0 ? "▲" : "▼"} ${virgula(Math.abs(d))}`;
 }
 
 /* ---------- a linha do tempo ---------- */

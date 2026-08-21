@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ETIQUETAS, etiquetasValidas, telefoneLimpo } from "./pesquisa.js";
+import { ETIQUETAS, etiquetasValidas, liberacaoDoPremio, telefoneLimpo } from "./pesquisa.js";
 
 test("etiqueta fora da lista não entra no gráfico da casa", () => {
   // A lista fixa é o que permite dizer "as reclamações de espera dobraram".
@@ -28,4 +28,48 @@ test("toda etiqueta oferecida é aceita de volta", () => {
 test("o telefone perde a formatação e fica só em dígitos", () => {
   assert.equal(telefoneLimpo("(65) 99999-0000"), "65999990000");
   assert.equal(telefoneLimpo("+55 65 9 9999-0000"), "5565999990000");
+});
+
+/* ---------- a carência do prêmio ---------- */
+
+test("o cupom só é liberado no dia seguinte, no relógio da casa", () => {
+  // Usado na mesma conta, o prêmio vira desconto no que o cliente já ia
+  // pagar — o oposto de trazer alguém de volta.
+  const cuiaba = "America/Cuiaba";
+  // 20h de 22/08 em Cuiabá = 23/08 00:00 UTC. A liberação tem que ser a
+  // meia-noite do dia 23 EM CUIABÁ, que é 23/08 04:00 UTC.
+  const r = liberacaoDoPremio(cuiaba, new Date("2026-08-23T00:00:00Z"));
+  assert.equal(r, "2026-08-23T04:00:00.000Z");
+});
+
+test("a virada do dia é a da casa, não a do UTC", () => {
+  // 23h de sábado em Cuiabá já é domingo em UTC. Calculado em UTC, o cupom
+  // ganho no sábado à noite seria liberado no próprio sábado.
+  const ganho = new Date("2026-08-23T03:00:00Z"); // sábado 22, 23h em Cuiabá
+  const liberado = liberacaoDoPremio("America/Cuiaba", ganho);
+  assert.ok(
+    Date.parse(liberado) > ganho.getTime(),
+    `liberou antes de ganhar: ${liberado} <= ${ganho.toISOString()}`,
+  );
+  // E é a meia-noite do domingo 23 em Cuiabá.
+  assert.equal(liberado, "2026-08-23T04:00:00.000Z");
+});
+
+test("a liberação é sempre no futuro, a qualquer hora do dia", () => {
+  // O caso que quebraria em silêncio: responder às 00:05 e o cupom já nascer
+  // liberado, porque a conta pegou "hoje" em vez de "amanhã".
+  for (const hora of ["04:05", "10:00", "16:30", "23:59", "03:59"]) {
+    const agora = new Date(`2026-08-22T${hora}:00Z`);
+    const liberado = liberacaoDoPremio("America/Cuiaba", agora);
+    assert.ok(
+      Date.parse(liberado) > agora.getTime(),
+      `${hora}: liberou em ${liberado}, que não é depois de ${agora.toISOString()}`,
+    );
+  }
+});
+
+test("cada fuso tem a sua virada", () => {
+  const emCuiaba = liberacaoDoPremio("America/Cuiaba", new Date("2026-08-22T18:00:00Z"));
+  const emSaoPaulo = liberacaoDoPremio("America/Sao_Paulo", new Date("2026-08-22T18:00:00Z"));
+  assert.notEqual(emCuiaba, emSaoPaulo);
 });

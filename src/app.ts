@@ -208,6 +208,16 @@ import {
 import type { EventoParaGravar } from "./importarProgramacao.js";
 import type { Venue } from "./venues.js";
 import {
+  CATEGORIAS_SUGERIDAS,
+  ErroDeModelo,
+  apagarPesquisa,
+  atualizarPesquisa,
+  conversarMontagem,
+  criarPesquisa,
+  listarPesquisas,
+  pesquisaAtiva,
+} from "./pesquisaModelo.js";
+import {
   baixarVendas,
   corrigirItem,
   descartarImportacao,
@@ -601,6 +611,18 @@ async function convidarParaPesquisa(
   }
   await marcarConviteEnviado(convite.id);
   return { convite, enfileirado: true };
+}
+
+/** E o mesmo para os erros de montagem da pesquisa. */
+async function comErroDeModelo<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDeModelo) {
+      throw erro(e.status, e.status === 404 ? "not_found" : "invalid_request", e.message);
+    }
+    throw e;
+  }
 }
 
 /** O mesmo tratamento para os erros da gestão de acessos. */
@@ -1575,6 +1597,84 @@ async function roteasApi(
           }),
         ),
       );
+    }
+
+    // ---- O modelo: as perguntas que a casa faz ----
+
+    // GET | POST /v1/venues/:slug/pesquisa/modelos
+    if (recurso === "pesquisa" && p[3] === "modelos" && p.length === 4) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, {
+          pesquisas: await comErroDeModelo(() => listarPesquisas(venue.id)),
+          categorias: [...CATEGORIAS_SUGERIDAS],
+        });
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDeModelo(() =>
+            criarPesquisa({
+              venueId: venue.id,
+              nome: texto(corpo, "nome"),
+              descricao: textoOpcional(corpo, "descricao") ?? null,
+              itens: corpo.itens,
+              ativar: corpo.ativar === undefined ? undefined : Boolean(corpo.ativar),
+            }),
+          ),
+          201,
+        );
+      }
+    }
+
+    // PATCH | DELETE /v1/venues/:slug/pesquisa/modelos/:id
+    if (recurso === "pesquisa" && p[3] === "modelos" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      if (metodo === "PATCH") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDeModelo(() =>
+            atualizarPesquisa({
+              venueId: venue.id,
+              id: p[4]!,
+              nome: textoOpcional(corpo, "nome"),
+              descricao: corpo.descricao === undefined ? undefined : (textoOpcional(corpo, "descricao") ?? null),
+              itens: corpo.itens,
+              ativa: corpo.ativa === undefined ? undefined : Boolean(corpo.ativa),
+            }),
+          ),
+        );
+      }
+      if (metodo === "DELETE") {
+        await comErroDeModelo(() => apagarPesquisa(venue.id, p[4]!));
+        return ok(res, { apagada: true });
+      }
+    }
+
+    // POST /v1/venues/:slug/pesquisa/montar — a IA conversa e propõe
+    if (metodo === "POST" && recurso === "pesquisa" && p[3] === "montar" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+
+      const mensagens = Array.isArray(corpo.mensagens)
+        ? corpo.mensagens.map((m) => {
+            const o = (m ?? {}) as Record<string, unknown>;
+            return {
+              papel: o.papel === "ia" ? ("ia" as const) : ("usuario" as const),
+              texto: String(o.texto ?? ""),
+            };
+          }).filter((m) => m.texto.trim())
+        : [];
+
+      return ok(res, await comErroDeModelo(() => conversarMontagem(mensagens)));
     }
 
     // GET | PUT /v1/venues/:slug/pesquisa/config
@@ -2859,11 +2959,17 @@ async function roteasApi(
       if (!config.ativa) {
         return ok(res, { ativa: false, casa: venue.name });
       }
+      // As perguntas da casa. Sem pesquisa montada a tela continua funcionando
+      // com a nota geral e as etiquetas — quem acabou de comprar o módulo
+      // imprime o QR e já recebe resposta, em vez de o cliente achar um
+      // formulário vazio na mesa.
+      const modelo = await comErroDeModelo(() => pesquisaAtiva(venue.id));
       return ok(res, {
         ativa: true,
         casa: venue.name,
         saudacao: config.saudacao,
         etiquetas: [...ETIQUETAS],
+        perguntas: modelo?.itens ?? [],
         perguntar_atendente: config.perguntar_atendente,
         perguntar_comentario: config.perguntar_comentario,
         premio: config.premio_ativo
@@ -2889,7 +2995,9 @@ async function roteasApi(
         await comErroDePesquisa(() =>
           registrarResposta({
             venueId: venue.id,
+            fuso: venue.timezone,
             nota: Number(corpo.nota),
+            itens: corpo.itens,
             elogios: corpo.elogios,
             criticas: corpo.criticas,
             comentario: textoOpcional(corpo, "comentario") ?? null,

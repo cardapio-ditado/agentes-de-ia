@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { db } from "./supabase.js";
 import { montarPainel } from "./pesquisaMetricas.js";
-import type { PainelDaPesquisa, RespostaBruta } from "./pesquisaMetricas.js";
+import type { NotaBruta, PainelDaPesquisa, RespostaBruta } from "./pesquisaMetricas.js";
+import { notaNormalizada, pesquisaAtiva } from "./pesquisaModelo.js";
+import type { ItemDaPesquisa } from "./pesquisaModelo.js";
+import { instanteNaCasa } from "./fuso.js";
 
 /**
  * Pesquisa de satisfação: a opinião do cliente enquanto ele ainda está na mesa.
@@ -258,6 +261,8 @@ export interface PremioEmitido {
   codigo: string;
   titulo: string;
   expira_em: string;
+  /** A partir de quando vale. O prêmio é pela próxima visita. */
+  liberado_em: string;
 }
 
 export interface RespostaRegistrada {
@@ -283,8 +288,17 @@ export function etiquetasValidas(cruas: unknown): string[] {
   return [...new Set(limpas)];
 }
 
+/** O que o cliente respondeu numa pergunta montada pela casa. */
+export interface RespostaDeItem {
+  item_id: string;
+  valor?: unknown;
+  texto?: string | null;
+}
+
 export async function registrarResposta(params: {
   venueId: string;
+  /** O fuso da casa — é ele que define quando o cupom é liberado. */
+  fuso: string;
   nota: number;
   elogios?: unknown;
   criticas?: unknown;
@@ -296,6 +310,8 @@ export async function registrarResposta(params: {
   conviteId?: string | null;
   clienteNome?: string | null;
   clienteContato?: string | null;
+  /** As respostas às perguntas da pesquisa da casa. */
+  itens?: unknown;
 }): Promise<RespostaRegistrada> {
   const nota = Math.trunc(Number(params.nota));
   if (!Number.isFinite(nota) || nota < 0 || nota > 10) {
@@ -319,10 +335,13 @@ export async function registrarResposta(params: {
     ? String(params.origem)
     : "qrcode";
 
+  const modelo = await pesquisaAtiva(params.venueId);
+
   const { data, error } = await cliente()
     .from("pesquisa_respostas")
     .insert({
       venue_id: params.venueId,
+      pesquisa_id: modelo?.id ?? null,
       nota,
       elogios: etiquetasValidas(params.elogios),
       criticas: etiquetasValidas(params.criticas),
@@ -352,13 +371,29 @@ export async function registrarResposta(params: {
 
   const respostaId = (data as { id: string }).id;
 
+  // As notas por pergunta entram DEPOIS da resposta, e falhar aqui não
+  // desfaz nada: a nota geral e o comentário já estão gravados, e é melhor
+  // uma resposta incompleta que resposta nenhuma.
+  if (modelo) {
+    try {
+      await gravarNotas({
+        respostaId,
+        venueId: params.venueId,
+        itens: modelo.itens,
+        respondido: params.itens,
+      });
+    } catch (e) {
+      console.error(`[pesquisa] notas da resposta ${respostaId} não entraram: ${(e as Error).message}`);
+    }
+  }
+
   let premio: PremioEmitido | null = null;
   if (config.premio_ativo) {
     // Falhar aqui não pode desfazer a resposta: a opinião do cliente é o que
     // interessa, o cupom é o agrado. Perder a resposta inteira porque a
     // emissão do cupom tropeçou seria trocar o ouro pelo brinde.
     try {
-      premio = await emitirPremio(respostaId, config);
+      premio = await emitirPremio(respostaId, config, params.fuso);
     } catch (e) {
       console.error(`[pesquisa] resposta ${respostaId} sem cupom: ${(e as Error).message}`);
     }
@@ -370,11 +405,13 @@ export async function registrarResposta(params: {
 async function emitirPremio(
   respostaId: string,
   config: ConfigDaPesquisa,
+  fuso: string,
 ): Promise<PremioEmitido> {
   const { data, error } = await cliente().rpc("pesquisa_emitir_premio", {
     p_resposta_id: respostaId,
     p_titulo: config.premio_titulo,
     p_validade_dias: config.premio_validade_dias,
+    p_liberado_em: liberacaoDoPremio(fuso),
   } as never);
   if (error) throw new Error(error.message);
 
@@ -383,7 +420,86 @@ async function emitirPremio(
     codigo: String(linha.codigo),
     titulo: String(linha.titulo),
     expira_em: String(linha.expira_em),
+    liberado_em: String(linha.liberado_em ?? ""),
   };
+}
+
+/**
+ * A partir de quando o cupom vale: o começo do dia seguinte no relógio da casa.
+ *
+ * O prêmio é pela PRÓXIMA visita. Usado na mesma conta, ele vira desconto no
+ * que o cliente já ia pagar — o oposto de trazer alguém de volta.
+ *
+ * "Dia seguinte" e não "24 horas": quem responde às 23h de sexta poderia usar
+ * na sexta seguinte com 24h, mas não no sábado à noite. A virada do dia é o
+ * que as palavras "próxima visita" significam para quem lê o cupom.
+ *
+ * A conta é feita no fuso da CASA. Feita em UTC, a noite de sábado em Cuiabá
+ * (que já é domingo em UTC) liberaria o cupom no próprio sábado.
+ */
+export function liberacaoDoPremio(fuso: string, agora = new Date()): string {
+  const hoje = new Intl.DateTimeFormat("en-CA", {
+    timeZone: fuso,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(agora);
+
+  const amanha = new Date(`${hoje}T12:00:00Z`);
+  amanha.setUTCDate(amanha.getUTCDate() + 1);
+  return instanteNaCasa(amanha.toISOString().slice(0, 10), "00:00", fuso);
+}
+
+/**
+ * Grava uma linha por pergunta respondida, com a nota já na escala de 0 a 10.
+ *
+ * Só entra o que a casa realmente perguntou: a lista de itens do modelo é a
+ * fonte, e não o corpo que chegou. Sem isso, um POST feito à mão inventaria
+ * categorias e perguntas que nunca existiram, e o painel mostraria assunto que
+ * ninguém perguntou.
+ */
+async function gravarNotas(params: {
+  respostaId: string;
+  venueId: string;
+  itens: ItemDaPesquisa[];
+  respondido: unknown;
+}): Promise<void> {
+  const porId = new Map<string, RespostaDeItem>();
+  if (Array.isArray(params.respondido)) {
+    for (const cru of params.respondido) {
+      const o = (cru ?? {}) as RespostaDeItem;
+      if (typeof o.item_id === "string") porId.set(o.item_id, o);
+    }
+  }
+
+  const linhas = [];
+  for (const item of params.itens) {
+    const resposta = porId.get(item.id);
+    if (!resposta) continue;
+
+    const nota = notaNormalizada(item.tipo, resposta.valor);
+    const texto = typeof resposta.texto === "string" ? resposta.texto.trim().slice(0, 2000) : null;
+
+    // Pergunta pulada: nada a gravar. Uma linha com nota nula e texto nulo só
+    // engordaria a tabela e não entraria em conta nenhuma.
+    if (nota === null && !texto) continue;
+
+    linhas.push({
+      resposta_id: params.respostaId,
+      venue_id: params.venueId,
+      item_id: item.id,
+      categoria: item.categoria,
+      pergunta: item.pergunta,
+      tipo: item.tipo,
+      nota,
+      valor: resposta.valor === undefined || resposta.valor === null ? null : String(resposta.valor),
+      texto: texto || null,
+    });
+  }
+
+  if (linhas.length === 0) return;
+  const { error } = await cliente().from("pesquisa_resposta_itens").insert(linhas as never);
+  if (error) throw new Error(error.message);
 }
 
 // ============================================================
@@ -587,6 +703,23 @@ async function respostasEntre(
   return (data ?? []) as RespostaBruta[];
 }
 
+async function notasEntre(venueId: string, de: Date, ate: Date): Promise<NotaBruta[]> {
+  const { data, error } = await cliente()
+    .from("pesquisa_resposta_itens")
+    .select("resposta_id, item_id, categoria, pergunta, tipo, nota, texto, created_at")
+    .eq("venue_id", venueId)
+    .gte("created_at", de.toISOString())
+    .lt("created_at", ate.toISOString())
+    .limit(TETO_DE_RESPOSTAS * 4);
+  if (error) throw new ErroDePesquisa(500, `Falha ao ler as notas: ${error.message}`);
+  // `numeric` volta como texto do PostgREST: sem o Number, a média viraria
+  // concatenação de strings e o painel mostraria um número absurdo.
+  return (data ?? []).map((l: Record<string, unknown>) => ({
+    ...l,
+    nota: l.nota === null || l.nota === undefined ? null : Number(l.nota),
+  })) as NotaBruta[];
+}
+
 export async function painelDaPesquisa(params: {
   venueId: string;
   fuso: string;
@@ -599,14 +732,17 @@ export async function painelDaPesquisa(params: {
   // a casa piorou sempre que o dono ampliasse o período na tela.
   const inicioAnterior = new Date(inicio.getTime() - dias * 86_400_000);
 
-  const [respostas, anteriores, atendentes] = await Promise.all([
-    respostasEntre(params.venueId, inicio, new Date(agora.getTime() + 60_000)),
+  const fim = new Date(agora.getTime() + 60_000);
+  const [respostas, anteriores, notas, notasAnteriores, atendentes] = await Promise.all([
+    respostasEntre(params.venueId, inicio, fim),
     respostasEntre(params.venueId, inicioAnterior, inicio),
+    notasEntre(params.venueId, inicio, fim),
+    notasEntre(params.venueId, inicioAnterior, inicio),
     listarAtendentes(params.venueId, { incluirInativos: true }),
   ]);
 
   return {
-    ...montarPainel({ respostas, anteriores, atendentes, fuso: params.fuso }),
+    ...montarPainel({ respostas, anteriores, notas, notasAnteriores, atendentes, fuso: params.fuso }),
     atendentes,
     etiquetas: [...ETIQUETAS],
   };

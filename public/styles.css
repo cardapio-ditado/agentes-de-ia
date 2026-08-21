@@ -2349,3 +2349,54 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .qr-imagem { width: 340px; height: 340px; }
   .bloco-codigo { border: 0; font-size: 0.8rem; }
 }
+
+/* ---- Notas por assunto (pesquisa) ---- */
+.categorias { display: grid; gap: 4px; margin-top: 10px; }
+.categoria { border-bottom: 1px solid var(--borda); }
+.categoria:last-child { border-bottom: 0; }
+.categoria-linha {
+  display: grid;
+  grid-template-columns: minmax(96px, 1.1fr) 2fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.9rem;
+}
+.categoria-linha::-webkit-details-marker { display: none; }
+.categoria-linha:hover { background: var(--marca-suave); }
+.categoria-nome { font-weight: 600; }
+.categoria-trilho {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  overflow: hidden;
+}
+.categoria-preenche { display: block; height: 100%; border-radius: 999px; }
+/* Verde a partir de 9, amarelo de 7 a 9, vermelho abaixo — a mesma faixa do
+   NPS, para a cor querer dizer a mesma coisa nas duas telas. */
+.faixa-ok { background: var(--ok); }
+.faixa-alerta { background: var(--alerta); }
+.faixa-perigo { background: var(--perigo); }
+.faixa-texto-ok { color: var(--ok); }
+.faixa-texto-alerta { color: var(--alerta); }
+.faixa-texto-perigo { color: var(--perigo); }
+.categoria-nota { font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.categoria-variacao { min-width: 5ch; text-align: right; }
+.categoria-perguntas { padding: 4px 4px 12px 12px; display: grid; gap: 7px; }
+.categoria-pergunta {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: var(--texto-2);
+}
+.categoria-pergunta strong { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 620px) {
+  .categoria-linha { grid-template-columns: 1fr auto auto; }
+  .categoria-trilho { display: none; }
+}

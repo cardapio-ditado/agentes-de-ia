@@ -207,6 +207,112 @@ export function porDia(respostas: RespostaBruta[], fuso: string): PontoDaLinha[]
     .sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
+/** Uma linha de `pesquisa_resposta_itens`, do jeito que sai do banco. */
+export interface NotaBruta {
+  resposta_id: string;
+  item_id: string;
+  categoria: string;
+  pergunta: string;
+  tipo: string;
+  /** Já normalizada de 0 a 10. Null em pergunta de texto. */
+  nota: number | null;
+  texto: string | null;
+  created_at: string;
+}
+
+export interface NotaDaPergunta {
+  itemId: string;
+  pergunta: string;
+  tipo: string;
+  media: number;
+  respostas: number;
+}
+
+export interface NotaDaCategoria {
+  categoria: string;
+  media: number;
+  /** Quantas notas entraram nesta média (não quantos clientes). */
+  respostas: number;
+  /** A mesma média no período anterior. Null = sem base para comparar. */
+  antes: number | null;
+  perguntas: NotaDaPergunta[];
+}
+
+/**
+ * A nota de cada assunto da casa.
+ *
+ * É a resposta para "o problema é a cozinha ou o salão?" — a pergunta que a
+ * nota geral sozinha nunca respondeu. Duas casas com NPS 40 podem ter
+ * problemas opostos, e o dono só descobre qual é o dele olhando por categoria.
+ */
+export function porCategoria(
+  notas: NotaBruta[],
+  anteriores: NotaBruta[] = [],
+): NotaDaCategoria[] {
+  const medias = (linhas: NotaBruta[]) => {
+    const acumulado = new Map<string, { soma: number; n: number }>();
+    for (const l of linhas) {
+      if (l.nota === null) continue;
+      const atual = acumulado.get(l.categoria) ?? { soma: 0, n: 0 };
+      atual.soma += l.nota;
+      atual.n += 1;
+      acumulado.set(l.categoria, atual);
+    }
+    return acumulado;
+  };
+
+  const agora = medias(notas);
+  const antes = medias(anteriores);
+
+  // Uma linha por pergunta, dentro da categoria dela: a categoria diz ONDE
+  // está o problema, a pergunta diz QUAL é.
+  const porPergunta = new Map<string, Map<string, { pergunta: string; tipo: string; soma: number; n: number }>>();
+  for (const l of notas) {
+    if (l.nota === null) continue;
+    if (!porPergunta.has(l.categoria)) porPergunta.set(l.categoria, new Map());
+    const daCategoria = porPergunta.get(l.categoria)!;
+    const atual = daCategoria.get(l.item_id) ?? {
+      pergunta: l.pergunta,
+      tipo: l.tipo,
+      soma: 0,
+      n: 0,
+    };
+    atual.soma += l.nota;
+    atual.n += 1;
+    daCategoria.set(l.item_id, atual);
+  }
+
+  const saida: NotaDaCategoria[] = [];
+  for (const [categoria, { soma, n }] of agora) {
+    const base = antes.get(categoria);
+    saida.push({
+      categoria,
+      media: arredondar(soma / n),
+      respostas: n,
+      antes: base && base.n > 0 ? arredondar(base.soma / base.n) : null,
+      perguntas: [...(porPergunta.get(categoria) ?? new Map()).entries()]
+        .map(([itemId, p]) => ({
+          itemId,
+          pergunta: p.pergunta,
+          tipo: p.tipo,
+          media: arredondar(p.soma / p.n),
+          respostas: p.n,
+        }))
+        .sort((a, b) => a.media - b.media || a.pergunta.localeCompare(b.pergunta)),
+    });
+  }
+
+  // Da pior para a melhor: a tela existe para achar problema, e o que precisa
+  // de ação tem que estar em cima. Ordenar por nome poria "Ambiente" antes de
+  // "Tempo de espera" mesmo com a espera em 4,2.
+  saida.sort((a, b) => a.media - b.media || a.categoria.localeCompare(b.categoria));
+  return saida;
+}
+
+function arredondar(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 export interface PainelDaPesquisa {
   resumo: ResumoNps;
   /** O mesmo resumo do período anterior, do mesmo tamanho. Null = sem base. */
@@ -216,6 +322,7 @@ export interface PainelDaPesquisa {
   criticas: ContagemDeEtiqueta[];
   nuvem: TermoDaNuvem[];
   linha: PontoDaLinha[];
+  categorias: NotaDaCategoria[];
   /** Detratores recentes: é para estes que o dono liga de volta. */
   aBater: RespostaBruta[];
 }
@@ -226,20 +333,33 @@ const LIMITE_A_BATER = 10;
 export function montarPainel(params: {
   respostas: RespostaBruta[];
   anteriores?: RespostaBruta[];
+  notas?: NotaBruta[];
+  notasAnteriores?: NotaBruta[];
   atendentes: Array<{ id: string; nome: string; apelido?: string | null }>;
   fuso: string;
 }): PainelDaPesquisa {
   const { respostas, atendentes, fuso } = params;
 
   return {
+    categorias: porCategoria(params.notas ?? [], params.notasAnteriores ?? []),
     resumo: resumoNps(respostas),
     anterior: params.anteriores?.length ? resumoNps(params.anteriores) : null,
     ranking: ranking(respostas, atendentes),
     elogios: contarEtiquetas(respostas, "elogios"),
     criticas: contarEtiquetas(respostas, "criticas"),
-    nuvem: nuvemDePalavras(
-      respostas.map((r) => ({ texto: r.comentario, nota: r.nota })),
-    ),
+    // A nuvem lê o comentário geral E o texto das perguntas abertas da casa:
+    // quem escreveu na pergunta "quer contar mais?" está falando da casa do
+    // mesmo jeito, e deixar isso de fora esvaziaria a nuvem justamente nas
+    // pesquisas mais bem montadas.
+    nuvem: nuvemDePalavras([
+      ...respostas.map((r) => ({ texto: r.comentario, nota: r.nota })),
+      ...(params.notas ?? [])
+        .filter((n) => n.texto)
+        .map((n) => ({
+          texto: n.texto,
+          nota: respostas.find((r) => r.id === n.resposta_id)?.nota ?? 8,
+        })),
+    ]),
     linha: porDia(respostas, fuso),
     // Os mais recentes primeiro: um cliente insatisfeito ontem ainda dá para
     // recuperar; o de três semanas atrás já contou para os amigos.

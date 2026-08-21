@@ -177,6 +177,13 @@
       .pessoa small { font-size: 11px; color: var(--creme-2); }
 
       .estrelas { display: flex; gap: 6px; justify-content: center; margin-top: 16px; }
+      /* Dentro de uma pergunta da casa as estrelas ficam à esquerda, alinhadas
+         com o enunciado — centralizadas, pareceriam pertencer à tela e não
+         àquela pergunta específica. */
+      .estrelas-linha { justify-content: flex-start; margin-top: 4px; }
+      /* Aviso do que falta: o botão travado sem explicação faz a pessoa achar
+         que a tela quebrou. */
+      .btn:disabled { opacity: .35; }
       .estrela {
         appearance: none; border: 0; background: none; cursor: pointer;
         font-size: 34px; line-height: 1; padding: 4px 2px; color: var(--borda);
@@ -308,6 +315,8 @@
         cliente_nome: "",
         cliente_contato: "",
         mesa,
+        /** item_id -> {valor, texto} das perguntas montadas pela casa. */
+        itens: new Map(),
       };
 
       let dados = null;
@@ -345,8 +354,27 @@
       }
 
       /** Os passos que esta casa configurou. Passo desligado não existe. */
+      /**
+       * As categorias da pesquisa da casa, na ordem em que ela montou.
+       *
+       * Uma tela por categoria, e não uma tela por pergunta: "Comida" com
+       * três perguntas numa tela é uma rolada de dedo; três telas seguidas
+       * perguntando de comida parecem um formulário que não acaba.
+       */
+      function categoriasDaCasa() {
+        const ordem = [];
+        for (const pergunta of dados.perguntas ?? []) {
+          if (!ordem.includes(pergunta.categoria)) ordem.push(pergunta.categoria);
+        }
+        return ordem;
+      }
+
       function passos() {
-        const lista = ["nota", "etiquetas"];
+        const lista = ["nota", ...categoriasDaCasa().map((c) => `cat:${c}`)];
+        // As etiquetas só aparecem quando a casa NÃO montou pesquisa própria.
+        // Com as duas coisas, o cliente marcaria "Comida" numa tela e daria
+        // nota para a comida na seguinte — a mesma pergunta, duas vezes.
+        if ((dados.perguntas ?? []).length === 0) lista.push("etiquetas");
         if (dados.perguntar_atendente && dados.atendentes.length > 0) lista.push("atendente");
         if (dados.perguntar_comentario) lista.push("comentario");
         lista.push("premio");
@@ -368,13 +396,15 @@
           }),
         );
 
-        const tela = {
-          nota: telaNota,
-          etiquetas: telaEtiquetas,
-          atendente: telaAtendente,
-          comentario: telaComentario,
-          premio: telaPremio,
-        }[atual]();
+        const tela = atual.startsWith("cat:")
+          ? telaCategoria(atual.slice(4))
+          : {
+              nota: telaNota,
+              etiquetas: telaEtiquetas,
+              atendente: telaAtendente,
+              comentario: telaComentario,
+              premio: telaPremio,
+            }[atual]();
         if (passoDesenhado !== passo) tela.classList.add("entrando");
         conteudo.replaceChildren(tela);
         // Marcar uma etiqueta redesenha o passo inteiro. Rolar para o topo aí
@@ -477,6 +507,117 @@
         }
         grupo.append(rotulo, caixa);
         return grupo;
+      }
+
+      /* ---------- passo: uma categoria da pesquisa da casa ---------- */
+
+      /**
+       * As perguntas de um assunto, numa tela só.
+       *
+       * Cada tipo vira o controle que se responde com um toque. Nada de campo
+       * livre onde cabia um número: quem está de pé esperando a conta não
+       * digita, e a nota que não vem não entra em média nenhuma.
+       */
+      function telaCategoria(categoria) {
+        const bloco = novoPasso();
+        const perguntas = dados.perguntas.filter((p) => p.categoria === categoria);
+
+        bloco.append(titulo(categoria), ajuda("Toque na nota. Pode pular o que não se aplica."));
+
+        for (const pergunta of perguntas) {
+          const grupo = document.createElement("div");
+          grupo.className = "grupo";
+
+          const enunciado = document.createElement("p");
+          enunciado.className = "grupo-titulo";
+          enunciado.textContent = pergunta.pergunta + (pergunta.obrigatorio ? " *" : "");
+          grupo.append(enunciado);
+
+          grupo.append(controleDaPergunta(pergunta));
+          bloco.append(grupo);
+        }
+
+        // Obrigatória sem resposta trava o botão — mas o texto diz o que
+        // falta, em vez de um botão apagado sem explicação.
+        const faltando = perguntas.filter(
+          (p) => p.obrigatorio && !temResposta(p),
+        );
+        const botao = botao_(faltando.length === 0 ? "Continuar" : "Responda as marcadas com *", avancar, faltando.length > 0);
+        bloco.append(rodape(botao));
+        return bloco;
+      }
+
+      function temResposta(pergunta) {
+        const r = resposta.itens.get(pergunta.id);
+        if (!r) return false;
+        return pergunta.tipo === "texto" ? Boolean(r.texto?.trim()) : r.valor !== undefined && r.valor !== null;
+      }
+
+      function marcar(pergunta, campos) {
+        const atual = resposta.itens.get(pergunta.id) ?? {};
+        resposta.itens.set(pergunta.id, { ...atual, ...campos });
+        desenhar();
+      }
+
+      function controleDaPergunta(pergunta) {
+        const atual = resposta.itens.get(pergunta.id) ?? {};
+
+        if (pergunta.tipo === "nota") {
+          const grade = document.createElement("div");
+          grade.className = "notas";
+          for (let n = 0; n <= 10; n++) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "nota";
+            b.textContent = String(n);
+            b.setAttribute("aria-pressed", String(atual.valor === n));
+            b.onclick = () => marcar(pergunta, { valor: atual.valor === n ? null : n });
+            grade.append(b);
+          }
+          return grade;
+        }
+
+        if (pergunta.tipo === "estrelas") {
+          const caixa = document.createElement("div");
+          caixa.className = "estrelas estrelas-linha";
+          for (let n = 1; n <= 5; n++) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = `estrela ${atual.valor >= n ? "acesa" : ""}`;
+            b.textContent = "★";
+            b.setAttribute("aria-label", `${n} de 5`);
+            b.onclick = () => marcar(pergunta, { valor: atual.valor === n ? null : n });
+            caixa.append(b);
+          }
+          return caixa;
+        }
+
+        if (pergunta.tipo === "sim_nao") {
+          const caixa = document.createElement("div");
+          caixa.className = "chips";
+          for (const [valor, rotulo, classe] of [["sim", "Sim", "bom"], ["nao", "Não", "ruim"]]) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = `chip ${classe}`;
+            b.textContent = rotulo;
+            b.setAttribute("aria-pressed", String(atual.valor === valor));
+            b.onclick = () => marcar(pergunta, { valor: atual.valor === valor ? null : valor });
+            caixa.append(b);
+          }
+          return caixa;
+        }
+
+        const campo = document.createElement("textarea");
+        campo.placeholder = "Escreva à vontade…";
+        campo.value = atual.texto ?? "";
+        campo.maxLength = 2000;
+        // Sem `desenhar()` a cada tecla: redesenhar o passo tiraria o foco do
+        // campo e a pessoa perderia o teclado no meio da frase.
+        campo.oninput = () => {
+          const guardado = resposta.itens.get(pergunta.id) ?? {};
+          resposta.itens.set(pergunta.id, { ...guardado, texto: campo.value });
+        };
+        return campo;
       }
 
       /* ---------- passo: quem atendeu ---------- */
@@ -639,6 +780,7 @@
               ...resposta,
               elogios: [...resposta.elogios],
               criticas: [...resposta.criticas],
+              itens: [...resposta.itens.entries()].map(([item_id, r]) => ({ item_id, ...r })),
             }),
           });
           const corpo = await r.json();
@@ -690,10 +832,16 @@
           codigo.textContent = resultado.premio.codigo;
 
           const validade = document.createElement("small");
-          const dia = new Date(resultado.premio.expira_em).toLocaleDateString("pt-BR");
-          // O código na tela E a validade: a pessoa mostra o celular ao
-          // garçom, e sem a data ela guarda o cupom para o ano que vem.
-          validade.textContent = `Mostre este código na casa · vale até ${dia}`;
+          const ate = new Date(resultado.premio.expira_em).toLocaleDateString("pt-BR");
+          // A partir de QUANDO é a informação mais importante aqui: o prêmio é
+          // pela próxima visita, e quem tentar usar hoje vai ouvir um não do
+          // garçom se esta linha não avisar antes.
+          const de = resultado.premio.liberado_em
+            ? new Date(resultado.premio.liberado_em).toLocaleDateString("pt-BR")
+            : null;
+          validade.textContent = de
+            ? `Vale na sua próxima visita, a partir de ${de} · até ${ate}`
+            : `Mostre este código na casa · vale até ${ate}`;
 
           cupom.append(nomeDoPremio, codigo, validade);
           fim.append(cupom);
@@ -738,6 +886,7 @@
         s.textContent = t;
         return s;
       }
+      const botao_ = (rotulo, aoClicar, desativado) => botao(rotulo, aoClicar, desativado);
       function botao(rotulo, aoClicar, desativado = false) {
         const b = document.createElement("button");
         b.type = "button";
