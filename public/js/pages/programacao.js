@@ -1,4 +1,5 @@
 import { del, get, post } from "../api.js";
+import { blocoAgendaRapida } from "./agendaRapida.js";
 import { avisar, dataHora, diaNaCasa, dinheiro, el, etiqueta, horaNaCasa, limpar, vazio } from "../ui.js";
 
 const TIPOS = [
@@ -171,6 +172,10 @@ export async function programacao(raiz, ctx) {
 
   raiz.append(
     el("div", { classe: "pilha" }, [
+      // Primeiro o caminho rápido, depois o formulário: quem tem a agenda do
+      // mês na mão não deveria descobrir o atalho só depois de digitar o
+      // primeiro show à mão.
+      blocoAgendaRapida(ctx, carregarEventos),
       form,
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [

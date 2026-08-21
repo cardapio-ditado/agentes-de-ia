@@ -182,6 +182,10 @@ import {
   removerPessoa,
 } from "./equipe.js";
 import { tipoDeVendasAceito } from "./cmv/lerVendas.js";
+import { lerProgramacao, tipoDeAgendaAceito } from "./lerProgramacao.js";
+import { ErroDeAgenda, importarProgramacao } from "./importarProgramacao.js";
+import { hojeNaCasa } from "./fuso.js";
+import type { EventoParaGravar } from "./importarProgramacao.js";
 import {
   baixarVendas,
   corrigirItem,
@@ -1345,6 +1349,56 @@ async function roteasApi(
         return ok(res, r, 201);
       } catch (e) {
         if (e instanceof ErroDeJogos) throw erro(e.status, "jogos_indisponiveis", e.message);
+        throw e;
+      }
+    }
+
+    // ---- Programação lida por IA: cola-se o texto, manda-se o cartaz ----
+
+    // POST /v1/venues/:slug/programacao/ler
+    //
+    // Com `media_type` na URL, o arquivo vai cru no corpo (foto do cartaz,
+    // planilha, PDF). Sem ele, o corpo é JSON com o texto colado. Só LÊ: quem
+    // grava é a rota de baixo, depois que alguém conferiu na tela.
+    if (metodo === "POST" && recurso === "programacao" && p[3] === "ler" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const hoje = hojeNaCasa(venue.timezone);
+
+      const mediaType = url.searchParams.get("media_type");
+      try {
+        if (mediaType) {
+          if (!tipoDeAgendaAceito(mediaType)) {
+            throw erro(400, "invalid_request", "Mande foto, PDF, Excel ou CSV.");
+          }
+          const arquivo = await lerBinario(req, LIMITE_ARQUIVO_BYTES);
+          if (arquivo.length === 0) throw erro(400, "invalid_request", "O arquivo chegou vazio.");
+          return ok(res, await lerProgramacao({ arquivo, mediaType, hoje }));
+        }
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await lerProgramacao({ texto: texto(corpo, "texto"), hoje }));
+      } catch (e) {
+        // Erro de leitura é recado para quem está na tela ("mande outra foto"),
+        // não falha de servidor — mas o `erro()` acima já vem pronto.
+        if (e && typeof e === "object" && "status" in e) throw e;
+        throw erro(422, "leitura_falhou", e instanceof Error ? e.message : "Não consegui ler esta agenda.");
+      }
+    }
+
+    // POST /v1/venues/:slug/programacao/importar — grava o que foi conferido
+    if (metodo === "POST" && recurso === "programacao" && p[3] === "importar" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const eventos = Array.isArray(corpo.eventos) ? (corpo.eventos as EventoParaGravar[]) : [];
+      try {
+        return ok(
+          res,
+          await importarProgramacao({ venueId: venue.id, fuso: venue.timezone, eventos }),
+          201,
+        );
+      } catch (e) {
+        if (e instanceof ErroDeAgenda) throw erro(e.status, "agenda_invalida", e.message);
         throw e;
       }
     }
