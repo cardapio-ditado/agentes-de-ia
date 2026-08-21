@@ -324,7 +324,8 @@ export type RespostaDaConversa =
 export async function conversarMontagem(
   mensagens: MensagemDaConversa[],
 ): Promise<RespostaDaConversa> {
-  if (mensagens.length === 0) {
+  const conversa = alternarPapeis(mensagens);
+  if (conversa.length === 0) {
     throw new ErroDeModelo(400, "Conte que tipo de casa é a sua para começar.");
   }
 
@@ -350,7 +351,7 @@ export async function conversarMontagem(
       "Responda SEMPRE um único JSON válido, sem texto fora dele, num destes formatos: " +
       '{"tipo":"pergunta","texto":"suas perguntas aqui"} ou ' +
       '{"tipo":"itens","itens":[{"categoria":"Comida","pergunta":"...","tipo":"nota"|"estrelas"|"sim_nao"|"texto","obrigatorio":true|false}]}',
-    messages: mensagens.map((m) => ({
+    messages: conversa.map((m) => ({
       role: m.papel === "ia" ? ("assistant" as const) : ("user" as const),
       content: m.texto,
     })),
@@ -362,6 +363,39 @@ export async function conversarMontagem(
     .join("");
 
   return interpretarResposta(texto);
+}
+
+/**
+ * Deixa a conversa alternando entre pessoa e IA.
+ *
+ * A API recusa dois turnos seguidos do mesmo lado, e é fácil produzir isso sem
+ * perceber: bastava a tela esquecer de registrar um turno da IA para a
+ * mensagem seguinte da pessoa virar o segundo "usuario" em sequência — e aí
+ * TODA continuação da conversa falhava, justamente quando alguém tentava
+ * acrescentar uma informação depois de a IA já ter proposto as perguntas.
+ *
+ * Juntar em vez de descartar: o que a pessoa escreveu em duas mensagens
+ * continua valendo como contexto.
+ */
+export function alternarPapeis(mensagens: MensagemDaConversa[]): MensagemDaConversa[] {
+  const limpas = mensagens
+    .map((m) => ({ papel: m.papel, texto: String(m.texto ?? "").trim() }))
+    .filter((m) => m.texto);
+
+  const saida: MensagemDaConversa[] = [];
+  for (const m of limpas) {
+    const anterior = saida[saida.length - 1];
+    if (anterior && anterior.papel === m.papel) {
+      anterior.texto = `${anterior.texto}\n\n${m.texto}`;
+    } else {
+      saida.push({ ...m });
+    }
+  }
+
+  // Uma conversa que começa pela IA não existe: o primeiro turno é sempre de
+  // quem pediu alguma coisa.
+  while (saida.length > 0 && saida[0]!.papel === "ia") saida.shift();
+  return saida;
 }
 
 /**

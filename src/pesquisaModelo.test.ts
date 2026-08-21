@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { interpretarResposta, notaNormalizada, validarItens } from "./pesquisaModelo.js";
+import { alternarPapeis, interpretarResposta, notaNormalizada, validarItens } from "./pesquisaModelo.js";
+import type { MensagemDaConversa } from "./pesquisaModelo.js";
 
 /* ---------- a escala única ---------- */
 
@@ -132,4 +133,66 @@ test("resposta sem JSON nenhum vira recado, não erro de servidor", () => {
   assert.throws(() => interpretarResposta("Desculpe, não entendi."), /formato inesperado/);
   assert.throws(() => interpretarResposta("{quebrado"), /formato inesperado/);
   assert.throws(() => interpretarResposta('{"tipo":"outra_coisa"}'), /formato inesperado/);
+});
+
+/* ---------- a conversa com a IA ---------- */
+
+test("dois turnos seguidos da pessoa viram um só", () => {
+  // O bug real: a tela esquecia de registrar o turno da IA quando ela GERAVA
+  // as perguntas. A mensagem seguinte da pessoa virava o segundo "usuario" em
+  // sequência, a API recusava, e toda continuação da conversa falhava —
+  // justamente quando alguém queria acrescentar uma informação.
+  const r = alternarPapeis([
+    { papel: "usuario", texto: "bar com palco" },
+    { papel: "usuario", texto: "e tem estacionamento" },
+  ]);
+  assert.equal(r.length, 1);
+  assert.match(r[0]!.texto, /bar com palco/);
+  assert.match(r[0]!.texto, /estacionamento/);
+});
+
+test("a conversa alternada passa intacta", () => {
+  const conversa: MensagemDaConversa[] = [
+    { papel: "usuario", texto: "bar com palco" },
+    { papel: "ia", texto: "tem área externa?" },
+    { papel: "usuario", texto: "tem" },
+  ];
+  assert.deepEqual(alternarPapeis(conversa), conversa);
+});
+
+test("dois turnos seguidos da IA também se juntam", () => {
+  const r = alternarPapeis([
+    { papel: "usuario", texto: "monta aí" },
+    { papel: "ia", texto: "montei 5 perguntas" },
+    { papel: "ia", texto: "quer mudar algo?" },
+  ]);
+  assert.equal(r.length, 2);
+  assert.equal(r[1]!.papel, "ia");
+});
+
+test("conversa que começa pela IA perde o começo", () => {
+  // Não existe conversa que começa pela resposta.
+  const r = alternarPapeis([
+    { papel: "ia", texto: "oi" },
+    { papel: "usuario", texto: "monta a pesquisa" },
+  ]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0]!.papel, "usuario");
+});
+
+test("mensagem vazia não entra e não quebra a alternância", () => {
+  const r = alternarPapeis([
+    { papel: "usuario", texto: "bar" },
+    { papel: "ia", texto: "   " },
+    { papel: "usuario", texto: "com palco" },
+  ]);
+  // Sem o turno vazio da IA, as duas da pessoa se juntam em vez de virarem
+  // dois "usuario" seguidos.
+  assert.equal(r.length, 1);
+  assert.equal(r[0]!.papel, "usuario");
+});
+
+test("conversa vazia sai vazia, para a rota dar o recado certo", () => {
+  assert.deepEqual(alternarPapeis([]), []);
+  assert.deepEqual(alternarPapeis([{ papel: "usuario", texto: "  " }]), []);
 });

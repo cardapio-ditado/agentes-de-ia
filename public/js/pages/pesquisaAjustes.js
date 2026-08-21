@@ -77,7 +77,7 @@ async function telaPerguntas(ctx, recarregar) {
   const ativa = dados.pesquisas.find((p) => p.ativa) ?? null;
 
   return el("div", { classe: "pilha" }, [
-    blocoMontagemIA(ctx, recarregar, dados.categorias),
+    blocoCriar(ctx, recarregar, dados.categorias),
     ativa
       ? editorDaPesquisa(ctx, ativa, dados.categorias, recarregar)
       : el("section", { classe: "cartao" }, [
@@ -87,7 +87,110 @@ async function telaPerguntas(ctx, recarregar) {
             texto: "Sem pesquisa própria, o QR code pergunta só a nota geral. Monte a sua acima para ter nota separada por assunto.",
           }),
         ]),
-    dados.pesquisas.length > 1 ? listaDeModelos(ctx, dados.pesquisas, recarregar) : null,
+    dados.pesquisas.filter((p) => !p.ativa).length > 0
+      ? listaDeModelos(ctx, dados.pesquisas, recarregar)
+      : null,
+  ]);
+}
+
+/**
+ * Os dois caminhos para criar uma pesquisa, lado a lado.
+ *
+ * À mão não é o "modo avançado": é o caminho de quem já sabe o que quer
+ * perguntar, e de quem tentou pela IA e prefere terminar sozinho. Esconder
+ * essa porta obriga a conversar com a IA para chegar a uma tabela que está
+ * ali do lado.
+ */
+function blocoCriar(ctx, recarregar, categorias) {
+  const area = el("div");
+  let aberto = null;
+
+  function abrir(qual, construir) {
+    // Clicar de novo no mesmo botão fecha: é como se sai de um caminho que
+    // não era o desejado, sem precisar recarregar a tela.
+    if (aberto === qual) {
+      aberto = null;
+      limpar(area);
+    } else {
+      aberto = qual;
+      limpar(area).append(construir());
+    }
+    for (const b of botoes) b.classList.toggle("btn-primario", b.dataset.qual === aberto);
+  }
+
+  const botoes = [
+    el("button", {
+      classe: "btn btn-primario btn-peq",
+      type: "button",
+      texto: "Montar com IA",
+      "data-qual": "ia",
+      onclick: () => abrir("ia", () => blocoMontagemIA(ctx, recarregar, categorias)),
+    }),
+    el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Criar à mão",
+      "data-qual": "mao",
+      onclick: () => abrir("mao", () => blocoManual(ctx, recarregar, categorias)),
+    }),
+  ];
+
+  return el("section", { classe: "cartao" }, [
+    el("div", { classe: "cabecalho-secao" }, [
+      el("div", {}, [
+        el("h3", { texto: "Criar uma pesquisa" }),
+        el("p", {
+          classe: "muted",
+          texto: "Converse com a IA e ela propõe as perguntas, ou escreva você mesmo. Nos dois casos dá para editar tudo depois.",
+        }),
+      ]),
+      el("div", { classe: "linha-campos" }, botoes),
+    ]),
+    area,
+  ]);
+}
+
+/** A tabela vazia, para quem já sabe o que quer perguntar. */
+function blocoManual(ctx, recarregar, categorias) {
+  const nome = el("input", { value: "Pesquisa da casa", required: true });
+  // Uma linha já preenchida com um exemplo: a tabela totalmente vazia não
+  // mostra como uma pergunta se parece, e o primeiro clique vira dúvida.
+  const editor = editorDeItens(
+    [{ categoria: "Comida", pergunta: "A comida agradou?", tipo: "nota", obrigatorio: false }],
+    categorias,
+  );
+
+  return el("div", { style: "margin-top:14px" }, [
+    el("p", {
+      classe: "muted",
+      texto: "Cada linha é uma pergunta. O ASSUNTO é o que agrupa as notas no painel — perguntas do mesmo assunto aparecem na mesma tela do cliente.",
+    }),
+    el("div", { classe: "campo", style: "margin-top:10px;max-width:360px" }, [
+      el("label", { texto: "Nome da pesquisa" }),
+      nome,
+    ]),
+    editor.elemento,
+    el("button", {
+      classe: "btn btn-primario",
+      type: "button",
+      texto: "Salvar e usar esta pesquisa",
+      style: "margin-top:12px",
+      onclick: async (e) => {
+        e.target.disabled = true;
+        try {
+          await post(`/v1/venues/${ctx.venue}/pesquisa/modelos`, {
+            nome: nome.value.trim(),
+            itens: editor.ler(),
+            ativar: true,
+          });
+          avisar("Pesquisa no ar. O QR code da mesa já pergunta isso.", "ok");
+          await recarregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          e.target.disabled = false;
+        }
+      },
+    }),
   ]);
 }
 
@@ -110,36 +213,33 @@ function blocoMontagemIA(ctx, recarregar, categorias) {
     onclick: falar,
   });
 
-  const corpo = el("div", { hidden: true, style: "margin-top:12px" }, [
+  // Recomeçar do zero: depois de duas rodadas a conversa carrega o contexto
+  // errado, e insistir nela é mais trabalhoso que começar de novo. Sem este
+  // botão o único jeito era sair da tela e voltar.
+  const recomecar = el("button", {
+    classe: "btn btn-peq",
+    type: "button",
+    texto: "Começar de novo",
+    hidden: true,
+    onclick: () => {
+      conversa.length = 0;
+      limpar(historico);
+      limpar(proposta);
+      campo.value = "";
+      enviar.textContent = "Conversar com a IA";
+      recomecar.hidden = true;
+    },
+  });
+
+  return el("div", { style: "margin-top:14px" }, [
     el("p", {
       classe: "muted",
       texto: "Conte que tipo de casa é a sua e o que você quer descobrir. A IA pergunta o que faltar e monta as perguntas — você confere antes de valer.",
     }),
     historico,
     el("div", { classe: "campo campo-largo", style: "margin-top:10px" }, [campo]),
-    el("div", { classe: "linha-campos" }, [enviar]),
+    el("div", { classe: "linha-campos" }, [enviar, recomecar]),
     proposta,
-  ]);
-
-  const alternar = el("button", {
-    classe: "btn btn-primario btn-peq",
-    type: "button",
-    texto: "Montar com IA",
-    onclick: () => {
-      corpo.hidden = !corpo.hidden;
-      alternar.textContent = corpo.hidden ? "Montar com IA" : "Fechar";
-    },
-  });
-
-  return el("section", { classe: "cartao" }, [
-    el("div", { classe: "cabecalho-secao" }, [
-      el("div", {}, [
-        el("h3", { texto: "A IA monta a pesquisa com você" }),
-        el("p", { classe: "muted", texto: "Ela pergunta como é a casa e propõe as perguntas certas." }),
-      ]),
-      alternar,
-    ]),
-    corpo,
   ]);
 
   function balao(papel, texto) {
@@ -166,9 +266,24 @@ function blocoMontagemIA(ctx, recarregar, categorias) {
         conversa.push({ papel: "ia", texto: r.texto });
         historico.append(balao("ia", r.texto));
       } else {
-        historico.append(balao("ia", `Montei ${r.itens.length} perguntas — confira abaixo.`));
+        // O turno da IA PRECISA entrar no histórico, e com a lista dentro.
+        //
+        // Sem ele, a próxima mensagem da pessoa virava o segundo "usuario"
+        // seguido e a API recusava a conversa inteira — era por isso que
+        // acrescentar uma informação depois de a IA gerar não gerava nada.
+        // E com a lista dentro, o pedido seguinte ("acrescente uma sobre
+        // estacionamento") parte do que já existe em vez de recomeçar do zero.
+        conversa.push({
+          papel: "ia",
+          texto: JSON.stringify({ tipo: "itens", itens: r.itens }),
+        });
+        historico.append(
+          balao("ia", `Montei ${r.itens.length} perguntas — confira abaixo. Pode pedir para mudar, tirar ou acrescentar.`),
+        );
         proposta.append(revisarProposta(ctx, r.itens, categorias, recarregar));
       }
+      recomecar.hidden = false;
+      campo.placeholder = "Ex.: acrescente uma pergunta sobre o estacionamento e tira a de preço.";
     } catch (e) {
       avisar(e.message, "erro");
     } finally {
