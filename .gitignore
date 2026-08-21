@@ -23,3 +23,6 @@ diagnostico-*.html
 npm-debug.log*
 .DS_Store
 .supabase/
+
+# Prints para divulgação — material de marketing, gerado sob demanda
+prints/

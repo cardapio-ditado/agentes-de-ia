@@ -1019,6 +1019,18 @@ textarea {
   resize: vertical;
   min-height: 76px;
 }
+/* Caixa de marcar e botão de rádio ficam de fora do `width: 100%` acima.
+   Com ele, um checkbox dentro de um flex esticava para a largura inteira da
+   linha e empurrava o texto ao lado para o outro extremo — foi o que
+   desalinhou a lista de jogos, onde a marcação vinha colada no nome do
+   confronto. O padding também sai: num quadradinho de 17px ele vira borda. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  accent-color: var(--marca);
+}
 input:focus,
 select:focus,
 textarea:focus {
@@ -1139,7 +1151,11 @@ textarea:focus {
 }
 .barra {
   display: grid;
-  align-content: end;
+  /* Três faixas: número, tronco, dia. A do meio precisa ser `1fr` — uma faixa
+     de altura automática não dá altura definida para o `height:%` do tronco
+     resolver, e TODA barra saía com os 3px do `min-height`. O gráfico existia,
+     mas era uma régua de traços. */
+  grid-template-rows: auto 1fr auto;
   gap: 6px;
   text-align: center;
   height: 100%;
@@ -1149,6 +1165,9 @@ textarea:focus {
   border-radius: 5px 5px 2px 2px;
   min-height: 3px;
   opacity: 0.85;
+  /* Cresce do chão para cima, como barra de gráfico cresce. */
+  align-self: end;
+  width: 100%;
 }
 .barra:hover .barra-tronco {
   opacity: 1;
