@@ -2229,8 +2229,11 @@ async function roteasApi(
       if (!token) throw erro(401, "unauthorized", "Link de troca de senha inválido.");
       const corpo = await lerJson(req);
       try {
-        await trocarSenha(token, texto(corpo, "senha"));
-        return ok(res, { trocada: true });
+        // Os tokens novos vão junto: a troca de senha derruba a sessão que
+        // veio no cabeçalho, e sem um par novo o painel continuaria usando o
+        // token morto — telas em branco logo depois de "salvar senha".
+        const tokens = await trocarSenha(token, texto(corpo, "senha"));
+        return ok(res, { trocada: true, sessao: tokens });
       } catch (e) {
         if (e instanceof ErroDeAcesso) throw erro(e.status, "invalid_request", e.message);
         throw e;

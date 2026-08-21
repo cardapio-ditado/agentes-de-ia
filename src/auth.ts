@@ -225,7 +225,7 @@ export function podeAbrirModulo(sessao: Sessao, modulo: string): boolean {
  * no endereço) e quem já está logado e quer trocar. Nos dois casos a prova
  * de identidade é o token — nunca a senha antiga, que quem esqueceu não tem.
  */
-export async function trocarSenha(token: string, novaSenha: string): Promise<void> {
+export async function trocarSenha(token: string, novaSenha: string): Promise<Tokens | null> {
   if (novaSenha.length < 8) {
     throw new ErroDeAcesso(400, "A senha precisa ter pelo menos 8 caracteres.");
   }
@@ -242,22 +242,50 @@ export async function trocarSenha(token: string, novaSenha: string): Promise<voi
     throw new ErroDeAcesso(400, "Essa é a senha provisória. Escolha uma senha sua.");
   }
 
-  // A marca de provisória sai junto com a troca — é ela que faz o painel
-  // exigir esta tela, e escolher a própria senha é exatamente o que a
-  // resolve. Os outros metadados (nome) são preservados: `user_metadata`
-  // substitui o objeto inteiro, não mescla.
-  const metadados = { ...(data.user.user_metadata ?? {}) };
-  delete metadados.senha_provisoria;
-
   // Pelo admin e não pelo updateUser da sessão: o cliente aqui é descartável
   // e não tem sessão nenhuma — só o token que acabou de ser conferido.
   const { error: erroTroca } = await cliente.auth.admin.updateUserById(data.user.id, {
     password: novaSenha,
-    user_metadata: metadados,
+    user_metadata: semMarcaDeProvisoria(data.user.user_metadata),
   });
   if (erroTroca) throw new ErroDeAcesso(400, `Não deu para trocar a senha: ${erroTroca.message}`);
 
   // A sessão em memória guarda o papel, não a senha — mas sair do cache força
   // a próxima requisição a reler tudo, que é o que se espera depois de trocar.
   esquecerSessao(token);
+
+  // Uma sessão nova, com a senha nova.
+  //
+  // O token que chegou aqui pode ter morrido no instante em que a senha
+  // mudou — trocar a senha revoga sessões. Sem devolver um par novo, o painel
+  // seguiria usando um token morto: as telas dariam 401 em silêncio e a
+  // pessoa veria um painel meio carregado logo depois de "salvar senha".
+  //
+  // Falhar aqui não desfaz a troca: a senha JÁ é a nova, e o pior caso é
+  // pedir para entrar de novo com ela.
+  if (!data.user.email) return null;
+  try {
+    return await entrar(data.user.email, novaSenha);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Os metadados da pessoa sem a marca de senha provisória.
+ *
+ * O `senha_provisoria: null` explícito é o ponto: `user_metadata` no update
+ * do admin MESCLA com o que já existe, não substitui. Uma versão anterior
+ * fazia `delete` da chave no objeto local e mandava o resto — que, mesclado,
+ * não removia nada. A marca sobrevivia à troca, e o painel exigia trocar a
+ * senha de novo, e de novo, para sempre.
+ *
+ * Null e não `false` porque é assim que o GoTrue apaga uma chave. E, se um
+ * dia a semântica virar "substitui", `senha_provisoria: null` continua certo:
+ * a leitura em toda parte é `=== true`.
+ */
+export function semMarcaDeProvisoria(
+  atuais: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  return { ...(atuais ?? {}), senha_provisoria: null };
 }

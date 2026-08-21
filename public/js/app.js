@@ -742,8 +742,26 @@ formNovaSenha.addEventListener("submit", async (e) => {
     }
     // Vindo da troca obrigatória, a pessoa JÁ está logada: mandá-la entrar
     // de novo seria pedir duas vezes a mesma senha que ela acabou de criar.
+    //
+    // Mas o token que ela tinha morreu junto com a senha antiga. O servidor
+    // devolve um par novo justamente por isso — sem guardá-lo, o painel
+    // seguiria com o token morto e as telas viriam vazias.
     if (trocaObrigatoria) {
+      if (corpo.data?.sessao) {
+        salvarSessao(corpo.data.sessao, { lembrar: !sessionStorage.getItem("agentes.chave") });
+      }
       trocaObrigatoria = false;
+      tokenDeTroca = null;
+      formNovaSenha.hidden = true;
+      formAcesso.hidden = false;
+      return iniciar();
+    }
+
+    // Veio do link de recuperação: aqui a pessoa não estava logada, então o
+    // par novo também serve — entra direto em vez de digitar a senha que
+    // acabou de criar.
+    if (corpo.data?.sessao) {
+      salvarSessao(corpo.data.sessao, { lembrar: true });
       tokenDeTroca = null;
       formNovaSenha.hidden = true;
       formAcesso.hidden = false;

@@ -1,4 +1,5 @@
 import { db, dbAuth } from "./supabase.js";
+import { semMarcaDeProvisoria } from "./auth.js";
 
 /**
  * Pessoas e acessos da casa.
@@ -307,12 +308,12 @@ export async function trocarPropriaSenha(params: {
   }
 
   const { data: conta } = await dbAuth().auth.admin.getUserById(params.userId);
-  const metadados = { ...(conta?.user?.user_metadata ?? {}) };
-  delete metadados.senha_provisoria;
 
   const { error } = await dbAuth().auth.admin.updateUserById(params.userId, {
     password: senha,
-    user_metadata: metadados,
+    // A marca precisa ser apagada com `null` explícito, e não omitindo a
+    // chave: o update do admin mescla os metadados. Ver `semMarcaDeProvisoria`.
+    user_metadata: semMarcaDeProvisoria(conta?.user?.user_metadata),
   });
   if (error) throw new ErroDeEquipe(500, `Falha ao trocar a senha: ${error.message}`);
 }
