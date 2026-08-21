@@ -306,65 +306,6 @@ export interface MensagemDaConversa {
   texto: string;
 }
 
-export type RespostaDaConversa =
-  | { tipo: "pergunta"; texto: string }
-  | { tipo: "itens"; itens: ItemDaPesquisa[] };
-
-/**
- * Monta a pesquisa conversando, como o checklist faz.
- *
- * A IA entrevista antes de propor: que tipo de casa é, o que o dono desconfia
- * que está ruim, o que ele já tentou medir. Sem a entrevista, a proposta sai
- * genérica — "como foi a comida?", "como foi o atendimento?" — e uma pesquisa
- * genérica não muda decisão nenhuma.
- *
- * Duas rodadas de perguntas no máximo: quem está montando quer terminar, e um
- * questionário sobre o questionário cansa antes de chegar ao fim.
- */
-export async function conversarMontagem(
-  mensagens: MensagemDaConversa[],
-): Promise<RespostaDaConversa> {
-  const conversa = alternarPapeis(mensagens);
-  if (conversa.length === 0) {
-    throw new ErroDeModelo(400, "Conte que tipo de casa é a sua para começar.");
-  }
-
-  const resposta = await anthropic().messages.create({
-    model: MODELO_IA,
-    max_tokens: 2000,
-    system:
-      "Você monta pesquisas de satisfação para bares e restaurantes brasileiros, " +
-      "conversando com o dono antes de gerar. O cliente vai responder no celular, " +
-      "de pé, esperando a conta — cada pergunta a mais derruba a taxa de resposta. " +
-      "Entenda primeiro: que tipo de casa é (bar, restaurante, casa de shows); o que " +
-      "o dono desconfia que está ruim; se tem palco, estacionamento, área externa, " +
-      "delivery; e se quer medir alguém ou algo específico. " +
-      "Faça NO MÁXIMO duas rodadas de perguntas — curtas, agrupadas numa mensagem só, " +
-      "no máximo 4 por rodada. Se o contexto já basta (ou o dono pediu para gerar logo), gere. " +
-      "REGRAS DAS PERGUNTAS: entre 4 e 8 perguntas, nunca mais; cada uma com uma CATEGORIA " +
-      "que é o assunto medido (Comida, Atendimento, Ambiente, Preço, Música, Limpeza, " +
-      "Tempo de espera, ou outra que faça sentido para a casa); a maioria do tipo " +
-      '"nota" ou "estrelas", porque é delas que sai o acompanhamento; no máximo UMA do ' +
-      'tipo "texto", no fim. Pergunta curta, direta, sobre UMA coisa só — "a comida e o ' +
-      'atendimento foram bons?" não pode ser respondida com um número. Nada de perguntar ' +
-      "o que a casa não tem. " +
-      "Responda SEMPRE um único JSON válido, sem texto fora dele, num destes formatos: " +
-      '{"tipo":"pergunta","texto":"suas perguntas aqui"} ou ' +
-      '{"tipo":"itens","itens":[{"categoria":"Comida","pergunta":"...","tipo":"nota"|"estrelas"|"sim_nao"|"texto","obrigatorio":true|false}]}',
-    messages: conversa.map((m) => ({
-      role: m.papel === "ia" ? ("assistant" as const) : ("user" as const),
-      content: m.texto,
-    })),
-  });
-
-  const texto = resposta.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-
-  return interpretarResposta(texto);
-}
-
 /**
  * Deixa a conversa alternando entre pessoa e IA.
  *
@@ -398,29 +339,161 @@ export function alternarPapeis(mensagens: MensagemDaConversa[]): MensagemDaConve
   return saida;
 }
 
+export type RespostaDaConversa =
+  | { tipo: "pergunta"; texto: string }
+  | { tipo: "itens"; itens: ItemDaPesquisa[] };
+
 /**
- * Traduz o que o modelo devolveu.
+ * As duas coisas que a IA pode fazer nesta tela.
  *
- * Exportada para teste: a leitura do JSON e a recusa do que veio torto não
- * deveriam custar uma chamada de API para serem verificadas.
+ * Ferramentas, e não "responda em JSON".
+ *
+ * Pedir JSON num texto livre funciona quase sempre, e "quase sempre" aqui
+ * significa que de vez em quando o modelo escreve "Claro! Aqui está:" antes,
+ * fecha um bloco de markdown depois, ou corta a lista no meio ao bater no
+ * limite de tokens — e a tela responde "a IA respondeu num formato
+ * inesperado", que não é culpa de quem está montando a pesquisa nem dá pista
+ * do que fazer. Com ferramenta a estrutura é garantida pela API: não há texto
+ * livre para interpretar, e `tool_choice` obriga o modelo a usar uma das duas.
+ *
+ * É o mesmo caminho que a leitura de nota fiscal e a de programação já usam
+ * aqui — a diferença é que lá havia uma ferramenta só, e aqui a IA precisa
+ * escolher entre perguntar mais e entregar.
  */
-export function interpretarResposta(texto: string): RespostaDaConversa {
-  const inicio = texto.indexOf("{");
-  const fim = texto.lastIndexOf("}");
-  if (inicio === -1 || fim <= inicio) {
-    throw new ErroDeModelo(502, "A IA respondeu num formato inesperado — tente de novo.");
+const FERRAMENTAS = [
+  {
+    name: "perguntar_ao_dono",
+    description:
+      "Faz perguntas curtas ao dono antes de montar. Use quando faltar contexto sobre a casa.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        texto: {
+          type: "string",
+          description: "Suas perguntas, no máximo 4, agrupadas numa mensagem só.",
+        },
+      },
+      required: ["texto"],
+    },
+  },
+  {
+    name: "registrar_perguntas",
+    description: "Entrega as perguntas da pesquisa, prontas para o dono conferir.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        itens: {
+          type: "array",
+          description: "De 4 a 8 perguntas.",
+          items: {
+            type: "object",
+            properties: {
+              categoria: {
+                type: "string",
+                description:
+                  "O assunto medido: Comida, Atendimento, Ambiente, Preço, Música, Limpeza, Tempo de espera, ou outro que faça sentido para a casa.",
+              },
+              pergunta: {
+                type: "string",
+                description:
+                  "Curta, direta, sobre UMA coisa só. \"A comida e o atendimento foram bons?\" não pode ser respondida com um número.",
+              },
+              tipo: {
+                type: "string",
+                enum: ["nota", "estrelas", "sim_nao", "texto"],
+                description:
+                  "A maioria nota ou estrelas — é delas que sai o acompanhamento. No máximo uma do tipo texto, no fim.",
+              },
+              obrigatorio: { type: "boolean" },
+            },
+            required: ["categoria", "pergunta", "tipo"],
+          },
+        },
+      },
+      required: ["itens"],
+    },
+  },
+];
+
+const INSTRUCOES = `Você monta pesquisas de satisfação para bares e restaurantes brasileiros, conversando com o dono antes de gerar.
+
+O cliente vai responder no celular, de pé, esperando a conta — cada pergunta a mais derruba a taxa de resposta.
+
+Entenda primeiro: que tipo de casa é (bar, restaurante, casa de shows); o que o dono desconfia que está ruim; se tem palco, estacionamento, área externa, delivery; e se quer medir alguém ou algo específico.
+
+Use "perguntar_ao_dono" no máximo DUAS vezes na conversa inteira. Se o contexto já basta, ou o dono já respondeu, ou ele pediu para gerar logo, use "registrar_perguntas".
+
+Quando o dono pedir para mudar algo numa lista que você já entregou, devolva a lista INTEIRA com a mudança feita — não só a parte alterada.
+
+Nunca pergunte sobre o que a casa não tem.`;
+
+/**
+ * Monta a pesquisa conversando, como o checklist faz.
+ *
+ * A IA entrevista antes de propor: que tipo de casa é, o que o dono desconfia
+ * que está ruim, o que ele já tentou medir. Sem a entrevista, a proposta sai
+ * genérica — "como foi a comida?", "como foi o atendimento?" — e uma pesquisa
+ * genérica não muda decisão nenhuma.
+ *
+ * Duas rodadas de perguntas no máximo: quem está montando quer terminar, e um
+ * questionário sobre o questionário cansa antes de chegar ao fim.
+ */
+export async function conversarMontagem(
+  mensagens: MensagemDaConversa[],
+): Promise<RespostaDaConversa> {
+  const conversa = alternarPapeis(mensagens);
+  if (conversa.length === 0) {
+    throw new ErroDeModelo(400, "Conte que tipo de casa é a sua para começar.");
   }
 
-  let bruto: { tipo?: string; texto?: string; itens?: unknown };
-  try {
-    bruto = JSON.parse(texto.slice(inicio, fim + 1));
-  } catch {
-    throw new ErroDeModelo(502, "A IA respondeu num formato inesperado — tente de novo.");
+  const resposta = await anthropic().messages.create({
+    model: MODELO_IA,
+    // Oito perguntas com texto e categoria cabem folgado; o excesso é a
+    // margem para o modelo não ser cortado no meio da lista.
+    max_tokens: 4000,
+    system: INSTRUCOES,
+    tools: FERRAMENTAS,
+    // Obriga a usar uma das duas: sem isto o modelo pode "responder" em texto
+    // solto, que é exatamente o caso que não temos como aproveitar.
+    tool_choice: { type: "any" },
+    messages: conversa.map((m: MensagemDaConversa) => ({
+      role: m.papel === "ia" ? ("assistant" as const) : ("user" as const),
+      content: m.texto,
+    })),
+  });
+
+  return interpretarUso(resposta.content);
+}
+
+/**
+ * Lê qual ferramenta a IA usou.
+ *
+ * Exportada para teste: a tradução do que a API devolveu não deveria custar
+ * uma chamada paga para ser verificada.
+ */
+export function interpretarUso(blocos: Anthropic.ContentBlock[]): RespostaDaConversa {
+  const uso = blocos.find((b) => b.type === "tool_use");
+  if (!uso || uso.type !== "tool_use") {
+    // Com `tool_choice: any` isto não deveria acontecer. Se acontecer, o
+    // recado tem que dizer o que fazer — "formato inesperado" não diz.
+    throw new ErroDeModelo(
+      502,
+      "A IA não conseguiu montar agora. Tente de novo, ou use “Criar à mão”.",
+    );
   }
 
-  if (bruto.tipo === "itens") return { tipo: "itens", itens: validarItens(bruto.itens) };
-  if (bruto.tipo === "pergunta" && typeof bruto.texto === "string" && bruto.texto.trim()) {
-    return { tipo: "pergunta", texto: bruto.texto.trim() };
+  const entrada = (uso.input ?? {}) as Record<string, unknown>;
+
+  if (uso.name === "registrar_perguntas") {
+    return { tipo: "itens", itens: validarItens(entrada.itens) };
   }
-  throw new ErroDeModelo(502, "A IA respondeu num formato inesperado — tente de novo.");
+
+  const texto = typeof entrada.texto === "string" ? entrada.texto.trim() : "";
+  if (!texto) {
+    throw new ErroDeModelo(
+      502,
+      "A IA não conseguiu montar agora. Tente de novo, ou use “Criar à mão”.",
+    );
+  }
+  return { tipo: "pergunta", texto };
 }

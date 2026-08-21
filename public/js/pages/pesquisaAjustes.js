@@ -273,9 +273,17 @@ function blocoMontagemIA(ctx, recarregar, categorias) {
         // acrescentar uma informação depois de a IA gerar não gerava nada.
         // E com a lista dentro, o pedido seguinte ("acrescente uma sobre
         // estacionamento") parte do que já existe em vez de recomeçar do zero.
+        // A lista vai como TEXTO legível, e não como JSON cru: é assim que o
+        // modelo entende o que já propôs quando o pedido seguinte for "tira a
+        // de preço". Guardá-la é o que faz a continuação partir do que existe
+        // em vez de recomeçar do zero.
         conversa.push({
           papel: "ia",
-          texto: JSON.stringify({ tipo: "itens", itens: r.itens }),
+          texto:
+            "Perguntas que propus:\n" +
+            r.itens
+              .map((i, n) => `${n + 1}. [${i.categoria}] ${i.pergunta} (${i.tipo})`)
+              .join("\n"),
         });
         historico.append(
           balao("ia", `Montei ${r.itens.length} perguntas — confira abaixo. Pode pedir para mudar, tirar ou acrescentar.`),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { alternarPapeis, interpretarResposta, notaNormalizada, validarItens } from "./pesquisaModelo.js";
+import { alternarPapeis, interpretarUso, notaNormalizada, validarItens } from "./pesquisaModelo.js";
 import type { MensagemDaConversa } from "./pesquisaModelo.js";
 
 /* ---------- a escala única ---------- */
@@ -106,33 +106,57 @@ test("obrigatório só quando dito explicitamente", () => {
 
 /* ---------- a resposta da IA ---------- */
 
+/** Um bloco de uso de ferramenta, do jeito que a API devolve. */
+function uso(name: string, input: unknown) {
+  return [{ type: "tool_use" as const, id: "t1", name, input }] as never;
+}
+
 test("a IA pedindo mais contexto vira pergunta na tela", () => {
-  const r = interpretarResposta('{"tipo":"pergunta","texto":"Sua casa tem palco?"}');
+  const r = interpretarUso(uso("perguntar_ao_dono", { texto: "Sua casa tem palco?" }));
   assert.equal(r.tipo, "pergunta");
   assert.equal(r.tipo === "pergunta" && r.texto, "Sua casa tem palco?");
 });
 
-test("o que a IA gera passa pela MESMA porta do que a pessoa digita", () => {
-  // Sem isso, a IA seria um caminho para gravar o que a validação recusaria.
-  assert.throws(
-    () => interpretarResposta('{"tipo":"itens","itens":[{"pergunta":"x","tipo":"emoji"}]}'),
-    /não existe/,
-  );
-});
-
-test("JSON embrulhado em conversa ainda é lido", () => {
-  // O modelo às vezes escreve "Claro! Aqui está:" antes do JSON.
-  const r = interpretarResposta(
-    'Claro, aqui está:\n```json\n{"tipo":"itens","itens":[{"categoria":"Comida","pergunta":"A comida agradou?","tipo":"nota"}]}\n```',
+test("as perguntas entregues viram itens", () => {
+  const r = interpretarUso(
+    uso("registrar_perguntas", {
+      itens: [{ categoria: "Comida", pergunta: "A comida agradou?", tipo: "nota" }],
+    }),
   );
   assert.equal(r.tipo, "itens");
   assert.equal(r.tipo === "itens" && r.itens[0]!.categoria, "Comida");
 });
 
-test("resposta sem JSON nenhum vira recado, não erro de servidor", () => {
-  assert.throws(() => interpretarResposta("Desculpe, não entendi."), /formato inesperado/);
-  assert.throws(() => interpretarResposta("{quebrado"), /formato inesperado/);
-  assert.throws(() => interpretarResposta('{"tipo":"outra_coisa"}'), /formato inesperado/);
+test("o que a IA gera passa pela MESMA porta do que a pessoa digita", () => {
+  // Sem isso, a IA seria um caminho para gravar o que a validação recusaria.
+  assert.throws(
+    () => interpretarUso(uso("registrar_perguntas", { itens: [{ pergunta: "x", tipo: "emoji" }] })),
+    /não existe/,
+  );
+});
+
+test("conversa em texto solto vira recado com saída, não erro de servidor", () => {
+  // Com `tool_choice: any` isto não deveria acontecer — mas se acontecer, o
+  // recado tem que dizer o que fazer. "Formato inesperado" não diz.
+  const soTexto = [{ type: "text" as const, text: "Desculpe, não entendi.", citations: null }] as never;
+  assert.throws(() => interpretarUso(soTexto), /Criar à mão/);
+  assert.throws(() => interpretarUso([] as never), /Criar à mão/);
+});
+
+test("pergunta vazia da IA não vira balão em branco na tela", () => {
+  assert.throws(() => interpretarUso(uso("perguntar_ao_dono", { texto: "   " })), /Criar à mão/);
+});
+
+test("o texto que acompanha a ferramenta é ignorado", () => {
+  // O modelo costuma escrever "Claro! Vou montar:" antes de usar a
+  // ferramenta. Isso não pode atrapalhar a leitura do que importa.
+  const misto = [
+    { type: "text" as const, text: "Claro, aqui está:", citations: null },
+    { type: "tool_use" as const, id: "t1", name: "registrar_perguntas",
+      input: { itens: [{ categoria: "Comida", pergunta: "A comida agradou?", tipo: "nota" }] } },
+  ] as never;
+  const r = interpretarUso(misto);
+  assert.equal(r.tipo, "itens");
 });
 
 /* ---------- a conversa com a IA ---------- */
