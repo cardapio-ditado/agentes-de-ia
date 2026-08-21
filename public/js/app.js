@@ -26,6 +26,8 @@ import { contagem } from "./pages/contagem.js";
 import { estoque } from "./pages/estoque.js";
 import { cmvPainel } from "./pages/cmvPainel.js";
 import { vendas } from "./pages/vendas.js";
+import { pesquisa } from "./pages/pesquisa.js";
+import { pesquisaAjustes } from "./pages/pesquisaAjustes.js";
 import { producao } from "./pages/producao.js";
 
 /**
@@ -63,6 +65,9 @@ const PAGINAS = [
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
 
   { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
+
+  { id: "pesquisa", modulo: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
+  { id: "pesquisa-ajustes", modulo: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
 
   // A ordem é a do dia de trabalho: o número primeiro, depois o que se faz
   // toda manhã, depois o que se faz às vezes, por fim o que se cadastra uma
@@ -169,6 +174,16 @@ const MODULOS = [
     icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
     pos: { x: -0.75, y: -0.5 },
   },
+  {
+    id: "pesquisa",
+    nome: "Voz do Cliente",
+    descricao:
+      "QR code na mesa, prêmio para quem responde, e o que a casa faz de bom e de ruim em palavras e em nota.",
+    icone: ICONES.conversas,
+    // O favo que estava reservado ao crescimento da colmeia, embaixo do
+    // centro: é o primeiro que o olho encontra depois dos quatro de cima.
+    pos: { x: 0, y: 1 },
+  },
   // ---- Fora da colmeia ----
   //
   // A colmeia é a vitrine do que a casa COMPROU. Estes dois não são produto:
@@ -195,7 +210,7 @@ const MODULOS = [
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
-const FAVOS_VAZIOS = [{ x: 0, y: 1 }];
+const FAVOS_VAZIOS = [{ x: -1.5, y: 0 }];
 
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");

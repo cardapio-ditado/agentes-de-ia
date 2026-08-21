@@ -2247,3 +2247,105 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .dia-cal { min-height: 66px; padding: 3px; }
   .item-cal { font-size: 0.62rem; padding: 1px 3px; }
 }
+
+/* ============ Pesquisa de satisfação ============ */
+
+/* A nuvem de palavras. Tamanho = quantas pessoas falaram; cor = a nota de
+   quem falou. Sem a cor, "demora" apareceria grande e bonito ao lado de
+   "delícia" e o dono comemoraria a reclamação. */
+.nuvem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px 14px;
+  padding: 18px 8px 12px;
+  line-height: 1.15;
+}
+.termo {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: default;
+  transition: transform 0.12s ease;
+}
+.termo:hover { transform: scale(1.06); }
+.termo-elogio { color: var(--ok); }
+.termo-critica { color: var(--perigo); }
+.termo-neutro { color: var(--texto-2); }
+
+/* Barras das etiquetas mais marcadas.
+   Nomes próprios de propósito: `.barras` e `.barra-valor` já pertencem ao
+   gráfico de 7 dias do painel, que empilha em COLUNA. Reaproveitar o nome
+   fazia estas linhas saírem lado a lado, espremidas fora do cartão. */
+.etiquetas-barras { display: grid; gap: 9px; margin-top: 12px; }
+.etiqueta-barra {
+  display: grid;
+  grid-template-columns: minmax(96px, 1.2fr) 2.2fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+.etiqueta-barra > span:first-child { color: var(--texto-2); }
+.etiqueta-trilho {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  overflow: hidden;
+}
+.etiqueta-preenche { display: block; height: 100%; border-radius: 999px; }
+.etiqueta-preenche-ok { background: var(--ok); }
+.etiqueta-preenche-perigo { background: var(--perigo); }
+.etiqueta-vezes { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+
+/* As duas pontas da linha do tempo, alinhadas com o SVG. */
+.escala-datas { display: flex; justify-content: space-between; margin-top: 2px; }
+
+/* Marcar/desmarcar numa linha só — os ajustes da pesquisa são quase todos
+   liga-desliga, e um por linha faria a tela ter três telas de altura. */
+.check-linha {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--superficie);
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+.check-linha input { width: 17px; height: 17px; }
+
+/* O cartaz do QR code. */
+.cartaz-qr {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-g);
+  padding: 18px;
+}
+.qr-imagem {
+  width: 210px;
+  height: 210px;
+  /* Fundo branco fixo, mesmo no tema escuro: leitor de QR precisa de
+     contraste claro/escuro na ordem certa, e um QR escuro sobre fundo escuro
+     simplesmente não é lido. */
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px;
+  flex: 0 0 auto;
+}
+.cartaz-qr > div { flex: 1; min-width: 240px; }
+
+/* Impressão: sai o painel, fica o cartaz. Quem manda imprimir quer o papel da
+   mesa, não a barra lateral e o menu. */
+@media print {
+  body { background: #fff; }
+  .lateral, .topo, .abas, #avisos, .btn, .linha-campos { display: none !important; }
+  .cartaz-qr { border: 0; padding: 0; display: block; text-align: center; }
+  .qr-imagem { width: 340px; height: 340px; }
+  .bloco-codigo { border: 0; font-size: 0.8rem; }
+}

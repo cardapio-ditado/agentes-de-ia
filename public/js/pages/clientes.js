@@ -45,6 +45,8 @@ const MODULOS_VENDAVEIS = [
   ["cardapio-digital", "Cardápio Digital"],
   ["checklist", "Checklist"],
   ["avaliacoes", "Avaliações"],
+  ["cmv", "CMV Inteligente"],
+  ["pesquisa", "Voz do Cliente"],
 ];
 
 // Os fusos que existem no Brasil. Lista curta de propósito: o seletor com as

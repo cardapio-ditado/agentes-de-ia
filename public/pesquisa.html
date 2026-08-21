@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#191110" />
+    <title>Como foi sua visita?</title>
+    <!-- Nunca indexar: o link de convite carrega um token pessoal. Se o Google
+         guardar essa página, o convite de um cliente vira resultado de busca. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/png" href="/img/favicon-brasa-food.png" />
+    <link rel="apple-touch-icon" href="/img/favicon-brasa-food.png" />
+    <style>
+      /* A pesquisa é respondida de pé, com uma mão, esperando a conta chegar.
+         Tudo aqui obedece a isso: um passo por tela, alvo grande, zero
+         digitação obrigatória, e um só botão em foco por vez. */
+      :root {
+        --fundo: #191110;
+        --superficie: #241813;
+        --superficie-2: #2e1e18;
+        --borda: #3a2a23;
+        --creme: #fff8f0;
+        --creme-2: #c9b4a6;
+        --brasa: #ff6b35;
+        --fogo: #c1121f;
+        --ok: #4ecb8d;
+        --alerta: #ffc857;
+        /* O celular do cliente pode estar num 4G que não busca fonte nenhuma.
+           Sem esta pilha, cada `font:` abreviado abaixo cairia no serifado
+           padrão do navegador e a página apareceria como um documento antigo. */
+        --fonte: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --fonte-titulo: "Fraunces", Georgia, "Times New Roman", serif;
+      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(1200px 600px at 50% -10%, #2a1a14 0%, transparent 60%),
+          var(--fundo);
+        color: var(--creme);
+        font: 16px/1.55 var(--fonte);
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+      }
+
+      .topo {
+        padding: 22px 20px 6px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .chama { width: 30px; height: 38px; flex: 0 0 auto; }
+      .chama img { width: 100%; height: 100%; object-fit: contain; }
+      .casa {
+        font-family: var(--fonte-titulo);
+        font-weight: 600;
+        font-size: 17px;
+        margin: 0;
+        line-height: 1.15;
+      }
+      .casa small { display: block; font-family: var(--fonte); font-weight: 500; font-size: 12px; color: var(--creme-2); }
+
+      /* Trilha de progresso: quatro riscos finos. Barra com porcentagem
+         convidaria a contar quanto falta; risco preenchido só diz "está
+         andando". */
+      .trilha { display: flex; gap: 5px; padding: 12px 20px 0; }
+      /* `display:flex` ganha do [hidden] do navegador: sem esta linha a trilha
+         aparece durante o carregamento e continua na tela depois do envio,
+         sugerindo que ainda falta um passo quando já acabou. */
+      .trilha[hidden] { display: none; }
+      .trilha i {
+        flex: 1; height: 3px; border-radius: 3px; background: var(--borda);
+        transition: background .25s ease;
+      }
+      .trilha i.feito { background: var(--brasa); }
+
+      main { flex: 1; padding: 8px 20px 24px; max-width: 560px; width: 100%; margin: 0 auto; }
+
+      .passo { display: none; }
+      .passo.atual { display: block; }
+      /* A animação vive numa classe SEPARADA e só é posta quando o passo
+         muda. Marcar uma etiqueta redesenha o passo inteiro: com a animação
+         no `.passo`, cada toque apagava e reacendia a tela na cara da pessoa,
+         que é exatamente a aparência de um site quebrado. */
+      .passo.entrando { animation: entra .28s ease both; }
+      @keyframes entra {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: none; }
+      }
+      /* Quem prefere menos movimento não deveria pagar por uma escolha
+         estética nossa. */
+      @media (prefers-reduced-motion: reduce) {
+        .passo.entrando { animation: none; }
+        * { transition: none !important; }
+      }
+
+      h2 {
+        font-family: var(--fonte-titulo);
+        font-weight: 600;
+        font-size: 25px;
+        line-height: 1.2;
+        margin: 18px 0 6px;
+      }
+      .ajuda { color: var(--creme-2); font-size: 14px; margin: 0 0 18px; }
+
+      /* ---- Passo 1: a nota ---- */
+      .notas {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .nota {
+        appearance: none;
+        border: 1px solid var(--borda);
+        background: var(--superficie);
+        color: var(--creme);
+        border-radius: 14px;
+        /* 52px de altura: o mínimo confortável para o polegar de quem está em
+           pé. Abaixo disso, a pessoa erra o número e desiste. */
+        height: 52px;
+        font: 600 17px/1 var(--fonte);
+        cursor: pointer;
+        transition: transform .12s ease, background .15s ease, border-color .15s ease;
+      }
+      .nota:active { transform: scale(.94); }
+      .nota[aria-pressed="true"] {
+        background: var(--brasa); border-color: var(--brasa); color: #1a0f0a; font-weight: 800;
+      }
+      .escala {
+        display: flex; justify-content: space-between;
+        color: var(--creme-2); font-size: 12px; margin-top: 10px;
+      }
+
+      /* ---- Etiquetas ---- */
+      .grupo + .grupo { margin-top: 22px; }
+      .grupo-titulo { font-size: 14px; font-weight: 700; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip {
+        appearance: none;
+        border: 1px solid var(--borda);
+        background: var(--superficie);
+        color: var(--creme);
+        border-radius: 999px;
+        padding: 11px 15px;
+        font: 500 14.5px/1 var(--fonte);
+        cursor: pointer;
+        transition: transform .12s ease, background .15s ease, border-color .15s ease;
+      }
+      .chip:active { transform: scale(.95); }
+      .chip[aria-pressed="true"].bom { background: rgba(78,203,141,.16); border-color: var(--ok); color: var(--ok); }
+      .chip[aria-pressed="true"].ruim { background: rgba(193,18,31,.18); border-color: #e2565f; color: #ff9aa1; }
+
+      /* ---- Atendente ---- */
+      .pessoas { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
+      .pessoa {
+        appearance: none; border: 1px solid var(--borda); background: var(--superficie);
+        color: var(--creme); border-radius: 14px; padding: 13px 9px; cursor: pointer;
+        display: grid; gap: 7px; justify-items: center; transition: border-color .15s ease, background .15s ease;
+      }
+      .pessoa[aria-pressed="true"] { border-color: var(--brasa); background: var(--superficie-2); }
+      .inicial {
+        width: 38px; height: 38px; border-radius: 50%;
+        display: grid; place-items: center;
+        background: linear-gradient(140deg, var(--brasa), var(--fogo));
+        color: #1a0f0a; font-weight: 800; font-size: 15px;
+      }
+      .pessoa span { font-size: 13.5px; font-weight: 600; line-height: 1.2; text-align: center; }
+      .pessoa small { font-size: 11px; color: var(--creme-2); }
+
+      .estrelas { display: flex; gap: 6px; justify-content: center; margin-top: 16px; }
+      .estrela {
+        appearance: none; border: 0; background: none; cursor: pointer;
+        font-size: 34px; line-height: 1; padding: 4px 2px; color: var(--borda);
+        transition: transform .12s ease, color .15s ease;
+      }
+      .estrela:active { transform: scale(.9); }
+      .estrela.acesa { color: var(--alerta); }
+
+      /* ---- Campos ---- */
+      textarea, input[type="text"], input[type="tel"] {
+        width: 100%;
+        background: var(--superficie);
+        border: 1px solid var(--borda);
+        border-radius: 14px;
+        color: var(--creme);
+        /* 16px exatos: abaixo disso o Safari do iPhone dá zoom no campo ao
+           focar, e a pessoa perde a tela de vista no meio da resposta. */
+        font: 400 16px/1.5 var(--fonte);
+        padding: 13px 14px;
+      }
+      textarea { min-height: 108px; resize: vertical; }
+      input:focus, textarea:focus { outline: 2px solid var(--brasa); outline-offset: 1px; }
+      label.campo { display: block; margin-top: 12px; }
+      label.campo span { display: block; font-size: 13px; color: var(--creme-2); margin-bottom: 6px; }
+
+      /* ---- Prêmio ---- */
+      .premio {
+        border: 1px dashed var(--brasa);
+        background: linear-gradient(160deg, rgba(255,107,53,.14), rgba(255,107,53,.04));
+        border-radius: 16px; padding: 15px 16px; margin: 16px 0 4px;
+      }
+      .premio b { display: block; font-size: 15px; margin-bottom: 3px; }
+      .premio p { margin: 0; font-size: 13.5px; color: var(--creme-2); }
+
+      /* ---- Rodapé fixo com o botão ---- */
+      .rodape {
+        position: sticky; bottom: 0;
+        background: linear-gradient(to top, var(--fundo) 62%, transparent);
+        padding: 16px 20px calc(18px + env(safe-area-inset-bottom));
+        max-width: 560px; width: 100%; margin: 0 auto;
+      }
+      .btn {
+        width: 100%; appearance: none; border: 0; border-radius: 14px;
+        background: var(--brasa); color: #1a0f0a;
+        font: 800 16px/1 var(--fonte); padding: 17px; cursor: pointer;
+        transition: opacity .15s ease, transform .12s ease;
+      }
+      .btn:active { transform: scale(.985); }
+      .btn:disabled { opacity: .35; cursor: not-allowed; }
+      .btn-fantasma {
+        background: none; color: var(--creme-2); font-weight: 600; padding: 12px;
+        text-decoration: underline; font-size: 14px;
+      }
+
+      /* ---- Fim ---- */
+      .fim { text-align: center; padding: 40px 4px; }
+      .selo {
+        width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 50%;
+        display: grid; place-items: center; font-size: 36px;
+        background: rgba(78,203,141,.14); border: 1px solid var(--ok);
+      }
+      .cupom {
+        margin: 22px 0 8px; padding: 20px 16px; border-radius: 18px;
+        background: var(--superficie); border: 1px solid var(--brasa);
+      }
+      .cupom .codigo {
+        font: 800 34px/1 var(--fonte); letter-spacing: 5px; color: var(--brasa);
+        margin: 10px 0 6px; word-break: break-all;
+      }
+      .cupom small { color: var(--creme-2); font-size: 12.5px; }
+
+      .aviso {
+        margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+        background: rgba(193,18,31,.14); border: 1px solid #7c2b2b;
+        font-size: 14px;
+      }
+      .rodape-marca {
+        text-align: center; color: #6f574c; font-size: 11.5px;
+        padding: 0 20px calc(16px + env(safe-area-inset-bottom));
+      }
+      .rodape-marca a { color: #8a6d5f; }
+    </style>
+  </head>
+  <body>
+    <header class="topo">
+      <span class="chama"><img src="/img/favicon-brasa-food.png" alt="" /></span>
+      <h1 class="casa" id="casa">Carregando…<small id="sub"></small></h1>
+    </header>
+
+    <div class="trilha" id="trilha" hidden>
+      <i></i><i></i><i></i><i></i>
+    </div>
+
+    <main id="conteudo">
+      <p class="ajuda" id="carregando">Abrindo a pesquisa…</p>
+    </main>
+
+    <p class="rodape-marca">Pesquisa por <a href="/">Brasa Food</a></p>
+
+    <script type="module">
+      /**
+       * A pesquisa que o cliente responde na mesa.
+       *
+       * Autônoma de propósito: não importa nada do painel. Esta página abre no
+       * celular de um desconhecido, com 4G ruim, enquanto ele espera a conta —
+       * cada módulo a mais é meio segundo a mais até o primeiro toque, e é aí
+       * que se perde a resposta.
+       */
+      const params = new URLSearchParams(location.search);
+      const token = params.get("t");
+      const casaId = params.get("c");
+      const mesa = params.get("mesa");
+
+      const base = token
+        ? `/v1/pesquisa-publica/convite/${encodeURIComponent(token)}`
+        : `/v1/pesquisa-publica/${encodeURIComponent(casaId ?? "")}`;
+
+      const conteudo = document.getElementById("conteudo");
+      const trilha = document.getElementById("trilha");
+
+      /** O que o cliente marcou até agora. */
+      const resposta = {
+        nota: null,
+        elogios: new Set(),
+        criticas: new Set(),
+        atendente_id: null,
+        atendente_nota: null,
+        comentario: "",
+        cliente_nome: "",
+        cliente_contato: "",
+        mesa,
+      };
+
+      let dados = null;
+      let passo = 0;
+      /** O passo que já está na tela — o redesenho só rola quando muda. */
+      let passoDesenhado = null;
+
+      iniciar();
+
+      async function iniciar() {
+        if (!token && !casaId) return falhar("Link incompleto", "Leia o QR code da mesa de novo.");
+        try {
+          const r = await fetch(base);
+          const corpo = await r.json();
+          if (!r.ok || corpo?.success === false) {
+            return falhar("Pesquisa indisponível", corpo?.error?.message ?? "Tente de novo mais tarde.");
+          }
+          dados = corpo.data;
+        } catch {
+          return falhar("Sem conexão", "Confira a internet do celular e tente de novo.");
+        }
+
+        document.getElementById("casa").firstChild.textContent = dados.casa;
+        document.getElementById("sub").textContent = mesa ? `Mesa ${mesa}` : "";
+
+        if (!dados.ativa) {
+          return falhar("Pesquisa fechada", "Esta casa não está recebendo respostas agora.");
+        }
+        // Convite pelo WhatsApp: o nome já é conhecido, e pedir de novo o que
+        // a casa já sabe é o tipo de campo que faz a pessoa fechar a aba.
+        if (dados.convidado) resposta.cliente_nome = dados.convidado;
+
+        trilha.hidden = false;
+        desenhar();
+      }
+
+      /** Os passos que esta casa configurou. Passo desligado não existe. */
+      function passos() {
+        const lista = ["nota", "etiquetas"];
+        if (dados.perguntar_atendente && dados.atendentes.length > 0) lista.push("atendente");
+        if (dados.perguntar_comentario) lista.push("comentario");
+        lista.push("premio");
+        return lista;
+      }
+
+      function desenhar() {
+        const lista = passos();
+        const atual = lista[passo];
+
+        // A trilha mostra a quantidade REAL de passos desta casa: quatro
+        // risquinhos numa pesquisa de três passos faria a pessoa achar que
+        // ficou faltando alguma coisa.
+        trilha.replaceChildren(
+          ...lista.map((_, i) => {
+            const risco = document.createElement("i");
+            if (i <= passo) risco.className = "feito";
+            return risco;
+          }),
+        );
+
+        const tela = {
+          nota: telaNota,
+          etiquetas: telaEtiquetas,
+          atendente: telaAtendente,
+          comentario: telaComentario,
+          premio: telaPremio,
+        }[atual]();
+        if (passoDesenhado !== passo) tela.classList.add("entrando");
+        conteudo.replaceChildren(tela);
+        // Marcar uma etiqueta redesenha o passo inteiro. Rolar para o topo aí
+        // sacudiria a tela debaixo do dedo a cada toque; só a troca de passo
+        // merece o salto.
+        if (passoDesenhado !== passo) {
+          window.scrollTo({ top: 0 });
+          passoDesenhado = passo;
+        }
+      }
+
+      function avancar() {
+        if (passo < passos().length - 1) {
+          passo += 1;
+          desenhar();
+        }
+      }
+
+      /* ---------- passo: a nota ---------- */
+
+      function telaNota() {
+        const bloco = novoPasso();
+        bloco.append(
+          titulo(dados.saudacao || "Como foi sua visita?"),
+          ajuda("De 0 a 10, o quanto você indicaria esta casa para um amigo?"),
+        );
+
+        const grade = document.createElement("div");
+        grade.className = "notas";
+        for (let n = 0; n <= 10; n++) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nota";
+          b.textContent = String(n);
+          b.setAttribute("aria-pressed", String(resposta.nota === n));
+          // Um toque só: marcar a nota JÁ passa de tela. Pedir "confirme" para
+          // quem acabou de escolher um número é um toque a mais em troca de
+          // nada — e o toque a mais é onde a pessoa desiste.
+          b.onclick = () => {
+            resposta.nota = n;
+            for (const outro of grade.children) outro.setAttribute("aria-pressed", "false");
+            b.setAttribute("aria-pressed", "true");
+            setTimeout(avancar, 180);
+          };
+          grade.append(b);
+        }
+
+        const escala = document.createElement("div");
+        escala.className = "escala";
+        escala.append(spanTexto("Não indicaria"), spanTexto("Com certeza"));
+
+        bloco.append(grade, escala);
+        return bloco;
+      }
+
+      /* ---------- passo: as etiquetas ---------- */
+
+      function telaEtiquetas() {
+        const bloco = novoPasso();
+        const nota = resposta.nota ?? 10;
+        bloco.append(
+          titulo(nota >= 9 ? "O que mais te agradou?" : nota >= 7 ? "O que dá pra melhorar?" : "O que deu errado?"),
+          ajuda("Toque no que combina. Pode marcar mais de um, ou nenhum."),
+        );
+
+        bloco.append(
+          grupoDeChips("👏  Foi muito bom", "bom", resposta.elogios),
+          grupoDeChips("🔧  Pode melhorar", "ruim", resposta.criticas),
+        );
+        bloco.append(rodape(botao("Continuar", avancar)));
+        return bloco;
+      }
+
+      function grupoDeChips(rotuloTexto, classe, conjunto) {
+        const grupo = document.createElement("div");
+        grupo.className = "grupo";
+
+        const rotulo = document.createElement("p");
+        rotulo.className = "grupo-titulo";
+        rotulo.textContent = rotuloTexto;
+
+        const caixa = document.createElement("div");
+        caixa.className = "chips";
+        for (const etiqueta of dados.etiquetas) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = `chip ${classe}`;
+          b.textContent = etiqueta;
+          b.setAttribute("aria-pressed", String(conjunto.has(etiqueta)));
+          b.onclick = () => {
+            // A mesma etiqueta nos dois lados seria contraditória — marcar de
+            // um lado tira do outro.
+            const oposto = conjunto === resposta.elogios ? resposta.criticas : resposta.elogios;
+            oposto.delete(etiqueta);
+            if (conjunto.has(etiqueta)) conjunto.delete(etiqueta);
+            else conjunto.add(etiqueta);
+            desenhar();
+          };
+          caixa.append(b);
+        }
+        grupo.append(rotulo, caixa);
+        return grupo;
+      }
+
+      /* ---------- passo: quem atendeu ---------- */
+
+      function telaAtendente() {
+        const bloco = novoPasso();
+        bloco.append(titulo("Quem cuidou de você?"), ajuda("Seu elogio vai direto para a pessoa."));
+
+        const grade = document.createElement("div");
+        grade.className = "pessoas";
+        for (const pessoa of dados.atendentes) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "pessoa";
+          b.setAttribute("aria-pressed", String(resposta.atendente_id === pessoa.id));
+
+          const inicial = document.createElement("span");
+          inicial.className = "inicial";
+          inicial.textContent = pessoa.nome.trim().charAt(0).toUpperCase();
+
+          const nome = document.createElement("span");
+          nome.textContent = pessoa.nome;
+
+          b.append(inicial, nome);
+          if (pessoa.funcao) {
+            const funcao = document.createElement("small");
+            funcao.textContent = pessoa.funcao;
+            b.append(funcao);
+          }
+
+          b.onclick = () => {
+            // Tocar de novo em quem já estava marcado desmarca: é como a
+            // pessoa desfaz sem procurar um botão de "limpar".
+            const jaEra = resposta.atendente_id === pessoa.id;
+            resposta.atendente_id = jaEra ? null : pessoa.id;
+            resposta.atendente_nota = jaEra ? null : resposta.atendente_nota;
+            desenhar();
+          };
+          grade.append(b);
+        }
+        bloco.append(grade);
+
+        if (resposta.atendente_id) {
+          const escolhida = dados.atendentes.find((a) => a.id === resposta.atendente_id);
+          bloco.append(ajudaCentro(`Como foi o atendimento de ${escolhida.nome}?`), estrelas());
+        }
+
+        // Sem atendente escolhido, o botão diz "pular": esconder o caminho de
+        // saída faria a pessoa fechar a aba em vez de seguir.
+        const pronto = !resposta.atendente_id || resposta.atendente_nota !== null;
+        bloco.append(
+          rodape(
+            botao(
+              resposta.atendente_id ? "Continuar" : "Não lembro o nome",
+              avancar,
+              !pronto,
+            ),
+          ),
+        );
+        return bloco;
+      }
+
+      function estrelas() {
+        const caixa = document.createElement("div");
+        caixa.className = "estrelas";
+        for (let n = 1; n <= 5; n++) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = `estrela ${resposta.atendente_nota >= n ? "acesa" : ""}`;
+          b.textContent = "★";
+          b.setAttribute("aria-label", `${n} de 5`);
+          b.onclick = () => {
+            resposta.atendente_nota = n;
+            desenhar();
+          };
+          caixa.append(b);
+        }
+        return caixa;
+      }
+
+      /* ---------- passo: o texto livre ---------- */
+
+      function telaComentario() {
+        const bloco = novoPasso();
+        bloco.append(
+          titulo("Quer contar mais?"),
+          ajuda("Escreva à vontade — é o dono quem lê. Se não quiser, é só continuar."),
+        );
+
+        const campo = document.createElement("textarea");
+        campo.placeholder = "O que aconteceu, o que faltou, o que te surpreendeu…";
+        campo.value = resposta.comentario;
+        campo.maxLength = 2000;
+        // Guardado a cada tecla: a pessoa volta um passo para conferir a nota
+        // e o texto tem que continuar lá.
+        campo.oninput = () => {
+          resposta.comentario = campo.value;
+        };
+        bloco.append(campo, rodape(botao("Continuar", avancar)));
+        return bloco;
+      }
+
+      /* ---------- passo: o prêmio ---------- */
+
+      function telaPremio() {
+        const bloco = novoPasso();
+
+        if (dados.premio) {
+          bloco.append(titulo("Falta só o seu mimo"), ajuda("Deixe como te chamar para receber o prêmio."));
+          const cartao = document.createElement("div");
+          cartao.className = "premio";
+          const b = document.createElement("b");
+          b.textContent = `🎁  ${dados.premio.titulo}`;
+          cartao.append(b);
+          if (dados.premio.regras) {
+            const p = document.createElement("p");
+            p.textContent = dados.premio.regras;
+            cartao.append(p);
+          }
+          bloco.append(cartao);
+        } else {
+          bloco.append(titulo("Quase lá"), ajuda("Se quiser, deixe seu nome. É opcional."));
+        }
+
+        const nome = campoTexto("Seu nome", "text", resposta.cliente_nome, (v) => (resposta.cliente_nome = v));
+        nome.querySelector("input").autocomplete = "name";
+        const contato = campoTexto("WhatsApp (opcional)", "tel", resposta.cliente_contato, (v) => (resposta.cliente_contato = v));
+        contato.querySelector("input").autocomplete = "tel";
+
+        bloco.append(nome, contato);
+
+        const enviar = botao(dados.premio ? "Enviar e pegar meu prêmio" : "Enviar", () => enviarTudo(enviar));
+        const pular = document.createElement("button");
+        pular.type = "button";
+        pular.className = "btn btn-fantasma";
+        pular.textContent = "Prefiro não me identificar";
+        pular.onclick = () => {
+          // Anônimo perde o cupom — mas a opinião entra igual, que é o que
+          // interessa. Cobrar identificação afugentaria justamente o cliente
+          // insatisfeito, que é o mais importante de ouvir.
+          resposta.cliente_nome = "";
+          resposta.cliente_contato = "";
+          enviarTudo(pular);
+        };
+
+        bloco.append(rodape(enviar, pular));
+        return bloco;
+      }
+
+      async function enviarTudo(botaoClicado) {
+        for (const b of conteudo.querySelectorAll("button")) b.disabled = true;
+        const original = botaoClicado.textContent;
+        botaoClicado.textContent = "Enviando…";
+
+        try {
+          const r = await fetch(base, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...resposta,
+              elogios: [...resposta.elogios],
+              criticas: [...resposta.criticas],
+            }),
+          });
+          const corpo = await r.json();
+          if (!r.ok || corpo?.success === false) {
+            throw new Error(corpo?.error?.message ?? "Não deu para enviar.");
+          }
+          telaFinal(corpo.data);
+        } catch (e) {
+          for (const b of conteudo.querySelectorAll("button")) b.disabled = false;
+          botaoClicado.textContent = original;
+          const aviso = document.createElement("p");
+          aviso.className = "aviso";
+          aviso.textContent = e.message;
+          conteudo.querySelector(".passo").append(aviso);
+        }
+      }
+
+      function telaFinal(resultado) {
+        trilha.hidden = true;
+        const fim = document.createElement("div");
+        fim.className = "fim";
+
+        const selo = document.createElement("div");
+        selo.className = "selo";
+        selo.textContent = resposta.nota >= 9 ? "🧡" : "✅";
+
+        const h = document.createElement("h2");
+        h.textContent = resultado.premio ? "Prêmio garantido!" : "Obrigado de verdade";
+
+        const p = document.createElement("p");
+        p.className = "ajuda";
+        p.textContent =
+          resultado.agradecimento ||
+          (resposta.nota <= 6
+            ? "Sua opinião foi direto para o dono da casa. Vamos consertar isso."
+            : "Sua opinião ajuda a casa a melhorar de verdade.");
+
+        fim.append(selo, h, p);
+
+        if (resultado.premio) {
+          const cupom = document.createElement("div");
+          cupom.className = "cupom";
+
+          const nomeDoPremio = document.createElement("b");
+          nomeDoPremio.textContent = resultado.premio.titulo;
+
+          const codigo = document.createElement("div");
+          codigo.className = "codigo";
+          codigo.textContent = resultado.premio.codigo;
+
+          const validade = document.createElement("small");
+          const dia = new Date(resultado.premio.expira_em).toLocaleDateString("pt-BR");
+          // O código na tela E a validade: a pessoa mostra o celular ao
+          // garçom, e sem a data ela guarda o cupom para o ano que vem.
+          validade.textContent = `Mostre este código na casa · vale até ${dia}`;
+
+          cupom.append(nomeDoPremio, codigo, validade);
+          fim.append(cupom);
+
+          const dica = document.createElement("p");
+          dica.className = "ajuda";
+          dica.style.marginTop = "14px";
+          dica.textContent = "Tire um print desta tela para não perder o código.";
+          fim.append(dica);
+        }
+
+        conteudo.replaceChildren(fim);
+        window.scrollTo({ top: 0 });
+      }
+
+      /* ---------- peças ---------- */
+
+      function novoPasso() {
+        const d = document.createElement("div");
+        d.className = "passo atual";
+        return d;
+      }
+      function titulo(t) {
+        const h = document.createElement("h2");
+        h.textContent = t;
+        return h;
+      }
+      function ajuda(t) {
+        const p = document.createElement("p");
+        p.className = "ajuda";
+        p.textContent = t;
+        return p;
+      }
+      function ajudaCentro(t) {
+        const p = ajuda(t);
+        p.style.textAlign = "center";
+        p.style.margin = "22px 0 0";
+        return p;
+      }
+      function spanTexto(t) {
+        const s = document.createElement("span");
+        s.textContent = t;
+        return s;
+      }
+      function botao(rotulo, aoClicar, desativado = false) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn";
+        b.textContent = rotulo;
+        b.disabled = desativado;
+        b.onclick = aoClicar;
+        return b;
+      }
+      function rodape(...filhos) {
+        const d = document.createElement("div");
+        d.className = "rodape";
+        d.append(...filhos);
+        return d;
+      }
+      function campoTexto(rotulo, tipo, valor, aoMudar) {
+        const l = document.createElement("label");
+        l.className = "campo";
+        const s = document.createElement("span");
+        s.textContent = rotulo;
+        const i = document.createElement("input");
+        i.type = tipo;
+        i.value = valor;
+        i.oninput = () => aoMudar(i.value);
+        l.append(s, i);
+        return l;
+      }
+      function falhar(titulo, detalhe) {
+        trilha.hidden = true;
+        const d = document.createElement("div");
+        d.className = "fim";
+        const h = document.createElement("h2");
+        h.textContent = titulo;
+        const p = document.createElement("p");
+        p.className = "ajuda";
+        p.textContent = detalhe;
+        d.append(h, p);
+        conteudo.replaceChildren(d);
+      }
+    </script>
+  </body>
+</html>

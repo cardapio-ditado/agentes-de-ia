@@ -1,0 +1,637 @@
+import { randomBytes } from "node:crypto";
+import { db } from "./supabase.js";
+import { montarPainel } from "./pesquisaMetricas.js";
+import type { PainelDaPesquisa, RespostaBruta } from "./pesquisaMetricas.js";
+
+/**
+ * Pesquisa de satisfação: a opinião do cliente enquanto ele ainda está na mesa.
+ *
+ * O que a casa já tinha era a avaliação do Google — que chega depois, em
+ * público, e só de quem se dá ao trabalho. Falta o outro lado: o cliente que
+ * não vai escrever no Google mas responde um QR code em vinte segundos, e o
+ * que teve um problema e vai embora calado. Esse segundo é o mais caro de
+ * perder: ele não reclama, só não volta.
+ *
+ * O módulo não depende de nenhum outro. Uma casa que comprou só a pesquisa
+ * imprime o QR code, cadastra quem atende e está funcionando — sem agente, sem
+ * cardápio, sem CMV.
+ */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Sem os tipos gerados: as tabelas da pesquisa são novas e
+ * `database.types.ts` só é regerado depois que a migração roda em produção.
+ * Tipar à mão aqui criaria uma terceira descrição do mesmo esquema para
+ * manter em dia — a mesma decisão já tomada no CMV.
+ */
+const cliente = () => db() as any;
+
+export class ErroDePesquisa extends Error {
+  constructor(readonly status: number, mensagem: string) {
+    super(mensagem);
+  }
+}
+
+/**
+ * As etiquetas que o cliente marca com o dedo.
+ *
+ * Lista fixa, e não texto livre por casa, de propósito: é o que permite dizer
+ * "as reclamações de tempo de espera dobraram este mês". Com etiqueta livre,
+ * "demora", "Demora" e "demorou muito" viram três assuntos e o gráfico não
+ * significa mais nada. O texto livre existe — é o comentário, que a nuvem lê.
+ */
+export const ETIQUETAS = [
+  "Atendimento",
+  "Comida",
+  "Bebidas",
+  "Ambiente",
+  "Música",
+  "Preço",
+  "Tempo de espera",
+  "Limpeza",
+] as const;
+
+const ETIQUETAS_VALIDAS = new Set<string>(ETIQUETAS);
+
+export interface ConfigDaPesquisa {
+  ativa: boolean;
+  saudacao: string | null;
+  agradecimento: string | null;
+  premio_ativo: boolean;
+  premio_titulo: string;
+  premio_regras: string | null;
+  premio_validade_dias: number;
+  perguntar_atendente: boolean;
+  perguntar_comentario: boolean;
+}
+
+const CONFIG_PADRAO: ConfigDaPesquisa = {
+  ativa: true,
+  saudacao: null,
+  agradecimento: null,
+  premio_ativo: true,
+  premio_titulo: "Um chopp por nossa conta na próxima visita",
+  premio_regras: null,
+  premio_validade_dias: 30,
+  perguntar_atendente: true,
+  perguntar_comentario: true,
+};
+
+/**
+ * A configuração da casa, ou o padrão.
+ *
+ * Sem linha no banco a pesquisa funciona assim mesmo: quem acabou de comprar o
+ * módulo imprime o QR code e já recebe resposta, em vez de descobrir numa tela
+ * em branco que precisava configurar alguma coisa antes.
+ */
+export async function configDaPesquisa(venueId: string): Promise<ConfigDaPesquisa> {
+  const { data, error } = await cliente()
+    .from("pesquisa_config")
+    .select("*")
+    .eq("venue_id", venueId)
+    .maybeSingle();
+  if (error) throw new ErroDePesquisa(500, `Falha ao ler os ajustes da pesquisa: ${error.message}`);
+  if (!data) return { ...CONFIG_PADRAO };
+
+  const linha = data as Record<string, unknown>;
+  return {
+    ativa: Boolean(linha.ativa),
+    saudacao: (linha.saudacao as string) || null,
+    agradecimento: (linha.agradecimento as string) || null,
+    premio_ativo: Boolean(linha.premio_ativo),
+    premio_titulo: (linha.premio_titulo as string) || CONFIG_PADRAO.premio_titulo,
+    premio_regras: (linha.premio_regras as string) || null,
+    premio_validade_dias: Number(linha.premio_validade_dias) || CONFIG_PADRAO.premio_validade_dias,
+    perguntar_atendente: Boolean(linha.perguntar_atendente),
+    perguntar_comentario: Boolean(linha.perguntar_comentario),
+  };
+}
+
+export async function salvarConfig(
+  venueId: string,
+  campos: Partial<ConfigDaPesquisa>,
+): Promise<ConfigDaPesquisa> {
+  const atual = await configDaPesquisa(venueId);
+  const nova = { ...atual, ...campos };
+
+  if (!nova.premio_titulo.trim()) {
+    throw new ErroDePesquisa(400, "Escreva qual é o prêmio — o cliente vai ler isso antes de responder.");
+  }
+  if (!(nova.premio_validade_dias >= 1 && nova.premio_validade_dias <= 365)) {
+    throw new ErroDePesquisa(400, "A validade do prêmio precisa ficar entre 1 e 365 dias.");
+  }
+
+  const { error } = await cliente()
+    .from("pesquisa_config")
+    .upsert(
+      { venue_id: venueId, ...nova, updated_at: new Date().toISOString() } as never,
+      { onConflict: "venue_id" },
+    );
+  if (error) throw new ErroDePesquisa(500, `Falha ao salvar os ajustes: ${error.message}`);
+  return nova;
+}
+
+// ============================================================
+// Quem atende
+// ============================================================
+
+export interface Atendente {
+  id: string;
+  nome: string;
+  apelido: string | null;
+  funcao: string | null;
+  ativo: boolean;
+}
+
+export async function listarAtendentes(
+  venueId: string,
+  { incluirInativos = false } = {},
+): Promise<Atendente[]> {
+  let consulta = cliente()
+    .from("pesquisa_atendentes")
+    .select("id, nome, apelido, funcao, ativo")
+    .eq("venue_id", venueId)
+    .order("nome", { ascending: true });
+  if (!incluirInativos) consulta = consulta.eq("ativo", true);
+
+  const { data, error } = await consulta;
+  if (error) throw new ErroDePesquisa(500, `Falha ao listar a equipe: ${error.message}`);
+  return (data ?? []) as Atendente[];
+}
+
+export async function criarAtendente(params: {
+  venueId: string;
+  nome: string;
+  apelido?: string | null;
+  funcao?: string | null;
+}): Promise<Atendente> {
+  const nome = params.nome.trim();
+  if (!nome) throw new ErroDePesquisa(400, "O nome de quem atende é obrigatório.");
+
+  const { data, error } = await cliente()
+    .from("pesquisa_atendentes")
+    .insert({
+      venue_id: params.venueId,
+      nome,
+      apelido: params.apelido?.trim() || null,
+      funcao: params.funcao?.trim() || null,
+    } as never)
+    .select("id, nome, apelido, funcao, ativo")
+    .single();
+
+  if (error) {
+    // Índice único por nome normalizado: a pessoa já está cadastrada, talvez
+    // desativada. Dizer isso é mais útil que "erro 23505".
+    if (/duplicate key|unique/i.test(error.message)) {
+      throw new ErroDePesquisa(409, `"${nome}" já está na lista — confira se não está desativado.`);
+    }
+    throw new ErroDePesquisa(500, `Falha ao cadastrar: ${error.message}`);
+  }
+  return data as Atendente;
+}
+
+export async function atualizarAtendente(params: {
+  venueId: string;
+  id: string;
+  nome?: string;
+  apelido?: string | null;
+  funcao?: string | null;
+  ativo?: boolean;
+}): Promise<Atendente> {
+  const mudancas: Record<string, unknown> = {};
+  if (params.nome !== undefined) {
+    const nome = params.nome.trim();
+    if (!nome) throw new ErroDePesquisa(400, "O nome não pode ficar vazio.");
+    mudancas.nome = nome;
+  }
+  if (params.apelido !== undefined) mudancas.apelido = params.apelido?.trim() || null;
+  if (params.funcao !== undefined) mudancas.funcao = params.funcao?.trim() || null;
+  if (params.ativo !== undefined) mudancas.ativo = params.ativo;
+
+  const { data, error } = await cliente()
+    .from("pesquisa_atendentes")
+    .update(mudancas as never)
+    .eq("id", params.id)
+    .eq("venue_id", params.venueId)
+    .select("id, nome, apelido, funcao, ativo")
+    .maybeSingle();
+
+  if (error) throw new ErroDePesquisa(500, `Falha ao salvar: ${error.message}`);
+  if (!data) throw new ErroDePesquisa(404, "Pessoa não encontrada nesta casa.");
+  return data as Atendente;
+}
+
+/**
+ * Tira a pessoa da lista.
+ *
+ * DESATIVA em vez de apagar quando ela já foi avaliada: apagar levaria junto o
+ * histórico de quem foi bem avaliado por um ano — e o dono perderia
+ * exatamente o dado que justificaria uma promoção. Sem avaliação nenhuma, é
+ * cadastro errado e some de vez.
+ */
+export async function removerAtendente(venueId: string, id: string): Promise<{ apagado: boolean }> {
+  const { count, error: erroConta } = await cliente()
+    .from("pesquisa_respostas")
+    .select("id", { count: "exact", head: true })
+    .eq("atendente_id", id);
+  if (erroConta) throw new ErroDePesquisa(500, `Falha ao conferir o histórico: ${erroConta.message}`);
+
+  if ((count ?? 0) > 0) {
+    await atualizarAtendente({ venueId, id, ativo: false });
+    return { apagado: false };
+  }
+
+  const { error } = await cliente()
+    .from("pesquisa_atendentes")
+    .delete()
+    .eq("id", id)
+    .eq("venue_id", venueId);
+  if (error) throw new ErroDePesquisa(500, `Falha ao remover: ${error.message}`);
+  return { apagado: true };
+}
+
+// ============================================================
+// A resposta do cliente
+// ============================================================
+
+export interface PremioEmitido {
+  codigo: string;
+  titulo: string;
+  expira_em: string;
+}
+
+export interface RespostaRegistrada {
+  id: string;
+  premio: PremioEmitido | null;
+  agradecimento: string | null;
+}
+
+/**
+ * Só o que está na lista fixa entra.
+ *
+ * Exportada para teste: é a fronteira que impede um POST feito à mão de
+ * gravar texto qualquer no lugar da etiqueta e sujar o gráfico da casa para
+ * sempre — e uma fronteira que não é testada é uma fronteira que se acredita
+ * ter.
+ */
+export function etiquetasValidas(cruas: unknown): string[] {
+  if (!Array.isArray(cruas)) return [];
+  // Só o que está na lista fixa entra: sem isto, um POST feito à mão gravaria
+  // qualquer texto no lugar da etiqueta e sujaria o gráfico da casa para
+  // sempre.
+  const limpas = cruas.map(String).filter((e) => ETIQUETAS_VALIDAS.has(e));
+  return [...new Set(limpas)];
+}
+
+export async function registrarResposta(params: {
+  venueId: string;
+  nota: number;
+  elogios?: unknown;
+  criticas?: unknown;
+  comentario?: string | null;
+  atendenteId?: string | null;
+  atendenteNota?: number | null;
+  mesa?: string | null;
+  origem?: string;
+  conviteId?: string | null;
+  clienteNome?: string | null;
+  clienteContato?: string | null;
+}): Promise<RespostaRegistrada> {
+  const nota = Math.trunc(Number(params.nota));
+  if (!Number.isFinite(nota) || nota < 0 || nota > 10) {
+    throw new ErroDePesquisa(400, "Escolha uma nota de 0 a 10.");
+  }
+
+  // Atendente sem nota é meia informação: o banco recusa, e recusar aqui dá
+  // uma mensagem que a pessoa entende em vez de um erro de constraint.
+  const temAtendente = Boolean(params.atendenteId);
+  const atendenteNota = params.atendenteNota == null ? null : Math.trunc(Number(params.atendenteNota));
+  if (temAtendente && !(atendenteNota !== null && atendenteNota >= 1 && atendenteNota <= 5)) {
+    throw new ErroDePesquisa(400, "Dê de 1 a 5 estrelas para quem atendeu.");
+  }
+
+  const config = await configDaPesquisa(params.venueId);
+  if (!config.ativa) {
+    throw new ErroDePesquisa(403, "A pesquisa desta casa está desligada no momento.");
+  }
+
+  const origem = ["qrcode", "whatsapp", "link"].includes(String(params.origem))
+    ? String(params.origem)
+    : "qrcode";
+
+  const { data, error } = await cliente()
+    .from("pesquisa_respostas")
+    .insert({
+      venue_id: params.venueId,
+      nota,
+      elogios: etiquetasValidas(params.elogios),
+      criticas: etiquetasValidas(params.criticas),
+      // Comentário gigante quase sempre é cola acidental; o que interessa
+      // cabe muito antes disso.
+      comentario: params.comentario?.trim().slice(0, 2000) || null,
+      atendente_id: temAtendente ? params.atendenteId : null,
+      atendente_nota: temAtendente ? atendenteNota : null,
+      mesa: params.mesa?.trim().slice(0, 40) || null,
+      origem,
+      convite_id: params.conviteId ?? null,
+      cliente_nome: params.clienteNome?.trim().slice(0, 120) || null,
+      cliente_contato: params.clienteContato?.trim().slice(0, 40) || null,
+    } as never)
+    .select("id")
+    .single();
+
+  if (error) {
+    if (/duplicate key|unique/i.test(error.message)) {
+      throw new ErroDePesquisa(409, "Esta pesquisa já foi respondida. Obrigado!");
+    }
+    if (/foreign key/i.test(error.message)) {
+      throw new ErroDePesquisa(400, "Quem atendeu não está mais na lista desta casa.");
+    }
+    throw new ErroDePesquisa(500, `Falha ao gravar a resposta: ${error.message}`);
+  }
+
+  const respostaId = (data as { id: string }).id;
+
+  let premio: PremioEmitido | null = null;
+  if (config.premio_ativo) {
+    // Falhar aqui não pode desfazer a resposta: a opinião do cliente é o que
+    // interessa, o cupom é o agrado. Perder a resposta inteira porque a
+    // emissão do cupom tropeçou seria trocar o ouro pelo brinde.
+    try {
+      premio = await emitirPremio(respostaId, config);
+    } catch (e) {
+      console.error(`[pesquisa] resposta ${respostaId} sem cupom: ${(e as Error).message}`);
+    }
+  }
+
+  return { id: respostaId, premio, agradecimento: config.agradecimento };
+}
+
+async function emitirPremio(
+  respostaId: string,
+  config: ConfigDaPesquisa,
+): Promise<PremioEmitido> {
+  const { data, error } = await cliente().rpc("pesquisa_emitir_premio", {
+    p_resposta_id: respostaId,
+    p_titulo: config.premio_titulo,
+    p_validade_dias: config.premio_validade_dias,
+  } as never);
+  if (error) throw new Error(error.message);
+
+  const linha = (Array.isArray(data) ? data[0] : data) as Record<string, unknown>;
+  return {
+    codigo: String(linha.codigo),
+    titulo: String(linha.titulo),
+    expira_em: String(linha.expira_em),
+  };
+}
+
+// ============================================================
+// Cupons
+// ============================================================
+
+export interface PremioNaLista {
+  id: string;
+  codigo: string;
+  titulo: string;
+  expira_em: string;
+  resgatado_em: string | null;
+  created_at: string;
+  cliente_nome: string | null;
+  cliente_contato: string | null;
+  nota: number | null;
+}
+
+export async function listarPremios(
+  venueId: string,
+  { situacao = "todos", limite = 200 } = {},
+): Promise<PremioNaLista[]> {
+  const { data, error } = await cliente()
+    .from("pesquisa_premios")
+    .select("id, codigo, titulo, expira_em, resgatado_em, created_at, pesquisa_respostas(cliente_nome, cliente_contato, nota)")
+    .eq("venue_id", venueId)
+    .order("created_at", { ascending: false })
+    .limit(limite);
+  if (error) throw new ErroDePesquisa(500, `Falha ao listar os cupons: ${error.message}`);
+
+  const agora = Date.now();
+  const lista: PremioNaLista[] = (data ?? []).map((linha: unknown) => {
+    const l = linha as Record<string, unknown>;
+    const resposta = (l.pesquisa_respostas ?? {}) as Record<string, unknown>;
+    return {
+      id: String(l.id),
+      codigo: String(l.codigo),
+      titulo: String(l.titulo),
+      expira_em: String(l.expira_em),
+      resgatado_em: (l.resgatado_em as string) ?? null,
+      created_at: String(l.created_at),
+      cliente_nome: (resposta.cliente_nome as string) ?? null,
+      cliente_contato: (resposta.cliente_contato as string) ?? null,
+      nota: resposta.nota == null ? null : Number(resposta.nota),
+    };
+  });
+
+  if (situacao === "aberto") {
+    return lista.filter((p) => !p.resgatado_em && Date.parse(p.expira_em) > agora);
+  }
+  if (situacao === "resgatado") return lista.filter((p) => p.resgatado_em);
+  if (situacao === "vencido") {
+    return lista.filter((p) => !p.resgatado_em && Date.parse(p.expira_em) <= agora);
+  }
+  return lista;
+}
+
+/**
+ * Baixa o cupom no balcão.
+ *
+ * A regra inteira (existe? já usou? venceu?) mora numa função do banco, com a
+ * linha travada durante a leitura. Feita aqui, dois garçons batendo o mesmo
+ * código ao mesmo tempo dariam o prêmio duas vezes.
+ */
+export async function resgatarPremio(params: {
+  venueId: string;
+  codigo: string;
+  usuarioId?: string | null;
+}): Promise<{ codigo: string; titulo: string; resgatado_em: string }> {
+  const codigo = params.codigo.trim();
+  if (!codigo) throw new ErroDePesquisa(400, "Digite o código do cupom.");
+
+  const { data, error } = await cliente().rpc("pesquisa_resgatar_premio", {
+    p_venue_id: params.venueId,
+    p_codigo: codigo,
+    p_usuario: params.usuarioId ?? null,
+  } as never);
+
+  if (error) {
+    // As mensagens vêm prontas do banco, escritas para quem está no balcão.
+    const texto = error.message.replace(/^.*?:\s*/, "");
+    const naoAchou = /não encontrado/i.test(texto);
+    throw new ErroDePesquisa(naoAchou ? 404 : 409, texto);
+  }
+
+  const linha = (Array.isArray(data) ? data[0] : data) as Record<string, unknown>;
+  return {
+    codigo: String(linha.codigo),
+    titulo: String(linha.titulo),
+    resgatado_em: String(linha.resgatado_em),
+  };
+}
+
+// ============================================================
+// Convites por WhatsApp
+// ============================================================
+
+export interface Convite {
+  id: string;
+  telefone: string;
+  nome: string | null;
+  token: string;
+  enviado_em: string | null;
+  respondido_em: string | null;
+  created_at: string;
+}
+
+/** Só dígitos: o que o WhatsApp entende. */
+export function telefoneLimpo(bruto: string): string {
+  return bruto.replace(/\D/g, "");
+}
+
+export async function criarConvite(params: {
+  venueId: string;
+  telefone: string;
+  nome?: string | null;
+}): Promise<Convite> {
+  const telefone = telefoneLimpo(params.telefone);
+  // 10 dígitos = fixo com DDD; abaixo disso não é telefone brasileiro nenhum,
+  // e mandar para um número inventado gasta o disparo e some sem aviso.
+  if (telefone.length < 10 || telefone.length > 15) {
+    throw new ErroDePesquisa(400, `"${params.telefone}" não parece um telefone com DDD.`);
+  }
+
+  const { data, error } = await cliente()
+    .from("pesquisa_convites")
+    .insert({
+      venue_id: params.venueId,
+      telefone,
+      nome: params.nome?.trim() || null,
+      token: randomBytes(18).toString("base64url"),
+    } as never)
+    .select("*")
+    .single();
+  if (error) throw new ErroDePesquisa(500, `Falha ao criar o convite: ${error.message}`);
+  return data as Convite;
+}
+
+export async function listarConvites(venueId: string, limite = 100): Promise<Convite[]> {
+  const { data, error } = await cliente()
+    .from("pesquisa_convites")
+    .select("*")
+    .eq("venue_id", venueId)
+    .order("created_at", { ascending: false })
+    .limit(limite);
+  if (error) throw new ErroDePesquisa(500, `Falha ao listar os convites: ${error.message}`);
+  return (data ?? []) as Convite[];
+}
+
+export async function marcarConviteEnviado(id: string): Promise<void> {
+  await cliente()
+    .from("pesquisa_convites")
+    .update({ enviado_em: new Date().toISOString() } as never)
+    .eq("id", id);
+}
+
+/** O convite por trás de um token, se ele ainda serve. */
+export async function conviteDoToken(
+  token: string,
+): Promise<{ id: string; venue_id: string; nome: string | null } | null> {
+  const { data, error } = await cliente()
+    .from("pesquisa_convites")
+    .select("id, venue_id, nome, respondido_em")
+    .eq("token", token)
+    .maybeSingle();
+  if (error) throw new ErroDePesquisa(500, `Falha ao conferir o convite: ${error.message}`);
+  if (!data) return null;
+
+  const linha = data as Record<string, unknown>;
+  if (linha.respondido_em) {
+    throw new ErroDePesquisa(409, "Esta pesquisa já foi respondida. Obrigado!");
+  }
+  return {
+    id: String(linha.id),
+    venue_id: String(linha.venue_id),
+    nome: (linha.nome as string) ?? null,
+  };
+}
+
+// ============================================================
+// O painel
+// ============================================================
+
+/** Quantas respostas o painel lê de uma vez. Um bar movimentado não passa disso num mês. */
+const TETO_DE_RESPOSTAS = 5000;
+
+async function respostasEntre(
+  venueId: string,
+  de: Date,
+  ate: Date,
+): Promise<RespostaBruta[]> {
+  const { data, error } = await cliente()
+    .from("pesquisa_respostas")
+    .select("*")
+    .eq("venue_id", venueId)
+    .gte("created_at", de.toISOString())
+    .lt("created_at", ate.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(TETO_DE_RESPOSTAS);
+  if (error) throw new ErroDePesquisa(500, `Falha ao ler as respostas: ${error.message}`);
+  return (data ?? []) as RespostaBruta[];
+}
+
+export async function painelDaPesquisa(params: {
+  venueId: string;
+  fuso: string;
+  dias?: number;
+}): Promise<PainelDaPesquisa & { atendentes: Atendente[]; etiquetas: string[] }> {
+  const dias = Math.min(Math.max(Math.trunc(params.dias ?? 30), 1), 365);
+  const agora = new Date();
+  const inicio = new Date(agora.getTime() - dias * 86_400_000);
+  // A janela anterior tem o MESMO tamanho: comparar 30 dias com 90 diria que
+  // a casa piorou sempre que o dono ampliasse o período na tela.
+  const inicioAnterior = new Date(inicio.getTime() - dias * 86_400_000);
+
+  const [respostas, anteriores, atendentes] = await Promise.all([
+    respostasEntre(params.venueId, inicio, new Date(agora.getTime() + 60_000)),
+    respostasEntre(params.venueId, inicioAnterior, inicio),
+    listarAtendentes(params.venueId, { incluirInativos: true }),
+  ]);
+
+  return {
+    ...montarPainel({ respostas, anteriores, atendentes, fuso: params.fuso }),
+    atendentes,
+    etiquetas: [...ETIQUETAS],
+  };
+}
+
+export async function listarRespostas(params: {
+  venueId: string;
+  dias?: number;
+  notaMaxima?: number;
+  limite?: number;
+}): Promise<RespostaBruta[]> {
+  const dias = Math.min(Math.max(Math.trunc(params.dias ?? 30), 1), 365);
+  const inicio = new Date(Date.now() - dias * 86_400_000);
+
+  let consulta = cliente()
+    .from("pesquisa_respostas")
+    .select("*")
+    .eq("venue_id", params.venueId)
+    .gte("created_at", inicio.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(Math.min(params.limite ?? 300, TETO_DE_RESPOSTAS));
+
+  if (params.notaMaxima !== undefined) consulta = consulta.lte("nota", params.notaMaxima);
+
+  const { data, error } = await consulta;
+  if (error) throw new ErroDePesquisa(500, `Falha ao listar as respostas: ${error.message}`);
+  return (data ?? []) as RespostaBruta[];
+}

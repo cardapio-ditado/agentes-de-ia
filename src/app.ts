@@ -105,6 +105,7 @@ import {
   deleteVenueEvent,
   deleteVenueEventSeries,
   deleteVenueInfo,
+  findVenueBySlug,
   findVenueBySlugInOrg,
   getReservationWithVenue,
   listAllEvents,
@@ -119,7 +120,7 @@ import {
   type DadosReserva,
   type DadosVenue,
 } from "./venues.js";
-import { definirModulo, listarModulos } from "./modulos.js";
+import { definirModulo, listarModulos, temModulo } from "./modulos.js";
 import {
   ErroDoEstoque,
   apagarFicha,
@@ -185,7 +186,27 @@ import { tipoDeVendasAceito } from "./cmv/lerVendas.js";
 import { lerProgramacao, tipoDeAgendaAceito } from "./lerProgramacao.js";
 import { ErroDeAgenda, importarProgramacao } from "./importarProgramacao.js";
 import { hojeNaCasa } from "./fuso.js";
+import {
+  ErroDePesquisa,
+  ETIQUETAS,
+  atualizarAtendente,
+  conviteDoToken,
+  configDaPesquisa,
+  criarAtendente,
+  criarConvite,
+  listarAtendentes,
+  listarConvites,
+  listarPremios,
+  listarRespostas,
+  marcarConviteEnviado,
+  painelDaPesquisa,
+  registrarResposta,
+  removerAtendente,
+  resgatarPremio,
+  salvarConfig,
+} from "./pesquisa.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
+import type { Venue } from "./venues.js";
 import {
   baixarVendas,
   corrigirItem,
@@ -464,6 +485,122 @@ async function comErroDeEstoque<T>(acao: () => Promise<T>): Promise<T> {
     }
     throw e;
   }
+}
+
+/** O mesmo tratamento para os erros da pesquisa de satisfação. */
+async function comErroDePesquisa<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDePesquisa) {
+      const codigo =
+        e.status === 404 ? "not_found" : e.status === 409 ? "conflito" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
+/**
+ * O endereço público da pesquisa desta casa.
+ *
+ * Pelo slug quando ele é só desta casa; pelo id quando não é. Um QR code é
+ * IMPRESSO e colado na mesa: se um segundo cliente do hub escolher o mesmo
+ * slug daqui a seis meses, o cartaz da mesa passaria a abrir a pesquisa do
+ * vizinho, e ninguém iria descobrir por meses. O id é feio na barra de
+ * endereços e nunca fica ambíguo.
+ */
+async function enderecoDaPesquisa(
+  venue: { id: string; slug: string },
+  mesa?: string | null,
+): Promise<string> {
+  const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
+
+  let identificador = venue.id;
+  try {
+    const porSlug = await findVenueBySlug(venue.slug);
+    if (porSlug.id === venue.id) identificador = venue.slug;
+  } catch {
+    /* slug repetido em outra organização: fica o id, que não erra */
+  }
+
+  const busca = new URLSearchParams({ c: identificador });
+  if (mesa?.trim()) busca.set("mesa", mesa.trim());
+  return `${base}/pesquisa?${busca}`;
+}
+
+/**
+ * A casa por trás do que veio no QR code: um id ou um slug.
+ *
+ * Os dois formatos existem porque o cartaz gerado hoje usa o slug e o gerado
+ * amanhã pode usar o id (ver `enderecoDaPesquisa`). Um cartaz impresso vive
+ * anos na mesa e precisa continuar abrindo.
+ */
+async function venueDaPesquisa(identificador: string): Promise<Venue | null> {
+  const pareceUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    identificador,
+  );
+  try {
+    if (pareceUuid) {
+      const { data } = await db().from("venues").select("*").eq("id", identificador).maybeSingle();
+      return (data as Venue) ?? null;
+    }
+    return await findVenueBySlug(identificador);
+  } catch {
+    return null;
+  }
+}
+
+/** O QR code como imagem embutida, pronto para a tela mandar imprimir. */
+async function qrcodeDataUrl(texto: string): Promise<string> {
+  const { toDataURL } = await import("qrcode");
+  return toDataURL(texto, { errorCorrectionLevel: "M", margin: 1, width: 512 });
+}
+
+/**
+ * Cria o convite e enfileira o link no WhatsApp da casa.
+ *
+ * Enfileira em vez de enviar: quem entrega é o conector, que pode estar fora
+ * do ar neste segundo. Gravar o convite e deixar a fila cuidar do envio é o
+ * que faz a mensagem sair sozinha quando o WhatsApp voltar, em vez de a tela
+ * dizer "falhou" e o cliente nunca receber nada.
+ */
+async function convidarParaPesquisa(
+  venue: { id: string; name: string; slug: string },
+  corpo: Record<string, unknown>,
+): Promise<{ convite: unknown; enfileirado: boolean }> {
+  const convite = await criarConvite({
+    venueId: venue.id,
+    telefone: texto(corpo, "telefone"),
+    nome: textoOpcional(corpo, "nome") ?? null,
+  });
+
+  const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
+  const link = `${base}/pesquisa?t=${convite.token}`;
+  const primeiroNome = convite.nome ? `${convite.nome.split(/\s+/)[0]}, ` : "";
+  const mensagemPadrao = [
+    `${primeiroNome}obrigado pela visita ao ${venue.name}! 🙌`,
+    ``,
+    `Conta pra gente como foi? São 30 segundos, e quem responde concorre a um mimo por nossa conta:`,
+    link,
+  ].join("\n");
+
+  const { error } = await db().from("notifications").insert({
+    venue_id: venue.id,
+    channel: "whatsapp",
+    destination: convite.telefone,
+    template: "pesquisa_convite",
+    body: textoOpcional(corpo, "mensagem")
+      ? `${textoOpcional(corpo, "mensagem")}\n\n${link}`
+      : mensagemPadrao,
+  } as never);
+
+  if (error) {
+    console.error(`[pesquisa] convite ${convite.id} sem envio: ${error.message}`);
+    return { convite, enfileirado: false };
+  }
+  await marcarConviteEnviado(convite.id);
+  return { convite, enfileirado: true };
 }
 
 /** O mesmo tratamento para os erros da gestão de acessos. */
@@ -884,6 +1021,8 @@ async function roteasApi(
       vendas: "cmv",
       consumo: "cmv",
       jogos: "agentes-ia",
+      programacao: "agentes-ia",
+      pesquisa: "pesquisa",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -1400,6 +1539,186 @@ async function roteasApi(
       } catch (e) {
         if (e instanceof ErroDeAgenda) throw erro(e.status, "agenda_invalida", e.message);
         throw e;
+      }
+    }
+
+    // ---- Pesquisa de satisfação ----
+
+    // GET /v1/venues/:slug/pesquisa?dias=30 — o painel inteiro
+    if (metodo === "GET" && recurso === "pesquisa" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          painelDaPesquisa({
+            venueId: venue.id,
+            fuso: venue.timezone,
+            dias: numeroOuNulo(url.searchParams.get("dias")) ?? 30,
+          }),
+        ),
+      );
+    }
+
+    // GET /v1/venues/:slug/pesquisa/respostas?dias=&nota_max=
+    if (metodo === "GET" && recurso === "pesquisa" && p[3] === "respostas" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const notaMaxima = numeroOuNulo(url.searchParams.get("nota_max"));
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          listarRespostas({
+            venueId: venue.id,
+            dias: numeroOuNulo(url.searchParams.get("dias")) ?? 30,
+            notaMaxima: notaMaxima ?? undefined,
+          }),
+        ),
+      );
+    }
+
+    // GET | PUT /v1/venues/:slug/pesquisa/config
+    if (recurso === "pesquisa" && p[3] === "config" && p.length === 4) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDePesquisa(() => configDaPesquisa(venue.id)));
+      }
+      if (metodo === "PUT") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDePesquisa(() =>
+            salvarConfig(venue.id, {
+              ativa: corpo.ativa === undefined ? undefined : Boolean(corpo.ativa),
+              saudacao: textoOpcional(corpo, "saudacao") ?? null,
+              agradecimento: textoOpcional(corpo, "agradecimento") ?? null,
+              premio_ativo: corpo.premio_ativo === undefined ? undefined : Boolean(corpo.premio_ativo),
+              premio_titulo: textoOpcional(corpo, "premio_titulo"),
+              premio_regras: textoOpcional(corpo, "premio_regras") ?? null,
+              premio_validade_dias: numeroOuNulo(corpo.premio_validade_dias) ?? undefined,
+              perguntar_atendente:
+                corpo.perguntar_atendente === undefined ? undefined : Boolean(corpo.perguntar_atendente),
+              perguntar_comentario:
+                corpo.perguntar_comentario === undefined ? undefined : Boolean(corpo.perguntar_comentario),
+            }),
+          ),
+        );
+      }
+    }
+
+    // GET | POST /v1/venues/:slug/pesquisa/atendentes
+    if (recurso === "pesquisa" && p[3] === "atendentes" && p.length === 4) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(
+          res,
+          await comErroDePesquisa(() =>
+            listarAtendentes(venue.id, { incluirInativos: url.searchParams.get("todos") === "1" }),
+          ),
+        );
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDePesquisa(() =>
+            criarAtendente({
+              venueId: venue.id,
+              nome: texto(corpo, "nome"),
+              apelido: textoOpcional(corpo, "apelido") ?? null,
+              funcao: textoOpcional(corpo, "funcao") ?? null,
+            }),
+          ),
+          201,
+        );
+      }
+    }
+
+    // PATCH | DELETE /v1/venues/:slug/pesquisa/atendentes/:id
+    if (recurso === "pesquisa" && p[3] === "atendentes" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      if (metodo === "PATCH") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDePesquisa(() =>
+            atualizarAtendente({
+              venueId: venue.id,
+              id: p[4]!,
+              nome: textoOpcional(corpo, "nome"),
+              apelido: corpo.apelido === undefined ? undefined : (textoOpcional(corpo, "apelido") ?? null),
+              funcao: corpo.funcao === undefined ? undefined : (textoOpcional(corpo, "funcao") ?? null),
+              ativo: corpo.ativo === undefined ? undefined : Boolean(corpo.ativo),
+            }),
+          ),
+        );
+      }
+      if (metodo === "DELETE") {
+        return ok(res, await comErroDePesquisa(() => removerAtendente(venue.id, p[4]!)));
+      }
+    }
+
+    // GET /v1/venues/:slug/pesquisa/premios?situacao=aberto|resgatado|vencido
+    if (metodo === "GET" && recurso === "pesquisa" && p[3] === "premios" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          listarPremios(venue.id, { situacao: url.searchParams.get("situacao") ?? "todos" }),
+        ),
+      );
+    }
+
+    // POST /v1/venues/:slug/pesquisa/premios/resgatar — o balcão baixa o cupom
+    if (
+      metodo === "POST" && recurso === "pesquisa" &&
+      p[3] === "premios" && p[4] === "resgatar" && p.length === 5
+    ) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          resgatarPremio({
+            venueId: venue.id,
+            codigo: texto(corpo, "codigo"),
+            usuarioId: chave.userId ?? null,
+          }),
+        ),
+      );
+    }
+
+    // GET /v1/venues/:slug/pesquisa/qrcode?mesa=7 — o cartaz da mesa
+    if (metodo === "GET" && recurso === "pesquisa" && p[3] === "qrcode" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const mesa = url.searchParams.get("mesa");
+      const endereco = await enderecoDaPesquisa(venue, mesa);
+      return ok(res, { url: endereco, png: await qrcodeDataUrl(endereco), mesa: mesa ?? null });
+    }
+
+    // GET | POST /v1/venues/:slug/pesquisa/convites — mandar a pesquisa ao cliente
+    if (recurso === "pesquisa" && p[3] === "convites" && p.length === 4) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDePesquisa(() => listarConvites(venue.id)));
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDePesquisa(() => convidarParaPesquisa(venue, corpo)), 201);
       }
     }
 
@@ -2502,6 +2821,91 @@ async function roteasApi(
     }
   }
 
+  // ---- Pesquisa pública (QR code da mesa e link do WhatsApp) ----
+  //
+  // Sem chave de API: quem responde é o cliente da casa, no celular dele, sem
+  // conta em lugar nenhum. O que substitui a chave é o alcance: por aqui só se
+  // LÊ o que já está impresso no cartaz e se GRAVA uma resposta.
+  if (p[0] === "pesquisa-publica" && p.length >= 2) {
+    const porConvite = p[1] === "convite";
+    const identificador = porConvite ? p[2] : p[1];
+    if (!identificador) throw erro(404, "not_found", "Pesquisa não encontrada.");
+
+    const convite = porConvite
+      ? await comErroDePesquisa(async () => {
+          const achado = await conviteDoToken(identificador);
+          if (!achado) throw new ErroDePesquisa(404, "Este link não vale mais.");
+          return achado;
+        })
+      : null;
+
+    const venue = await venueDaPesquisa(convite?.venue_id ?? identificador);
+    if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+
+    // A casa que não contratou (ou cancelou) o módulo não responde por aqui.
+    // Sem esta conferência, o cartaz impresso continuaria recebendo resposta
+    // depois do cancelamento — e a casa veria dado entrando num módulo pelo
+    // qual não paga mais.
+    if (!(await temModulo(venue.id, "pesquisa"))) {
+      throw erro(404, "not_found", "Pesquisa não disponível.");
+    }
+
+    const config = await comErroDePesquisa(() => configDaPesquisa(venue.id));
+
+    if (metodo === "GET") {
+      if (!config.ativa) {
+        return ok(res, { ativa: false, casa: venue.name });
+      }
+      return ok(res, {
+        ativa: true,
+        casa: venue.name,
+        saudacao: config.saudacao,
+        etiquetas: [...ETIQUETAS],
+        perguntar_atendente: config.perguntar_atendente,
+        perguntar_comentario: config.perguntar_comentario,
+        premio: config.premio_ativo
+          ? { titulo: config.premio_titulo, regras: config.premio_regras }
+          : null,
+        // Só quem está ativo: o cliente não pode elogiar quem não trabalha
+        // mais aqui, e o nome de um demitido na lista é constrangimento.
+        atendentes: config.perguntar_atendente
+          ? (await comErroDePesquisa(() => listarAtendentes(venue.id))).map((a) => ({
+              id: a.id,
+              nome: a.apelido?.trim() || a.nome,
+              funcao: a.funcao,
+            }))
+          : [],
+        convidado: convite?.nome ?? null,
+      });
+    }
+
+    if (metodo === "POST") {
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          registrarResposta({
+            venueId: venue.id,
+            nota: Number(corpo.nota),
+            elogios: corpo.elogios,
+            criticas: corpo.criticas,
+            comentario: textoOpcional(corpo, "comentario") ?? null,
+            atendenteId: textoOpcional(corpo, "atendente_id") ?? null,
+            atendenteNota: numeroOuNulo(corpo.atendente_nota),
+            mesa: textoOpcional(corpo, "mesa") ?? null,
+            origem: convite ? "whatsapp" : "qrcode",
+            conviteId: convite?.id ?? null,
+            clienteNome: textoOpcional(corpo, "cliente_nome") ?? null,
+            clienteContato: textoOpcional(corpo, "cliente_contato") ?? null,
+          }),
+        ),
+        201,
+      );
+    }
+
+    throw erro(405, "method_not_allowed", "Método não suportado aqui.");
+  }
+
   // ---- Instagram (API oficial da Meta) ----
   // O webhook NÃO usa chave de API: quem chama é a Meta. A segurança é o
   // verify token (GET de verificação) e a assinatura HMAC do corpo (POST).
@@ -2721,6 +3125,7 @@ const PAGINAS_LIMPAS: Record<string, string> = {
   "/painel": "app.html",
   "/entrar": "app.html",
   "/checklist": "checklist.html",
+  "/pesquisa": "pesquisa.html",
   "/privacidade": "privacidade.html",
   "/termos": "termos.html",
 };

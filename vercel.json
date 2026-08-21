@@ -20,6 +20,10 @@
       "destination": "/checklist.html"
     },
     {
+      "source": "/pesquisa",
+      "destination": "/pesquisa.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },
