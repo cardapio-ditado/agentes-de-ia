@@ -6,10 +6,38 @@ import { avisar, dataHora, desde, el, etiqueta, limpar, vazio } from "../ui.js";
  *
  * "Assumir atendimento" silencia o agente naquela conversa — enquanto uma
  * pessoa estiver respondendo, o modelo não entra por cima.
+ *
+ * A tela se atualiza sozinha. Sem isso, quem está atendendo pelo painel fica
+ * olhando para uma conversa parada enquanto o cliente já respondeu, e só
+ * descobre saindo e voltando — que é o mesmo que não ter caixa de entrada.
+ *
+ * A atualização é CIRÚRGICA, e não um redesenho: redesenhar tudo a cada oito
+ * segundos apagaria o que a pessoa está digitando, perderia a rolagem do
+ * histórico e piscaria a lista inteira na cara de quem está lendo. Então só
+ * muda o que mudou — mensagem nova entra no fim, lista só é redesenhada
+ * quando alguma conversa realmente mexeu.
  */
+
+/** De quanto em quanto tempo perguntar se chegou coisa nova. */
+const INTERVALO_MS = 8000;
+
 export async function conversas(raiz, ctx) {
   const filtros = { canal: "", status: "", humanas: false };
   let selecionada = null;
+
+  /**
+   * O retrato da lista que está na tela.
+   *
+   * Só redesenhar quando isto muda é o que separa "atualiza sozinha" de
+   * "pisca sozinha".
+   */
+  let assinaturaLista = null;
+
+  /** A conversa aberta à direita, para receber mensagem nova sem ser refeita. */
+  let aberta = null;
+
+  /** Uma sincronização por vez: rede lenta não pode empilhar requisição. */
+  let sincronizando = false;
 
   const itens = el("div", { classe: "inbox-itens" });
   const painelThread = el("div", { classe: "thread" });
@@ -59,8 +87,99 @@ export async function conversas(raiz, ctx) {
   vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o agente.");
   await carregarLista();
 
-  async function carregarLista() {
-    limpar(itens).append(el("p", { classe: "muted", style: "padding:14px", texto: "Carregando…" }));
+  // Aba escondida não pergunta nada: no celular, ficar batendo na API com o
+  // painel em segundo plano gasta bateria e dados de quem nem está olhando.
+  // Ao voltar, sincroniza na hora — é justamente o momento em que a pessoa
+  // quer ver o que chegou enquanto esteve fora.
+  const timer = setInterval(() => {
+    if (!document.hidden) sincronizar();
+  }, INTERVALO_MS);
+  const aoVoltar = () => {
+    if (!document.hidden) sincronizar();
+  };
+  document.addEventListener("visibilitychange", aoVoltar);
+  ctx.aoSair(() => {
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", aoVoltar);
+  });
+
+  /**
+   * Uma passada: a lista e, se houver, a conversa aberta.
+   *
+   * Falha em silêncio de propósito. Um erro de rede a cada oito segundos
+   * viraria uma fila de avisos vermelhos por cima do trabalho de quem está
+   * atendendo — e a próxima volta, oito segundos depois, provavelmente já
+   * funciona.
+   */
+  async function sincronizar() {
+    if (sincronizando) return;
+    sincronizando = true;
+    try {
+      await carregarLista({ silencioso: true });
+      await sincronizarAberta();
+    } catch {
+      /* rede oscilou: a próxima volta resolve */
+    } finally {
+      sincronizando = false;
+    }
+  }
+
+  /**
+   * Traz para a conversa aberta o que chegou depois que ela foi aberta.
+   *
+   * Mensagem nova é ACRESCENTADA no fim. Refazer o painel seria mais simples
+   * de escrever e apagaria a resposta meio digitada — que é exatamente o que
+   * a pessoa mais odiaria perder.
+   */
+  async function sincronizarAberta() {
+    if (!aberta) return;
+    const id = aberta.id;
+    const c = await get(`/v1/conversations/${id}`);
+    // Trocou de conversa enquanto a resposta vinha: o que chegou é de outra
+    // tela e não pode ser colado nesta.
+    if (!aberta || aberta.id !== id) return;
+
+    // Assumir, devolver, encerrar ou reabrir muda os botões e o rodapé, e
+    // isso o acréscimo de mensagem não resolve — só refazendo. Mas nunca por
+    // cima de texto digitado: quem está escrevendo prefere um cabeçalho
+    // desatualizado a uma resposta perdida.
+    const estado = `${c.status}|${c.atendimento.por}`;
+    if (estado !== aberta.estado && !aberta.campo.value.trim()) {
+      await abrir(id);
+      return;
+    }
+
+    const novas = c.mensagens.filter(
+      (m) => (m.papel === "user" || m.papel === "assistant") && !aberta.ids.has(m.id),
+    );
+    if (novas.length === 0) return;
+
+    // Se a pessoa subiu para reler algo, não puxar a tela para baixo à força.
+    const noFim = aberta.corpo.scrollHeight - aberta.corpo.scrollTop - aberta.corpo.clientHeight < 40;
+    for (const m of novas) {
+      aberta.ids.add(m.id);
+      aberta.corpo.append(balao(m));
+    }
+    if (noFim) aberta.corpo.scrollTop = aberta.corpo.scrollHeight;
+  }
+
+  /** Um balão do histórico. Mesmo desenho na abertura e na mensagem que chega. */
+  function balao(m) {
+    const humana = m.origem === "humano";
+    const classe = m.papel === "user" ? "balao-user" : humana ? "balao-humano" : "balao-assistant";
+    return el("div", { classe: `balao ${classe}`, title: dataHora(m.em) }, [
+      el("span", {
+        classe: "balao-meta",
+        texto: m.papel === "user" ? "Cliente" : humana ? "Você" : "Agente",
+      }),
+      el("span", { texto: m.texto ?? "" }),
+    ]);
+  }
+
+  async function carregarLista({ silencioso = false } = {}) {
+    if (!silencioso) {
+      limpar(itens).append(el("p", { classe: "muted", style: "padding:14px", texto: "Carregando…" }));
+    }
 
     const busca = new URLSearchParams();
     if (filtros.canal) busca.set("canal", filtros.canal);
@@ -68,6 +187,19 @@ export async function conversas(raiz, ctx) {
     if (filtros.humanas) busca.set("humanas", "1");
 
     const lista = await get(`/v1/venues/${ctx.venue}/conversations?${busca}`);
+
+    // O que faz a lista mudar de cara: ordem, última mensagem, quem está
+    // atendendo, aberta ou fechada. Igual ao que já está na tela = não mexer,
+    // senão a lista pisca e a rolagem volta ao topo a cada oito segundos.
+    const assinatura = JSON.stringify(
+      lista.map((c) => [c.id, c.atualizada_em, c.status, c.atendimento.por, c.ultima_mensagem?.texto ?? null]),
+    );
+    if (silencioso && assinatura === assinaturaLista) return;
+    assinaturaLista = assinatura;
+
+    // Lista longa: quem rolou até o fim para achar uma conversa antiga não
+    // pode ser jogado de volta ao topo por uma mensagem que chegou.
+    const rolagem = itens.scrollTop;
     limpar(itens);
 
     if (lista.length === 0) {
@@ -93,6 +225,9 @@ export async function conversas(raiz, ctx) {
             classe: "conversa-item",
             type: "button",
             "aria-selected": String(c.id === selecionada),
+            // Marca a conversa na linha para o realce poder ser aplicado ao
+            // clicar, sem depender de a lista ser recarregada primeiro.
+            "data-conversa": c.id,
             onclick: () => abrir(c.id),
           },
           [
@@ -110,35 +245,31 @@ export async function conversas(raiz, ctx) {
         ),
       );
     }
+
+    itens.scrollTop = rolagem;
   }
 
   async function abrir(id) {
     selecionada = id;
     for (const b of itens.querySelectorAll(".conversa-item")) {
-      b.setAttribute("aria-selected", "false");
+      b.setAttribute("aria-selected", String(b.dataset.conversa === id));
     }
-    limpar(painelThread).append(el("p", { classe: "muted", style: "padding:16px", texto: "Abrindo…" }));
+    // "Abrindo…" só quando não há nada ali: reabrir a mesma conversa (depois
+    // de assumir, por exemplo) piscaria o histórico inteiro à toa.
+    if (aberta?.id !== id) {
+      limpar(painelThread).append(el("p", { classe: "muted", style: "padding:16px", texto: "Abrindo…" }));
+    }
 
     const c = await get(`/v1/conversations/${id}`);
+    // Clicaram em outra conversa enquanto esta vinha da rede. Sem esta linha,
+    // a resposta atrasada pintaria a conversa antiga por cima da que a pessoa
+    // acabou de abrir — e ela responderia ao cliente errado.
+    if (selecionada !== id) return;
+
     const assumida = c.atendimento.por === "humano";
 
-    const corpo = el(
-      "div",
-      { classe: "thread-corpo" },
-      c.mensagens
-        .filter((m) => m.papel === "user" || m.papel === "assistant")
-        .map((m) => {
-          const humana = m.origem === "humano";
-          const classe = m.papel === "user" ? "balao-user" : humana ? "balao-humano" : "balao-assistant";
-          return el("div", { classe: `balao ${classe}`, title: dataHora(m.em) }, [
-            el("span", {
-              classe: "balao-meta",
-              texto: m.papel === "user" ? "Cliente" : humana ? "Você" : "Agente",
-            }),
-            el("span", { texto: m.texto ?? "" }),
-          ]);
-        }),
-    );
+    const visiveis = c.mensagens.filter((m) => m.papel === "user" || m.papel === "assistant");
+    const corpo = el("div", { classe: "thread-corpo" }, visiveis.map(balao));
 
     const campo = el("textarea", {
       placeholder: assumida
@@ -217,6 +348,16 @@ export async function conversas(raiz, ctx) {
 
     corpo.scrollTop = corpo.scrollHeight;
 
+    // O que a sincronização precisa saber para acrescentar sem refazer: onde
+    // colar, o que já está colado, e o que faria os botões mudarem.
+    aberta = {
+      id,
+      corpo,
+      campo,
+      ids: new Set(visiveis.map((m) => m.id)),
+      estado: `${c.status}|${c.atendimento.por}`,
+    };
+
     async function apagar() {
       const nome = c.titulo || c.contato || "esta conversa";
       // confirm nativo basta: apagar histórico é raro e irreversível — o
@@ -229,6 +370,7 @@ export async function conversas(raiz, ctx) {
         await del(`/v1/conversations/${id}`);
         avisar("Conversa apagada. Se o cliente escrever de novo, começa do zero.", "ok");
         selecionada = null;
+        aberta = null;
         vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o agente.");
         await carregarLista();
       } catch (e) {
