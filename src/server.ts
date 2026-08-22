@@ -7,6 +7,7 @@ import {
   temSessaoSalva,
 } from "./channels/whatsapp.js";
 import { dispararChecklistsAgendados } from "./checklists.js";
+import { lembrarReservasProximas } from "./lembretes.js";
 import { listAgentsInOrg } from "./repository.js";
 import {
   consumirComandoPonte,
@@ -172,7 +173,7 @@ setInterval(() => void cicloDaPonte(), CICLO_PONTE_MS);
 void religarSeJaPareado().then(() => cicloDaPonte());
 
 // ============================================================
-// Agendador de checklists
+// Agendador de checklists e lembretes de reserva
 // ============================================================
 // A cada minuto: cria as execuções cujo horário chegou e enfileira o link
 // no WhatsApp do responsável — a fila de notificações (acima) entrega.
@@ -187,6 +188,15 @@ async function cicloDosChecklists(): Promise<void> {
     await dispararChecklistsAgendados();
   } catch (e) {
     console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
+  }
+  // Fora do try do checklist de propósito: uma falha lá não pode impedir o
+  // lembrete de reserva de sair, e vice-versa. São dois trabalhos que só
+  // dividem o relógio.
+  try {
+    const quantos = await lembrarReservasProximas();
+    if (quantos > 0) console.log(`[lembretes] ${quantos} lembrete(s) na fila.`);
+  } catch (e) {
+    console.error("[lembretes] varredura falhou:", e instanceof Error ? e.message : e);
   } finally {
     agendadorEmAndamento = false;
   }

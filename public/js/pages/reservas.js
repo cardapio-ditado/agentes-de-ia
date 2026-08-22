@@ -17,6 +17,7 @@ export async function reservas(raiz, ctx) {
 
   raiz.append(
     el("section", { classe: "pilha" }, [
+      await blocoDeAvisos(ctx),
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Fila de aprovação" }),
@@ -309,4 +310,133 @@ export async function reservas(raiz, ctx) {
       el("strong", { texto: String(valor) }),
     ]);
   }
+}
+
+/**
+ * Os dois avisos automáticos das reservas.
+ *
+ * Ficam aqui, e não em "A casa": são ajustes DA RESERVA, e quem os procura
+ * está justamente olhando a fila. Recolhido por padrão — configura-se uma vez
+ * e não se mexe mais, e aberto ele empurraria a fila para baixo todo dia.
+ */
+async function blocoDeAvisos(ctx) {
+  let venue;
+  try {
+    venue = await get(`/v1/venues/${ctx.venue}`);
+  } catch {
+    // Sem os ajustes a fila continua funcionando; é isso que importa aqui.
+    return null;
+  }
+
+  const gestor = el("input", {
+    type: "tel",
+    value: venue.reservas_avisar_whatsapp ?? "",
+    placeholder: "(65) 99999-0000",
+  });
+
+  const minutos = el(
+    "select",
+    { classe: "select" },
+    [
+      ["0", "Não lembrar"],
+      ["30", "30 minutos antes"],
+      ["60", "1 hora antes"],
+      ["120", "2 horas antes"],
+      ["180", "3 horas antes"],
+      ["360", "6 horas antes"],
+      ["720", "12 horas antes"],
+      ["1440", "1 dia antes"],
+    ].map(([v, r]) =>
+      el("option", { value: v, texto: r, selected: Number(v) === Number(venue.reserva_lembrete_minutos ?? 60) }),
+    ),
+  );
+
+  const salvar = el("button", {
+    classe: "btn btn-primario",
+    type: "button",
+    texto: "Salvar",
+    onclick: async () => {
+      salvar.disabled = true;
+      try {
+        await patch(`/v1/venues/${ctx.venue}`, {
+          reservas_avisar_whatsapp: gestor.value.trim(),
+          reserva_lembrete_minutos: Number(minutos.value),
+        });
+        avisar("Ajustes salvos.", "ok");
+      } catch (e) {
+        avisar(e.message, "erro");
+      } finally {
+        salvar.disabled = false;
+      }
+    },
+  });
+
+  const corpo = el("div", { hidden: true, style: "margin-top:12px" }, [
+    el("div", { classe: "grade-2" }, [
+      el("div", { classe: "campo" }, [
+        el("label", { texto: "Avisar quem analisa as reservas" }),
+        gestor,
+        el("small", {
+          classe: "muted",
+          texto:
+            "Assim que o agente registrar uma reserva, esta pessoa recebe no WhatsApp o nome, o horário e a observação — sem precisar abrir o painel. Deixe vazio para não avisar ninguém.",
+        }),
+      ]),
+      el("div", { classe: "campo" }, [
+        el("label", { texto: "Lembrar o cliente antes da reserva" }),
+        minutos,
+        el("small", {
+          classe: "muted",
+          texto:
+            "Só para reservas já aprovadas, e só quem reservou com antecedência. A mensagem convida a avisar se não puder vir — é o que libera a mesa a tempo.",
+        }),
+      ]),
+    ]),
+    el("div", { classe: "linha-campos", style: "margin-top:12px" }, [salvar]),
+    el("p", {
+      classe: "muted",
+      style: "margin-top:6px",
+      texto: "As duas mensagens saem pelo WhatsApp da casa (o administrativo), configurado em Ajustes.",
+    }),
+  ]);
+
+  const alternar = el("button", {
+    classe: "btn btn-peq",
+    type: "button",
+    texto: "Ajustar",
+    onclick: () => {
+      corpo.hidden = !corpo.hidden;
+      alternar.textContent = corpo.hidden ? "Ajustar" : "Fechar";
+    },
+  });
+
+  return el("section", { classe: "cartao" }, [
+    el("div", { classe: "cabecalho-secao" }, [
+      el("div", {}, [
+        el("h3", { texto: "Avisos automáticos" }),
+        el("p", {
+          classe: "muted",
+          texto: resumoDosAvisos(venue),
+        }),
+      ]),
+      alternar,
+    ]),
+    corpo,
+  ]);
+}
+
+/** O estado atual em uma frase — para não precisar abrir para saber. */
+function resumoDosAvisos(venue) {
+  const partes = [];
+  const gestor = (venue.reservas_avisar_whatsapp ?? "").trim();
+  partes.push(gestor ? `Reserva nova avisa ${gestor}` : "Ninguém é avisado de reserva nova");
+
+  const minutos = Number(venue.reserva_lembrete_minutos ?? 60);
+  if (minutos === 0) partes.push("cliente não recebe lembrete");
+  else if (minutos < 60) partes.push(`cliente lembrado ${minutos} min antes`);
+  else if (minutos === 60) partes.push("cliente lembrado 1 hora antes");
+  else if (minutos < 1440) partes.push(`cliente lembrado ${minutos / 60} horas antes`);
+  else partes.push("cliente lembrado 1 dia antes");
+
+  return `${partes.join(" · ")}.`;
 }

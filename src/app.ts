@@ -989,6 +989,10 @@ async function roteasApi(
         timezone: venue.timezone,
         opening_hours: venue.opening_hours ?? {},
         maps_url: mapsUrl(venue),
+        reservas_avisar_whatsapp: venue.reservas_avisar_whatsapp ?? null,
+        // O padrão vale para quem ainda não rodou a migração: a tela mostra 60
+        // e a casa não vê um campo vazio sem saber o que significa.
+        reserva_lembrete_minutos: venue.reserva_lembrete_minutos ?? 60,
       });
     }
 

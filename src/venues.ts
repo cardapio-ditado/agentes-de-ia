@@ -1,7 +1,25 @@
 import { db } from "./supabase.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 
-export type Venue = Tables<"venues">;
+/**
+ * O estabelecimento, com as colunas que `database.types.ts` ainda não conhece.
+ *
+ * O arquivo gerado só é refeito depois que a migração roda em produção. Em vez
+ * de deixar o resto do código sem tipo nenhum (o `as any` do CMV, que se
+ * justifica lá porque são tabelas inteiras novas), aqui são duas colunas numa
+ * tabela que já existe — declarar as duas custa duas linhas e mantém tudo o
+ * mais tipado.
+ *
+ * OPCIONAIS de propósito: até a migração rodar, elas de fato não vêm nas
+ * linhas que o banco devolve. Quem lê usa `?? padrão` e funciona nos dois
+ * mundos, em vez de o tipo prometer um campo que ainda não existe.
+ */
+export type Venue = Tables<"venues"> & {
+  /** WhatsApp de quem analisa as reservas. Vazio = ninguém é avisado. */
+  reservas_avisar_whatsapp?: string | null;
+  /** Minutos antes da reserva em que o cliente é lembrado. 0 desliga. */
+  reserva_lembrete_minutos?: number;
+};
 export type VenueEvent = Tables<"venue_events">;
 export type VenueInfo = Tables<"venue_info">;
 export type Reservation = Tables<"reservations">;
@@ -388,6 +406,10 @@ export interface DadosVenue {
   opening_hours?: Record<string, string>;
   /** Link do Google Maps que o agente manda ao cliente. Vive em settings. */
   maps_url?: string | null;
+  /** WhatsApp de quem analisa as reservas. */
+  reservas_avisar_whatsapp?: string | null;
+  /** Minutos de antecedência do lembrete ao cliente. 0 desliga. */
+  reserva_lembrete_minutos?: number;
 }
 
 /** Link do Maps guardado em settings, validado ao salvar. */
@@ -435,6 +457,24 @@ export async function updateVenue(
       if (typeof valor === "string" && valor.trim()) horarios[dia] = valor.trim();
     }
     mudancas.opening_hours = horarios as Json;
+  }
+  if (dados.reservas_avisar_whatsapp !== undefined) {
+    const bruto = dados.reservas_avisar_whatsapp?.trim() ?? "";
+    // Só dígitos: é o que o WhatsApp entende. Abaixo de 10 não é telefone
+    // brasileiro nenhum, e um número inventado consome o disparo e some sem
+    // aviso — o gestor ficaria esperando um recado que nunca sai.
+    const digitos = bruto.replace(/\D/g, "");
+    if (bruto && (digitos.length < 10 || digitos.length > 15)) {
+      throw new Error(`"${bruto}" não parece um WhatsApp com DDD.`);
+    }
+    (mudancas as Record<string, unknown>).reservas_avisar_whatsapp = digitos || null;
+  }
+  if (dados.reserva_lembrete_minutos !== undefined) {
+    const minutos = Number(dados.reserva_lembrete_minutos);
+    if (!Number.isInteger(minutos) || minutos < 0 || minutos > 1440) {
+      throw new Error("A antecedência do lembrete vai de 0 (desligado) a 1440 minutos.");
+    }
+    (mudancas as Record<string, unknown>).reserva_lembrete_minutos = minutos;
   }
   if (dados.maps_url !== undefined) {
     const url = dados.maps_url?.trim() || null;

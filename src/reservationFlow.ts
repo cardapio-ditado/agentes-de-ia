@@ -2,6 +2,7 @@ import { notificarCliente, type Notification } from "./notifications.js";
 import { dispatchWebhooks } from "./webhooks.js";
 import { getVenue, reviewReservation, type Reservation, type Venue } from "./venues.js";
 import type { Json } from "./database.types.js";
+import { db } from "./supabase.js";
 
 export interface DecisaoResultado {
   reserva: Reservation;
@@ -71,9 +72,74 @@ export async function publicarReservaCriada(
   reserva: Reservation,
   venue: Venue,
 ): Promise<void> {
+  // O aviso ao gestor vem ANTES do webhook e com `await`: a fila de aprovação
+  // só é vista por quem abre o painel, e reserva que entra às 23h de sexta
+  // ficaria esperando até alguém lembrar de olhar — com o cliente esperando
+  // resposta do outro lado.
+  await avisarGestorDaCasa(reserva, venue);
+
   await publicar(
     dispatchWebhooks(venue.org_id, "reservation.created", payloadDaReserva(reserva, venue)),
   );
+}
+
+/**
+ * Enfileira o aviso de reserva nova no WhatsApp de quem analisa.
+ *
+ * Enfileira em vez de enviar: quem entrega é o conector, que pode estar noutro
+ * processo (este pode ser a Vercel, onde o WhatsApp não roda). E nunca lança —
+ * a reserva JÁ está gravada, e derrubar o registro dela porque o aviso falhou
+ * seria trocar o essencial pelo acessório.
+ */
+async function avisarGestorDaCasa(reserva: Reservation, venue: Venue): Promise<void> {
+  const destino = (venue.reservas_avisar_whatsapp ?? "").trim();
+  if (!destino) return;
+
+  try {
+    const { error } = await db().from("notifications").insert({
+      venue_id: venue.id,
+      reservation_id: reserva.id,
+      channel: "whatsapp",
+      destination: destino,
+      template: "reserva_nova_gestor",
+      body: textoParaOGestor(reserva, venue),
+    } as never);
+    // Índice único: o aviso desta reserva já saiu. Não é erro.
+    if (error && !/duplicate key|unique/i.test(error.message)) {
+      console.error(`[reservas] aviso ao gestor não entrou: ${error.message}`);
+    }
+  } catch (e) {
+    console.error(`[reservas] aviso ao gestor falhou: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * O texto que o gestor recebe.
+ *
+ * Traz o suficiente para ele decidir SEM abrir o painel — nome, quando,
+ * quantas pessoas, área e observação. Um aviso que só diz "entrou uma reserva"
+ * obriga a largar o que está fazendo e ir olhar, e é assim que um aviso vira
+ * uma coisa que se ignora.
+ */
+export function textoParaOGestor(reserva: Reservation, venue: Venue): string {
+  const quando = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: venue.timezone,
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(reserva.reserved_for));
+  const pessoas = `${reserva.party_size} pessoa${reserva.party_size > 1 ? "s" : ""}`;
+
+  const linhas = [
+    `📋 Reserva nova esperando aprovação — ${venue.name}`,
+    ``,
+    `${reserva.customer_name} · ${pessoas}`,
+    `${quando}`,
+  ];
+  if (reserva.area_preference) linhas.push(`Área: ${reserva.area_preference}`);
+  if (reserva.notes) linhas.push(`Obs.: ${reserva.notes}`);
+  if (reserva.customer_phone) linhas.push(``, `Contato: ${reserva.customer_phone}`);
+  linhas.push(``, `Aprove ou recuse em Reservas, no painel.`);
+  return linhas.join("\n");
 }
 
 function payloadDaReserva(reserva: Reservation, venue: Venue): Record<string, Json> {
