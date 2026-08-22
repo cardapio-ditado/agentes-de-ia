@@ -3,6 +3,7 @@ import { dispatchWebhooks } from "./webhooks.js";
 import { getVenue, reviewReservation, type Reservation, type Venue } from "./venues.js";
 import type { Json } from "./database.types.js";
 import { db } from "./supabase.js";
+import { codigoDaReserva } from "./codigoDeReserva.js";
 
 export interface DecisaoResultado {
   reserva: Reservation;
@@ -129,16 +130,26 @@ export function textoParaOGestor(reserva: Reservation, venue: Venue): string {
   }).format(new Date(reserva.reserved_for));
   const pessoas = `${reserva.party_size} pessoa${reserva.party_size > 1 ? "s" : ""}`;
 
+  const codigo = codigoDaReserva(reserva.id);
+
   const linhas = [
-    `📋 Reserva nova esperando aprovação — ${venue.name}`,
+    `📋 Reserva nova esperando decisão — ${venue.name}`,
     ``,
-    `${reserva.customer_name} · ${pessoas}`,
+    `*${codigo}* · ${reserva.customer_name} · ${pessoas}`,
     `${quando}`,
   ];
   if (reserva.area_preference) linhas.push(`Área: ${reserva.area_preference}`);
   if (reserva.notes) linhas.push(`Obs.: ${reserva.notes}`);
   if (reserva.customer_phone) linhas.push(``, `Contato: ${reserva.customer_phone}`);
-  linhas.push(``, `Aprove ou recuse em Reservas, no painel.`);
+
+  // A instrução vai NA MENSAGEM, e com a palavra exata. O gestor não vai
+  // procurar manual: se o aviso não ensinar, ele responde "ok" — que de
+  // propósito não decide nada — e vai achar que o sistema está quebrado.
+  linhas.push(
+    ``,
+    `Responda *CONFIRMAR ${codigo}* ou *RECUSAR ${codigo}* para decidir por aqui.`,
+    `Para recusar com explicação: RECUSAR ${codigo} sem mesa nesse horário`,
+  );
   return linhas.join("\n");
 }
 

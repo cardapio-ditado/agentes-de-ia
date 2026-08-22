@@ -23,6 +23,7 @@ import {
   tentarEnviar,
   variacoesDoTelefone,
 } from "../notifications.js";
+import { responderComandoDeReserva } from "../comandosDeReserva.js";
 
 /**
  * Conector WhatsApp via Baileys (protocolo do WhatsApp Web).
@@ -278,16 +279,39 @@ async function aoReceberMensagem(
   const timestamp = normalizarTimestamp(mensagem.messageTimestamp);
   if (timestamp && timestamp * 1000 < estado.iniciadoEm) return;
 
-  // O NÚMERO ADMINISTRATIVO NÃO RESPONDE.
+  // O NÚMERO ADMINISTRATIVO NÃO ATENDE — com UMA exceção.
   //
   // Ele existe para enviar: link de checklist, confirmação de reserva, aviso
   // de ruptura. Quem recebe é a equipe, e a equipe responde "ok" — se a IA
   // atendesse, o cozinheiro seria tratado como cliente novo querendo reserva.
-  // Registrar em log basta: mensagem importante ("não abre o link") aparece
-  // para quem lê o log do conector, e o funcionário fala com o gerente pelo
-  // caminho de sempre.
+  //
+  // A exceção é o gestor de reservas decidindo pelo WhatsApp. Ela é estreita
+  // por construção (ver `comandosDeReserva.ts`): só o número cadastrado no
+  // painel, e só palavra explícita — "ok" e "sim" não decidem nada. Qualquer
+  // outra mensagem, de qualquer outro remetente, continua sendo só uma linha
+  // de log, exatamente como antes.
   if ((opcoes.papel ?? "agente") === "administrativo") {
     const de = mensagem.pushName?.trim() || jid.split("@")[0];
+    const texto = extrairTexto(mensagem.message);
+
+    if (texto) {
+      try {
+        const resposta = await responderComandoDeReserva({
+          telefoneDoRemetente: jid.split("@")[0] ?? "",
+          texto,
+        });
+        if (resposta) {
+          await responder(jid, resposta);
+          console.log(`[whatsapp:adm] ${de} decidiu uma reserva pelo WhatsApp.`);
+          return;
+        }
+      } catch (e) {
+        // Falhar aqui não pode derrubar o conector: o gestor decide pelo
+        // painel, que continua sendo o caminho principal.
+        console.error(`[whatsapp:adm] comando de reserva falhou:`, e instanceof Error ? e.message : e);
+      }
+    }
+
     console.log(`[whatsapp:adm] ${de} respondeu — número administrativo não atende.`);
     return;
   }
