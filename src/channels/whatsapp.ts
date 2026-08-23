@@ -23,7 +23,7 @@ import {
   tentarEnviar,
   variacoesDoTelefone,
 } from "../notifications.js";
-import { responderComandoDeReserva } from "../comandosDeReserva.js";
+import { interpretarComando, responderComandoDeReserva } from "../comandosDeReserva.js";
 
 /**
  * Conector WhatsApp via Baileys (protocolo do WhatsApp Web).
@@ -294,16 +294,37 @@ async function aoReceberMensagem(
     const de = mensagem.pushName?.trim() || jid.split("@")[0];
     const texto = extrairTexto(mensagem.message);
 
+    // O TELEFONE VEM DA MESMA CASCATA QUE O AGENTE USA.
+    //
+    // Em conta migrada para LID o `jid` é um id interno, não o telefone —
+    // comparar ele com o número cadastrado no painel nunca casa, e o comando
+    // do gestor morre no silêncio reservado a estranhos. Foi exatamente isso
+    // que aconteceu no primeiro teste em produção.
+    const telefoneDoRemetente = extrairTelefone(jid, mensagem.key.remoteJidAlt);
+
     if (texto) {
       try {
-        const resposta = await responderComandoDeReserva({
-          telefoneDoRemetente: jid.split("@")[0] ?? "",
-          texto,
-        });
+        const resposta = telefoneDoRemetente
+          ? await responderComandoDeReserva({ telefoneDoRemetente, texto })
+          : null;
         if (resposta) {
           await responder(jid, resposta);
           console.log(`[whatsapp:adm] ${de} decidiu uma reserva pelo WhatsApp.`);
           return;
+        }
+
+        // Diagnóstico de quem tentou e não conseguiu.
+        //
+        // Sem esta linha, "escrevi CONFIRMAR e não aconteceu nada" não tem
+        // como ser investigado: silêncio é a resposta correta para estranho e
+        // o sintoma de bug para o gestor, e no log os dois eram idênticos.
+        if (interpretarComando(texto)) {
+          console.warn(
+            `[whatsapp:adm] ${de} escreveu um comando de reserva, mas ` +
+              (telefoneDoRemetente
+                ? `${telefoneDoRemetente} não é o número cadastrado em Reservas → Avisos (ou não há reserva pendente).`
+                : `não deu para descobrir o telefone dele (conta LID sem número no evento).`),
+          );
         }
       } catch (e) {
         // Falhar aqui não pode derrubar o conector: o gestor decide pelo
