@@ -1,0 +1,23 @@
+-- Sobrou uma versão velha de `pesquisa_emitir_premio`.
+--
+-- `create or replace function` só substitui quando a assinatura é idêntica.
+-- A migração da pesquisa por categoria acrescentou o parâmetro
+-- `p_liberado_em`, e o Postgres entendeu isso como uma função NOVA ao lado da
+-- antiga, em vez de uma substituição. As duas ficaram no banco.
+--
+-- Por que isso importa: a versão de 3 parâmetros não sabe da carência. O
+-- `liberado_em` cairia no default da coluna (`now()`) e o cupom sairia
+-- liberado na hora — o cliente resgataria o prêmio na mesma conta em que
+-- respondeu a pesquisa, que é exatamente a regra que o módulo existe para
+-- impedir. Um prêmio pela próxima visita que vale na visita atual é só
+-- desconto.
+--
+-- Hoje a aplicação chama a de 4 parâmetros (por nome, em `src/pesquisa.ts`),
+-- então nada está errado no ar. A versão velha é uma armadilha guardada: basta
+-- alguém chamar com 3 argumentos, de um script ou do SQL Editor, para a regra
+-- cair sem aviso.
+--
+-- A assinatura é nomeada por extenso de propósito. `drop function` sem os
+-- tipos derrubaria as duas.
+
+drop function if exists public.pesquisa_emitir_premio(uuid, text, integer);
