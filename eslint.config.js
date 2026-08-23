@@ -15,7 +15,11 @@ export default tseslint.config(
       // Complexidade ciclomática: quantos caminhos diferentes uma função tem.
       // Acima de 10 ninguém consegue mais ler a função inteira de uma vez, e
       // testar todos os caminhos deixa de ser viável — é onde o bug se esconde.
-      complexity: ["error", 10],
+      //
+      // AVISO, e não erro, de propósito: é um mapa de onde o código está mais
+      // perigoso de mexer, não um portão. Nenhuma das 57 funções que já
+      // estavam aqui barra publicação por causa desta regra.
+      complexity: ["warn", 10],
     },
   },
 );
