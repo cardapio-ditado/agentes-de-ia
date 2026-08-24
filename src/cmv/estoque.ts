@@ -1,4 +1,5 @@
 import { db } from "../supabase.js";
+import { avisarDivergenciaDaContagem } from "./avisos.js";
 import { casarPorTexto, normalizar, type Apelido, type InsumoConhecido } from "./casarInsumo.js";
 import type { LinhaDaNota } from "./lerNota.js";
 
@@ -1047,6 +1048,21 @@ export async function registrarContagem(params: {
     // A maior perda primeiro: é a que merece investigação hoje, não em ordem
     // alfabética.
     .sort((a: AjusteDaContagem, b: AjusteDaContagem) => a.valor - b.valor);
+
+  // O aviso vai DEPOIS de a contagem estar processada e nunca lança: o saldo
+  // já foi corrigido, e derrubar a resposta da tela porque a mensagem
+  // tropeçou seria punir quem acabou de fazer a parte dela.
+  await avisarDivergenciaDaContagem({
+    venueId: params.venueId,
+    contagemId: contagem.id,
+    itens: (resultado ?? []).map((r: any) => ({
+      insumo: r.insumos?.nome ?? "?",
+      unidade: r.insumos?.unidade ?? "un",
+      contada: Number(r.quantidade_contada),
+      sistema: Number(r.saldo_sistema ?? 0),
+      custoMedio: Number(r.insumos?.custo_medio ?? 0),
+    })),
+  });
 
   return { ajustes, contados: validos.length };
 }

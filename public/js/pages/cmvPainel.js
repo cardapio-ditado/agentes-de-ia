@@ -1,4 +1,4 @@
-import { get, post } from "../api.js";
+import { get, post, put } from "../api.js";
 import { avisar, dinheiro, el, limpar, vazio } from "../ui.js";
 
 /**
@@ -17,6 +17,9 @@ import { avisar, dinheiro, el, limpar, vazio } from "../ui.js";
 export async function cmvPainel(raiz, ctx) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
+  const cartaoAvisos = el("div");
+  raiz.append(cartaoAvisos);
+  void desenharAvisos(ctx, cartaoAvisos);
 
   const hoje = new Date();
   const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -198,4 +201,87 @@ export async function cmvPainel(raiz, ctx) {
       ].filter(Boolean)),
     );
   }
+}
+
+
+/**
+ * Os avisos do CMV: quem recebe e a partir de quanto cada coisa vira
+ * mensagem no WhatsApp.
+ *
+ * Fica no fim do painel, num cartão recolhido, porque se configura uma vez e
+ * nunca mais — o mesmo racional do cartão de avisos das reservas.
+ */
+async function desenharAvisos(ctx, raiz) {
+  let config;
+  try {
+    config = await get(`/v1/venues/${ctx.venue}/cmv/avisos`);
+  } catch {
+    return; // Sem a rota (versão antiga no ar), o painel segue sem o cartão.
+  }
+
+  const detalhes = el("details", { classe: "cartao" });
+  const resumo = el("summary", {}, [
+    el("strong", { texto: "Avisos no WhatsApp" }),
+    el("span", {
+      classe: "muted",
+      style: "margin-left:8px",
+      texto: config.avisar_whatsapp
+        ? `ligados para ${config.avisar_whatsapp}`
+        : "desligados — ninguém recebe",
+    }),
+  ]);
+
+  const numero = el("input", {
+    value: config.avisar_whatsapp ?? "",
+    placeholder: "(65) 99999-8888 — vazio desliga tudo",
+  });
+  const pct = el("input", { type: "number", min: "1", max: "100", value: String(config.aumento_preco_pct) });
+  const reais = el("input", { type: "number", min: "0", step: "10", value: String(config.divergencia_reais) });
+  const estoque = el("input", { type: "checkbox", checked: config.avisar_estoque });
+
+  const salvar = el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "Salvar avisos" });
+  salvar.addEventListener("click", async () => {
+    salvar.disabled = true;
+    try {
+      await put(`/v1/venues/${ctx.venue}/cmv/avisos`, {
+        avisar_whatsapp: numero.value.trim(),
+        aumento_preco_pct: Number(pct.value),
+        divergencia_reais: Number(reais.value),
+        avisar_estoque: estoque.checked,
+      });
+      avisar("Avisos do CMV salvos.", "ok");
+      limpar(raiz);
+      await desenharAvisos(ctx, raiz);
+    } catch (e) {
+      avisar(e.message, "erro");
+    } finally {
+      salvar.disabled = false;
+    }
+  });
+
+  detalhes.append(
+    resumo,
+    el("div", { classe: "pilha", style: "margin-top:12px" }, [
+      el("p", {
+        classe: "muted",
+        texto:
+          "Três avisos, direto no WhatsApp: fornecedor que subiu o preço (na hora do recebimento), " +
+          "contagem que divergiu do sistema, e insumo que vai faltar (no máximo um aviso por dia).",
+      }),
+      el("div", { classe: "campo" }, [el("label", { texto: "WhatsApp que recebe" }), numero]),
+      el("div", { classe: "linha-campos" }, [
+        el("div", { classe: "campo", style: "flex:1" }, [
+          el("label", { texto: "Avisar aumento a partir de (%)" }),
+          pct,
+        ]),
+        el("div", { classe: "campo", style: "flex:1" }, [
+          el("label", { texto: "Avisar divergência a partir de (R$)" }),
+          reais,
+        ]),
+      ]),
+      el("label", { classe: "check-linha" }, [estoque, el("span", { texto: "Avisar quando um insumo for faltar" })]),
+      salvar,
+    ]),
+  );
+  raiz.append(detalhes);
 }

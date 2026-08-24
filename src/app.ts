@@ -96,6 +96,13 @@ import {
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
 import {
+  avisarAumentoDePreco,
+  avisarEstoqueBaixo,
+  configDoCmv,
+  fotografarCustosDaCompra,
+  salvarConfigDoCmv,
+} from "./cmv/avisos.js";
+import {
   LIMITE_LOGO_BYTES,
   apagarLogoAntiga,
   corLegivelNoEscuro,
@@ -1407,6 +1414,39 @@ async function roteasApi(
     }
 
     // GET /v1/venues/:slug/cmv?inicio=AAAA-MM-DD&fim=AAAA-MM-DD — o painel
+    // GET | PUT /v1/venues/:slug/cmv/avisos — quem recebe e a partir de quanto
+    if (recurso === "cmv" && p[3] === "avisos" && p.length === 4) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await configDoCmv(venue.id));
+      }
+      if (metodo === "PUT") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        try {
+          return ok(
+            res,
+            await salvarConfigDoCmv(venue.id, {
+              // "" apaga o número — é assim que o X desliga o aviso; ausente
+              // não mexe. A mesma regra do aviso de nota baixa.
+              avisar_whatsapp:
+                corpo.avisar_whatsapp === undefined
+                  ? undefined
+                  : String(corpo.avisar_whatsapp ?? "").trim() || null,
+              aumento_preco_pct: numeroOuNulo(corpo.aumento_preco_pct) ?? undefined,
+              divergencia_reais: numeroOuNulo(corpo.divergencia_reais) ?? undefined,
+              avisar_estoque:
+                corpo.avisar_estoque === undefined ? undefined : Boolean(corpo.avisar_estoque),
+            }),
+          );
+        } catch (e) {
+          throw erro(400, "invalid_request", e instanceof Error ? e.message : "Dados inválidos.");
+        }
+      }
+    }
+
     if (metodo === "GET" && recurso === "cmv" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
@@ -1972,6 +2012,13 @@ async function roteasApi(
       const r = await comErroDeEstoque(() =>
         baixarVendas({ venueId: venue.id, importacaoId: p[3]!, usuario: null }),
       );
+      // A baixa mudou os saldos — é a hora de saber o que vai faltar. No
+      // máximo um aviso por dia, e quem garante é o índice único.
+      await avisarEstoqueBaixo({
+        venueId: venue.id,
+        fuso: venue.timezone,
+        hojeISO: hojeNaCasa(venue.timezone),
+      });
       return ok(res, r);
     }
 
@@ -2122,7 +2169,11 @@ async function roteasApi(
     if (metodo === "POST" && recurso === "compras" && p[4] === "receber" && p.length === 5) {
       const chave = await exigirChave(req, "reservations:write");
       await findVenueBySlugInOrg(chave.org_id, slug);
+      // A foto dos custos vem ANTES da entrada: o recebimento atualiza o
+      // custo médio, e depois dele o "preço antigo" não existe mais.
+      const fotoDosCustos = await fotografarCustosDaCompra(p[3]!);
       await comErroDeEstoque(() => receberCompra(p[3]!, null));
+      await avisarAumentoDePreco(fotoDosCustos, p[3]!);
       // As divergências voltam junto: quem acabou de receber é quem pode
       // cobrar o fornecedor, e mandá-la procurar noutra tela é garantir que
       // ninguém cobre.
