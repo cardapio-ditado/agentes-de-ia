@@ -221,7 +221,7 @@ function cartaoDaResposta(r, fechar) {
     r.atendente_nome
       ? el("p", { classe: "muted", style: "margin-top:14px" }, [
           el("span", { texto: `Atendeu: ${r.atendente_nome}` }),
-          r.atendente_nota ? el("span", { texto: ` — ${"★".repeat(r.atendente_nota)}` }) : null,
+          r.atendente_nota ? el("span", { texto: ` — ${estrelas(r.atendente_nota)}` }) : null,
         ])
       : null,
 
@@ -287,12 +287,22 @@ function blocoDaCategoria(c) {
  */
 function respostaLegivel(i) {
   if (i.tipo === "sim_nao") return i.valor === "sim" || i.valor === "true" ? "Sim" : "Não";
-  if (i.tipo === "estrelas") {
-    const n = Number(i.valor);
-    return Number.isFinite(n) && n > 0 ? "★".repeat(n) : "—";
-  }
+  if (i.tipo === "estrelas") return estrelas(i.valor);
   if (i.tipo === "texto") return i.texto ? "" : "—";
   return i.nota === null ? (i.valor ?? "—") : numero(i.nota);
+}
+
+/**
+ * As cinco posições sempre aparecem: "★☆☆☆☆", não "★".
+ *
+ * Só a estrela cheia não diz se foi 1 de 5 ou 1 de 3 — e uma estrela de cinco
+ * é uma reclamação grave que ficaria com cara de elogio tímido.
+ */
+function estrelas(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  const cheias = Math.min(Math.round(n), 5);
+  return "★".repeat(cheias) + "☆".repeat(5 - cheias);
 }
 
 function mediaDe(itens) {
