@@ -80,7 +80,7 @@
         flex: 1; height: 3px; border-radius: 3px; background: var(--borda);
         transition: background .25s ease;
       }
-      .trilha i.feito { background: var(--brasa); }
+      .trilha i.feito { background: var(--traco-marca, var(--brasa)); }
 
       main { flex: 1; padding: 8px 20px 24px; max-width: 560px; width: 100%; margin: 0 auto; }
 
@@ -133,7 +133,7 @@
       }
       .nota:active { transform: scale(.94); }
       .nota[aria-pressed="true"] {
-        background: var(--brasa); border-color: var(--brasa); color: #1a0f0a; font-weight: 800;
+        background: var(--brasa); border-color: var(--brasa); color: var(--sobre-marca, #1a0f0a); font-weight: 800;
       }
       .escala {
         display: flex; justify-content: space-between;
@@ -171,7 +171,7 @@
         width: 38px; height: 38px; border-radius: 50%;
         display: grid; place-items: center;
         background: linear-gradient(140deg, var(--brasa), var(--fogo));
-        color: #1a0f0a; font-weight: 800; font-size: 15px;
+        color: var(--sobre-marca, #1a0f0a); font-weight: 800; font-size: 15px;
       }
       .pessoa span { font-size: 13.5px; font-weight: 600; line-height: 1.2; text-align: center; }
       .pessoa small { font-size: 11px; color: var(--creme-2); }
@@ -205,13 +205,13 @@
         padding: 13px 14px;
       }
       textarea { min-height: 108px; resize: vertical; }
-      input:focus, textarea:focus { outline: 2px solid var(--brasa); outline-offset: 1px; }
+      input:focus, textarea:focus { outline: 2px solid var(--traco-marca, var(--brasa)); outline-offset: 1px; }
       label.campo { display: block; margin-top: 12px; }
       label.campo span { display: block; font-size: 13px; color: var(--creme-2); margin-bottom: 6px; }
 
       /* ---- Prêmio ---- */
       .premio {
-        border: 1px dashed var(--brasa);
+        border: 1px dashed var(--traco-marca, var(--brasa));
         background: linear-gradient(160deg, rgba(255,107,53,.14), rgba(255,107,53,.04));
         border-radius: 16px; padding: 15px 16px; margin: 16px 0 4px;
       }
@@ -227,7 +227,7 @@
       }
       .btn {
         width: 100%; appearance: none; border: 0; border-radius: 14px;
-        background: var(--brasa); color: #1a0f0a;
+        background: var(--brasa); color: var(--sobre-marca, #1a0f0a);
         font: 800 16px/1 var(--fonte); padding: 17px; cursor: pointer;
         transition: opacity .15s ease, transform .12s ease;
       }
@@ -247,10 +247,10 @@
       }
       .cupom {
         margin: 22px 0 8px; padding: 20px 16px; border-radius: 18px;
-        background: var(--superficie); border: 1px solid var(--brasa);
+        background: var(--superficie); border: 1px solid var(--traco-marca, var(--brasa));
       }
       .cupom .codigo {
-        font: 800 34px/1 var(--fonte); letter-spacing: 5px; color: var(--brasa);
+        font: 800 34px/1 var(--fonte); letter-spacing: 5px; color: var(--traco-marca, var(--brasa));
         margin: 10px 0 6px; word-break: break-all;
       }
       .cupom small { color: var(--creme-2); font-size: 12.5px; }
@@ -341,6 +341,7 @@
 
         document.getElementById("casa").firstChild.textContent = dados.casa;
         document.getElementById("sub").textContent = mesa ? `Mesa ${mesa}` : "";
+        vestirDaCasa(dados);
 
         if (!dados.ativa) {
           return falhar("Pesquisa fechada", "Esta casa não está recebendo respostas agora.");
@@ -914,6 +915,46 @@
         l.append(s, i);
         return l;
       }
+      /**
+       * Veste a página com a marca da casa.
+       *
+       * O cliente escaneou um QR code na mesa DAQUELE bar. Cair numa página
+       * com a logo de outra empresa faz ele achar que errou o link — ou que
+       * caiu num golpe, o que no celular de um estranho é a suposição sensata.
+       *
+       * As cores vêm prontas do servidor, inclusive a do texto por cima. É lá
+       * que mora a conta de contraste: a casa que escolhe amarelo-ouro precisa
+       * de letra escura no botão, e não dá para deixar essa decisão para cada
+       * celular fazer do seu jeito.
+       */
+      function vestirDaCasa(dados) {
+        const raiz = document.documentElement.style;
+        if (dados.cor_marca) {
+          raiz.setProperty("--brasa", dados.cor_marca);
+          raiz.setProperty("--fogo", dados.cor_marca);
+          raiz.setProperty("--sobre-marca", dados.cor_texto);
+          raiz.setProperty("--fundo", dados.cor_fundo);
+          // O traço usa a cor clareada: a mesma cor que serve de FUNDO de botão
+          // pode sumir quando vira risco fino sobre a página escura.
+          if (dados.cor_traco) raiz.setProperty("--traco-marca", dados.cor_traco);
+          document.body.style.background = dados.cor_fundo;
+        }
+
+        if (dados.logo_url) {
+          const img = document.querySelector(".chama img");
+          // `onerror` importa: a logo mora num endereço público que pode ter
+          // sido apagado. Sem isto, a página abriria com um ícone quebrado no
+          // topo — pior que a marca genérica que estava lá antes.
+          img.onerror = () => {
+            img.src = "/img/favicon-brasa-food.png";
+            document.querySelector(".chama").classList.remove("chama-casa");
+          };
+          img.src = dados.logo_url;
+          img.alt = dados.casa ?? "";
+          document.querySelector(".chama").classList.add("chama-casa");
+        }
+      }
+
       function falhar(titulo, detalhe) {
         trilha.hidden = true;
         const d = document.createElement("div");

@@ -1,4 +1,5 @@
 import { db } from "./supabase.js";
+import { corValida } from "./marca.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 
 /**
@@ -19,6 +20,10 @@ export type Venue = Tables<"venues"> & {
   reservas_avisar_whatsapp?: string | null;
   /** Minutos antes da reserva em que o cliente é lembrado. 0 desliga. */
   reserva_lembrete_minutos?: number;
+  /** Endereço público da logo da casa. Vazio = marca da Brasa. */
+  logo_url?: string | null;
+  /** Cor da casa em #rrggbb. Vazio = laranja Brasa. */
+  cor_marca?: string | null;
 };
 export type VenueEvent = Tables<"venue_events">;
 export type VenueInfo = Tables<"venue_info">;
@@ -410,6 +415,8 @@ export interface DadosVenue {
   reservas_avisar_whatsapp?: string | null;
   /** Minutos de antecedência do lembrete ao cliente. 0 desliga. */
   reserva_lembrete_minutos?: number;
+  /** Cor da casa em hexadecimal. A logo sobe pela rota própria. */
+  cor_marca?: string | null;
 }
 
 /** Link do Maps guardado em settings, validado ao salvar. */
@@ -427,6 +434,25 @@ export function mapsUrl(venue: Venue): string | null {
  * texto porque bar tem horário que não cabe em hora de abrir/fechar: "só
  * eventos", "até o último cliente". O agente lê como está.
  */
+/**
+ * Aponta a casa para a logo nova (ou tira a que havia).
+ *
+ * Separada de `updateVenue` porque não é um campo que a pessoa digita: quem
+ * escreve aqui é a rota de upload, depois de o arquivo já estar no balde. Um
+ * endereço de logo chegando junto com nome e telefone num formulário seria um
+ * caminho para apontar a casa para uma imagem de qualquer lugar da internet.
+ */
+export async function updateVenueLogo(venueId: string, endereco: string | null): Promise<Venue> {
+  const { data, error } = await db()
+    .from("venues")
+    .update({ logo_url: endereco } as never)
+    .eq("id", venueId)
+    .select()
+    .single();
+  if (error) throw new Error(`Falha ao salvar a logo: ${error.message}`);
+  return data as Venue;
+}
+
 export async function updateVenue(
   orgId: string,
   slug: string,
@@ -475,6 +501,17 @@ export async function updateVenue(
       throw new Error("A antecedência do lembrete vai de 0 (desligado) a 1440 minutos.");
     }
     (mudancas as Record<string, unknown>).reserva_lembrete_minutos = minutos;
+  }
+  if (dados.cor_marca !== undefined) {
+    const bruta = dados.cor_marca?.trim() ?? "";
+    // Vazio limpa e volta para a cor da Brasa. Cor inválida é recusada com
+    // mensagem em vez de virar null em silêncio: quem digitou "vermelho"
+    // acharia que salvou e passaria a semana esperando a tela mudar.
+    const cor = bruta ? corValida(bruta) : null;
+    if (bruta && !cor) {
+      throw new Error(`"${bruta}" não é uma cor. Use o formato #rrggbb, por exemplo #c1121f.`);
+    }
+    (mudancas as Record<string, unknown>).cor_marca = cor;
   }
   if (dados.maps_url !== undefined) {
     const url = dados.maps_url?.trim() || null;

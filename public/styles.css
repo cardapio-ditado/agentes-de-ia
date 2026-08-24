@@ -2477,3 +2477,36 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .linha-pergunta { grid-template-columns: 1fr; }
   .linha-pergunta > strong { justify-self: start; }
 }
+
+/* ============================================================
+   A marca da casa
+   ============================================================ */
+
+.logo-previa {
+  max-height: 64px;
+  max-width: 220px;
+  object-fit: contain;
+  /* Xadrez por trás: logo PNG com fundo transparente sobre cartão branco
+     parece recortada errada, e o dono acha que subiu o arquivo errado. */
+  background:
+    linear-gradient(45deg, var(--superficie-2) 25%, transparent 25%, transparent 75%, var(--superficie-2) 75%) 0 0 / 14px 14px,
+    linear-gradient(45deg, var(--superficie-2) 25%, transparent 25%, transparent 75%, var(--superficie-2) 75%) 7px 7px / 14px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.previa-marca { min-height: 40px; }
+
+.linha-cor { display: flex; gap: 8px; align-items: center; }
+/* O seletor nativo é minúsculo por padrão e vira alvo difícil no celular. */
+.linha-cor input[type="color"] {
+  width: 52px;
+  height: 40px;
+  padding: 2px;
+  flex: 0 0 auto;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--superficie);
+  cursor: pointer;
+}

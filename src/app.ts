@@ -95,6 +95,15 @@ import {
   primeiroVenueAtivo,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
+import {
+  LIMITE_LOGO_BYTES,
+  apagarLogoAntiga,
+  corLegivelNoEscuro,
+  corValida,
+  fundoDaCasa,
+  guardarLogo,
+  textoSobre,
+} from "./marca.js";
 import { versaoDoCodigo } from "./version.js";
 import {
   cancelReservation,
@@ -117,6 +126,7 @@ import {
   renewVenueEventSeries,
   updateReservation,
   updateVenue,
+  updateVenueLogo,
   type DadosReserva,
   type DadosVenue,
 } from "./venues.js";
@@ -289,6 +299,35 @@ function responder(res: ServerResponse, status: number, corpo: unknown): void {
     "content-length": Buffer.byteLength(json),
   });
   res.end(json);
+}
+
+/**
+ * A marca da casa, pronta para a página do cliente aplicar.
+ *
+ * O contraste é calculado AQUI e não no navegador: a página pública é a única
+ * tela que um estranho abre, e mandar a decisão para lá significaria confiar
+ * que todo celular vai fazer a conta igual. Além disso, a casa que escolhe
+ * amarelo-ouro precisa de letra escura por cima independentemente do aparelho.
+ */
+function marcaDaCasa(venue: Venue): {
+  logo_url: string | null;
+  cor_marca: string | null;
+  cor_texto: string;
+  cor_fundo: string;
+  cor_traco: string | null;
+} {
+  const cor = corValida(venue.cor_marca);
+  return {
+    logo_url: venue.logo_url ?? null,
+    cor_marca: cor,
+    cor_texto: textoSobre(cor),
+    cor_fundo: fundoDaCasa(cor),
+    // A mesma cor, clareada o quanto for preciso para aparecer COMO TRAÇO
+    // sobre o fundo escuro: trilha de progresso, contorno do campo em foco,
+    // código do cupom. Sem isto, a casa de identidade azul-marinho fica com a
+    // trilha invisível e a pesquisa parece travada.
+    cor_traco: corLegivelNoEscuro(cor),
+  };
 }
 
 function ok(res: ServerResponse, data: unknown, status = 200): void {
@@ -1602,6 +1641,37 @@ async function roteasApi(
           }),
         ),
       );
+    }
+
+    // POST | DELETE /v1/venues/:slug/logo — a marca da casa
+    //
+    // O arquivo vai cru no corpo, como as outras rotas de upload. A logo é da
+    // CASA e não do módulo de pesquisa: quem tem só o cardápio ou só o
+    // checklist também sobe a dele por aqui.
+    if (recurso === "logo" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      if (metodo === "DELETE") {
+        await apagarLogoAntiga(venue.logo_url);
+        return ok(res, await updateVenueLogo(venue.id, null));
+      }
+
+      if (metodo === "POST") {
+        const mediaType = url.searchParams.get("media_type") ?? "";
+        const arquivo = await lerBinario(req, LIMITE_LOGO_BYTES);
+        let endereco: string;
+        try {
+          endereco = await guardarLogo({ venueId: venue.id, arquivo, contentType: mediaType });
+        } catch (e) {
+          throw erro(400, "invalid_request", e instanceof Error ? e.message : "Logo inválida.");
+        }
+        const atualizada = await updateVenueLogo(venue.id, endereco);
+        // A antiga sai DEPOIS de a nova estar gravada e apontada. Na ordem
+        // inversa, uma falha no meio deixaria a casa sem logo nenhuma.
+        await apagarLogoAntiga(venue.logo_url);
+        return ok(res, atualizada);
+      }
     }
 
     // GET /v1/venues/:slug/pesquisa/respostas/:id — a resposta inteira
@@ -2972,7 +3042,7 @@ async function roteasApi(
 
     if (metodo === "GET") {
       if (!config.ativa) {
-        return ok(res, { ativa: false, casa: venue.name });
+        return ok(res, { ativa: false, casa: venue.name, ...marcaDaCasa(venue) });
       }
       // As perguntas da casa. Sem pesquisa montada a tela continua funcionando
       // com a nota geral e as etiquetas — quem acabou de comprar o módulo
@@ -2982,6 +3052,7 @@ async function roteasApi(
       return ok(res, {
         ativa: true,
         casa: venue.name,
+        ...marcaDaCasa(venue),
         saudacao: config.saudacao,
         etiquetas: [...ETIQUETAS],
         perguntas: modelo?.itens ?? [],

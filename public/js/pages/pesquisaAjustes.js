@@ -1,4 +1,4 @@
-import { del, get, patch, post, put } from "../api.js";
+import { del, get, patch, post, postArquivo, put } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
@@ -812,6 +812,15 @@ async function telaPremio(ctx, recarregar) {
         "Mudar o prêmio não mexe nos cupons já entregues — cada um continua valendo o que prometeu a quem respondeu.",
     }),
 
+    el("h3", { texto: "A cara da casa", style: "margin-top:22px" }),
+    el("p", {
+      classe: "muted",
+      texto:
+        "A pesquisa é a única tela que o SEU cliente vê. Com a logo e a cor do bar, ela é do bar — " +
+        "quem escaneia o QR na mesa não cai numa página de outra empresa.",
+    }),
+    cartaoDaMarca(ctx, recarregar),
+
     el("h3", { texto: "Aviso de nota baixa", style: "margin-top:22px" }),
     el("p", {
       classe: "muted",
@@ -835,6 +844,113 @@ async function telaPremio(ctx, recarregar) {
   ]);
 
   return el("div", { classe: "pilha" }, [form, cartaoResgate(ctx, recarregar), cartaoCupons(premios)]);
+}
+
+/**
+ * Sobe a logo e escolhe a cor.
+ *
+ * Fica num cartão próprio, e não no formulário de cima, porque a logo grava na
+ * hora que a pessoa escolhe o arquivo — não tem "salvar". Misturar as duas
+ * coisas no mesmo Salvar faria a pessoa escolher o arquivo, sair da tela e
+ * descobrir depois que a logo tinha subido mas a cor não.
+ */
+function cartaoDaMarca(ctx, recarregar) {
+  const previa = el("div", { classe: "previa-marca" });
+  const arquivo = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/svg+xml" });
+  const cor = el("input", { type: "color" });
+  const corTexto = el("input", { placeholder: "#c1121f", style: "max-width:140px" });
+
+  const cartao = el("section", { classe: "cartao", style: "margin-top:12px" }, [
+    previa,
+    el("div", { classe: "grade-2", style: "margin-top:12px" }, [
+      campo("Logo da casa (PNG, JPG, WEBP ou SVG, até 2 MB)", arquivo),
+      campo("Cor da casa", el("div", { classe: "linha-cor" }, [cor, corTexto])),
+    ]),
+    el("p", {
+      classe: "muted",
+      style: "margin-top:8px",
+      texto:
+        "A cor tinge o fundo e os botões da pesquisa. A cor da letra por cima é calculada sozinha — " +
+        "casa que escolhe um tom claro ganha letra escura, para o cliente conseguir ler no sol.",
+    }),
+  ]);
+
+  // Os dois campos de cor são o MESMO valor: o seletor para quem quer escolher
+  // no olho, o texto para quem recebeu "#c1121f" do designer e quer colar.
+  cor.addEventListener("input", () => {
+    corTexto.value = cor.value;
+    salvarCor(cor.value);
+  });
+  corTexto.addEventListener("change", () => salvarCor(corTexto.value.trim()));
+
+  arquivo.addEventListener("change", async () => {
+    const escolhido = arquivo.files?.[0];
+    if (!escolhido) return;
+    arquivo.disabled = true;
+    try {
+      await postArquivo(
+        `/v1/venues/${ctx.venue}/logo?media_type=${encodeURIComponent(escolhido.type || "")}`,
+        escolhido,
+      );
+      avisar("Logo atualizada.", "ok");
+      await recarregar();
+    } catch (e) {
+      avisar(e.message, "erro");
+    } finally {
+      arquivo.disabled = false;
+    }
+  });
+
+  void carregarMarca();
+  return cartao;
+
+  async function carregarMarca() {
+    let venue;
+    try {
+      venue = await get(`/v1/venues/${ctx.venue}`);
+    } catch {
+      limpar(previa).append(el("p", { classe: "muted", texto: "Não deu para ler a marca da casa." }));
+      return;
+    }
+
+    cor.value = venue.cor_marca || "#ff6b35";
+    corTexto.value = venue.cor_marca || "";
+
+    limpar(previa);
+    if (venue.logo_url) {
+      const remover = el("button", { classe: "btn btn-peq", texto: "Remover logo" });
+      remover.addEventListener("click", async () => {
+        remover.disabled = true;
+        try {
+          await del(`/v1/venues/${ctx.venue}/logo`);
+          avisar("Logo removida.", "ok");
+          await recarregar();
+        } catch (e) {
+          avisar(e.message, "erro");
+          remover.disabled = false;
+        }
+      });
+      previa.append(
+        el("div", { classe: "cabecalho-secao" }, [
+          el("img", { src: venue.logo_url, alt: "Logo da casa", classe: "logo-previa" }),
+          remover,
+        ]),
+      );
+    } else {
+      previa.append(
+        el("p", { classe: "muted", texto: "Sem logo ainda — a pesquisa mostra a marca da Brasa Food." }),
+      );
+    }
+  }
+
+  async function salvarCor(valor) {
+    try {
+      await patch(`/v1/venues/${ctx.venue}`, { cor_marca: valor });
+      avisar("Cor salva.", "ok");
+    } catch (e) {
+      avisar(e.message, "erro");
+    }
+  }
 }
 
 function cartaoResgate(ctx, recarregar) {
