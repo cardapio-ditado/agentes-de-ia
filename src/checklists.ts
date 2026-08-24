@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { modeloDaTarefa } from "./modelos.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { anthropicConfig } from "./config.js";
 import { db } from "./supabase.js";
@@ -19,7 +20,7 @@ export type ChecklistRun = Tables<"checklist_runs">;
  */
 
 const DIAS_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"] as const;
-const MODELO_IA = "claude-sonnet-5";
+const MODELO_IA = () => modeloDaTarefa("checklists");
 export const LIMITE_FOTO_BYTES = 8_000_000;
 
 export interface ItemChecklist {
@@ -532,7 +533,7 @@ async function analisarComIA(
   });
 
   const resposta = await anthropic().messages.create({
-    model: MODELO_IA,
+    model: MODELO_IA(),
     max_tokens: 800,
     system:
       "Você analisa checklists operacionais de bares e restaurantes. " +
@@ -584,7 +585,7 @@ export async function conversarGeracao(mensagens: MensagemGeracao[]): Promise<Re
   if (mensagens.length === 0) throw new Error("Descreva a rotina para começar.");
 
   const resposta = await anthropic().messages.create({
-    model: MODELO_IA,
+    model: MODELO_IA(),
     max_tokens: 1500,
     system:
       "Você monta checklists operacionais para bares e restaurantes brasileiros, " +

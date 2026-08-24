@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { modeloDaTarefa } from "./modelos.js";
 import ExcelJS from "exceljs";
 import mammoth from "mammoth";
 import { randomUUID } from "node:crypto";
@@ -143,7 +144,7 @@ async function extrairComModelo(params: {
   // "a API respondeu algo que não é JSON" — uma mensagem que não tem nada a
   // ver com a causa e não sugere nada a quem está tentando subir um arquivo.
   const stream = anthropic().messages.stream({
-    model: "claude-sonnet-5",
+    model: modeloDaTarefa("treinamento"),
     // Teto acima do que cabe em MAX_CONTEUDO (30 mil caracteres ≈ 8 mil
     // tokens), com folga para documento denso — e não tão alto que a geração
     // se arraste sem nunca ser aproveitada.

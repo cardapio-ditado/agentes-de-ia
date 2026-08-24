@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { modeloDaTarefa } from "./modelos.js";
 import ExcelJS from "exceljs";
 import { anthropicConfig } from "./config.js";
 
@@ -19,7 +20,7 @@ import { anthropicConfig } from "./config.js";
  * de uma foto ruim viraria promessa ao cliente.
  */
 
-const MODELO = "claude-sonnet-5";
+const MODELO = () => modeloDaTarefa("lerProgramacao");
 
 /** Os tipos que a agenda aceita — os mesmos do banco. */
 const TIPOS = ["musica", "jogo", "promocao", "evento", "outro"] as const;
@@ -196,7 +197,7 @@ export async function lerProgramacao(params: {
   });
 
   const resposta = await anthropic.messages.create({
-    model: MODELO,
+    model: MODELO(),
     max_tokens: 8000,
     system: INSTRUCOES,
     tools: [FERRAMENTA],

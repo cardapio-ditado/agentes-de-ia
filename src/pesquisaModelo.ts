@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { modeloDaTarefa } from "./modelos.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicConfig } from "./config.js";
 import { db } from "./supabase.js";
@@ -22,7 +23,7 @@ import { db } from "./supabase.js";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const cliente = () => db() as any;
 
-const MODELO_IA = "claude-sonnet-5";
+const MODELO_IA = () => modeloDaTarefa("pesquisa");
 
 /** Quantas perguntas cabem antes de o cliente desistir no meio. */
 const MAXIMO_DE_ITENS = 20;
@@ -490,7 +491,7 @@ export async function conversarMontagem(
   }
 
   const resposta = await anthropic().messages.create({
-    model: MODELO_IA,
+    model: MODELO_IA(),
     // Oito perguntas com texto e categoria cabem folgado; o excesso é a
     // margem para o modelo não ser cortado no meio da lista.
     max_tokens: 4000,

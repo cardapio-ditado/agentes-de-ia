@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { modeloDaTarefa } from "./modelos.js";
 import { randomUUID } from "node:crypto";
 import { anthropicConfig } from "./config.js";
 import { db } from "./supabase.js";
@@ -44,7 +45,7 @@ export function traduzirFalha(mensagem: string, contexto: string): never {
  * neste módulo, e não no conector.
  */
 
-const MODELO_IA = "claude-sonnet-5";
+const MODELO_IA = () => modeloDaTarefa("avaliacoes");
 
 /**
  * Nota a partir da qual a resposta pode ser publicada sem ninguém olhar.
@@ -287,7 +288,7 @@ export async function gerarResposta(params: {
   const { avaliacao, venue, config } = params;
 
   const resposta = await anthropic().messages.create({
-    model: MODELO_IA,
+    model: MODELO_IA(),
     max_tokens: 400,
     system: promptDeResposta({
       venue,
