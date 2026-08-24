@@ -25,6 +25,7 @@ import { fichas } from "./pages/fichas.js";
 import { contagem } from "./pages/contagem.js";
 import { estoque } from "./pages/estoque.js";
 import { cmvPainel } from "./pages/cmvPainel.js";
+import { engenhariaCardapio } from "./pages/engenhariaCardapio.js";
 import { vendas } from "./pages/vendas.js";
 import { pesquisa } from "./pages/pesquisa.js";
 import { pesquisaAjustes } from "./pages/pesquisaAjustes.js";
@@ -75,6 +76,7 @@ const PAGINAS = [
   // toda manhã, depois o que se faz às vezes, por fim o que se cadastra uma
   // vez e esquece.
   { id: "cmv-painel", modulo: "cmv", rotulo: "Painel do CMV", icone: ICONES.painel, render: cmvPainel, subtitulo: "O percentual do período, com a conta aberta" },
+  { id: "engenharia-cardapio", modulo: "cmv", rotulo: "Engenharia de cardápio", icone: ICONES.estrela, render: engenhariaCardapio, subtitulo: "O que proteger, reprecificar, divulgar e tirar" },
   { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
   { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
   { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },

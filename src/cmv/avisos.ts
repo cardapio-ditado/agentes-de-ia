@@ -32,6 +32,8 @@ export interface ConfigDoCmv {
   aumento_preco_pct: number;
   divergencia_reais: number;
   avisar_estoque: boolean;
+  /** A cada quantos dias lembrar de contar. 0 desliga. */
+  lembrete_contagem_dias: number;
 }
 
 export const CONFIG_CMV_PADRAO: ConfigDoCmv = {
@@ -39,6 +41,7 @@ export const CONFIG_CMV_PADRAO: ConfigDoCmv = {
   aumento_preco_pct: 10,
   divergencia_reais: 100,
   avisar_estoque: true,
+  lembrete_contagem_dias: 0,
 };
 
 /** A configuração da casa, ou o padrão — inclusive antes de a migração rodar. */
@@ -65,6 +68,7 @@ export async function configDoCmv(venueId: string): Promise<ConfigDoCmv> {
         ? CONFIG_CMV_PADRAO.divergencia_reais
         : Number(linha.divergencia_reais),
     avisar_estoque: linha.avisar_estoque !== false,
+    lembrete_contagem_dias: Number(linha.lembrete_contagem_dias) || 0,
   };
 }
 
@@ -88,6 +92,10 @@ export async function salvarConfigDoCmv(
   nova.divergencia_reais = Number(nova.divergencia_reais);
   if (!(nova.divergencia_reais >= 0)) {
     throw new Error("O limite da divergência precisa ser zero ou mais.");
+  }
+  nova.lembrete_contagem_dias = Math.trunc(Number(nova.lembrete_contagem_dias) || 0);
+  if (!(nova.lembrete_contagem_dias >= 0 && nova.lembrete_contagem_dias <= 90)) {
+    throw new Error("O lembrete de contagem vai de 0 (desligado) a 90 dias.");
   }
 
   const { error } = await cliente()
@@ -283,7 +291,7 @@ export function origemDoDia(venueId: string, diaISO: string): string {
 export async function enfileirarAvisoCmv(params: {
   venueId: string;
   destino: string;
-  template: "cmv_preco_subiu" | "cmv_divergencia" | "cmv_estoque_baixo";
+  template: "cmv_preco_subiu" | "cmv_divergencia" | "cmv_estoque_baixo" | "cmv_lembrete_contagem";
   origemId: string;
   corpo: string;
 }): Promise<boolean> {
@@ -458,4 +466,119 @@ function formatarQtd(n: number): string {
   return Number.isInteger(arredondado)
     ? String(arredondado)
     : arredondado.toFixed(2).replace(".", ",").replace(/0$/, "");
+}
+
+
+// ============================================================
+// A varredura diária (roda no conector, que é o processo de pé)
+// ============================================================
+
+/**
+ * Uma volta por dia, para cada casa com o módulo de CMV:
+ *
+ *  1. FOTOGRAFA o estoque (`cmv_registrar_snapshot`). O CMV do período
+ *     precisa do estoque de cada dia, e até aqui a foto só era tirada quando
+ *     alguém abria o painel — casa que ficasse duas semanas sem abrir tinha
+ *     um CMV calculado sobre um estoque inicial de duas semanas atrás.
+ *  2. LEMBRA de contar, se a casa pediu. Cadência que depende de memória
+ *     morre na terceira semana; um lembrete por atraso, e não um por dia —
+ *     quem segura a repetição é o par (última contagem × índice único).
+ *
+ * Idempotente de ponta a ponta: o snapshot é upsert por dia, e o lembrete
+ * tem índice único por dia. Rodar duas vezes não duplica nada — por isso o
+ * laço pode chamar de hora em hora sem guardar estado.
+ */
+export async function cicloDiarioDoCmv(agora = new Date()): Promise<void> {
+  let casas: any[] = [];
+  try {
+    const { data, error } = await cliente()
+      .from("venue_modulos")
+      .select("venue_id, venues:venue_id(id, name, timezone)")
+      .eq("modulo", "cmv")
+      .eq("ativo", true);
+    if (error) {
+      if (/venue_modulos|42P01|PGRST/i.test(error.message)) return;
+      throw error;
+    }
+    casas = data ?? [];
+  } catch (e) {
+    console.error(`[cmv] varredura diária não listou as casas: ${(e as Error).message}`);
+    return;
+  }
+
+  for (const casa of casas) {
+    const venue = casa.venues;
+    if (!venue) continue;
+    try {
+      await cliente().rpc("cmv_registrar_snapshot", { p_venue_id: venue.id });
+    } catch (e) {
+      console.error(`[cmv] snapshot de ${venue.name} falhou: ${(e as Error).message}`);
+    }
+    try {
+      await lembrarContagemAtrasada(venue, agora);
+    } catch (e) {
+      console.error(`[cmv] lembrete de contagem de ${venue.name} falhou: ${(e as Error).message}`);
+    }
+  }
+}
+
+async function lembrarContagemAtrasada(
+  venue: { id: string; name: string; timezone: string },
+  agora: Date,
+): Promise<void> {
+  const config = await configDoCmv(venue.id);
+  if (!config.avisar_whatsapp || config.lembrete_contagem_dias <= 0) return;
+
+  const { data: ultima } = await cliente()
+    .from("contagens")
+    .select("processada_em")
+    .eq("venue_id", venue.id)
+    .eq("status", "processada")
+    .order("processada_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const referencia = ultima?.processada_em ? new Date(ultima.processada_em) : null;
+  const dias = referencia
+    ? Math.floor((agora.getTime() - referencia.getTime()) / 86_400_000)
+    : null;
+  // Casa que nunca contou também merece o empurrão — mas só depois do prazo
+  // configurado a partir de hoje não dá para medir; usa o prazo como piso.
+  if (dias !== null && dias < config.lembrete_contagem_dias) return;
+
+  // UM lembrete por atraso, não um por dia: se já existe lembrete mais novo
+  // que a última contagem, a casa já sabe. Contou de novo → o ciclo zera.
+  const { data: jaLembrado } = await cliente()
+    .from("notifications")
+    .select("created_at")
+    .eq("venue_id", venue.id)
+    .eq("template", "cmv_lembrete_contagem")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (
+    jaLembrado?.created_at &&
+    (!referencia || new Date(jaLembrado.created_at) > referencia)
+  ) {
+    return;
+  }
+
+  const hojeISO = new Date(agora.getTime()).toISOString().slice(0, 10);
+  const corpo = [
+    dias === null
+      ? `📋 Ainda não houve nenhuma contagem de estoque — ${venue.name}`
+      : `📋 Faz ${dias} dias desde a última contagem — ${venue.name}`,
+    ``,
+    `Sem contagem em cadência, o CMV vira chute: o teórico anda sozinho e ninguém confere. Dez minutos na prateleira principal já seguram o número.`,
+    ``,
+    `Painel → Contagem.`,
+  ].join("\n");
+
+  await enfileirarAvisoCmv({
+    venueId: venue.id,
+    destino: config.avisar_whatsapp,
+    template: "cmv_lembrete_contagem",
+    origemId: origemDoDia(venue.id, `${hojeISO}:lembrete`),
+    corpo,
+  });
 }

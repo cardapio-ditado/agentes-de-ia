@@ -376,7 +376,7 @@ export async function baixarVendas(params: {
   venueId: string;
   importacaoId: string;
   usuario?: string | null;
-}): Promise<{ itens: number; movimentos: number }> {
+}): Promise<{ itens: number; movimentos: number; faturamento_por_dia: Array<{ data: string; valor: number }> }> {
   const dono = await cliente()
     .from("venda_importacoes")
     .select("id")
@@ -393,7 +393,30 @@ export async function baixarVendas(params: {
   if (error) throw traduzir(error);
 
   const linha = Array.isArray(data) ? data[0] : data;
-  return { itens: Number(linha?.itens_baixados ?? 0), movimentos: Number(linha?.insumos_movidos ?? 0) };
+
+  // O faturamento por dia sai da mesma importação: o relatório do PDV já
+  // trouxe o valor de cada linha, e obrigar alguém a digitar de novo o total
+  // que acabou de importar é pedir dado dobrado — que diverge e ninguém sabe
+  // qual vale. A tela OFERECE lançar; quem confirma é a pessoa, porque o
+  // total do PDV pode incluir gorjeta e taxa que o CMV não quer.
+  const { data: valores } = await cliente()
+    .from("venda_itens")
+    .select("data_venda, valor_total")
+    .eq("importacao_id", params.importacaoId)
+    .not("valor_total", "is", null);
+
+  const porDia = new Map<string, number>();
+  for (const v of (valores ?? []) as Array<{ data_venda: string; valor_total: number }>) {
+    porDia.set(v.data_venda, (porDia.get(v.data_venda) ?? 0) + Number(v.valor_total));
+  }
+
+  return {
+    itens: Number(linha?.itens_baixados ?? 0),
+    movimentos: Number(linha?.insumos_movidos ?? 0),
+    faturamento_por_dia: [...porDia.entries()]
+      .map(([data, valor]) => ({ data, valor: Math.round(valor * 100) / 100 }))
+      .sort((a, b) => a.data.localeCompare(b.data)),
+  };
 }
 
 /** Descarta a importação sem baixar — o arquivo errado, o mês errado. */

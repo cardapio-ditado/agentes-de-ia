@@ -8,6 +8,7 @@ import {
 } from "./channels/whatsapp.js";
 import { dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
+import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { listAgentsInOrg } from "./repository.js";
 import {
   consumirComandoPonte,
@@ -202,6 +203,15 @@ async function cicloDosChecklists(): Promise<void> {
   }
 }
 setInterval(() => void cicloDosChecklists(), 60_000);
+
+// De hora em hora: a foto diária do estoque e o lembrete de contagem. Pode
+// rodar mais de uma vez por dia sem estrago — o snapshot é upsert por dia e o
+// lembrete tem índice único; a repetição é a resiliência contra o conector
+// ter estado fora do ar na hora "certa".
+setInterval(() => {
+  cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
+}, 60 * 60_000);
+void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));

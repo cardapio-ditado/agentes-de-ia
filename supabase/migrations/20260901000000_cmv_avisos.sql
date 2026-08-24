@@ -33,6 +33,12 @@ create table if not exists public.cmv_config (
   -- porque é o mais falador dos três.
   avisar_estoque boolean not null default true,
 
+  -- Lembrete de contagem: a cada quantos dias a casa deveria contar. Zero
+  -- desliga. O CMV só é honesto com contagem em cadência, e cadência que
+  -- depende de memória morre na terceira semana — a mesma razão de existir o
+  -- agendamento de checklist.
+  lembrete_contagem_dias int not null default 0 check (lembrete_contagem_dias between 0 and 90),
+
   updated_at timestamptz not null default now()
 );
 
@@ -70,3 +76,7 @@ create unique index if not exists idx_um_aviso_de_divergencia_por_contagem
 create unique index if not exists idx_um_aviso_de_estoque_por_dia
   on public.notifications (cmv_origem_id)
   where template = 'cmv_estoque_baixo';
+
+create unique index if not exists idx_um_lembrete_de_contagem_por_dia
+  on public.notifications (cmv_origem_id)
+  where template = 'cmv_lembrete_contagem';

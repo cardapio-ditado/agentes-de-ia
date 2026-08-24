@@ -267,6 +267,12 @@ export async function vendas(raiz, ctx) {
                   try {
                     const r = await post(`/v1/venues/${ctx.venue}/vendas/${imp.id}/baixar`, {});
                     avisar(`${r.itens} venda(s) baixaram — ${r.movimentos} movimento(s) no estoque.`, "ok");
+                    // O relatório já trouxe os valores: oferece lançar o
+                    // faturamento em vez de a pessoa digitar de novo o total
+                    // que acabou de importar. OFERECE, não lança sozinho — o
+                    // total do PDV pode incluir gorjeta e taxa que o CMV não
+                    // quer no denominador.
+                    await oferecerFaturamento(ctx, r.faturamento_por_dia);
                     revisar(imp.id);
                   } catch (e) {
                     avisar(e.message, "erro");
@@ -424,4 +430,39 @@ export async function vendas(raiz, ctx) {
       );
     }
   }
+}
+
+
+/**
+ * Depois da baixa: os valores do relatório podem virar o faturamento do dia.
+ *
+ * Um clique no lugar de redigitar — mas com a pessoa no meio, porque o total
+ * do PDV pode incluir gorjeta e taxa de serviço, e o CMV quer o líquido.
+ * Relançar corrige, não soma (a regra já é da rota de faturamento).
+ */
+async function oferecerFaturamento(ctx, porDia) {
+  const dias = (porDia ?? []).filter((d) => d.valor > 0);
+  if (dias.length === 0) return;
+
+  const linhas = dias
+    .map((d) => `• ${d.data.split("-").reverse().join("/")}: ${dinheiro(d.valor)}`)
+    .join("\n");
+  const ok = window.confirm(
+    `O relatório trouxe estes totais:\n\n${linhas}\n\n` +
+      `Lançar como faturamento do CMV?\n` +
+      `(Confira antes se o valor inclui gorjeta ou taxa — o CMV quer o líquido. ` +
+      `Dá para corrigir depois no Painel do CMV.)`,
+  );
+  if (!ok) return;
+
+  let lancados = 0;
+  for (const d of dias) {
+    try {
+      await post(`/v1/venues/${ctx.venue}/faturamento`, { data: d.data, valor: d.valor });
+      lancados += 1;
+    } catch (e) {
+      avisar(`Faturamento de ${d.data} não entrou: ${e.message}`, "erro");
+    }
+  }
+  if (lancados > 0) avisar(`Faturamento lançado para ${lancados} dia(s).`, "ok");
 }

@@ -95,6 +95,7 @@ import {
   primeiroVenueAtivo,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
+import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
   avisarAumentoDePreco,
   avisarEstoqueBaixo,
@@ -1414,6 +1415,19 @@ async function roteasApi(
     }
 
     // GET /v1/venues/:slug/cmv?inicio=AAAA-MM-DD&fim=AAAA-MM-DD — o painel
+    // GET /v1/venues/:slug/cmv/engenharia?inicio=&fim= — popularidade × margem
+    if (metodo === "GET" && recurso === "cmv" && p[3] === "engenharia" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const hoje = hojeNaCasa(venue.timezone);
+      const inicio = url.searchParams.get("inicio") ?? hoje.slice(0, 8) + "01";
+      const fim = url.searchParams.get("fim") ?? hoje;
+      return ok(
+        res,
+        await comErroDeEstoque(() => engenhariaDoCardapio({ venueId: venue.id, inicio, fim })),
+      );
+    }
+
     // GET | PUT /v1/venues/:slug/cmv/avisos — quem recebe e a partir de quanto
     if (recurso === "cmv" && p[3] === "avisos" && p.length === 4) {
       if (metodo === "GET") {
@@ -1439,6 +1453,7 @@ async function roteasApi(
               divergencia_reais: numeroOuNulo(corpo.divergencia_reais) ?? undefined,
               avisar_estoque:
                 corpo.avisar_estoque === undefined ? undefined : Boolean(corpo.avisar_estoque),
+              lembrete_contagem_dias: numeroOuNulo(corpo.lembrete_contagem_dias) ?? undefined,
             }),
           );
         } catch (e) {

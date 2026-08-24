@@ -238,6 +238,7 @@ async function desenharAvisos(ctx, raiz) {
   const pct = el("input", { type: "number", min: "1", max: "100", value: String(config.aumento_preco_pct) });
   const reais = el("input", { type: "number", min: "0", step: "10", value: String(config.divergencia_reais) });
   const estoque = el("input", { type: "checkbox", checked: config.avisar_estoque });
+  const lembrete = el("input", { type: "number", min: "0", max: "90", value: String(config.lembrete_contagem_dias ?? 0) });
 
   const salvar = el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "Salvar avisos" });
   salvar.addEventListener("click", async () => {
@@ -248,6 +249,7 @@ async function desenharAvisos(ctx, raiz) {
         aumento_preco_pct: Number(pct.value),
         divergencia_reais: Number(reais.value),
         avisar_estoque: estoque.checked,
+        lembrete_contagem_dias: Number(lembrete.value),
       });
       avisar("Avisos do CMV salvos.", "ok");
       limpar(raiz);
@@ -280,6 +282,14 @@ async function desenharAvisos(ctx, raiz) {
         ]),
       ]),
       el("label", { classe: "check-linha" }, [estoque, el("span", { texto: "Avisar quando um insumo for faltar" })]),
+      el("div", { classe: "campo", style: "max-width:280px" }, [
+        el("label", { texto: "Lembrar de contar a cada (dias) — 0 desliga" }),
+        lembrete,
+      ]),
+      el("p", {
+        classe: "muted",
+        texto: "O CMV só é honesto com contagem em cadência. O lembrete chega uma vez por atraso — contou, o ciclo zera.",
+      }),
       salvar,
     ]),
   );
