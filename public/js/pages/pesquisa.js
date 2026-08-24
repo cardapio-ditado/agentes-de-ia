@@ -142,6 +142,14 @@ function cartaoDetratores(respostas) {
           texto: "Um telefonema hoje ainda recupera. Depois de uma semana, ele já contou para os amigos.",
         }),
       ]),
+      // A coluna "O que disse" mostra só o comentário geral. O que a pessoa
+      // respondeu em cada pergunta — onde exatamente afundou — está na tela
+      // de respostas, e sem este atalho ninguém descobre que ela existe.
+      el("a", {
+        classe: "btn btn-peq",
+        href: "#pesquisa-respostas",
+        texto: "Ler as respostas inteiras",
+      }),
     ]),
     el(
       "div",

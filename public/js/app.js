@@ -28,6 +28,7 @@ import { cmvPainel } from "./pages/cmvPainel.js";
 import { vendas } from "./pages/vendas.js";
 import { pesquisa } from "./pages/pesquisa.js";
 import { pesquisaAjustes } from "./pages/pesquisaAjustes.js";
+import { pesquisaRespostas } from "./pages/pesquisaRespostas.js";
 import { producao } from "./pages/producao.js";
 
 /**
@@ -67,6 +68,7 @@ const PAGINAS = [
   { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
 
   { id: "pesquisa", modulo: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
+  { id: "pesquisa-respostas", modulo: "pesquisa", rotulo: "Respostas da pesquisa", icone: ICONES.conversas, render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
   { id: "pesquisa-ajustes", modulo: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
 
   // A ordem é a do dia de trabalho: o número primeiro, depois o que se faz

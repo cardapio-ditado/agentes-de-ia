@@ -201,6 +201,7 @@ import {
   marcarConviteEnviado,
   painelDaPesquisa,
   registrarResposta,
+  respostaCompleta,
   removerAtendente,
   resgatarPremio,
   salvarConfig,
@@ -1600,6 +1601,16 @@ async function roteasApi(
             notaMaxima: notaMaxima ?? undefined,
           }),
         ),
+      );
+    }
+
+    // GET /v1/venues/:slug/pesquisa/respostas/:id — a resposta inteira
+    if (metodo === "GET" && recurso === "pesquisa" && p[3] === "respostas" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDePesquisa(() => respostaCompleta(venue.id, p[4]!)),
       );
     }
 

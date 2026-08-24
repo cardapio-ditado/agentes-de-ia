@@ -2419,3 +2419,61 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .categoria-linha { grid-template-columns: 1fr auto auto; }
   .categoria-trilho { display: none; }
 }
+
+/* ============================================================
+   A resposta da pesquisa, uma a uma
+   ============================================================ */
+
+/* A linha inteira é o botão: mirar num link de 3 palavras dentro de uma
+   planilha é difícil no celular, e a coluna que a pessoa quer ler é
+   justamente a mais larga. */
+.planilha-clicavel tbody tr:hover {
+  background: var(--superficie-2);
+}
+
+/* O que o cliente escreveu, com as palavras dele. Recuado e com a barra à
+   esquerda porque é fala de outra pessoa no meio da nossa tela — sem essa
+   marca visual, a queixa se confunde com o rótulo que nós escrevemos. */
+.citacao {
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--ambar);
+  background: var(--superficie-2);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: var(--texto);
+}
+.citacao p { margin: 0; }
+
+.citacao-fina {
+  margin: 4px 0 0;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.cartao-interno {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--superficie-2);
+}
+
+.pilha-fina { display: grid; gap: 8px; }
+
+/* Pergunta à esquerda, resposta à direita, alinhadas pelo topo: o texto que a
+   pessoa escreveu pode ter três linhas, e centralizar faria a nota flutuar no
+   meio do desabafo dela. */
+.linha-pergunta {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  font-size: 14px;
+}
+.linha-pergunta > div { min-width: 0; }
+
+@media (max-width: 620px) {
+  .linha-pergunta { grid-template-columns: 1fr; }
+  .linha-pergunta > strong { justify-self: start; }
+}

@@ -847,6 +847,103 @@ export async function painelDaPesquisa(params: {
   };
 }
 
+export interface ItemRespondido {
+  item_id: string;
+  categoria: string;
+  pergunta: string;
+  tipo: string;
+  /** Normalizada de 0 a 10. Null em pergunta de texto, que não pontua. */
+  nota: number | null;
+  /** O que o cliente marcou, como ele marcou: "4", "sim". */
+  valor: string | null;
+  texto: string | null;
+}
+
+export interface RespostaCompleta extends RespostaBruta {
+  atendente_nome: string | null;
+  itens: ItemRespondido[];
+  premio: { codigo: string; titulo: string; resgatado_em: string | null } | null;
+}
+
+/**
+ * Uma resposta inteira, como o cliente a preencheu.
+ *
+ * Existe porque o resto do módulo só sabia calcular médias. As notas por
+ * pergunta eram gravadas, viravam "Cozinha: 4,2" no painel e nunca mais eram
+ * lidas — de modo que o dono via QUE alguém reclamou e nunca DO QUÊ.
+ *
+ * Média responde "como andam as coisas". Só a resposta individual responde
+ * "por que essa pessoa foi embora chateada", que é a pergunta que faz alguém
+ * pegar o telefone.
+ */
+export async function respostaCompleta(
+  venueId: string,
+  respostaId: string,
+): Promise<RespostaCompleta> {
+  const { data, error } = await cliente()
+    .from("pesquisa_respostas")
+    .select("*")
+    .eq("venue_id", venueId)
+    .eq("id", respostaId)
+    .maybeSingle();
+
+  if (error) throw new ErroDePesquisa(500, `Falha ao ler a resposta: ${error.message}`);
+  if (!data) throw new ErroDePesquisa(404, "Resposta não encontrada nesta casa.");
+
+  const resposta = data as RespostaBruta & Record<string, unknown>;
+
+  // As três buscas seguintes são acessórias: sem elas a resposta ainda é
+  // legível. Falhar em qualquer uma não pode esconder o que o cliente
+  // escreveu, que é o motivo desta tela existir.
+  const [itens, atendente, premio] = await Promise.all([
+    itensDaResposta(respostaId),
+    resposta.atendente_id ? nomeDoAtendente(String(resposta.atendente_id)) : Promise.resolve(null),
+    premioDaResposta(respostaId),
+  ]);
+
+  return { ...(resposta as RespostaBruta), atendente_nome: atendente, itens, premio };
+}
+
+async function itensDaResposta(respostaId: string): Promise<ItemRespondido[]> {
+  const { data, error } = await cliente()
+    .from("pesquisa_resposta_itens")
+    .select("item_id, categoria, pergunta, tipo, nota, valor, texto")
+    .eq("resposta_id", respostaId)
+    .order("categoria", { ascending: true });
+
+  if (error) {
+    console.error(`[pesquisa] itens da resposta ${respostaId}: ${error.message}`);
+    return [];
+  }
+  return ((data ?? []) as ItemRespondido[]).map((i) => ({
+    ...i,
+    nota: i.nota === null ? null : Number(i.nota),
+  }));
+}
+
+async function nomeDoAtendente(id: string): Promise<string | null> {
+  const { data, error } = await cliente()
+    .from("pesquisa_atendentes")
+    .select("nome, apelido")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+  const linha = data as { nome: string; apelido: string | null };
+  return linha.apelido?.trim() || linha.nome;
+}
+
+async function premioDaResposta(
+  respostaId: string,
+): Promise<{ codigo: string; titulo: string; resgatado_em: string | null } | null> {
+  const { data, error } = await cliente()
+    .from("pesquisa_premios")
+    .select("codigo, titulo, resgatado_em")
+    .eq("resposta_id", respostaId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as { codigo: string; titulo: string; resgatado_em: string | null };
+}
+
 export async function listarRespostas(params: {
   venueId: string;
   dias?: number;
