@@ -489,7 +489,7 @@ function formatarQtd(n: number): string {
  * laço pode chamar de hora em hora sem guardar estado.
  */
 export async function cicloDiarioDoCmv(agora = new Date()): Promise<void> {
-  let casas: any[] = [];
+  let casas: any[];
   try {
     const { data, error } = await cliente()
       .from("venue_modulos")
