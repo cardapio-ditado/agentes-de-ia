@@ -749,6 +749,16 @@ async function telaPremio(ctx, recarregar) {
     premio_regras: el("input", { value: config.premio_regras ?? "", placeholder: "Válido de terça a quinta, não acumula" }),
     premio_validade_dias: el("input", { type: "number", min: "1", max: "365", value: String(config.premio_validade_dias) }),
     agradecimento: el("input", { value: config.agradecimento ?? "", placeholder: "Obrigado! Te esperamos de novo." }),
+    detrator_avisar_whatsapp: el("input", {
+      value: config.detrator_avisar_whatsapp ?? "",
+      placeholder: "(65) 99999-8888 — vazio não avisa ninguém",
+    }),
+    detrator_nota_maxima: el("input", {
+      type: "number",
+      min: "0",
+      max: "10",
+      value: String(config.detrator_nota_maxima ?? 6),
+    }),
   };
 
   const form = el("form", {
@@ -768,6 +778,8 @@ async function telaPremio(ctx, recarregar) {
           premio_titulo: campos.premio_titulo.value.trim(),
           premio_regras: campos.premio_regras.value.trim(),
           premio_validade_dias: Number(campos.premio_validade_dias.value),
+          detrator_avisar_whatsapp: campos.detrator_avisar_whatsapp.value.trim(),
+          detrator_nota_maxima: Number(campos.detrator_nota_maxima.value),
         });
         avisar("Ajustes salvos.", "ok");
         await recarregar();
@@ -798,6 +810,26 @@ async function telaPremio(ctx, recarregar) {
       texto:
         "O cupom só vale a partir do dia seguinte: é prêmio pela PRÓXIMA visita, não desconto na conta de hoje. " +
         "Mudar o prêmio não mexe nos cupons já entregues — cada um continua valendo o que prometeu a quem respondeu.",
+    }),
+
+    el("h3", { texto: "Aviso de nota baixa", style: "margin-top:22px" }),
+    el("p", {
+      classe: "muted",
+      texto:
+        "Quando entrar uma nota ruim, esse WhatsApp recebe na hora: a nota, o que puxou para baixo, " +
+        "o que a pessoa escreveu e como falar com ela. É a chance de ligar no mesmo dia e recuperar o cliente — " +
+        "depois de dois dias já não é recuperação, é constrangimento.",
+    }),
+    el("div", { classe: "grade", style: "margin-top:12px" }, [
+      campo("WhatsApp que recebe o aviso", campos.detrator_avisar_whatsapp),
+      campo("Avisar quando a nota for até", campos.detrator_nota_maxima),
+    ]),
+    el("p", {
+      classe: "muted",
+      style: "margin-top:8px",
+      texto:
+        "6 é a régua do NPS: de 0 a 6 o cliente é considerado detrator. Aumente para saber de mais casos, " +
+        "diminua para receber só os graves. Campo do WhatsApp vazio desliga o aviso.",
     }),
     el("button", { classe: "btn btn-primario", type: "submit", texto: "Salvar", style: "margin-top:12px" }),
   ]);

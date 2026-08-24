@@ -3000,6 +3000,7 @@ async function roteasApi(
           registrarResposta({
             venueId: venue.id,
             fuso: venue.timezone,
+            casaNome: venue.name,
             nota: Number(corpo.nota),
             itens: corpo.itens,
             elogios: corpo.elogios,

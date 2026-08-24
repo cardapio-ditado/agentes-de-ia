@@ -5,6 +5,8 @@ import type { NotaBruta, PainelDaPesquisa, RespostaBruta } from "./pesquisaMetri
 import { notaNormalizada, pesquisaAtiva } from "./pesquisaModelo.js";
 import type { ItemDaPesquisa } from "./pesquisaModelo.js";
 import { instanteNaCasa } from "./fuso.js";
+import { avisarDetrator, ehDetrator } from "./pesquisaAlerta.js";
+import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
 
 /**
  * Pesquisa de satisfação: a opinião do cliente enquanto ele ainda está na mesa.
@@ -66,6 +68,10 @@ export interface ConfigDaPesquisa {
   premio_validade_dias: number;
   perguntar_atendente: boolean;
   perguntar_comentario: boolean;
+  /** WhatsApp avisado na hora quando entra nota baixa. Vazio = ninguém. */
+  detrator_avisar_whatsapp: string | null;
+  /** Nota até a qual a resposta dispara aviso. 6 é a régua do NPS. */
+  detrator_nota_maxima: number;
 }
 
 const CONFIG_PADRAO: ConfigDaPesquisa = {
@@ -78,6 +84,11 @@ const CONFIG_PADRAO: ConfigDaPesquisa = {
   premio_validade_dias: 30,
   perguntar_atendente: true,
   perguntar_comentario: true,
+  // Desligado até a casa escrever um número: aviso é mensagem no celular de
+  // alguém, e ligar isso sozinho seria decidir pelo dono que ele quer ser
+  // acordado às onze da noite.
+  detrator_avisar_whatsapp: null,
+  detrator_nota_maxima: 6,
 };
 
 /**
@@ -107,6 +118,11 @@ export async function configDaPesquisa(venueId: string): Promise<ConfigDaPesquis
     premio_validade_dias: Number(linha.premio_validade_dias) || CONFIG_PADRAO.premio_validade_dias,
     perguntar_atendente: Boolean(linha.perguntar_atendente),
     perguntar_comentario: Boolean(linha.perguntar_comentario),
+    detrator_avisar_whatsapp: (linha.detrator_avisar_whatsapp as string) || null,
+    detrator_nota_maxima:
+      linha.detrator_nota_maxima == null
+        ? CONFIG_PADRAO.detrator_nota_maxima
+        : Number(linha.detrator_nota_maxima),
   };
 }
 
@@ -123,6 +139,14 @@ export async function salvarConfig(
   if (!(nova.premio_validade_dias >= 1 && nova.premio_validade_dias <= 365)) {
     throw new ErroDePesquisa(400, "A validade do prêmio precisa ficar entre 1 e 365 dias.");
   }
+
+  nova.detrator_nota_maxima = Math.trunc(Number(nova.detrator_nota_maxima));
+  if (!(nova.detrator_nota_maxima >= 0 && nova.detrator_nota_maxima <= 10)) {
+    throw new ErroDePesquisa(400, "O limite do aviso precisa ser uma nota de 0 a 10.");
+  }
+  // Campo em branco desliga o aviso. Guardar "" em vez de null faria a coluna
+  // parecer preenchida em toda consulta que só testa se há valor.
+  nova.detrator_avisar_whatsapp = nova.detrator_avisar_whatsapp?.trim() || null;
 
   const { error } = await cliente()
     .from("pesquisa_config")
@@ -312,6 +336,8 @@ export async function registrarResposta(params: {
   clienteContato?: string | null;
   /** As respostas às perguntas da pesquisa da casa. */
   itens?: unknown;
+  /** Nome da casa, para o aviso de nota baixa não sair anônimo. */
+  casaNome?: string;
 }): Promise<RespostaRegistrada> {
   const nota = Math.trunc(Number(params.nota));
   if (!Number.isFinite(nota) || nota < 0 || nota > 10) {
@@ -374,9 +400,10 @@ export async function registrarResposta(params: {
   // As notas por pergunta entram DEPOIS da resposta, e falhar aqui não
   // desfaz nada: a nota geral e o comentário já estão gravados, e é melhor
   // uma resposta incompleta que resposta nenhuma.
+  let notasPorCategoria: CategoriaDaResposta[] = [];
   if (modelo) {
     try {
-      await gravarNotas({
+      notasPorCategoria = await gravarNotas({
         respostaId,
         venueId: params.venueId,
         itens: modelo.itens,
@@ -386,6 +413,20 @@ export async function registrarResposta(params: {
       console.error(`[pesquisa] notas da resposta ${respostaId} não entraram: ${(e as Error).message}`);
     }
   }
+
+  // O AVISO DE NOTA BAIXA VEM ANTES DO CUPOM.
+  //
+  // Os dois podem falhar sem desfazer a resposta, mas a ordem importa: o cupom
+  // é um agrado e o aviso é a chance de recuperar um cliente que está indo
+  // embora insatisfeito. Se um dos dois for tropeçar num dia ruim de rede, que
+  // seja o brinde.
+  await talvezAvisarNotaBaixa({
+    config,
+    respostaId,
+    nota,
+    categorias: notasPorCategoria,
+    resposta: params,
+  });
 
   let premio: PremioEmitido | null = null;
   if (config.premio_ativo) {
@@ -400,6 +441,50 @@ export async function registrarResposta(params: {
   }
 
   return { id: respostaId, premio, agradecimento: config.agradecimento };
+}
+
+/**
+ * Dispara o aviso de nota baixa, se a casa pediu e a nota merecer.
+ *
+ * Separada só para não engordar `registrarResposta`, que já é grande demais:
+ * cada bloco novo espremido lá dentro é mais um caminho para conferir quando
+ * alguém for mexer na gravação da resposta.
+ */
+async function talvezAvisarNotaBaixa(params: {
+  config: ConfigDaPesquisa;
+  respostaId: string;
+  nota: number;
+  categorias: CategoriaDaResposta[];
+  resposta: {
+    venueId: string;
+    casaNome?: string;
+    mesa?: string | null;
+    criticas?: unknown;
+    comentario?: string | null;
+    clienteNome?: string | null;
+    clienteContato?: string | null;
+  };
+}): Promise<void> {
+  const destino = params.config.detrator_avisar_whatsapp;
+  if (!destino) return;
+  if (!ehDetrator(params.nota, params.config.detrator_nota_maxima)) return;
+
+  const r = params.resposta;
+  await avisarDetrator({
+    venueId: r.venueId,
+    respostaId: params.respostaId,
+    destino,
+    dados: {
+      casa: r.casaNome?.trim() || "sua casa",
+      nota: params.nota,
+      mesa: r.mesa?.trim() || null,
+      criticas: etiquetasValidas(r.criticas),
+      comentario: r.comentario?.trim() || null,
+      clienteNome: r.clienteNome?.trim() || null,
+      clienteContato: r.clienteContato?.trim() || null,
+      categorias: params.categorias,
+    },
+  });
 }
 
 async function emitirPremio(
@@ -458,12 +543,19 @@ export function liberacaoDoPremio(fuso: string, agora = new Date()): string {
  * categorias e perguntas que nunca existiram, e o painel mostraria assunto que
  * ninguém perguntou.
  */
+/**
+ * Grava as notas por pergunta e devolve o que gravou.
+ *
+ * Devolve em vez de só gravar porque o aviso de nota baixa precisa dizer ONDE
+ * afundou, e reler do banco o que acabamos de escrever seria uma ida a mais
+ * para buscar o que já está na mão.
+ */
 async function gravarNotas(params: {
   respostaId: string;
   venueId: string;
   itens: ItemDaPesquisa[];
   respondido: unknown;
-}): Promise<void> {
+}): Promise<CategoriaDaResposta[]> {
   const porId = new Map<string, RespostaDeItem>();
   if (Array.isArray(params.respondido)) {
     for (const cru of params.respondido) {
@@ -497,9 +589,16 @@ async function gravarNotas(params: {
     });
   }
 
-  if (linhas.length === 0) return;
+  if (linhas.length === 0) return [];
   const { error } = await cliente().from("pesquisa_resposta_itens").insert(linhas as never);
   if (error) throw new Error(error.message);
+
+  return linhas.map((l) => ({
+    categoria: l.categoria,
+    pergunta: l.pergunta,
+    nota: l.nota,
+    texto: l.texto,
+  }));
 }
 
 // ============================================================
