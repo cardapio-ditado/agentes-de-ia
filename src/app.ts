@@ -127,6 +127,7 @@ import {
   updateReservation,
   updateVenue,
   updateVenueLogo,
+  dadosDaCasaParaOPainel,
   type DadosReserva,
   type DadosVenue,
 } from "./venues.js";
@@ -1017,23 +1018,7 @@ async function roteasApi(
     const venue = await findVenueBySlugInOrg(chave.org_id, p[1]!);
 
     if (metodo === "GET") {
-      return ok(res, {
-        slug: venue.slug,
-        name: venue.name,
-        description: venue.description,
-        address: venue.address,
-        phone: venue.phone,
-        whatsapp: venue.whatsapp,
-        email: venue.email,
-        capacity: venue.capacity,
-        timezone: venue.timezone,
-        opening_hours: venue.opening_hours ?? {},
-        maps_url: mapsUrl(venue),
-        reservas_avisar_whatsapp: venue.reservas_avisar_whatsapp ?? null,
-        // O padrão vale para quem ainda não rodou a migração: a tela mostra 60
-        // e a casa não vê um campo vazio sem saber o que significa.
-        reserva_lembrete_minutos: venue.reserva_lembrete_minutos ?? 60,
-      });
+      return ok(res, dadosDaCasaParaOPainel(venue));
     }
 
     if (metodo === "PATCH") {

@@ -435,6 +435,39 @@ export function mapsUrl(venue: Venue): string | null {
  * eventos", "até o último cliente". O agente lê como está.
  */
 /**
+ * Os dados da casa como o PAINEL os lê.
+ *
+ * Escrita à mão, campo a campo, para nunca devolver ao navegador colunas que
+ * ninguém pediu — `settings` guarda configuração interna e a tabela cresce.
+ *
+ * Mora aqui, e não solta dentro da rota, porque a lista já esqueceu campo novo
+ * duas vezes: a coluna entra no banco, a página pública (que lê a casa direto)
+ * mostra, e o painel do dono continua dizendo que não há nada salvo. Aqui ela
+ * tem teste.
+ */
+export function dadosDaCasaParaOPainel(venue: Venue): Record<string, unknown> {
+  return {
+    slug: venue.slug,
+    name: venue.name,
+    description: venue.description,
+    address: venue.address,
+    phone: venue.phone,
+    whatsapp: venue.whatsapp,
+    email: venue.email,
+    capacity: venue.capacity,
+    timezone: venue.timezone,
+    opening_hours: venue.opening_hours ?? {},
+    maps_url: mapsUrl(venue),
+    reservas_avisar_whatsapp: venue.reservas_avisar_whatsapp ?? null,
+    // O padrão vale para quem ainda não rodou a migração: a tela mostra 60 e a
+    // casa não vê um campo vazio sem saber o que significa.
+    reserva_lembrete_minutos: venue.reserva_lembrete_minutos ?? 60,
+    logo_url: venue.logo_url ?? null,
+    cor_marca: venue.cor_marca ?? null,
+  };
+}
+
+/**
  * Aponta a casa para a logo nova (ou tira a que havia).
  *
  * Separada de `updateVenue` porque não é um campo que a pessoa digita: quem
