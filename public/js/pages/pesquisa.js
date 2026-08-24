@@ -91,7 +91,24 @@ function indicadores(dados) {
 
   return el("div", { classe: "grade" }, [
     indicador("NPS", String(resumo.nps), textoDaVariacao(resumo.nps, anterior?.nps), true),
-    indicador("Nota média", resumo.media.toFixed(1).replace(".", ","), `de 0 a 10 · ${resumo.respostas} respostas`),
+    // A recomendação e a experiência lado a lado, e nunca uma no lugar da
+    // outra. NPS alto com experiência baixa é a casa que ainda tem crédito
+    // com o cliente e está gastando — e é o que nenhum dos dois números
+    // conta sozinho.
+    indicador(
+      "Nota de recomendação",
+      resumo.media.toFixed(1).replace(".", ","),
+      `de 0 a 10 · ${resumo.respostas} respostas`,
+    ),
+    indicador(
+      "Média da experiência",
+      dados.mediaDaExperiencia === null || dados.mediaDaExperiencia === undefined
+        ? "—"
+        : dados.mediaDaExperiencia.toFixed(1).replace(".", ","),
+      dados.mediaDaExperiencia === null || dados.mediaDaExperiencia === undefined
+        ? "monte a pesquisa por categoria para ver"
+        : textoDaVariacao(dados.mediaDaExperiencia, dados.experienciaAntes),
+    ),
     indicador(
       "Promotores",
       `${percentual(resumo.promotores, resumo.respostas)}%`,

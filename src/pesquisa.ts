@@ -5,7 +5,7 @@ import type { NotaBruta, PainelDaPesquisa, RespostaBruta } from "./pesquisaMetri
 import { notaNormalizada, pesquisaAtiva } from "./pesquisaModelo.js";
 import type { ItemDaPesquisa } from "./pesquisaModelo.js";
 import { instanteNaCasa } from "./fuso.js";
-import { avisarDetrator, ehDetrator } from "./pesquisaAlerta.js";
+import { avisarDetrator, mereceAviso } from "./pesquisaAlerta.js";
 import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
 
 /**
@@ -503,7 +503,13 @@ async function talvezAvisarNotaBaixa(params: {
 }): Promise<void> {
   const destino = params.config.detrator_avisar_whatsapp;
   if (!destino) return;
-  if (!ehDetrator(params.nota, params.config.detrator_nota_maxima)) return;
+
+  // Duas portas, e basta uma: a nota de recomendação no chão, OU qualquer
+  // categoria no chão. Só a nota deixaria passar o cliente que indicaria a
+  // casa e mesmo assim esperou quarenta minutos — e é justamente esse que
+  // ainda dá para recuperar, porque o problema tem nome.
+  const limite = params.config.detrator_nota_maxima;
+  if (!mereceAviso({ nota: params.nota, categorias: params.categorias, limite })) return;
 
   const r = params.resposta;
   await avisarDetrator({
@@ -519,6 +525,7 @@ async function talvezAvisarNotaBaixa(params: {
       clienteNome: r.clienteNome?.trim() || null,
       clienteContato: r.clienteContato?.trim() || null,
       categorias: params.categorias,
+      limite,
     },
   });
 }

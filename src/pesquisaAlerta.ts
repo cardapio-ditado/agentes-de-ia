@@ -29,9 +29,6 @@ const cliente = () => db() as any;
 
 export const TEMPLATE_DETRATOR = "pesquisa_detrator";
 
-/** Só as categorias abaixo disto entram no "o que puxou para baixo". */
-const NOTA_DE_CORTE_DA_CATEGORIA = 7;
-
 /**
  * Esta nota merece aviso?
  *
@@ -41,9 +38,92 @@ const NOTA_DE_CORTE_DA_CATEGORIA = 7;
  */
 export function ehDetrator(nota: number, limite: number): boolean {
   if (!Number.isFinite(nota)) return false;
-  // Limite fora da faixa é engano de configuração; na dúvida, a régua do NPS.
-  const corte = Number.isFinite(limite) && limite >= 0 && limite <= 10 ? limite : 6;
-  return nota <= corte;
+  return nota <= corteValido(limite);
+}
+
+/** Limite fora da faixa é engano de configuração; na dúvida, a régua do NPS. */
+function corteValido(limite: number): number {
+  return Number.isFinite(limite) && limite >= 0 && limite <= 10 ? limite : 6;
+}
+
+export interface CategoriaEmAlerta {
+  categoria: string;
+  media: number;
+}
+
+/**
+ * A média de tudo o que o cliente pontuou nesta resposta.
+ *
+ * NÃO é a nota da avaliação — essa é a pergunta de recomendação, e tem de
+ * continuar sendo, porque é o que torna o NPS comparável com o de qualquer
+ * outra casa. Esta é a outra metade: "como foi a experiência dele", somando
+ * comida, atendimento, ambiente e o resto.
+ *
+ * As duas discordam com frequência, e é aí que ficam interessantes: nota 9 com
+ * experiência 5 é o cliente que gosta da casa e teve uma noite ruim.
+ *
+ * Null quando não houve nada a pontuar — pesquisa só de perguntas abertas, ou
+ * cliente que pulou tudo. Null e não zero: zero significaria péssimo.
+ */
+export function mediaDaExperiencia(categorias: CategoriaDaResposta[]): number | null {
+  const notas = (categorias ?? [])
+    .map((c) => c.nota)
+    .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (notas.length === 0) return null;
+  return Math.round((notas.reduce((s, n) => s + n, 0) / notas.length) * 10) / 10;
+}
+
+/**
+ * As categorias cuja média ficou no chão, da pior para a menos pior.
+ *
+ * Existe porque a nota de recomendação esconde estrago. O cliente que dá 8 na
+ * recomendação — "eu indicaria, o lugar é bom" — pode ter dado 2 em Tempo de
+ * espera. Ninguém era avisado desse cliente, e ele é justamente o que a casa
+ * ainda consegue resolver: o problema é pontual e tem nome.
+ *
+ * Média por CATEGORIA e não por pergunta: uma pergunta ruim isolada dentro de
+ * um assunto que vai bem é ruído, e avisar a cada uma delas ensina o dono a
+ * ignorar o aviso.
+ */
+export function categoriasEmAlerta(
+  categorias: CategoriaDaResposta[],
+  limite: number,
+): CategoriaEmAlerta[] {
+  const corte = corteValido(limite);
+  const soma = new Map<string, { total: number; quantas: number }>();
+
+  for (const item of categorias ?? []) {
+    if (typeof item.nota !== "number" || !Number.isFinite(item.nota)) continue;
+    const atual = soma.get(item.categoria) ?? { total: 0, quantas: 0 };
+    atual.total += item.nota;
+    atual.quantas += 1;
+    soma.set(item.categoria, atual);
+  }
+
+  return [...soma.entries()]
+    .map(([categoria, s]) => ({
+      categoria,
+      media: Math.round((s.total / s.quantas) * 10) / 10,
+    }))
+    .filter((c) => c.media <= corte)
+    .sort((a, b) => a.media - b.media);
+}
+
+/**
+ * Esta resposta merece aviso?
+ *
+ * Duas portas, e basta uma: a nota de recomendação no chão, OU qualquer
+ * categoria no chão. Exigir as duas deixaria passar exatamente o cliente que
+ * mais dá para recuperar — o que gosta da casa e teve um problema com nome e
+ * endereço.
+ */
+export function mereceAviso(params: {
+  nota: number;
+  categorias: CategoriaDaResposta[];
+  limite: number;
+}): boolean {
+  if (ehDetrator(params.nota, params.limite)) return true;
+  return categoriasEmAlerta(params.categorias, params.limite).length > 0;
 }
 
 export interface CategoriaDaResposta {
@@ -63,6 +143,8 @@ export interface DadosDoAlerta {
   clienteNome?: string | null;
   clienteContato?: string | null;
   categorias?: CategoriaDaResposta[];
+  /** A régua da casa. 6 quando não vier — a do NPS. */
+  limite?: number;
 }
 
 /**
@@ -74,24 +156,39 @@ export interface DadosDoAlerta {
  * coisa que se ignora.
  */
 export function textoDoAlerta(dados: DadosDoAlerta): string {
-  const linhas: string[] = [`🚨 Nota ${dados.nota} na pesquisa — ${dados.casa}`];
+  const limite = dados.limite ?? 6;
+  const emAlerta = categoriasEmAlerta(dados.categorias ?? [], limite);
+  const experiencia = mediaDaExperiencia(dados.categorias ?? []);
+  const notaNoChao = ehDetrator(dados.nota, limite);
+
+  // O TÍTULO DIZ QUAL DOS DOIS CASOS É.
+  //
+  // "🚨 Nota 8" faria o dono abrir achando que erramos a conta. O aviso por
+  // categoria existe justamente para o cliente que indicaria a casa e mesmo
+  // assim teve um problema — e o título tem de contar isso na primeira linha,
+  // que é a única que aparece na notificação do celular.
+  const linhas: string[] = notaNoChao
+    ? [`🚨 Nota ${dados.nota} na pesquisa — ${dados.casa}`]
+    : [
+        `⚠️ ${nomesDasCategorias(emAlerta)} com nota baixa — ${dados.casa}`,
+        `O cliente deu ${dados.nota} na recomendação, mas não em tudo.`,
+      ];
 
   const onde = [dados.mesa?.trim() ? `Mesa ${dados.mesa.trim()}` : null, dados.atendente?.trim() || null]
     .filter(Boolean)
     .join(" · ");
   if (onde) linhas.push(onde);
 
-  // As categorias que afundaram, da pior para a menos pior: é o "o quê" que
-  // transforma a nota num problema endereçável.
-  const fracas = (dados.categorias ?? [])
-    .filter((c) => typeof c.nota === "number" && c.nota < NOTA_DE_CORTE_DA_CATEGORIA)
-    .sort((a, b) => (a.nota as number) - (b.nota as number))
-    .slice(0, 5);
+  if (experiencia !== null) {
+    linhas.push(`Média da experiência: ${formatarNota(experiencia)} de 10`);
+  }
 
-  if (fracas.length > 0) {
-    linhas.push(``, `O que puxou para baixo:`);
-    for (const c of fracas) {
-      linhas.push(`• ${c.categoria} — ${formatarNota(c.nota as number)} (${c.pergunta})`);
+  // As categorias em alerta, da pior para a menos pior: é o "o quê" que
+  // transforma a nota num problema endereçável.
+  if (emAlerta.length > 0) {
+    linhas.push(``, `Categorias em alerta:`);
+    for (const c of emAlerta.slice(0, 6)) {
+      linhas.push(`• ${c.categoria} — ${formatarNota(c.media)}${perguntasDaCategoria(dados, c.categoria)}`);
     }
   }
 
@@ -121,6 +218,29 @@ export function textoDoAlerta(dados: DadosDoAlerta): string {
   linhas.push(``, quem ? `Falar com: ${quem}` : `Respondeu sem deixar contato.`);
 
   return linhas.join("\n");
+}
+
+/** "Cozinha e Atendimento", "Cozinha, Atendimento e mais 2". */
+function nomesDasCategorias(alerta: CategoriaEmAlerta[]): string {
+  const nomes = alerta.map((c) => c.categoria);
+  if (nomes.length === 0) return "Uma categoria";
+  if (nomes.length === 1) return nomes[0]!;
+  if (nomes.length === 2) return `${nomes[0]} e ${nomes[1]}`;
+  return `${nomes.slice(0, 2).join(", ")} e mais ${nomes.length - 2}`;
+}
+
+/**
+ * A pior pergunta da categoria, entre parênteses.
+ *
+ * "Cozinha — 2,0" diz onde dói; "(O prato saiu no tempo?)" diz o que doeu. Sem
+ * a pergunta, o dono ainda precisa abrir o painel para saber o que fazer, e o
+ * aviso volta a ser só um convite para largar tudo e ir olhar.
+ */
+function perguntasDaCategoria(dados: DadosDoAlerta, categoria: string): string {
+  const pior = (dados.categorias ?? [])
+    .filter((c) => c.categoria === categoria && typeof c.nota === "number")
+    .sort((a, b) => (a.nota as number) - (b.nota as number))[0];
+  return pior ? ` (${pior.pergunta})` : "";
 }
 
 /** "8" e não "8,00"; "6,5" quando tem fração. */

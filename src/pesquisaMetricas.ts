@@ -315,6 +315,20 @@ function arredondar(n: number): number {
 
 export interface PainelDaPesquisa {
   resumo: ResumoNps;
+  /**
+   * A média de TUDO o que os clientes pontuaram no período, de 0 a 10.
+   *
+   * Ao lado do NPS e nunca no lugar dele: o NPS é a pergunta de recomendação e
+   * é o que se compara com outras casas; esta é "como foi a experiência", que
+   * o NPS sozinho não conta. As duas discordam com frequência, e é aí que
+   * ficam úteis — NPS alto com experiência baixa é a casa que ainda tem
+   * crédito com o cliente e está gastando.
+   *
+   * Null quando não houve nota nenhuma no período.
+   */
+  mediaDaExperiencia: number | null;
+  /** A mesma média no período anterior. Null = sem base para comparar. */
+  experienciaAntes: number | null;
   /** O mesmo resumo do período anterior, do mesmo tamanho. Null = sem base. */
   anterior: ResumoNps | null;
   ranking: PostoNoRanking[];
@@ -325,6 +339,20 @@ export interface PainelDaPesquisa {
   categorias: NotaDaCategoria[];
   /** Detratores recentes: é para estes que o dono liga de volta. */
   aBater: RespostaBruta[];
+}
+
+/**
+ * A média de um monte de notas já normalizadas, com uma casa decimal.
+ *
+ * Null e não zero quando não há nota: zero significaria "péssimo", e uma casa
+ * que ainda não recebeu resposta apareceria com a pior nota possível.
+ */
+function mediaDeNotas(notas: NotaBruta[]): number | null {
+  const validas = notas
+    .map((n) => n.nota)
+    .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (validas.length === 0) return null;
+  return Math.round((validas.reduce((s, n) => s + n, 0) / validas.length) * 10) / 10;
 }
 
 /** Quantos detratores a tela destaca. Mais que isso vira lista, não alerta. */
@@ -342,6 +370,8 @@ export function montarPainel(params: {
 
   return {
     categorias: porCategoria(params.notas ?? [], params.notasAnteriores ?? []),
+    mediaDaExperiencia: mediaDeNotas(params.notas ?? []),
+    experienciaAntes: mediaDeNotas(params.notasAnteriores ?? []),
     resumo: resumoNps(respostas),
     anterior: params.anteriores?.length ? resumoNps(params.anteriores) : null,
     ranking: ranking(respostas, atendentes),

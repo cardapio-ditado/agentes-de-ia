@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ehDetrator, textoDoAlerta } from "./pesquisaAlerta.js";
+import {
+  categoriasEmAlerta,
+  ehDetrator,
+  mediaDaExperiencia,
+  mereceAviso,
+  textoDoAlerta,
+} from "./pesquisaAlerta.js";
 import type { DadosDoAlerta } from "./pesquisaAlerta.js";
 
 /* ---------- quem dispara o aviso ---------- */
@@ -57,7 +63,7 @@ test("o comentário do cliente vai inteiro, com as palavras dele", () => {
   assert.ok(alerta({ comentario: queixa }).includes(`"${queixa}"`));
 });
 
-test("as categorias fracas aparecem, da pior para a menos pior", () => {
+test("as categorias em alerta aparecem, da pior para a menos pior", () => {
   const texto = alerta({
     categorias: [
       { categoria: "Ambiente", pergunta: "Como estava o som?", nota: 9 },
@@ -65,7 +71,7 @@ test("as categorias fracas aparecem, da pior para a menos pior", () => {
       { categoria: "Atendimento", pergunta: "Foi bem atendido?", nota: 5 },
     ],
   });
-  assert.match(texto, /O que puxou para baixo/);
+  assert.match(texto, /Categorias em alerta/);
   assert.ok(texto.indexOf("Cozinha") < texto.indexOf("Atendimento"), texto);
   // Categoria bem avaliada não entra: a lista existe para apontar o problema,
   // e encher ela do que foi bem esconde o que foi mal.
@@ -77,7 +83,7 @@ test("resposta sem categoria fraca não inventa seção vazia", () => {
     nota: 6,
     categorias: [{ categoria: "Cozinha", pergunta: "E a comida?", nota: 10 }],
   });
-  assert.ok(!/O que puxou para baixo/.test(texto), texto);
+  assert.ok(!/Categorias em alerta/.test(texto), texto);
 });
 
 test("o texto escrito numa pergunta específica também chega", () => {
@@ -121,10 +127,10 @@ test("nada de 'undefined' ou 'null' na tela de ninguém", () => {
 
 test("nota fracionária de categoria sai legível", () => {
   const texto = alerta({
-    categorias: [{ categoria: "Cozinha", pergunta: "E a comida?", nota: 6.5 }],
+    categorias: [{ categoria: "Cozinha", pergunta: "E a comida?", nota: 5.5 }],
   });
-  assert.match(texto, /Cozinha — 6,5/);
-  assert.ok(!/6\.50/.test(texto), texto);
+  assert.match(texto, /Cozinha — 5,5/);
+  assert.ok(!/5\.50/.test(texto), texto);
 });
 
 test("muitas categorias ruins não viram uma parede de texto", () => {
@@ -134,5 +140,143 @@ test("muitas categorias ruins não viram uma parede de texto", () => {
     nota: 1,
   }));
   const linhas = alerta({ categorias }).split("\n").filter((l) => l.startsWith("• "));
-  assert.equal(linhas.length, 5);
+  assert.equal(linhas.length, 6);
+});
+
+/* ---------- a média da experiência ---------- */
+
+const cat = (categoria: string, nota: number | null, pergunta = "Pergunta?") => ({
+  categoria,
+  pergunta,
+  nota,
+});
+
+test("a média soma tudo o que o cliente pontuou", () => {
+  assert.equal(mediaDaExperiencia([cat("Comida", 8), cat("Bar", 6)]), 7);
+});
+
+test("pergunta sem nota não entra na média", () => {
+  // A pergunta escrita ("deixe um recado") não pontua. Contá-la como zero
+  // afundaria a média de quem escreveu um elogio.
+  assert.equal(mediaDaExperiencia([cat("Comida", 8), cat("Comida", null)]), 8);
+});
+
+test("sem nota nenhuma, a média é null e não zero", () => {
+  // Zero significaria péssimo. Null significa "não há o que medir".
+  assert.equal(mediaDaExperiencia([]), null);
+  assert.equal(mediaDaExperiencia([cat("Recado", null)]), null);
+});
+
+test("a média sai com uma casa decimal", () => {
+  assert.equal(mediaDaExperiencia([cat("A", 1), cat("B", 2), cat("C", 2)]), 1.7);
+});
+
+/* ---------- quais categorias estão em alerta ---------- */
+
+test("a categoria é julgada pela MÉDIA dela, não por uma pergunta", () => {
+  // Duas perguntas de Comida: 2 e 10. A média é 6 — no limite, entra.
+  // Julgar pergunta a pergunta avisaria de um assunto que vai bem.
+  assert.deepEqual(
+    categoriasEmAlerta([cat("Comida", 2), cat("Comida", 10)], 6),
+    [{ categoria: "Comida", media: 6 }],
+  );
+  assert.deepEqual(categoriasEmAlerta([cat("Comida", 4), cat("Comida", 10)], 6), []);
+});
+
+test("as piores primeiro — é a ordem em que se resolve", () => {
+  const alerta = categoriasEmAlerta([cat("Bar", 5), cat("Cozinha", 1), cat("Salão", 3)], 6);
+  assert.deepEqual(alerta.map((c) => c.categoria), ["Cozinha", "Salão", "Bar"]);
+});
+
+test("categoria boa não entra no alerta", () => {
+  assert.deepEqual(categoriasEmAlerta([cat("Comida", 9), cat("Bar", 10)], 6), []);
+});
+
+test("a régua da casa vale para as categorias também", () => {
+  assert.equal(categoriasEmAlerta([cat("Comida", 7)], 6).length, 0);
+  assert.equal(categoriasEmAlerta([cat("Comida", 7)], 8).length, 1);
+});
+
+/* ---------- quem merece aviso ---------- */
+
+test("nota de recomendação no chão avisa, mesmo com categorias boas", () => {
+  assert.equal(mereceAviso({ nota: 3, categorias: [cat("Comida", 10)], limite: 6 }), true);
+});
+
+test("CATEGORIA no chão avisa, mesmo com nota de recomendação alta", () => {
+  // O caso que o aviso por nota deixava passar: o cliente que indicaria a casa
+  // — "o lugar é bom" — e mesmo assim esperou quarenta minutos. É o mais fácil
+  // de recuperar, porque o problema é pontual e tem nome.
+  assert.equal(
+    mereceAviso({ nota: 9, categorias: [cat("Tempo de espera", 2)], limite: 6 }),
+    true,
+  );
+});
+
+test("tudo bem avaliado não vira aviso", () => {
+  // O outro lado: aviso demais é indistinguível de aviso nenhum, porque os
+  // dois terminam com a conversa silenciada.
+  assert.equal(
+    mereceAviso({ nota: 10, categorias: [cat("Comida", 9), cat("Bar", 8)], limite: 6 }),
+    false,
+  );
+});
+
+test("resposta só com a nota, sem categorias, ainda é julgada pela nota", () => {
+  assert.equal(mereceAviso({ nota: 4, categorias: [], limite: 6 }), true);
+  assert.equal(mereceAviso({ nota: 9, categorias: [], limite: 6 }), false);
+});
+
+/* ---------- o aviso conta qual é o caso ---------- */
+
+test("nota alta com categoria ruim abre dizendo a categoria, não a nota", () => {
+  // "🚨 Nota 9" faria o dono abrir achando que erramos a conta.
+  const texto = textoDoAlerta({
+    casa: "Ditado Popular",
+    nota: 9,
+    limite: 6,
+    categorias: [cat("Tempo de espera", 2), cat("Comida", 9)],
+  });
+  assert.match(texto, /^⚠️ Tempo de espera com nota baixa/);
+  assert.match(texto, /deu 9 na recomendação/);
+  assert.ok(!texto.startsWith("🚨"), texto);
+});
+
+test("nota no chão continua abrindo como alarme", () => {
+  const texto = textoDoAlerta({ casa: "Ditado Popular", nota: 2, limite: 6, categorias: [] });
+  assert.match(texto, /^🚨 Nota 2 na pesquisa/);
+});
+
+test("o aviso nomeia TODAS as categorias em alerta", () => {
+  const texto = textoDoAlerta({
+    casa: "Ditado Popular",
+    nota: 2,
+    limite: 6,
+    categorias: [cat("Cozinha", 1, "E a comida?"), cat("Salão", 3), cat("Ambiente", 9)],
+  });
+  assert.match(texto, /Categorias em alerta/);
+  assert.match(texto, /• Cozinha — 1 \(E a comida\?\)/);
+  assert.match(texto, /• Salão — 3/);
+  // A que vai bem não aparece: a lista existe para apontar o problema.
+  assert.ok(!texto.includes("Ambiente"), texto);
+});
+
+test("a média da experiência vai no aviso", () => {
+  const texto = textoDoAlerta({
+    casa: "Ditado Popular",
+    nota: 2,
+    limite: 6,
+    categorias: [cat("Cozinha", 2), cat("Bar", 4)],
+  });
+  assert.match(texto, /Média da experiência: 3 de 10/);
+});
+
+test("várias categorias viram um título legível", () => {
+  const texto = textoDoAlerta({
+    casa: "Ditado Popular",
+    nota: 9,
+    limite: 6,
+    categorias: [cat("Cozinha", 1), cat("Salão", 2), cat("Bar", 3), cat("Música", 4)],
+  });
+  assert.match(texto, /^⚠️ Cozinha, Salão e mais 2 com nota baixa/);
 });

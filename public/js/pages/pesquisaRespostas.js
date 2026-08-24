@@ -188,6 +188,20 @@ function cartaoDaResposta(r, fechar) {
       fechado,
     ]),
 
+    // A recomendação e a experiência lado a lado. Elas discordam com
+    // frequência, e é aí que ficam úteis: nota 9 com experiência 4 é o cliente
+    // que gosta da casa e teve uma noite ruim — o mais fácil de recuperar.
+    (() => {
+      const media = mediaDaExperiencia(r.itens ?? []);
+      if (media === null) return null;
+      return el("p", { classe: "muted", style: "margin-top:4px" }, [
+        el("span", { texto: "Recomendação " }),
+        el("strong", { texto: String(r.nota) }),
+        el("span", { texto: " · Média da experiência " }),
+        el("strong", { texto: numero(media) }),
+      ]);
+    })(),
+
     r.cliente_contato
       ? el("p", { style: "margin-top:6px" }, [
           el("strong", { texto: "Contato: " }),
@@ -303,6 +317,17 @@ function estrelas(valor) {
   if (!Number.isFinite(n) || n <= 0) return "—";
   const cheias = Math.min(Math.round(n), 5);
   return "★".repeat(cheias) + "☆".repeat(5 - cheias);
+}
+
+/**
+ * A média de tudo o que o cliente pontuou nesta resposta.
+ *
+ * A mesma conta do servidor, repetida aqui: a tela já tem os itens na mão, e
+ * mandar o número pronto obrigaria a rota de detalhe a calcular algo que ela
+ * não usa para mais nada.
+ */
+function mediaDaExperiencia(itens) {
+  return mediaDe(itens ?? []);
 }
 
 function mediaDe(itens) {
