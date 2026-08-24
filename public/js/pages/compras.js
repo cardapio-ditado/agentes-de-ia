@@ -32,7 +32,51 @@ function dataCurta(iso) {
   return iso ? iso.split("-").reverse().join("/") : "—";
 }
 
+import { recebimento } from "./recebimento.js";
+
+/**
+ * Compras e recebimento na MESMA tela, em abas.
+ *
+ * Eram duas entradas de menu, e a separação era do código, não da vida: quem
+ * monta o pedido é quem confere quando o caminhão chega, e o recebimento é o
+ * segundo tempo da mesma jogada. Menu é mapa do trabalho de quem usa — cada
+ * entrada a mais é uma decisão a mais para quem só quer dar entrada na nota.
+ */
 export async function compras(raiz, ctx) {
+  let abaAtual = "pedidos";
+  const corpo = el("div", {});
+
+  const ABAS = [
+    ["pedidos", "Pedidos"],
+    ["receber", "Receber mercadoria"],
+  ];
+  const barra = el(
+    "div",
+    { classe: "abas" },
+    ABAS.map(([id, rotulo]) =>
+      el("button", {
+        classe: `aba ${id === abaAtual ? "aba-ativa" : ""}`.trim(),
+        type: "button",
+        texto: rotulo,
+        "data-aba": id,
+        onclick: async () => {
+          abaAtual = id;
+          for (const b of barra.querySelectorAll("[data-aba]")) {
+            b.classList.toggle("aba-ativa", b.dataset.aba === id);
+          }
+          limpar(corpo);
+          if (id === "receber") await recebimento(corpo, ctx);
+          else await paginaPedidos(corpo, ctx);
+        },
+      }),
+    ),
+  );
+
+  raiz.append(el("div", { classe: "pilha" }, [barra, corpo]));
+  await paginaPedidos(corpo, ctx);
+}
+
+async function paginaPedidos(raiz, ctx) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
 

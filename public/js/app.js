@@ -18,7 +18,6 @@ import { organizacao } from "./pages/organizacao.js";
 import { checklists } from "./pages/checklists.js";
 import { execucoes } from "./pages/execucoes.js";
 import { avaliacoes } from "./pages/avaliacoes.js";
-import { recebimento } from "./pages/recebimento.js";
 import { compras } from "./pages/compras.js";
 import { cadastros } from "./pages/cadastros.js";
 import { fichas } from "./pages/fichas.js";
@@ -77,8 +76,7 @@ const PAGINAS = [
   // vez e esquece.
   { id: "cmv-painel", modulo: "cmv", rotulo: "Painel do CMV", icone: ICONES.painel, render: cmvPainel, subtitulo: "O percentual do período, com a conta aberta" },
   { id: "engenharia-cardapio", modulo: "cmv", rotulo: "Engenharia de cardápio", icone: ICONES.estrela, render: engenhariaCardapio, subtitulo: "O que proteger, reprecificar, divulgar e tirar" },
-  { id: "recebimento", modulo: "cmv", rotulo: "Receber mercadoria", icone: ICONES.caixa, render: recebimento, subtitulo: "Fotografe a nota, confira o que chegou, dê entrada" },
-  { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.reservas, render: compras, subtitulo: "Monte e envie pedidos ao fornecedor" },
+  { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.caixa, render: compras, subtitulo: "Pedidos ao fornecedor e recebimento da mercadoria" },
   { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },
   { id: "vendas", modulo: "cmv", rotulo: "Vendas", icone: ICONES.raio, render: vendas, subtitulo: "O relatório do seu PDV baixa o estoque pelas fichas" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
