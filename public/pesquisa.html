@@ -59,6 +59,13 @@
       }
       .chama { width: 30px; height: 38px; flex: 0 0 auto; }
       .chama img { width: 100%; height: 100%; object-fit: contain; }
+      /* A logo da CASA é grande. A chama da Brasa é um selo de rodapé — a
+         marca de quem fez a ferramenta; a logo do bar é de quem está falando
+         com o cliente, e no tamanho de um favicon ela não convence ninguém de
+         que a pesquisa é daquela casa. */
+      .chama.chama-casa { width: auto; height: 62px; max-width: 190px; }
+      .chama.chama-casa img { width: auto; max-width: 190px; }
+      .topo:has(.chama-casa) { padding-top: 26px; }
       .casa {
         font-family: var(--fonte-titulo);
         font-weight: 600;
@@ -81,6 +88,21 @@
         transition: background .25s ease;
       }
       .trilha i.feito { background: var(--traco-marca, var(--brasa)); }
+
+      /* VOLTAR.
+         A tela da nota avança sozinha com um toque, e a nota geral é o número
+         mais importante da pesquisa inteira — é dela que sai o NPS. Sem voltar,
+         um toque errado no 10 (que fica sozinho na segunda linha da grade)
+         registrava um promotor onde havia um detrator, para sempre, e a pessoa
+         via o erro acontecer sem poder consertar.
+         Discreto de propósito: é uma saída de emergência, não um caminho. */
+      .voltar {
+        appearance: none; border: 0; background: none;
+        color: var(--creme-2); font: 500 14px/1 var(--fonte);
+        padding: 10px 20px 0; cursor: pointer; align-self: flex-start;
+      }
+      .voltar:active { opacity: .6; }
+      .voltar[hidden] { display: none; }
 
       main { flex: 1; padding: 8px 20px 24px; max-width: 560px; width: 100%; margin: 0 auto; }
 
@@ -277,6 +299,8 @@
       <i></i><i></i><i></i><i></i>
     </div>
 
+    <button type="button" class="voltar" id="voltar" hidden>← Voltar</button>
+
     <main id="conteudo">
       <p class="ajuda" id="carregando">Abrindo a pesquisa…</p>
     </main>
@@ -303,6 +327,8 @@
 
       const conteudo = document.getElementById("conteudo");
       const trilha = document.getElementById("trilha");
+      const botaoVoltar = document.getElementById("voltar");
+      botaoVoltar.addEventListener("click", voltar);
 
       /** O que o cliente marcou até agora. */
       const resposta = {
@@ -382,9 +408,20 @@
         return lista;
       }
 
+      function voltar() {
+        if (passo === 0) return;
+        passo -= 1;
+        desenhar();
+      }
+
       function desenhar() {
         const lista = passos();
         const atual = lista[passo];
+
+        // Some no primeiro passo (não há para onde voltar) e na tela final,
+        // onde a resposta já foi enviada e voltar prometeria uma edição que
+        // não existe mais.
+        botaoVoltar.hidden = passo === 0;
 
         // A trilha mostra a quantidade REAL de passos desta casa: quatro
         // risquinhos numa pesquisa de três passos faria a pessoa achar que
@@ -801,6 +838,7 @@
 
       function telaFinal(resultado) {
         trilha.hidden = true;
+        botaoVoltar.hidden = true;
         const fim = document.createElement("div");
         fim.className = "fim";
 

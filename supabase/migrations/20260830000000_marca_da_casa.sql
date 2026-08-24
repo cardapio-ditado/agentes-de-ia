@@ -44,7 +44,9 @@ comment on column public.venues.cor_marca is
 -- 2. Onde a imagem mora
 -- ============================================================
 --
--- Bucket PÚBLICO, ao contrário do de checklists.
+-- Bucket PÚBLICO, ao contrário do de checklists. O teto de 8 MB é a foto do
+-- letreiro tirada no celular; o painel reduz antes de mandar, mas o balde tem
+-- de aceitar o original de quem chamar a rota direto.
 --
 -- A logo aparece numa página que qualquer pessoa abre escaneando um QR code na
 -- mesa, sem login e sem sessão. URL assinada não serve: ela vence, e uma logo
@@ -53,12 +55,12 @@ comment on column public.venues.cor_marca is
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
-  'marcas', 'marcas', true, 2097152,
+  'marcas', 'marcas', true, 8388608,
   array['image/png','image/jpeg','image/webp','image/svg+xml']
 )
 on conflict (id) do update
   set public = true,
-      file_size_limit = 2097152,
+      file_size_limit = 8388608,
       allowed_mime_types = array['image/png','image/jpeg','image/webp','image/svg+xml'];
 
 -- Leitura liberada para qualquer um: é o que faz a logo aparecer para o

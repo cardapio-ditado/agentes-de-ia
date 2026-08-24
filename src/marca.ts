@@ -171,8 +171,19 @@ export function extensaoDaLogo(contentType: string | null | undefined): string |
   return FORMATOS[tipo] ?? null;
 }
 
-/** Teto do arquivo da logo. */
-export const LIMITE_LOGO_BYTES = 2 * 1024 * 1024;
+/**
+ * Teto do arquivo da logo.
+ *
+ * 8 MB porque a logo que a casa tem à mão costuma ser a foto do letreiro
+ * tirada no celular, e celular novo produz 5 a 10 MB sem esforço. Recusar isso
+ * com "no máximo 2 MB" empurra o dono para um editor de imagem que ele não
+ * tem — e o resultado prático é a casa ficar sem logo.
+ *
+ * O painel reduz a imagem antes de mandar, então o arquivo que chega aqui
+ * quase sempre é pequeno. Este teto é a rede de baixo, para quem chamar a rota
+ * direto.
+ */
+export const LIMITE_LOGO_BYTES = 8 * 1024 * 1024;
 
 export const BUCKET_MARCAS = "marcas";
 
@@ -194,7 +205,7 @@ export async function guardarLogo(params: {
   }
   if (params.arquivo.length === 0) throw new Error("O arquivo chegou vazio.");
   if (params.arquivo.length > LIMITE_LOGO_BYTES) {
-    throw new Error("A logo precisa ter no máximo 2 MB.");
+    throw new Error("A logo precisa ter no máximo 8 MB.");
   }
 
   const caminho = `${params.venueId}/logo-${Date.now()}.${extensao}`;

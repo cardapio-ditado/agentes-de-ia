@@ -863,14 +863,15 @@ function cartaoDaMarca(ctx, recarregar) {
   const cartao = el("section", { classe: "cartao", style: "margin-top:12px" }, [
     previa,
     el("div", { classe: "grade-2", style: "margin-top:12px" }, [
-      campo("Logo da casa (PNG, JPG, WEBP ou SVG, até 2 MB)", arquivo),
+      campo("Logo da casa (PNG, JPG, WEBP ou SVG, até 8 MB)", arquivo),
       campo("Cor da casa", el("div", { classe: "linha-cor" }, [cor, corTexto])),
     ]),
     el("p", {
       classe: "muted",
       style: "margin-top:8px",
       texto:
-        "A cor tinge o fundo e os botões da pesquisa. A cor da letra por cima é calculada sozinha — " +
+        "Pode mandar a foto do letreiro direto do celular: o sistema reduz sozinho antes de guardar. " +
+        "A cor tinge o fundo e os botões da pesquisa, e a cor da letra por cima é calculada — " +
         "casa que escolhe um tom claro ganha letra escura, para o cliente conseguir ler no sol.",
     }),
   ]);
@@ -888,9 +889,10 @@ function cartaoDaMarca(ctx, recarregar) {
     if (!escolhido) return;
     arquivo.disabled = true;
     try {
+      const pronto = await reduzirImagem(escolhido);
       await postArquivo(
-        `/v1/venues/${ctx.venue}/logo?media_type=${encodeURIComponent(escolhido.type || "")}`,
-        escolhido,
+        `/v1/venues/${ctx.venue}/logo?media_type=${encodeURIComponent(pronto.type || "")}`,
+        pronto,
       );
       avisar("Logo atualizada.", "ok");
       await recarregar();
@@ -951,6 +953,63 @@ function cartaoDaMarca(ctx, recarregar) {
       avisar(e.message, "erro");
     }
   }
+}
+
+/** Maior lado da logo depois de reduzida. */
+const LADO_MAXIMO_DA_LOGO = 900;
+
+/**
+ * Reduz a imagem no navegador antes de subir.
+ *
+ * A logo que a casa tem à mão quase nunca é um arquivo de designer: é a foto
+ * do letreiro tirada no celular, com 4000 pixels de largura e 8 MB. Subir isso
+ * como está resolveria o problema do dono e criaria o do cliente — ele abriria
+ * a pesquisa no 4G do bar e esperaria oito megabytes por uma imagem que vai
+ * aparecer com 62 pixels de altura.
+ *
+ * Reduzir aqui, e não no servidor, é o que faz o upload ser rápido também para
+ * quem está subindo. E é aqui que dá para fazer sem biblioteca nenhuma: o
+ * navegador já sabe decodificar e redesenhar imagem.
+ *
+ * SVG passa direto: é vetor, já é pequeno, e jogá-lo num canvas o
+ * transformaria em bitmap — perderia justamente a qualidade que o formato tem.
+ */
+async function reduzirImagem(arquivo) {
+  if (arquivo.type === "image/svg+xml") return arquivo;
+  if (typeof createImageBitmap !== "function") return arquivo;
+
+  let imagem;
+  try {
+    imagem = await createImageBitmap(arquivo);
+  } catch {
+    // Formato que o navegador não decodifica: manda como veio e deixa o
+    // servidor recusar com a mensagem dele. Melhor que "não deu" sem motivo.
+    return arquivo;
+  }
+
+  const maior = Math.max(imagem.width, imagem.height);
+  // Já é pequena o bastante: mexer só perderia qualidade e trocaria um PNG com
+  // transparência por outro sem ganho nenhum.
+  if (maior <= LADO_MAXIMO_DA_LOGO && arquivo.size <= 400 * 1024) {
+    imagem.close?.();
+    return arquivo;
+  }
+
+  const escala = Math.min(1, LADO_MAXIMO_DA_LOGO / maior);
+  const tela = document.createElement("canvas");
+  tela.width = Math.round(imagem.width * escala);
+  tela.height = Math.round(imagem.height * escala);
+  const pincel = tela.getContext("2d");
+  pincel.drawImage(imagem, 0, 0, tela.width, tela.height);
+  imagem.close?.();
+
+  // PNG e não JPEG: logo com fundo transparente vira um retângulo branco em
+  // JPEG, e o dono acha que o sistema estragou a arte dele.
+  const blob = await new Promise((resolve) => tela.toBlob(resolve, "image/png"));
+  if (!blob) return arquivo;
+  // Se a redução engordou (acontece com foto rica em cor), fica o original.
+  if (blob.size >= arquivo.size) return arquivo;
+  return new File([blob], "logo.png", { type: "image/png" });
 }
 
 function cartaoResgate(ctx, recarregar) {
