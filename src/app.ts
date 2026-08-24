@@ -1788,6 +1788,15 @@ async function roteasApi(
                 corpo.perguntar_atendente === undefined ? undefined : Boolean(corpo.perguntar_atendente),
               perguntar_comentario:
                 corpo.perguntar_comentario === undefined ? undefined : Boolean(corpo.perguntar_comentario),
+              // `textoOpcional` não serve aqui: ele devolve undefined para "",
+              // e "" é justamente como o X da tela diz "apague este número".
+              // Com ele, desligar o aviso viraria um salvamento que não faz
+              // nada — e o dono continuaria recebendo mensagem sem entender.
+              detrator_avisar_whatsapp:
+                corpo.detrator_avisar_whatsapp === undefined
+                  ? undefined
+                  : String(corpo.detrator_avisar_whatsapp ?? "").trim() || null,
+              detrator_nota_maxima: numeroOuNulo(corpo.detrator_nota_maxima) ?? undefined,
             }),
           ),
         );

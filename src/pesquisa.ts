@@ -131,7 +131,21 @@ export async function salvarConfig(
   campos: Partial<ConfigDaPesquisa>,
 ): Promise<ConfigDaPesquisa> {
   const atual = await configDaPesquisa(venueId);
-  const nova = { ...atual, ...campos };
+
+  // CAMPO AUSENTE NÃO É CAMPO APAGADO.
+  //
+  // `{ ...atual, ...campos }` parece guardar o que não veio, e não guarda:
+  // uma chave presente com valor `undefined` sobrescreve o valor atual. Como a
+  // rota preenche com `undefined` tudo o que não veio no corpo, salvar UM
+  // campo sozinho — o X que desliga o aviso manda só ele — zeraria os outros,
+  // e `nova.premio_titulo.trim()` estouraria antes disso.
+  //
+  // Peneirar aqui, e não na rota, porque é aqui que a fusão acontece: qualquer
+  // chamada futura com um objeto parcial passa pela mesma porta.
+  const informados = Object.fromEntries(
+    Object.entries(campos).filter(([, valor]) => valor !== undefined),
+  ) as Partial<ConfigDaPesquisa>;
+  const nova = { ...atual, ...informados };
 
   if (!nova.premio_titulo.trim()) {
     throw new ErroDePesquisa(400, "Escreva qual é o prêmio — o cliente vai ler isso antes de responder.");

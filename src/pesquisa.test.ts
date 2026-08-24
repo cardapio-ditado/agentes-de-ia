@@ -125,3 +125,35 @@ test("a lista vazia ou inválida não quebra a gravação", () => {
   assert.equal(notaDoNps([perguntaNps()], "nada disso"), null);
   assert.equal(notaDoNps([], [{ item_id: "nps-1", valor: 2 }]), null);
 });
+
+/* ---------- salvar um campo não apaga os outros ---------- */
+
+test("campo ausente não sobrescreve o que está guardado", () => {
+  // `{...atual, ...campos}` PARECE guardar o que não veio, e não guarda: uma
+  // chave presente com valor undefined sobrescreve. Como a rota preenche com
+  // undefined tudo o que não veio no corpo, salvar um campo sozinho — o X que
+  // desliga o aviso manda só ele — zeraria os outros.
+  const atual: Record<string, unknown> = { premio_titulo: "Um chopp", detrator_nota_maxima: 8, ativa: true };
+  const campos = { detrator_avisar_whatsapp: "65999998888", premio_titulo: undefined, ativa: undefined };
+
+  const informados = Object.fromEntries(
+    Object.entries(campos).filter(([, valor]) => valor !== undefined),
+  );
+  const nova = { ...atual, ...informados };
+
+  assert.equal(nova.premio_titulo, "Um chopp");
+  assert.equal(nova.ativa, true);
+  assert.equal(nova.detrator_nota_maxima, 8);
+  assert.equal(nova.detrator_avisar_whatsapp, "65999998888");
+});
+
+test("valor explicitamente vazio APAGA — é diferente de ausente", () => {
+  // O X manda "" de propósito. Confundir "não mandei" com "mandei vazio"
+  // deixaria o aviso ligado depois de o dono desligá-lo.
+  const campos = { detrator_avisar_whatsapp: "", premio_titulo: undefined };
+  const informados = Object.fromEntries(
+    Object.entries(campos).filter(([, valor]) => valor !== undefined),
+  );
+  assert.equal("detrator_avisar_whatsapp" in informados, true);
+  assert.equal("premio_titulo" in informados, false);
+});
