@@ -2510,3 +2510,60 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   background: var(--superficie);
   cursor: pointer;
 }
+
+/* ============================================================
+   Valor salvo, com X para apagar
+   ============================================================ */
+
+/* O que ESTÁ guardado aparece acima do campo. Um input com texto dentro não
+   diz se aquilo está salvo ou se é algo que a pessoa digitou e não salvou. */
+.valor-salvo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 12px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  max-width: 100%;
+}
+.valor-salvo-texto {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-x {
+  appearance: none;
+  border: 0;
+  background: var(--borda);
+  color: var(--texto-2);
+  border-radius: 50%;
+  /* 24px é o mínimo que o polegar acerta sem ampliar a tela. Um X de 14px é
+     bonito no computador e impossível no celular do salão. */
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chip-x:hover { background: var(--perigo); color: #fff; }
+.chip-x:disabled { opacity: .5; cursor: default; }
+
+/* Em cima da imagem, no canto: é onde se procura para apagar uma foto, no
+   WhatsApp, no Instagram e em qualquer app que aceite imagem. */
+.logo-caixa { position: relative; display: inline-block; }
+.chip-x-sobre {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}

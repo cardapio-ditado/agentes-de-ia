@@ -745,9 +745,10 @@ async function telaEquipe(ctx, recarregar) {
 /* ============ O prêmio ============ */
 
 async function telaPremio(ctx, recarregar) {
-  const [config, premios] = await Promise.all([
+  const [config, premios, venue] = await Promise.all([
     get(`/v1/venues/${ctx.venue}/pesquisa/config`),
     get(`/v1/venues/${ctx.venue}/pesquisa/premios`),
+    get(`/v1/venues/${ctx.venue}`),
   ]);
 
   const campos = {
@@ -830,7 +831,7 @@ async function telaPremio(ctx, recarregar) {
         "A pesquisa é a única tela que o SEU cliente vê. Com a logo e a cor do bar, ela é do bar — " +
         "quem escaneia o QR na mesa não cai numa página de outra empresa.",
     }),
-    cartaoDaMarca(ctx, recarregar),
+    cartaoDaMarca(ctx, venue, recarregar),
 
     el("h3", { texto: "Aviso de nota baixa", style: "margin-top:22px" }),
     el("p", {
@@ -841,7 +842,20 @@ async function telaPremio(ctx, recarregar) {
         "depois de dois dias já não é recuperação, é constrangimento.",
     }),
     el("div", { classe: "grade", style: "margin-top:12px" }, [
-      campo("WhatsApp que recebe o aviso", campos.detrator_avisar_whatsapp),
+      campoComValorSalvo(
+        "WhatsApp que recebe o aviso",
+        campos.detrator_avisar_whatsapp,
+        config.detrator_avisar_whatsapp,
+        async () => {
+          try {
+            await put(`/v1/venues/${ctx.venue}/pesquisa/config`, { detrator_avisar_whatsapp: "" });
+            avisar("Aviso desligado — ninguém mais recebe.", "ok");
+            await recarregar();
+          } catch (e) {
+            avisar(e.message, "erro");
+          }
+        },
+      ),
       campo("Avisar quando a nota for até", campos.detrator_nota_maxima),
     ]),
     el("p", {
@@ -865,7 +879,8 @@ async function telaPremio(ctx, recarregar) {
  * coisas no mesmo Salvar faria a pessoa escolher o arquivo, sair da tela e
  * descobrir depois que a logo tinha subido mas a cor não.
  */
-function cartaoDaMarca(ctx, recarregar) {
+function cartaoDaMarca(ctx, venue, recarregar) {
+  const corSalva = venue.cor_marca || "";
   const previa = el("div", { classe: "previa-marca" });
   const arquivo = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/svg+xml" });
   const cor = el("input", { type: "color" });
@@ -875,7 +890,20 @@ function cartaoDaMarca(ctx, recarregar) {
     previa,
     el("div", { classe: "grade-2", style: "margin-top:12px" }, [
       campo("Logo da casa (PNG, JPG, WEBP ou SVG, até 8 MB)", arquivo),
-      campo("Cor da casa", el("div", { classe: "linha-cor" }, [cor, corTexto])),
+      campoComValorSalvo(
+        "Cor da casa",
+        el("div", { classe: "linha-cor" }, [cor, corTexto]),
+        corSalva,
+        async () => {
+          try {
+            await patch(`/v1/venues/${ctx.venue}`, { cor_marca: "" });
+            avisar("Cor apagada. A pesquisa volta ao laranja da Brasa.", "ok");
+            await recarregar();
+          } catch (e) {
+            avisar(e.message, "erro");
+          }
+        },
+      ),
     ]),
     el("p", {
       classe: "muted",
@@ -914,39 +942,41 @@ function cartaoDaMarca(ctx, recarregar) {
     }
   });
 
-  void carregarMarca();
+  desenharMarca();
   return cartao;
 
-  async function carregarMarca() {
-    let venue;
-    try {
-      venue = await get(`/v1/venues/${ctx.venue}`);
-    } catch {
-      limpar(previa).append(el("p", { classe: "muted", texto: "Não deu para ler a marca da casa." }));
-      return;
-    }
-
+  function desenharMarca() {
     cor.value = venue.cor_marca || "#ff6b35";
     corTexto.value = venue.cor_marca || "";
 
     limpar(previa);
     if (venue.logo_url) {
-      const remover = el("button", { classe: "btn btn-peq", texto: "Remover logo" });
-      remover.addEventListener("click", async () => {
-        remover.disabled = true;
+      // O X fica EM CIMA da imagem, no canto. É onde a pessoa procura para
+      // apagar uma foto — o mesmo lugar do WhatsApp, do Instagram e de
+      // qualquer app que aceite imagem. Um botão "Remover logo" ao lado
+      // funciona, mas obriga a ler antes de agir.
+      const x = el("button", {
+        classe: "chip-x chip-x-sobre",
+        type: "button",
+        texto: "✕",
+        title: "Apagar a logo",
+        "aria-label": "Apagar a logo",
+      });
+      x.addEventListener("click", async () => {
+        x.disabled = true;
         try {
           await del(`/v1/venues/${ctx.venue}/logo`);
-          avisar("Logo removida.", "ok");
+          avisar("Logo apagada. A pesquisa volta a usar a marca da Brasa.", "ok");
           await recarregar();
         } catch (e) {
           avisar(e.message, "erro");
-          remover.disabled = false;
+          x.disabled = false;
         }
       });
       previa.append(
-        el("div", { classe: "cabecalho-secao" }, [
+        el("div", { classe: "logo-caixa" }, [
           el("img", { src: venue.logo_url, alt: "Logo da casa", classe: "logo-previa" }),
-          remover,
+          x,
         ]),
       );
     } else {
@@ -1226,6 +1256,45 @@ async function telaConvites(ctx, recarregar) {
 
 function campo(rotulo, controle) {
   return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+}
+
+/**
+ * Um campo que mostra o que JÁ ESTÁ salvo, com um X para apagar.
+ *
+ * Um input com texto dentro não diz se aquilo está guardado ou se é algo que
+ * a pessoa digitou e não salvou. E para apagar, a única saída era selecionar
+ * tudo, apagar com o dedo e lembrar de salvar — três passos para desfazer
+ * uma coisa. O X faz em um.
+ */
+function campoComValorSalvo(rotulo, controle, valorSalvo, aoRemover) {
+  const bloco = el("div", { classe: "campo" }, [el("label", { texto: rotulo })]);
+
+  if (valorSalvo) {
+    const x = el("button", {
+      classe: "chip-x",
+      type: "button",
+      texto: "✕",
+      title: `Apagar ${valorSalvo}`,
+      "aria-label": `Apagar ${valorSalvo}`,
+    });
+    x.addEventListener("click", async () => {
+      x.disabled = true;
+      try {
+        await aoRemover();
+      } finally {
+        x.disabled = false;
+      }
+    });
+    bloco.append(
+      el("div", { classe: "valor-salvo" }, [
+        el("span", { classe: "valor-salvo-texto", texto: valorSalvo }),
+        x,
+      ]),
+    );
+  }
+
+  bloco.append(controle);
+  return bloco;
 }
 
 function caixaDeMarcar(rotulo, marcado) {
