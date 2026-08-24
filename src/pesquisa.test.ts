@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ETIQUETAS, etiquetasValidas, liberacaoDoPremio, telefoneLimpo } from "./pesquisa.js";
+import { ETIQUETAS, etiquetasValidas, liberacaoDoPremio, notaDoNps, telefoneLimpo } from "./pesquisa.js";
+import type { ItemDaPesquisa } from "./pesquisaModelo.js";
 
 test("etiqueta fora da lista não entra no gráfico da casa", () => {
   // A lista fixa é o que permite dizer "as reclamações de espera dobraram".
@@ -72,4 +73,55 @@ test("cada fuso tem a sua virada", () => {
   const emCuiaba = liberacaoDoPremio("America/Cuiaba", new Date("2026-08-22T18:00:00Z"));
   const emSaoPaulo = liberacaoDoPremio("America/Sao_Paulo", new Date("2026-08-22T18:00:00Z"));
   assert.notEqual(emCuiaba, emSaoPaulo);
+});
+
+/* ---------- a nota vem da pergunta do NPS ---------- */
+
+const perguntaNps = (over: Partial<ItemDaPesquisa> = {}): ItemDaPesquisa => ({
+  id: "nps-1",
+  categoria: "NPS",
+  pergunta: "De 0 a 10, o quanto você indicaria esta casa?",
+  tipo: "nota",
+  obrigatorio: false,
+  nps: true,
+  ...over,
+});
+
+const outraPergunta: ItemDaPesquisa = {
+  id: "p2",
+  categoria: "Comida",
+  pergunta: "Como estava a comida?",
+  tipo: "nota",
+  obrigatorio: false,
+};
+
+test("a resposta da pergunta marcada vira a nota", () => {
+  // O caso real: o cliente respondeu 2 na pergunta da casa e o painel mostrou
+  // 10, porque a mesma pergunta estava sendo feita duas vezes.
+  assert.equal(notaDoNps([perguntaNps(), outraPergunta], [{ item_id: "nps-1", valor: 2 }]), 2);
+});
+
+test("sem pergunta marcada, quem manda é o passo embutido", () => {
+  // Null e não zero: null significa "vale a nota que veio do passo de sempre".
+  assert.equal(notaDoNps([outraPergunta], [{ item_id: "p2", valor: 9 }]), null);
+});
+
+test("pergunta marcada mas não respondida não zera a avaliação", () => {
+  // Gravar zero aqui transformaria "pulou a pergunta" em "detrator", e a casa
+  // receberia aviso de nota baixa de quem não deu nota nenhuma.
+  assert.equal(notaDoNps([perguntaNps()], []), null);
+  assert.equal(notaDoNps([perguntaNps()], [{ item_id: "outra", valor: 3 }]), null);
+  assert.equal(notaDoNps([perguntaNps()], [{ item_id: "nps-1", valor: null }]), null);
+});
+
+test("nota zero é nota, e não ausência de nota", () => {
+  // O erro clássico do `||`: zero é a pior avaliação possível e a mais
+  // importante de registrar.
+  assert.equal(notaDoNps([perguntaNps()], [{ item_id: "nps-1", valor: 0 }]), 0);
+});
+
+test("a lista vazia ou inválida não quebra a gravação", () => {
+  assert.equal(notaDoNps([perguntaNps()], null), null);
+  assert.equal(notaDoNps([perguntaNps()], "nada disso"), null);
+  assert.equal(notaDoNps([], [{ item_id: "nps-1", valor: 2 }]), null);
 });

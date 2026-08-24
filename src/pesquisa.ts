@@ -363,12 +363,22 @@ export async function registrarResposta(params: {
 
   const modelo = await pesquisaAtiva(params.venueId);
 
+  // A NOTA VEM DA PERGUNTA DO NPS, QUANDO A CASA MARCOU UMA.
+  //
+  // Aqui e não só na tela: é este número que vira o NPS da casa, e deixá-lo
+  // por conta do que o navegador mandou significa que uma tela desatualizada
+  // (cache, aba aberta desde ontem) grava a nota do jeito antigo — e ninguém
+  // descobre, porque a resposta entra normalmente.
+  //
+  // Sem pergunta marcada, vale o passo embutido, exatamente como antes.
+  const notaFinal = notaDoNps(modelo?.itens ?? [], params.itens) ?? nota;
+
   const { data, error } = await cliente()
     .from("pesquisa_respostas")
     .insert({
       venue_id: params.venueId,
       pesquisa_id: modelo?.id ?? null,
-      nota,
+      nota: notaFinal,
       elogios: etiquetasValidas(params.elogios),
       criticas: etiquetasValidas(params.criticas),
       // Comentário gigante quase sempre é cola acidental; o que interessa
@@ -423,7 +433,7 @@ export async function registrarResposta(params: {
   await talvezAvisarNotaBaixa({
     config,
     respostaId,
-    nota,
+    nota: notaFinal,
     categorias: notasPorCategoria,
     resposta: params,
   });
@@ -441,6 +451,32 @@ export async function registrarResposta(params: {
   }
 
   return { id: respostaId, premio, agradecimento: config.agradecimento };
+}
+
+/**
+ * A nota da avaliação, quando a casa marcou uma pergunta como sendo a do NPS.
+ *
+ * Devolve null quando não há pergunta marcada ou quando o cliente pulou ela —
+ * e null aqui significa "vale a nota do passo embutido", não "zero".
+ *
+ * Exportada para teste porque é a conta que define o número que o dono vê
+ * primeiro. Ela existe por um caso real: a pesquisa da casa perguntava "o
+ * quanto você indicaria o Ditado Popular" e o passo embutido perguntava "o
+ * quanto você indicaria esta casa". O mesmo cliente respondeu 2 numa e 10 na
+ * outra, e o painel mostrou 10.
+ */
+export function notaDoNps(itens: ItemDaPesquisa[], respondido: unknown): number | null {
+  const marcada = itens.find((i) => i.nps);
+  if (!marcada) return null;
+  if (!Array.isArray(respondido)) return null;
+
+  const resposta = respondido.find(
+    (r) => (r as RespostaDeItem | null)?.item_id === marcada.id,
+  ) as RespostaDeItem | undefined;
+  if (!resposta) return null;
+
+  const valor = notaNormalizada(marcada.tipo, resposta.valor);
+  return valor === null ? null : Math.round(valor);
 }
 
 /**

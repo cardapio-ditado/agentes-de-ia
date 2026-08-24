@@ -396,8 +396,19 @@
         return ordem;
       }
 
+      /** A pergunta que a casa marcou como sendo a do NPS, se houver. */
+      function perguntaDoNps() {
+        return (dados.perguntas ?? []).find((p) => p.nps) ?? null;
+      }
+
       function passos() {
-        const lista = ["nota", ...categoriasDaCasa().map((c) => `cat:${c}`)];
+        // Com a pergunta do NPS na pesquisa da casa, o passo embutido SOME.
+        // Os dois perguntam a mesma coisa — "o quanto você indicaria" — e
+        // perguntar duas vezes produz duas respostas que discordam. Aconteceu:
+        // um cliente respondeu 2 na pergunta da casa e 10 na embutida.
+        const lista = perguntaDoNps()
+          ? [...categoriasDaCasa().map((c) => `cat:${c}`)]
+          : ["nota", ...categoriasDaCasa().map((c) => `cat:${c}`)];
         // As etiquetas só aparecem quando a casa NÃO montou pesquisa própria.
         // Com as duas coisas, o cliente marcaria "Comida" numa tela e daria
         // nota para a comida na seguinte — a mesma pergunta, duas vezes.
@@ -502,7 +513,7 @@
 
       function telaEtiquetas() {
         const bloco = novoPasso();
-        const nota = resposta.nota ?? 10;
+        const nota = notaDaAvaliacao() ?? 10;
         bloco.append(
           titulo(nota >= 9 ? "O que mais te agradou?" : nota >= 7 ? "O que dá pra melhorar?" : "O que deu errado?"),
           ajuda("Toque no que combina. Pode marcar mais de um, ou nenhum."),
@@ -583,6 +594,18 @@
         const botao = botao_(faltando.length === 0 ? "Continuar" : "Responda as marcadas com *", avancar, faltando.length > 0);
         bloco.append(rodape(botao));
         return bloco;
+      }
+
+      /**
+       * A nota da avaliação: da pergunta marcada pela casa, ou do passo
+       * embutido quando não há pergunta marcada.
+       */
+      function notaDaAvaliacao() {
+        const marcada = perguntaDoNps();
+        if (!marcada) return resposta.nota;
+        const dada = resposta.itens.get(marcada.id);
+        const valor = Number(dada?.valor);
+        return Number.isFinite(valor) ? valor : resposta.nota;
       }
 
       function temResposta(pergunta) {
@@ -816,6 +839,10 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               ...resposta,
+              // Quando a casa marcou a pergunta do NPS, é a resposta dela que
+              // vale como nota. O servidor refaz esta conta — aqui é só para a
+              // tela final saber o que dizer.
+              nota: notaDaAvaliacao(),
               elogios: [...resposta.elogios],
               criticas: [...resposta.criticas],
               itens: [...resposta.itens.entries()].map(([item_id, r]) => ({ item_id, ...r })),
@@ -844,7 +871,8 @@
 
         const selo = document.createElement("div");
         selo.className = "selo";
-        selo.textContent = resposta.nota >= 9 ? "🧡" : "✅";
+        const notaFinal = notaDaAvaliacao();
+        selo.textContent = notaFinal >= 9 ? "🧡" : "✅";
 
         const h = document.createElement("h2");
         h.textContent = resultado.premio ? "Prêmio garantido!" : "Obrigado de verdade";
@@ -853,7 +881,7 @@
         p.className = "ajuda";
         p.textContent =
           resultado.agradecimento ||
-          (resposta.nota <= 6
+          (notaFinal <= 6
             ? "Sua opinião foi direto para o dono da casa. Vamos consertar isso."
             : "Sua opinião ajuda a casa a melhorar de verdade.");
 

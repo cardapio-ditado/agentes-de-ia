@@ -412,6 +412,7 @@ function editorDeItens(itens, categorias) {
             el("th", { texto: "Pergunta" }),
             el("th", { texto: "Como responde" }),
             el("th", { texto: "Obrig." }),
+            el("th", { texto: "É o NPS", title: "A pergunta \"o quanto você indicaria esta casa\". Marque uma: é ela que vira a nota da avaliação." }),
             el("th", { classe: "col-acoes", texto: "" }),
           ]),
         ]),
@@ -441,6 +442,14 @@ function editorDeItens(itens, categorias) {
         TIPOS_DE_PERGUNTA.map(([v, r]) => el("option", { value: v, texto: r, selected: v === item.tipo })),
       ),
       obrigatorio: el("input", { type: "checkbox", checked: item.obrigatorio === true }),
+      // Rádio e não caixa: só uma pergunta pode ser a do NPS, e o rádio diz
+      // isso sozinho — marcar outra desmarca a anterior, sem mensagem de erro.
+      nps: el("input", {
+        type: "radio",
+        name: "pergunta-do-nps",
+        checked: item.nps === true,
+        title: "Esta é a pergunta que vira a nota da avaliação",
+      }),
     };
 
     // `datalist` e não `select`: a lista sugere os assuntos comuns e continua
@@ -452,6 +461,7 @@ function editorDeItens(itens, categorias) {
       el("td", {}, [campos.pergunta]),
       el("td", {}, [campos.tipo]),
       el("td", {}, [campos.obrigatorio]),
+      el("td", {}, [campos.nps]),
       el("td", { classe: "col-acoes" }, [
         el("button", {
           classe: "btn-icone",
@@ -476,6 +486,7 @@ function editorDeItens(itens, categorias) {
           pergunta: tr._campos.pergunta.value.trim(),
           tipo: tr._campos.tipo.value,
           obrigatorio: tr._campos.obrigatorio.checked,
+          nps: tr._campos.nps.checked,
         }))
         // Linha em branco é a que o dono adicionou e desistiu de preencher:
         // mandá-la ao servidor só produziria um erro de validação.

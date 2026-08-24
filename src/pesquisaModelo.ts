@@ -38,6 +38,20 @@ export interface ItemDaPesquisa {
   pergunta: string;
   tipo: TipoDePergunta;
   obrigatorio: boolean;
+  /**
+   * Esta é a pergunta do NPS — "o quanto você indicaria esta casa".
+   *
+   * Quando a casa marca uma, o passo embutido de nota some da pesquisa e a
+   * resposta desta pergunta vira a nota da avaliação. Sem a marca, o passo
+   * embutido continua existindo como sempre.
+   *
+   * Existe porque a pesquisa montada pela casa quase sempre inclui a pergunta
+   * de recomendação — a IA propõe, e é a pergunta certa a fazer. O cliente
+   * respondia a MESMA coisa duas vezes, e as duas respostas podiam discordar:
+   * uma casa teve NPS 2 na pergunta dela e 10 na embutida, no mesmo cliente.
+   * O painel mostrava 10.
+   */
+  nps?: boolean;
 }
 
 /** Sugestões de categoria na tela. Texto livre, porque cada casa tem as suas. */
@@ -67,6 +81,15 @@ export class ErroDeModelo extends Error {
  */
 export function notaNormalizada(tipo: TipoDePergunta, valor: unknown): number | null {
   if (tipo === "texto") return null;
+
+  // PERGUNTA PULADA NÃO É NOTA ZERO.
+  //
+  // `Number(null)` e `Number("")` são 0, e zero é uma nota válida de 0 a 10 —
+  // então, sem esta porta, quem pula a pergunta recebe a pior nota possível.
+  // O caminho não é hipotético: na tela do cliente, tocar de novo na nota já
+  // marcada DESMARCA e manda `valor: null`. Quem se arrependeu de um 8 e tirou
+  // o dedo estava mandando um 0 para a média da categoria.
+  if (valor === null || valor === undefined || valor === "") return null;
 
   if (tipo === "nota") {
     const n = Number(valor);
@@ -129,8 +152,21 @@ export function validarItens(bruto: unknown): ItemDaPesquisa[] {
       pergunta,
       tipo: tipo as TipoDePergunta,
       obrigatorio: o.obrigatorio === true,
+      // Só faz sentido em pergunta de 0 a 10: o NPS É a escala de 0 a 10, e
+      // marcar uma pergunta de estrelas como NPS produziria um número que não
+      // é comparável com o de nenhuma outra casa.
+      nps: o.nps === true && tipo === "nota",
     };
   });
+
+  // Duas perguntas de NPS medem a mesma coisa e dão dois números diferentes, e
+  // o painel teria de escolher um deles sem ter como saber qual.
+  if (itens.filter((i) => i.nps).length > 1) {
+    throw new ErroDeModelo(
+      400,
+      "Só uma pergunta pode ser a do NPS — é ela que vira a nota da avaliação.",
+    );
+  }
 
   // Toda pesquisa precisa medir alguma coisa. Uma só de perguntas abertas não
   // produz nota nenhuma, e a tela de "como andam as coisas" ficaria vazia
@@ -405,6 +441,11 @@ const FERRAMENTAS = [
                   "A maioria nota ou estrelas — é delas que sai o acompanhamento. No máximo uma do tipo texto, no fim.",
               },
               obrigatorio: { type: "boolean" },
+              nps: {
+                type: "boolean",
+                description:
+                  "Marque true em EXATAMENTE UMA pergunta: a de recomendação (\"o quanto você indicaria esta casa para um amigo\"), que precisa ser do tipo nota. É ela que vira a nota da avaliação e o NPS da casa. Sem uma marcada, o cliente responde essa pergunta duas vezes.",
+              },
             },
             required: ["categoria", "pergunta", "tipo"],
           },
@@ -424,6 +465,8 @@ Entenda primeiro: que tipo de casa é (bar, restaurante, casa de shows); o que o
 Use "perguntar_ao_dono" no máximo DUAS vezes na conversa inteira. Se o contexto já basta, ou o dono já respondeu, ou ele pediu para gerar logo, use "registrar_perguntas".
 
 Quando o dono pedir para mudar algo numa lista que você já entregou, devolva a lista INTEIRA com a mudança feita — não só a parte alterada.
+
+SEMPRE inclua a pergunta de recomendação ("De 0 a 10, o quanto você indicaria esta casa para um amigo?"), do tipo nota, com nps: true. Exatamente UMA pergunta da lista pode ter nps: true. É ela que vira a nota da avaliação e o NPS da casa; sem ela marcada, o cliente responde a mesma pergunta duas vezes e as duas respostas podem discordar.
 
 Nunca pergunte sobre o que a casa não tem.`;
 

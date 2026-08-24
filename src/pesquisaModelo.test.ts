@@ -220,3 +220,25 @@ test("conversa vazia sai vazia, para a rota dar o recado certo", () => {
   assert.deepEqual(alternarPapeis([]), []);
   assert.deepEqual(alternarPapeis([{ papel: "usuario", texto: "  " }]), []);
 });
+
+/* ---------- pergunta pulada não é nota zero ---------- */
+
+test("pergunta pulada devolve null, não zero", () => {
+  // `Number(null)` é 0, e zero é a pior nota possível. Sem esta distinção,
+  // quem pula a pergunta afunda a média da categoria — e na tela do cliente
+  // tocar de novo na nota marcada DESMARCA e manda null, então quem se
+  // arrependeu de um 8 estava mandando um 0.
+  for (const vazio of [null, undefined, ""]) {
+    assert.equal(notaNormalizada("nota", vazio), null, String(vazio));
+    assert.equal(notaNormalizada("estrelas", vazio), null, String(vazio));
+    assert.equal(notaNormalizada("sim_nao", vazio), null, String(vazio));
+  }
+});
+
+test("zero de verdade continua sendo zero", () => {
+  // O outro lado: quem realmente deu 0 é o cliente mais insatisfeito que
+  // existe, e é a nota que a casa mais precisa ver.
+  assert.equal(notaNormalizada("nota", 0), 0);
+  assert.equal(notaNormalizada("nota", "0"), 0);
+  assert.equal(notaNormalizada("sim_nao", "nao"), 0);
+});
