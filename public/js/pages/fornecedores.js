@@ -1,5 +1,5 @@
 import { get, patch, post } from "../api.js";
-import { avisar, buscador, el, limpar, vazio } from "../ui.js";
+import { avisar, buscador, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Fornecedores.
@@ -59,13 +59,129 @@ export async function fornecedores(raiz, ctx) {
                         texto: `entrega a cada ${f.cicloCompraDias} dia(s)${f.telefone ? ` · ${f.telefone}` : ""}`,
                       }),
                     ]),
-                    el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formulario(f) }),
+                    el("div", { classe: "linha-campos" }, [
+                      el("button", { classe: "btn btn-peq", type: "button", texto: "Kardex", onclick: () => kardex(f) }),
+                      el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formulario(f) }),
+                    ]),
                   ]),
                 ]),
               ),
         ),
       ]),
     );
+
+    /**
+     * O kardex do fornecedor: a conta corrente das compras dele.
+     *
+     * Duas metades, e a segunda é a que rende dinheiro: o extrato das compras
+     * (com o acumulado — quanto já foi parar neste fornecedor) e o histórico
+     * de preço por insumo, do que mais subiu para o que menos. "Vocês subiram
+     * a picanha três vezes este ano" só se fala com a lista na mão.
+     */
+    async function kardex(f) {
+      limpar(conteudo).append(el("p", { classe: "muted", texto: "Montando o kardex…" }));
+      let k;
+      try {
+        k = await get(`/v1/venues/${ctx.venue}/fornecedores/${f.id}/kardex`);
+      } catch (e) {
+        limpar(conteudo).append(vazio("Kardex indisponível", e.message));
+        return;
+      }
+
+      limpar(conteudo).append(
+        el("section", { classe: "pilha" }, [
+          el("div", { classe: "cartao" }, [
+            el("div", { classe: "cabecalho-secao" }, [
+              el("div", {}, [
+                el("h2", { texto: `Kardex — ${k.fornecedor}` }),
+                el("p", { classe: "muted", texto: `${k.compras.length} compra(s) recebida(s)` }),
+              ]),
+              el("div", { classe: "linha-campos" }, [
+                el("strong", { style: "font-size:1.3rem", texto: dinheiro(k.total_geral) }),
+                el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+              ]),
+            ]),
+          ]),
+
+          k.precos.length > 0
+            ? el("div", { classe: "cartao" }, [
+                el("h3", { texto: "Preço por insumo — quem mais subiu primeiro" }),
+                el("div", { classe: "rolagem-x", style: "margin-top:10px" }, [
+                  el("table", { classe: "planilha" }, [
+                    el("thead", {}, [
+                      el("tr", {}, [
+                        el("th", { texto: "Insumo" }),
+                        el("th", { classe: "col-num", texto: "Compras" }),
+                        el("th", { classe: "col-num", texto: "Primeiro preço" }),
+                        el("th", { classe: "col-num", texto: "Último preço" }),
+                        el("th", { classe: "col-num", texto: "Variação" }),
+                      ]),
+                    ]),
+                    el(
+                      "tbody",
+                      {},
+                      k.precos.map((pr) =>
+                        el("tr", {}, [
+                          el("td", {}, [el("strong", { texto: pr.insumo })]),
+                          el("td", { classe: "col-num", texto: String(pr.compras) }),
+                          el("td", { classe: "col-num", texto: dinheiro(pr.primeiro_custo) }),
+                          el("td", { classe: "col-num", texto: dinheiro(pr.ultimo_custo) }),
+                          el("td", { classe: "col-num" }, [
+                            pr.variacao_pct === null
+                              ? el("span", { classe: "muted", texto: "—" })
+                              : etiqueta(
+                                  `${pr.variacao_pct > 0 ? "+" : ""}${pr.variacao_pct}%`,
+                                  pr.variacao_pct > 0 ? "etiqueta-perigo" : "etiqueta-ok",
+                                ),
+                          ]),
+                        ]),
+                      ),
+                    ),
+                  ]),
+                ]),
+              ])
+            : null,
+
+          el("div", { classe: "cartao" }, [
+            el("h3", { texto: "Compras recebidas — a conta corrente" }),
+            k.compras.length === 0
+              ? el("p", { classe: "muted", style: "margin-top:8px", texto: "Nenhuma compra recebida deste fornecedor ainda." })
+              : el("div", { classe: "rolagem-x", style: "margin-top:10px" }, [
+                  el("table", { classe: "planilha" }, [
+                    el("thead", {}, [
+                      el("tr", {}, [
+                        el("th", { texto: "Quando" }),
+                        el("th", { texto: "Itens" }),
+                        el("th", { classe: "col-num", texto: "Valor" }),
+                        el("th", { classe: "col-num", texto: "Acumulado" }),
+                      ]),
+                    ]),
+                    el(
+                      "tbody",
+                      {},
+                      k.compras.map((c) =>
+                        el("tr", {}, [
+                          el("td", { texto: dataHora(c.quando) }),
+                          // Os itens na própria linha, resumidos: abrir compra a
+                          // compra para saber o que veio é o que se faz no
+                          // módulo de Compras; aqui a leitura é corrida.
+                          el("td", { style: "white-space:normal;max-width:44ch" }, [
+                            el("span", {
+                              classe: "muted",
+                              texto: c.itens.map((i) => `${i.quantidade} ${i.unidade} ${i.insumo}`).join(" · "),
+                            }),
+                          ]),
+                          el("td", { classe: "col-num" }, [el("strong", { texto: dinheiro(c.total) })]),
+                          el("td", { classe: "col-num", texto: dinheiro(c.acumulado) }),
+                        ]),
+                      ),
+                    ),
+                  ]),
+                ]),
+          ]),
+        ]),
+      );
+    }
 
     function formulario(existente) {
       limpar(conteudo);

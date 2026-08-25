@@ -1133,6 +1133,142 @@ export async function detalheDaContagem(
   };
 }
 
+/**
+ * A movimentação inteira do estoque, do mais novo para o mais velho.
+ *
+ * É o razão da casa numa tela: tudo que entrou, saiu, quebrou, transferiu e
+ * ajustou, com filtro por insumo e por tipo. O extrato por insumo já existia;
+ * esta é a visão de quem pergunta "o que aconteceu no estoque esta semana?"
+ * sem saber ainda em qual item procurar.
+ */
+export async function movimentosDoEstoque(params: {
+  venueId: string;
+  insumoId?: string | null;
+  tipo?: string | null;
+  limite?: number;
+}): Promise<unknown[]> {
+  let consulta = cliente()
+    .from("estoque_movimentos")
+    .select("id, criado_em, tipo, quantidade, custo_unitario, observacao, insumos(id, nome, unidade), estoque_locais(nome)")
+    .eq("venue_id", params.venueId)
+    .order("criado_em", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(Math.min(params.limite ?? 200, 500));
+
+  if (params.insumoId) consulta = consulta.eq("insumo_id", params.insumoId);
+  if (params.tipo) consulta = consulta.eq("tipo", params.tipo);
+
+  const { data, error } = await consulta;
+  if (error) throw traduzir(error);
+
+  return (data ?? []).map((m: any) => ({
+    id: m.id,
+    criado_em: m.criado_em,
+    tipo: m.tipo,
+    quantidade: Number(m.quantidade),
+    custo_unitario: Number(m.custo_unitario ?? 0),
+    valor: Math.round(Number(m.quantidade) * Number(m.custo_unitario ?? 0) * 100) / 100,
+    observacao: m.observacao ?? null,
+    insumo_id: m.insumos?.id ?? null,
+    insumo: m.insumos?.nome ?? "?",
+    unidade: m.insumos?.unidade ?? "un",
+    local: m.estoque_locais?.nome ?? "?",
+  }));
+}
+
+/**
+ * O kardex do fornecedor: a conta corrente das compras dele.
+ *
+ * Cada compra recebida vira uma linha com valor e acumulado — quanto já se
+ * gastou com este fornecedor, quando, e em quê. E o histórico de preço por
+ * insumo, que é a metade que interessa na renegociação: "vocês subiram a
+ * picanha três vezes este ano" só se fala com a lista na mão.
+ */
+export async function kardexDoFornecedor(
+  venueId: string,
+  fornecedorId: string,
+): Promise<unknown> {
+  const { data: fornecedor, error: erroF } = await cliente()
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("venue_id", venueId)
+    .eq("id", fornecedorId)
+    .maybeSingle();
+  if (erroF) throw traduzir(erroF);
+  if (!fornecedor) throw new ErroDoEstoque(404, "Fornecedor não encontrado.");
+
+  const { data, error } = await cliente()
+    .from("compras")
+    .select(
+      "id, status, created_at, recebida_em, " +
+        "compra_itens(quantidade_recebida, quantidade_pedida, custo_unitario_recebido, custo_unitario_pedido, insumos(nome, unidade))",
+    )
+    .eq("venue_id", venueId)
+    .eq("fornecedor_id", fornecedorId)
+    .eq("status", "recebida")
+    .order("created_at", { ascending: true })
+    .limit(200);
+  if (error) throw traduzir(error);
+
+  let acumulado = 0;
+  const historicoPorInsumo = new Map<string, any[]>();
+
+  const compras = ((data ?? []) as any[]).map((c) => {
+    const itens = (c.compra_itens ?? [])
+      .filter((i: any) => i.insumos)
+      .map((i: any) => {
+        const qtd = Number(i.quantidade_recebida ?? i.quantidade_pedida ?? 0);
+        const custo = Number(i.custo_unitario_recebido ?? i.custo_unitario_pedido ?? 0);
+        const linha = {
+          insumo: i.insumos.nome,
+          unidade: i.insumos.unidade,
+          quantidade: qtd,
+          custo_unitario: custo,
+          valor: Math.round(qtd * custo * 100) / 100,
+        };
+        // O histórico de preço nasce das mesmas linhas — sem consulta extra.
+        const serie = historicoPorInsumo.get(linha.insumo) ?? [];
+        if (custo > 0) serie.push({ data: c.recebida_em ?? c.created_at, custo });
+        historicoPorInsumo.set(linha.insumo, serie);
+        return linha;
+      });
+
+    const total = Math.round(itens.reduce((s: number, i: any) => s + i.valor, 0) * 100) / 100;
+    acumulado = Math.round((acumulado + total) * 100) / 100;
+    return {
+      id: c.id,
+      quando: c.recebida_em ?? c.created_at,
+      itens,
+      total,
+      // A conta corrente: quanto já foi parar neste fornecedor até aqui.
+      acumulado,
+    };
+  });
+
+  const precos = [...historicoPorInsumo.entries()]
+    .map(([insumo, serie]) => {
+      const primeiro = serie[0]?.custo ?? 0;
+      const ultimo = serie[serie.length - 1]?.custo ?? 0;
+      return {
+        insumo,
+        compras: serie.length,
+        primeiro_custo: primeiro,
+        ultimo_custo: ultimo,
+        variacao_pct: primeiro > 0 ? Math.round(((ultimo - primeiro) / primeiro) * 100) : null,
+        serie,
+      };
+    })
+    // Quem mais subiu primeiro: é a lista da renegociação.
+    .sort((a, b) => (b.variacao_pct ?? -999) - (a.variacao_pct ?? -999));
+
+  return {
+    fornecedor: (fornecedor as any).nome,
+    compras: compras.reverse(), // mais novo primeiro na tela; o acumulado já está certo
+    total_geral: acumulado,
+    precos,
+  };
+}
+
 export async function listarContagens(venueId: string): Promise<unknown[]> {
   const { data, error } = await cliente()
     .from("contagens")

@@ -165,6 +165,8 @@ import {
   listarCompras,
   listarContagens,
   detalheDaContagem,
+  movimentosDoEstoque,
+  kardexDoFornecedor,
   listarFichas,
   listarFornecedores,
   listarInsumos,
@@ -1505,6 +1507,29 @@ async function roteasApi(
         }),
       );
       return ok(res, { registrada: true }, 201);
+    }
+
+    // GET /v1/venues/:slug/estoque/movimentos?insumo=&tipo= — o razão da casa
+    if (metodo === "GET" && recurso === "estoque" && p[3] === "movimentos" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDeEstoque(() =>
+          movimentosDoEstoque({
+            venueId: venue.id,
+            insumoId: url.searchParams.get("insumo"),
+            tipo: url.searchParams.get("tipo"),
+          }),
+        ),
+      );
+    }
+
+    // GET /v1/venues/:slug/fornecedores/:id/kardex — a conta corrente dele
+    if (metodo === "GET" && recurso === "fornecedores" && p[4] === "kardex" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => kardexDoFornecedor(venue.id, p[3]!)));
     }
 
     // GET /v1/venues/:slug/contagens — histórico, com a quebra em reais
