@@ -227,8 +227,9 @@ import {
   salvarConfig,
 } from "./pesquisa.js";
 import {
-  buscarEConvidar,
   configZig,
+  convidarEscolhidos,
+  listarVisitantes,
   salvarConfigZig,
   telefonesConvidadosRecentemente,
   testarZig,
@@ -2113,12 +2114,35 @@ async function roteasApi(
       );
     }
 
-    // POST /v1/venues/:slug/pesquisa/zig/buscar — busca o ontem agora,
-    // sem esperar a hora configurada. As travas de repetição continuam valendo.
-    if (metodo === "POST" && recurso === "pesquisa" && p[3] === "zig" && p[4] === "buscar" && p.length === 5) {
+    // GET /v1/venues/:slug/pesquisa/zig/visitantes?dia=AAAA-MM-DD
+    //
+    // A lista de quem esteve na casa no dia, com o gasto de cada um — SEM
+    // mandar nada. Buscar é olhar; convidar é a rota de baixo, de propósito.
+    if (metodo === "GET" && recurso === "pesquisa" && p[3] === "zig" && p[4] === "visitantes" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          listarVisitantes(venue, url.searchParams.get("dia") ?? undefined, venue.timezone),
+        ),
+      );
+    }
+
+    // POST /v1/venues/:slug/pesquisa/zig/convidar — só para os marcados
+    if (metodo === "POST" && recurso === "pesquisa" && p[3] === "zig" && p[4] === "convidar" && p.length === 5) {
       const chave = await exigirChave(req, "reservations:write");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      return ok(res, await comErroDePesquisa(() => buscarEConvidar(venue, { forcar: true })));
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const dia = typeof corpo.dia === "string" ? corpo.dia : "";
+      const clientes = (Array.isArray(corpo.clientes) ? corpo.clientes : [])
+        .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+        .map((c) => ({
+          telefone: typeof c.telefone === "string" ? c.telefone : "",
+          nome: typeof c.nome === "string" ? c.nome : null,
+        }))
+        .filter((c) => c.telefone !== "");
+      return ok(res, await comErroDePesquisa(() => convidarEscolhidos(venue, dia, clientes)), 201);
     }
 
     // ---- Vendas: o relatório do PDV baixa o estoque ----

@@ -60,6 +60,30 @@ describe("mesclarVisitantes", () => {
     const lista = mesclarVisitantes([{ userPhone: "(11) 98765-4321", userName: "A" }], []);
     assert.equal(lista[0]!.telefone, "5511987654321");
   });
+
+  it("soma o gasto da pessoa: cada transação é uma linha, o cliente é a soma", () => {
+    const lista = mesclarVisitantes(
+      [
+        { userPhone: "65987654321", userName: "João", productsValue: 12000 },
+        { userPhone: "+5565987654321", userName: "João", productsValue: 8000 },
+      ],
+      [{ phone: "65 98765-4321", name: "João" }],
+    );
+    assert.equal(lista.length, 1);
+    assert.equal(lista[0]!.gasto_centavos, 20000);
+  });
+
+  it("ordena do maior gasto para o menor — a ordem em que o dono escolhe", () => {
+    const lista = mesclarVisitantes(
+      [
+        { userPhone: "65911111111", userName: "Pouco", productsValue: 3000 },
+        { userPhone: "65922222222", userName: "Muito", productsValue: 45000 },
+      ],
+      [{ phone: "65933333333", name: "Só check-in" }],
+    );
+    assert.deepEqual(lista.map((v) => v.nome), ["Muito", "Pouco", "Só check-in"]);
+    assert.equal(lista[2]!.gasto_centavos, 0);
+  });
 });
 
 describe("diaAnterior / diaSeguinte", () => {

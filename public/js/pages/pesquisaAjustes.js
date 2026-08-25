@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * O que a casa configura na pesquisa, em quatro abas.
@@ -1213,10 +1213,19 @@ async function telaConvites(ctx, recarregar) {
 
   const zigToken = el("input", { type: "password", placeholder: zig?.token_salvo ? "Trocar o token…" : "Cole o token de integração da Zig" });
   const zigLoja = el("input", { value: zig?.loja ?? "", placeholder: "Identificador da loja na Zig" });
-  const zigAtivo = caixaDeMarcar("Mandar o convite sozinho, todo dia", zig?.ativo === true);
+  const zigAtivo = caixaDeMarcar("Modo automático: mandar sozinho todo dia, sem escolher", zig?.ativo === true);
   const zigHora = el("input", { type: "number", min: "0", max: "23", value: String(zig?.hora_envio ?? 11) });
   const zigTeto = el("input", { type: "number", min: "1", max: "500", value: String(zig?.teto_por_dia ?? 80) });
   const zigRepetir = el("input", { type: "number", min: "0", max: "365", value: String(zig?.nao_repetir_dias ?? 30) });
+
+  // Ontem, no relógio de quem está olhando a tela — o dia que se busca.
+  const ontem = new Date(Date.now() - 86_400_000);
+  const zigDia = el("input", {
+    type: "date",
+    classe: "campo",
+    value: `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`,
+  });
+  const areaVisitantes = el("div", {});
 
   const salvarZig = async () => {
     const corpo = {
@@ -1236,7 +1245,7 @@ async function telaConvites(ctx, recarregar) {
     el("p", {
       classe: "muted",
       texto:
-        "Quem comprou ou fez check-in ontem recebe o convite hoje, sem ninguém digitar nada. " +
+        "Busque quem esteve na casa, veja quanto cada um gastou e ESCOLHA quem recebe a pesquisa. " +
         "O token fica só no nosso banco e você apaga quando quiser.",
     }),
     !zig
@@ -1300,31 +1309,161 @@ async function telaConvites(ctx, recarregar) {
                 }
               },
             }),
+            el("label", { classe: "campo-rotulado", style: "margin-left:auto" }, [
+              el("span", { texto: "Dia" }),
+              zigDia,
+            ]),
             el("button", {
               classe: "btn",
               type: "button",
-              texto: "Buscar ontem agora",
+              texto: "Buscar clientes do dia",
               onclick: async (e) => {
-                if (!confirm("Buscar quem esteve na casa ontem e mandar o convite agora?")) return;
                 e.target.disabled = true;
+                limpar(areaVisitantes).append(el("p", { classe: "muted", texto: "Buscando na Zig…" }));
                 try {
-                  const r = await post(`/v1/venues/${ctx.venue}/pesquisa/zig/buscar`, {});
-                  avisar(
-                    r.ja_buscado
-                      ? `O dia ${r.dia} já tinha sido buscado — ninguém recebe duas vezes.`
-                      : `${r.visitantes} pessoa(s) ontem: ${r.convidados} convite(s) na fila, ${r.repetidos} já convidada(s) antes${r.alem_do_teto ? `, ${r.alem_do_teto} além do teto do dia` : ""}.`,
-                    "ok",
+                  const r = await get(
+                    `/v1/venues/${ctx.venue}/pesquisa/zig/visitantes?dia=${zigDia.value}`,
                   );
-                  await recarregar();
+                  desenharVisitantes(r);
                 } catch (err) {
+                  limpar(areaVisitantes);
                   avisar(err.message, "erro");
+                } finally {
                   e.target.disabled = false;
                 }
               },
             }),
           ]),
+          areaVisitantes,
         ]),
   ].filter(Boolean));
+
+  /**
+   * A lista de quem esteve na casa, do maior gasto para o menor, com uma
+   * caixinha por pessoa. Buscar não manda nada — mandar é o botão do rodapé,
+   * que diz em cima de quantos vai agir.
+   */
+  function desenharVisitantes(r) {
+    limpar(areaVisitantes);
+    if (r.visitantes.length === 0) {
+      areaVisitantes.append(el("p", { classe: "muted", texto: `Ninguém com telefone na Zig em ${r.dia}.` }));
+      return;
+    }
+
+    const linhas = r.visitantes.map((v) => {
+      const caixa = el("input", { type: "checkbox", disabled: v.ja_convidado });
+      caixa.addEventListener("change", atualizarBotao);
+      return { v, caixa };
+    });
+
+    const botaoEnviar = el("button", {
+      classe: "btn btn-primario",
+      type: "button",
+      texto: "Enviar convite para os marcados",
+      disabled: true,
+      onclick: async (e) => {
+        const marcados = linhas.filter((l) => l.caixa.checked).map((l) => ({ telefone: l.v.telefone, nome: l.v.nome }));
+        if (marcados.length === 0) return;
+        if (!confirm(`Mandar a pesquisa para ${marcados.length} cliente(s)?`)) return;
+        e.target.disabled = true;
+        try {
+          const resp = await post(`/v1/venues/${ctx.venue}/pesquisa/zig/convidar`, {
+            dia: r.dia,
+            clientes: marcados,
+          });
+          avisar(
+            `${resp.enviados} convite(s) na fila — saem espaçados pelo WhatsApp da casa.` +
+              (resp.repetidos ? ` ${resp.repetidos} já tinha(m) sido convidado(s).` : ""),
+            "ok",
+          );
+          await recarregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          e.target.disabled = false;
+        }
+      },
+    });
+
+    function atualizarBotao() {
+      const n = linhas.filter((l) => l.caixa.checked).length;
+      botaoEnviar.disabled = n === 0;
+      botaoEnviar.textContent = n === 0 ? "Enviar convite para os marcados" : `Enviar convite para ${n} marcado(s)`;
+    }
+
+    const quantosMaiores = el("input", { type: "number", min: "1", max: "500", value: "20", classe: "campo-numero", style: "width:70px" });
+    const marcarMaiores = () => {
+      const alvo = Number(quantosMaiores.value) || 20;
+      let marcados = 0;
+      for (const l of linhas) {
+        if (l.v.ja_convidado) continue;
+        l.caixa.checked = marcados < alvo;
+        if (l.caixa.checked) marcados++;
+      }
+      atualizarBotao();
+    };
+
+    const jaConvidados = linhas.filter((l) => l.v.ja_convidado).length;
+    areaVisitantes.append(
+      el("div", { classe: "pilha", style: "margin-top:8px" }, [
+        el("div", { classe: "cabecalho-secao" }, [
+          el("div", {}, [
+            el("h4", { texto: `${r.visitantes.length} cliente(s) em ${r.dia}` }),
+            el("p", {
+              classe: "muted",
+              texto:
+                "Do maior gasto para o menor. Marque quem recebe a pesquisa" +
+                (jaConvidados ? ` — ${jaConvidados} já convidado(s) há pouco aparecem travados.` : "."),
+            }),
+          ]),
+          el("div", { classe: "linha-campos" }, [
+            el("span", { classe: "muted", texto: "Marcar os" }),
+            quantosMaiores,
+            el("button", { classe: "btn btn-peq", type: "button", texto: "que mais gastaram", onclick: marcarMaiores }),
+            el("button", {
+              classe: "btn btn-peq",
+              type: "button",
+              texto: "Limpar",
+              onclick: () => {
+                for (const l of linhas) l.caixa.checked = false;
+                atualizarBotao();
+              },
+            }),
+          ]),
+        ]),
+        el("div", { classe: "rolagem-x" }, [
+          el("table", { classe: "planilha" }, [
+            el("thead", {}, [
+              el("tr", {}, [
+                el("th", { texto: "" }),
+                el("th", { texto: "Cliente" }),
+                el("th", { texto: "WhatsApp" }),
+                el("th", { classe: "col-num", texto: "Gastou no dia" }),
+                el("th", { texto: "" }),
+              ]),
+            ]),
+            el(
+              "tbody",
+              {},
+              linhas.map(({ v, caixa }) =>
+                el("tr", {}, [
+                  el("td", {}, [caixa]),
+                  el("td", {}, [el("strong", { texto: v.nome || "—" })]),
+                  el("td", { texto: v.telefone }),
+                  el("td", { classe: "col-num" }, [
+                    v.gasto_centavos > 0
+                      ? el("strong", { texto: dinheiro(v.gasto_centavos / 100) })
+                      : el("span", { classe: "muted", texto: "só check-in" }),
+                  ]),
+                  el("td", {}, [v.ja_convidado ? etiqueta("já convidado") : null].filter(Boolean)),
+                ]),
+              ),
+            ),
+          ]),
+        ]),
+        botaoEnviar,
+      ]),
+    );
+  }
 
   /* ---- A planilha: para quem não tem Zig ---- */
 

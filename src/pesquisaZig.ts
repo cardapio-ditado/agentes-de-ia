@@ -133,6 +133,8 @@ async function chamarZig<T>(caminho: string, token: string): Promise<T> {
 interface CompradorDaZig {
   userPhone?: string | null;
   userName?: string | null;
+  /** Valor dos produtos da transação, em centavos. */
+  productsValue?: number | null;
 }
 
 interface CheckinDaZig {
@@ -140,14 +142,18 @@ interface CheckinDaZig {
   name?: string | null;
 }
 
-/** O visitante como a pesquisa o entende: um telefone e, se der, um nome. */
+/** O visitante como a pesquisa o entende: telefone, nome e o que gastou. */
 export interface Visitante {
   telefone: string;
   nome: string | null;
+  /** Soma das compras da pessoa no dia, em centavos. Check-in sem compra = 0. */
+  gasto_centavos: number;
 }
 
 /**
- * Junta compradores e check-ins numa lista só, um por telefone.
+ * Junta compradores e check-ins numa lista só, um por telefone, com o gasto
+ * do dia somado — e ordenada do maior gasto para o menor, porque é nessa
+ * ordem que o dono escolhe quem convida.
  *
  * As duas fontes de propósito: numa mesa de seis, às vezes só um paga — mas
  * os seis fizeram check-in. Telefone sem DDD ou inventado fica de fora aqui,
@@ -158,7 +164,11 @@ export function mesclarVisitantes(
   checkins: CheckinDaZig[],
 ): Visitante[] {
   const porTelefone = new Map<string, Visitante>();
-  const acrescentar = (telefoneBruto: string | null | undefined, nome: string | null | undefined) => {
+  const acrescentar = (
+    telefoneBruto: string | null | undefined,
+    nome: string | null | undefined,
+    gastoCentavos: number,
+  ) => {
     let telefone = telefoneLimpo(telefoneBruto ?? "");
     if (telefone.length < 10 || telefone.length > 15) return;
     // A Zig ora manda com +55, ora sem. Normalizar aqui é o que faz o mesmo
@@ -169,13 +179,15 @@ export function mesclarVisitantes(
     if (existente) {
       // Um nome de verdade vale mais que nenhum — de qualquer uma das fontes.
       if (!existente.nome && nome?.trim()) existente.nome = nome.trim();
+      // Cada transação é uma linha em Compradores; a pessoa é a soma delas.
+      existente.gasto_centavos += gastoCentavos;
       return;
     }
-    porTelefone.set(telefone, { telefone, nome: nome?.trim() || null });
+    porTelefone.set(telefone, { telefone, nome: nome?.trim() || null, gasto_centavos: gastoCentavos });
   };
-  for (const c of compradores) acrescentar(c.userPhone, c.userName);
-  for (const c of checkins) acrescentar(c.phone, c.name);
-  return [...porTelefone.values()];
+  for (const c of compradores) acrescentar(c.userPhone, c.userName, Math.max(0, Number(c.productsValue ?? 0)));
+  for (const c of checkins) acrescentar(c.phone, c.name, 0);
+  return [...porTelefone.values()].sort((a, b) => b.gasto_centavos - a.gasto_centavos);
 }
 
 /** O dia anterior a um AAAA-MM-DD, sem depender do fuso do servidor. */
@@ -363,6 +375,94 @@ export async function buscarEConvidar(
     alem_do_teto: ineditos.length - convidaveis.length,
     ja_buscado: false,
   };
+}
+
+// ============================================================
+// O modo escolhido a dedo: buscar, olhar, marcar, enviar
+// ============================================================
+
+export interface VisitanteParaEscolher extends Visitante {
+  /** Já recebeu convite há menos de N dias — a tela desabilita a linha. */
+  ja_convidado: boolean;
+}
+
+/**
+ * Quem esteve na casa num dia, com o gasto de cada um — SEM mandar nada.
+ *
+ * É a lista que o dono olha antes de escolher: do maior gasto para o menor,
+ * com quem já foi convidado há pouco marcado. Buscar não convida; convidar é
+ * outro botão, apertado de propósito.
+ */
+export async function listarVisitantes(
+  venue: { id: string },
+  diaISO?: string,
+  fuso = "America/Cuiaba",
+): Promise<{ dia: string; visitantes: VisitanteParaEscolher[] }> {
+  const config = await configZig(venue.id);
+  if (!config.token || !config.loja) {
+    throw new ErroDePesquisa(400, "Preencha o token e a loja da Zig antes.");
+  }
+  const dia = diaISO && /^\d{4}-\d{2}-\d{2}$/.test(diaISO)
+    ? diaISO
+    : diaAnterior(hojeNaCasa(fuso));
+
+  const visitantes = await visitantesDoDia({ token: config.token, loja: config.loja }, dia);
+  const recentes = await telefonesConvidadosRecentemente(
+    venue.id,
+    Math.max(1, config.nao_repetir_dias),
+    new Date(),
+  );
+  return {
+    dia,
+    visitantes: visitantes.map((v) => ({ ...v, ja_convidado: recentes.has(v.telefone) })),
+  };
+}
+
+/**
+ * Convida exatamente quem o dono marcou.
+ *
+ * O teto por dia continua valendo — ele existe para proteger o número do
+ * WhatsApp, e escolher a dedo não muda o que a Meta enxerga. As travas de
+ * repetição também: marcar alguém já convidado vira "repetido", não segundo
+ * convite.
+ */
+export async function convidarEscolhidos(
+  venue: { id: string; name: string },
+  dia: string,
+  escolhidos: { telefone: string; nome?: string | null }[],
+): Promise<{ enviados: number; repetidos: number }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+    throw new ErroDePesquisa(400, "Diga de que dia é essa lista (AAAA-MM-DD).");
+  }
+  if (escolhidos.length === 0) {
+    throw new ErroDePesquisa(400, "Marque pelo menos um cliente.");
+  }
+  const config = await configZig(venue.id);
+  if (escolhidos.length > config.teto_por_dia) {
+    throw new ErroDePesquisa(
+      400,
+      `São ${escolhidos.length} marcados, e o teto do dia é ${config.teto_por_dia} — ` +
+        `o teto protege o número do WhatsApp. Marque menos gente ou suba o teto na conexão da Zig.`,
+    );
+  }
+
+  let enviados = 0;
+  let repetidos = 0;
+  for (const e of escolhidos) {
+    try {
+      await enviarConvite(venue, {
+        telefone: e.telefone,
+        nome: e.nome ?? null,
+        origem: "zig",
+        diaVisita: dia,
+      });
+      enviados++;
+    } catch (erro) {
+      if (erro instanceof ErroDePesquisa && erro.status === 409) repetidos++;
+      else console.error(`[pesquisa-zig] convite para ${e.telefone} falhou: ${(erro as Error).message}`);
+    }
+  }
+  return { enviados, repetidos };
 }
 
 // ============================================================
