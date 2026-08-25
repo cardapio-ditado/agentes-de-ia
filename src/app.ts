@@ -164,6 +164,7 @@ import {
   lancarFaturamento,
   listarCompras,
   listarContagens,
+  detalheDaContagem,
   listarFichas,
   listarFornecedores,
   listarInsumos,
@@ -1511,6 +1512,13 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await comErroDeEstoque(() => listarContagens(venue.id)));
+    }
+
+    // GET /v1/venues/:slug/contagens/:id — a contagem aberta, item a item
+    if (metodo === "GET" && recurso === "contagens" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeEstoque(() => detalheDaContagem(venue.id, p[3]!)));
     }
 
     // POST /v1/venues/:slug/contagens — cria, processa e devolve os ajustes

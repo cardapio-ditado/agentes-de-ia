@@ -1067,6 +1067,72 @@ export async function registrarContagem(params: {
   return { ajustes, contados: validos.length };
 }
 
+/**
+ * Uma contagem processada, aberta item a item.
+ *
+ * Existe porque os números da contagem aparecem em dois lugares com contas
+ * diferentes — a divergência do aviso soma falta E sobra; o CMV sente só o
+ * líquido — e sem ver os itens não há como conferir nenhuma das duas. A
+ * contagem é o registro de auditoria do estoque; auditoria que não se abre
+ * não audita.
+ */
+export async function detalheDaContagem(
+  venueId: string,
+  contagemId: string,
+): Promise<unknown> {
+  const { data, error } = await cliente()
+    .from("contagens")
+    .select(
+      "id, status, created_at, processada_em, observacoes, local_id, estoque_locais(nome), " +
+        "contagem_itens(quantidade_contada, saldo_sistema, insumos(id, nome, unidade, custo_medio))",
+    )
+    .eq("venue_id", venueId)
+    .eq("id", contagemId)
+    .maybeSingle();
+  if (error) throw traduzir(error);
+  if (!data) throw new ErroDoEstoque(404, "Contagem não encontrada.");
+
+  const c = data as any;
+  const itens = (c.contagem_itens ?? []).map((i: any) => {
+    const contado = Number(i.quantidade_contada);
+    const sistema = Number(i.saldo_sistema ?? 0);
+    const diferenca = contado - sistema;
+    return {
+      insumo_id: i.insumos?.id ?? null,
+      insumo: i.insumos?.nome ?? "?",
+      unidade: i.insumos?.unidade ?? "un",
+      contado,
+      // O saldo que o SISTEMA tinha na hora do processamento — congelado na
+      // linha de propósito, porque o saldo de agora já é outro (a própria
+      // contagem o mudou) e comparar com ele diria que nada divergiu.
+      sistema,
+      diferenca,
+      valor: Math.round(diferenca * Number(i.insumos?.custo_medio ?? 0) * 100) / 100,
+    };
+  });
+
+  const faltou = itens.filter((i: any) => i.valor < 0).reduce((s: number, i: any) => s - i.valor, 0);
+  const sobrou = itens.filter((i: any) => i.valor > 0).reduce((s: number, i: any) => s + i.valor, 0);
+
+  return {
+    id: c.id,
+    status: c.status,
+    created_at: c.created_at,
+    processada_em: c.processada_em,
+    observacoes: c.observacoes,
+    local_id: c.local_id,
+    local: c.estoque_locais?.nome ?? "?",
+    itens: itens.sort((a: any, b: any) => a.valor - b.valor),
+    // Os três totais, com nome. É a resposta pronta para "por que a contagem
+    // diz 18,40 e o CMV diz 13,80": divergência = faltou + sobrou; o CMV
+    // sente o líquido = faltou − sobrou.
+    faltou_reais: Math.round(faltou * 100) / 100,
+    sobrou_reais: Math.round(sobrou * 100) / 100,
+    liquido_reais: Math.round((faltou - sobrou) * 100) / 100,
+    divergencia_reais: Math.round((faltou + sobrou) * 100) / 100,
+  };
+}
+
 export async function listarContagens(venueId: string): Promise<unknown[]> {
   const { data, error } = await cliente()
     .from("contagens")
