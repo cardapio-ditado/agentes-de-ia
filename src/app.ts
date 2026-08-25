@@ -1449,6 +1449,10 @@ async function roteasApi(
                 corpo.avisar_whatsapp === undefined
                   ? undefined
                   : String(corpo.avisar_whatsapp ?? "").trim() || null,
+              contagem_whatsapp:
+                corpo.contagem_whatsapp === undefined
+                  ? undefined
+                  : String(corpo.contagem_whatsapp ?? "").trim() || null,
               aumento_preco_pct: numeroOuNulo(corpo.aumento_preco_pct) ?? undefined,
               divergencia_reais: numeroOuNulo(corpo.divergencia_reais) ?? undefined,
               avisar_estoque:

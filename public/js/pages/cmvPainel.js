@@ -235,6 +235,10 @@ async function desenharAvisos(ctx, raiz) {
     value: config.avisar_whatsapp ?? "",
     placeholder: "(65) 99999-8888 — vazio desliga tudo",
   });
+  const numeroContagem = el("input", {
+    value: config.contagem_whatsapp ?? "",
+    placeholder: "vazio = o lembrete vai para o número de cima",
+  });
   const pct = el("input", { type: "number", min: "1", max: "100", value: String(config.aumento_preco_pct) });
   const reais = el("input", { type: "number", min: "0", step: "10", value: String(config.divergencia_reais) });
   const estoque = el("input", { type: "checkbox", checked: config.avisar_estoque });
@@ -246,6 +250,7 @@ async function desenharAvisos(ctx, raiz) {
     try {
       await put(`/v1/venues/${ctx.venue}/cmv/avisos`, {
         avisar_whatsapp: numero.value.trim(),
+        contagem_whatsapp: numeroContagem.value.trim(),
         aumento_preco_pct: Number(pct.value),
         divergencia_reais: Number(reais.value),
         avisar_estoque: estoque.checked,
@@ -270,7 +275,14 @@ async function desenharAvisos(ctx, raiz) {
           "Três avisos, direto no WhatsApp: fornecedor que subiu o preço (na hora do recebimento), " +
           "contagem que divergiu do sistema, e insumo que vai faltar (no máximo um aviso por dia).",
       }),
-      el("div", { classe: "campo" }, [el("label", { texto: "WhatsApp que recebe" }), numero]),
+      el("div", { classe: "campo" }, [
+        el("label", { texto: "WhatsApp de quem gerencia o estoque (preço, divergência, vai faltar)" }),
+        numero,
+      ]),
+      el("div", { classe: "campo" }, [
+        el("label", { texto: "WhatsApp de quem faz a contagem (recebe o lembrete de contar)" }),
+        numeroContagem,
+      ]),
       el("div", { classe: "linha-campos" }, [
         el("div", { classe: "campo", style: "flex:1" }, [
           el("label", { texto: "Avisar aumento a partir de (%)" }),

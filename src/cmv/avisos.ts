@@ -28,7 +28,18 @@ import { db } from "../supabase.js";
 const cliente = () => db() as any;
 
 export interface ConfigDoCmv {
+  /** Quem gerencia o estoque: recebe preço, divergência e "vai faltar". */
   avisar_whatsapp: string | null;
+  /**
+   * Quem FAZ a contagem: recebe o lembrete de contar. Vazio = o lembrete vai
+   * para o número de cima.
+   *
+   * São funções diferentes na mesma casa: o lembrete é tarefa de quem conta;
+   * a divergência é assunto de quem gerencia — vai de propósito para o
+   * gestor, e não para o contador, porque contagem que audita a si mesma não
+   * audita nada.
+   */
+  contagem_whatsapp: string | null;
   aumento_preco_pct: number;
   divergencia_reais: number;
   avisar_estoque: boolean;
@@ -38,6 +49,7 @@ export interface ConfigDoCmv {
 
 export const CONFIG_CMV_PADRAO: ConfigDoCmv = {
   avisar_whatsapp: null,
+  contagem_whatsapp: null,
   aumento_preco_pct: 10,
   divergencia_reais: 100,
   avisar_estoque: true,
@@ -62,6 +74,7 @@ export async function configDoCmv(venueId: string): Promise<ConfigDoCmv> {
   const linha = data as Record<string, unknown>;
   return {
     avisar_whatsapp: (linha.avisar_whatsapp as string) || null,
+    contagem_whatsapp: (linha.contagem_whatsapp as string) || null,
     aumento_preco_pct: Number(linha.aumento_preco_pct) || CONFIG_CMV_PADRAO.aumento_preco_pct,
     divergencia_reais:
       linha.divergencia_reais == null
@@ -85,6 +98,7 @@ export async function salvarConfigDoCmv(
   const nova = { ...atual, ...informados };
 
   nova.avisar_whatsapp = nova.avisar_whatsapp?.trim() || null;
+  nova.contagem_whatsapp = nova.contagem_whatsapp?.trim() || null;
   nova.aumento_preco_pct = Number(nova.aumento_preco_pct);
   if (!(nova.aumento_preco_pct >= 1 && nova.aumento_preco_pct <= 100)) {
     throw new Error("O aviso de aumento vai de 1% a 100%.");
@@ -527,7 +541,8 @@ async function lembrarContagemAtrasada(
   agora: Date,
 ): Promise<void> {
   const config = await configDoCmv(venue.id);
-  if (!config.avisar_whatsapp || config.lembrete_contagem_dias <= 0) return;
+  const destino = config.contagem_whatsapp || config.avisar_whatsapp;
+  if (!destino || config.lembrete_contagem_dias <= 0) return;
 
   const { data: ultima } = await cliente()
     .from("contagens")
@@ -576,7 +591,7 @@ async function lembrarContagemAtrasada(
 
   await enfileirarAvisoCmv({
     venueId: venue.id,
-    destino: config.avisar_whatsapp,
+    destino,
     template: "cmv_lembrete_contagem",
     origemId: origemDoDia(venue.id, `${hojeISO}:lembrete`),
     corpo,
