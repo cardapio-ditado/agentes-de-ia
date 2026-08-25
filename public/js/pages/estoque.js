@@ -45,41 +45,95 @@ export async function estoque(raiz, ctx) {
     }
     limpar(conteudo);
 
-    const valorTotal = posicao.reduce((t, p) => t + Number(p.valor), 0);
-    const lista = el("div", { classe: "lista" });
+    const totalRotulo = el("strong", {
+      style: "font-size:1.3rem",
+      texto: dinheiro(posicao.reduce((t, p) => t + Number(p.valor), 0)),
+    });
+    const lista = el("div", {});
 
+    // O filtro por estoque vem dos próprios dados: cada linha da posição já
+    // diz de que local é. Um seletor a mais, zero ida ao servidor.
+    const nomesDeLocais = [...new Set(posicao.map((p) => p.local_nome))].sort();
+    const seletorLocal = el(
+      "select",
+      { classe: "select" },
+      [
+        el("option", { value: "", texto: "Todos os estoques" }),
+        ...nomesDeLocais.map((nome) => el("option", { value: nome, texto: nome })),
+      ],
+    );
+    seletorLocal.addEventListener("change", () => desenharLista(busca.value));
+
+    /**
+     * Tabela, e não cartão por item.
+     *
+     * A posição de uma casa de verdade tem dezenas ou centenas de insumos, e
+     * cartão gasta uma tela inteira para mostrar oito. Tabela mostra trinta
+     * sem rolar — e posição de estoque se LÊ em varredura, comparando linhas,
+     * que é exatamente o que coluna alinhada faz e cartão desfaz.
+     */
     const desenharLista = (filtro = "") => {
       const norm = (t) => (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
       const alvo = norm(filtro.trim());
-      const filtradas = alvo ? posicao.filter((p) => norm(p.insumo).includes(alvo)) : posicao;
+      const local = seletorLocal.value;
+      const filtradas = posicao.filter(
+        (p) => (!local || p.local_nome === local) && (!alvo || norm(p.insumo).includes(alvo)),
+      );
+
+      // O total acompanha o filtro: com "Câmara fria" escolhida, o número do
+      // topo é o valor parado NA câmara — que é a pergunta de quem filtrou.
+      const valorFiltrado = filtradas.reduce((t, p) => t + Number(p.valor), 0);
+      totalRotulo.textContent = dinheiro(valorFiltrado);
+
       limpar(lista);
       if (filtradas.length === 0) {
         lista.append(vazio("Nada em estoque", "Receba uma compra e a posição aparece aqui."));
+        return;
       }
-      for (const p of filtradas) {
-        lista.append(
-          el("article", { classe: "cartao" }, [
-            el("div", { classe: "cabecalho-secao" }, [
-              el("div", {}, [
-                el("strong", { texto: p.insumo }),
-                el("p", { classe: "muted", texto: `${p.quantidade} ${p.unidade} em ${p.local_nome}` }),
+
+      const mostrarLocal = !local;
+      lista.append(
+        el("div", { classe: "cartao" }, [
+          el("div", { classe: "rolagem-x" }, [
+            el("table", { classe: "planilha" }, [
+              el("thead", {}, [
+                el("tr", {}, [
+                  el("th", { texto: "Insumo" }),
+                  mostrarLocal ? el("th", { texto: "Estoque" }) : null,
+                  el("th", { classe: "col-num", texto: "Quantidade" }),
+                  el("th", { classe: "col-num", texto: "Custo médio" }),
+                  el("th", { classe: "col-num", texto: "Valor" }),
+                  el("th", { classe: "col-acoes", texto: "" }),
+                ].filter(Boolean)),
               ]),
-              el("div", {}, [
-                el("strong", { texto: dinheiro(Number(p.valor)) }),
-                el("button", {
-                  classe: "btn btn-peq",
-                  type: "button",
-                  texto: "Extrato",
-                  onclick: () => extrato(p),
-                }),
-              ]),
+              el(
+                "tbody",
+                {},
+                filtradas.map((p) =>
+                  el("tr", {}, [
+                    el("td", {}, [el("strong", { texto: p.insumo })]),
+                    mostrarLocal ? el("td", { texto: p.local_nome }) : null,
+                    el("td", { classe: "col-num", texto: `${p.quantidade} ${p.unidade}` }),
+                    el("td", { classe: "col-num", texto: dinheiro(Number(p.custo_medio)) }),
+                    el("td", { classe: "col-num" }, [el("strong", { texto: dinheiro(Number(p.valor)) })]),
+                    el("td", { classe: "col-acoes" }, [
+                      el("button", {
+                        classe: "btn btn-peq",
+                        type: "button",
+                        texto: "Extrato",
+                        onclick: () => extrato(p),
+                      }),
+                    ]),
+                  ].filter(Boolean)),
+                ),
+              ),
             ]),
           ]),
-        );
-      }
+        ]),
+      );
     };
 
-    const busca = el("input", { classe: "campo", placeholder: "🔍  Buscar no estoque…" });
+    const busca = el("input", { classe: "campo", placeholder: "🔍  Buscar no estoque…", style: "flex:1" });
     busca.addEventListener("input", () => desenharLista(busca.value));
 
     conteudo.append(
@@ -90,7 +144,7 @@ export async function estoque(raiz, ctx) {
               el("h2", { texto: "Posição do estoque" }),
               el("p", { classe: "muted", texto: "Do mais valioso para o menos — é onde o dinheiro está parado." }),
             ]),
-            el("strong", { style: "font-size:1.3rem", texto: dinheiro(valorTotal) }),
+            totalRotulo,
           ]),
         ]),
         el("div", { classe: "linha-campos" }, [
@@ -98,7 +152,13 @@ export async function estoque(raiz, ctx) {
           el("button", { classe: "btn", type: "button", texto: "🗑 Registrar perda", onclick: () => movimentar("perda") }),
           el("button", { classe: "btn", type: "button", texto: "🏬 Locais de estoque", onclick: gerenciarLocais }),
         ]),
-        busca,
+        el("div", { classe: "linha-campos" }, [
+          el("label", { classe: "campo-rotulado", style: "min-width:200px" }, [
+            el("span", { texto: "Estoque" }),
+            seletorLocal,
+          ]),
+          busca,
+        ]),
         lista,
       ]),
     );
