@@ -210,6 +210,7 @@ import { hojeNaCasa } from "./fuso.js";
 import {
   ErroDePesquisa,
   ETIQUETAS,
+  apagarConvite,
   atualizarAtendente,
   conviteDoToken,
   configDaPesquisa,
@@ -2003,6 +2004,21 @@ async function roteasApi(
         const corpo = (await lerJson(req)) as Record<string, unknown>;
         return ok(res, await comErroDePesquisa(() => convidarParaPesquisa(venue, corpo)), 201);
       }
+    }
+
+    // DELETE /v1/venues/:slug/pesquisa/convites/:id — apaga um disparo.
+    // O link daquele convite morre e o número sai da trava de repetição;
+    // a resposta, se existir, fica.
+    if (
+      metodo === "DELETE" &&
+      recurso === "pesquisa" &&
+      p[3] === "convites" &&
+      p.length === 5
+    ) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      await comErroDePesquisa(() => apagarConvite(venue.id, p[4]!));
+      return ok(res, { apagado: true });
     }
 
     // POST /v1/venues/:slug/pesquisa/convites/planilha?confirmar=1

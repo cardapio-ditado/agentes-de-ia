@@ -878,6 +878,25 @@ export async function listarConvites(venueId: string, limite = 100): Promise<Con
   return (data ?? []) as Convite[];
 }
 
+/**
+ * Apaga um convite.
+ *
+ * Duas consequências, e as duas são o motivo de alguém querer apagar:
+ * o link daquele convite morre na hora, e o número fica livre da trava de
+ * "não repetir" — pode ser convidado de novo hoje. Se o convite já tinha
+ * resposta, a resposta FICA (o banco só desamarra o vínculo): apagar o
+ * convite é limpeza de disparo, não apagamento de opinião.
+ */
+export async function apagarConvite(venueId: string, id: string): Promise<void> {
+  const { error, count } = await cliente()
+    .from("pesquisa_convites")
+    .delete({ count: "exact" })
+    .eq("venue_id", venueId)
+    .eq("id", id);
+  if (error) throw new ErroDePesquisa(500, `Falha ao apagar o convite: ${error.message}`);
+  if (!count) throw new ErroDePesquisa(404, "Convite não encontrado — talvez já tenha sido apagado.");
+}
+
 export async function marcarConviteEnviado(id: string): Promise<void> {
   await cliente()
     .from("pesquisa_convites")

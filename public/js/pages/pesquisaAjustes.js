@@ -1555,6 +1555,7 @@ async function telaConvites(ctx, recarregar) {
                 el("th", { texto: "WhatsApp" }),
                 el("th", { texto: "Enviado" }),
                 el("th", { texto: "Situação" }),
+                el("th", { classe: "col-acoes", texto: "" }),
               ]),
             ]),
             el(
@@ -1569,6 +1570,35 @@ async function telaConvites(ctx, recarregar) {
                     c.respondido_em
                       ? etiqueta(`respondeu ${dataHora(c.respondido_em)}`, "etiqueta-ok")
                       : etiqueta("aguardando"),
+                  ]),
+                  el("td", { classe: "col-acoes" }, [
+                    el("button", {
+                      classe: "btn-icone",
+                      type: "button",
+                      texto: "✕",
+                      title: "Excluir este convite — o link dele morre e o número pode ser convidado de novo",
+                      onclick: async (e) => {
+                        const quem = c.nome || c.telefone;
+                        if (
+                          !confirm(
+                            `Excluir o convite de ${quem}?\n\n` +
+                              `O link daquele convite deixa de funcionar e o número sai da trava ` +
+                              `de "não repetir" — pode ser convidado de novo hoje.` +
+                              (c.respondido_em ? `\n\nA resposta que ele deu FICA no painel.` : ""),
+                          )
+                        )
+                          return;
+                        e.target.disabled = true;
+                        try {
+                          await del(`/v1/venues/${ctx.venue}/pesquisa/convites/${c.id}`);
+                          avisar(`Convite de ${quem} excluído.`, "ok");
+                          await recarregar();
+                        } catch (err) {
+                          avisar(err.message, "erro");
+                          e.target.disabled = false;
+                        }
+                      },
+                    }),
                   ]),
                 ]),
               ),
