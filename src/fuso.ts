@@ -81,6 +81,19 @@ export function hojeNaCasa(fuso: string, agora = new Date()): string {
 }
 
 /**
+ * Que horas são no relógio da casa (0 a 23).
+ *
+ * É o que decide "já deu a hora de mandar o convite da pesquisa?" — pergunta
+ * que só faz sentido no fuso do bar, não no do servidor.
+ */
+export function horaNaCasa(fuso: string, agora = new Date()): number {
+  return Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: fuso, hour: "numeric", hourCycle: "h23" })
+      .format(agora),
+  );
+}
+
+/**
  * O fim de um evento que pode virar a noite.
  *
  * "20h às 00h" e "23h às 1h" são a vida de um bar: a hora final MENOR que a

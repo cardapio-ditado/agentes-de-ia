@@ -672,9 +672,18 @@ async function processarFila(): Promise<void> {
   processandoFila = true;
   try {
     const pendentes = await listPendingNotifications();
+    let enviadas = 0;
     for (const notificacao of pendentes) {
       if (notificacao.channel !== "whatsapp") continue;
+      // Pausa entre mensagens quando a fila tem volume (convites da pesquisa
+      // em lote): rajada de dezenas de mensagens idênticas é o padrão que o
+      // WhatsApp pune com banimento do número. O intervalo varia de propósito
+      // — ritmo cravado também é assinatura de robô.
+      if (enviadas > 0) {
+        await new Promise((r) => setTimeout(r, 2_000 + Math.random() * 3_000));
+      }
       const resultado = await tentarEnviar(notificacao);
+      enviadas++;
       if (resultado.status === "sent") {
         console.log(`[whatsapp] notificação ${notificacao.id} entregue pela fila.`);
       }

@@ -772,6 +772,10 @@ export async function criarConvite(params: {
   venueId: string;
   telefone: string;
   nome?: string | null;
+  /** De onde o convite veio: zig, planilha… Ausente = digitado no painel. */
+  origem?: "zig" | "planilha";
+  /** O dia da visita que motivou o convite (origem zig) — é a chave da trava de duplicidade. */
+  diaVisita?: string;
 }): Promise<Convite> {
   const telefone = telefoneLimpo(params.telefone);
   // 10 dígitos = fixo com DDD; abaixo disso não é telefone brasileiro nenhum,
@@ -780,18 +784,87 @@ export async function criarConvite(params: {
     throw new ErroDePesquisa(400, `"${params.telefone}" não parece um telefone com DDD.`);
   }
 
+  // origem/dia_visita só entram quando informados: o caminho do painel segue
+  // funcionando num banco que ainda não rodou a migração dessas colunas.
+  const linha: Record<string, unknown> = {
+    venue_id: params.venueId,
+    telefone,
+    nome: params.nome?.trim() || null,
+    token: randomBytes(18).toString("base64url"),
+  };
+  if (params.origem) {
+    linha.origem = params.origem;
+    linha.dia_visita = params.diaVisita ?? null;
+  }
+
   const { data, error } = await cliente()
     .from("pesquisa_convites")
-    .insert({
-      venue_id: params.venueId,
-      telefone,
-      nome: params.nome?.trim() || null,
-      token: randomBytes(18).toString("base64url"),
-    } as never)
+    .insert(linha as never)
     .select("*")
     .single();
-  if (error) throw new ErroDePesquisa(500, `Falha ao criar o convite: ${error.message}`);
+  if (error) {
+    // O índice único do zig barrando a repetição não é falha — é a trava
+    // fazendo o trabalho dela. Quem chama decide se conta como "pulado".
+    if (error.code === "23505") {
+      throw new ErroDePesquisa(409, "Esta pessoa já foi convidada por esta visita.");
+    }
+    throw new ErroDePesquisa(500, `Falha ao criar o convite: ${error.message}`);
+  }
   return data as Convite;
+}
+
+/**
+ * Cria o convite e enfileira o link no WhatsApp da casa.
+ *
+ * Enfileira em vez de enviar: quem entrega é o conector, que pode estar fora
+ * do ar neste segundo. Gravar o convite e deixar a fila cuidar do envio é o
+ * que faz a mensagem sair sozinha quando o WhatsApp voltar.
+ *
+ * É o MESMO caminho para o convite digitado no painel, o buscado na Zig e o
+ * importado de planilha — três portas, um corredor.
+ */
+export async function enviarConvite(
+  venue: { id: string; name: string },
+  params: {
+    telefone: string;
+    nome?: string | null;
+    mensagem?: string | null;
+    origem?: "zig" | "planilha";
+    diaVisita?: string;
+  },
+): Promise<{ convite: Convite; enfileirado: boolean }> {
+  const convite = await criarConvite({
+    venueId: venue.id,
+    telefone: params.telefone,
+    nome: params.nome,
+    origem: params.origem,
+    diaVisita: params.diaVisita,
+  });
+
+  const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
+  const link = `${base}/pesquisa?t=${convite.token}`;
+  const primeiroNome = convite.nome ? `${convite.nome.split(/\s+/)[0]}, ` : "";
+  const mensagemPadrao = [
+    `${primeiroNome}obrigado pela visita ao ${venue.name}! 🙌`,
+    ``,
+    `Conta pra gente como foi? São 30 segundos, e quem responde concorre a um mimo por nossa conta:`,
+    link,
+  ].join("\n");
+
+  const { error } = await cliente().from("notifications").insert({
+    venue_id: venue.id,
+    channel: "whatsapp",
+    destination: convite.telefone,
+    template: "pesquisa_convite",
+    body: params.mensagem ? `${params.mensagem}\n\n${link}` : mensagemPadrao,
+  } as never);
+
+  if (error) {
+    console.error(`[pesquisa] convite ${convite.id} sem envio: ${error.message}`);
+    return { convite, enfileirado: false };
+  }
+  await marcarConviteEnviado(convite.id);
+  return { convite, enfileirado: true };
 }
 
 export async function listarConvites(venueId: string, limite = 100): Promise<Convite[]> {

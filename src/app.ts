@@ -130,7 +130,6 @@ import {
   listUpcomingApproved,
   listVenueInfo,
   listVenuesInOrg,
-  mapsUrl,
   renewVenueEventSeries,
   updateReservation,
   updateVenue,
@@ -215,12 +214,11 @@ import {
   conviteDoToken,
   configDaPesquisa,
   criarAtendente,
-  criarConvite,
+  enviarConvite,
   listarAtendentes,
   listarConvites,
   listarPremios,
   listarRespostas,
-  marcarConviteEnviado,
   painelDaPesquisa,
   registrarResposta,
   respostaCompleta,
@@ -228,6 +226,14 @@ import {
   resgatarPremio,
   salvarConfig,
 } from "./pesquisa.js";
+import {
+  buscarEConvidar,
+  configZig,
+  salvarConfigZig,
+  telefonesConvidadosRecentemente,
+  testarZig,
+} from "./pesquisaZig.js";
+import { lerPlanilhaDeClientes } from "./pesquisaPlanilha.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
 import type { Venue } from "./venues.js";
 import {
@@ -620,49 +626,18 @@ async function qrcodeDataUrl(texto: string): Promise<string> {
 }
 
 /**
- * Cria o convite e enfileira o link no WhatsApp da casa.
- *
- * Enfileira em vez de enviar: quem entrega é o conector, que pode estar fora
- * do ar neste segundo. Gravar o convite e deixar a fila cuidar do envio é o
- * que faz a mensagem sair sozinha quando o WhatsApp voltar, em vez de a tela
- * dizer "falhou" e o cliente nunca receber nada.
+ * O convite digitado no painel. A criação, o link e a fila moram em
+ * `enviarConvite` (pesquisa.ts) — o mesmo corredor da Zig e da planilha.
  */
 async function convidarParaPesquisa(
   venue: { id: string; name: string; slug: string },
   corpo: Record<string, unknown>,
 ): Promise<{ convite: unknown; enfileirado: boolean }> {
-  const convite = await criarConvite({
-    venueId: venue.id,
+  return await enviarConvite(venue, {
     telefone: texto(corpo, "telefone"),
     nome: textoOpcional(corpo, "nome") ?? null,
+    mensagem: textoOpcional(corpo, "mensagem") ?? null,
   });
-
-  const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
-  const link = `${base}/pesquisa?t=${convite.token}`;
-  const primeiroNome = convite.nome ? `${convite.nome.split(/\s+/)[0]}, ` : "";
-  const mensagemPadrao = [
-    `${primeiroNome}obrigado pela visita ao ${venue.name}! 🙌`,
-    ``,
-    `Conta pra gente como foi? São 30 segundos, e quem responde concorre a um mimo por nossa conta:`,
-    link,
-  ].join("\n");
-
-  const { error } = await db().from("notifications").insert({
-    venue_id: venue.id,
-    channel: "whatsapp",
-    destination: convite.telefone,
-    template: "pesquisa_convite",
-    body: textoOpcional(corpo, "mensagem")
-      ? `${textoOpcional(corpo, "mensagem")}\n\n${link}`
-      : mensagemPadrao,
-  } as never);
-
-  if (error) {
-    console.error(`[pesquisa] convite ${convite.id} sem envio: ${error.message}`);
-    return { convite, enfileirado: false };
-  }
-  await marcarConviteEnviado(convite.id);
-  return { convite, enfileirado: true };
 }
 
 /** E o mesmo para os erros de montagem da pesquisa. */
@@ -794,6 +769,42 @@ function texto(corpo: Record<string, unknown>, campo: string): string {
     throw erro(400, "invalid_request", `O campo "${campo}" é obrigatório.`);
   }
   return valor.trim();
+}
+
+/** Número inteiro dentro da faixa, ou undefined para "não mexe". */
+function inteiroOpcional(valor: unknown, minimo: number, maximo: number): number | undefined {
+  if (valor === undefined || valor === null || valor === "") return undefined;
+  const n = Math.trunc(Number(valor));
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(maximo, Math.max(minimo, n));
+}
+
+/**
+ * A conexão com a Zig como o painel a vê: o token NUNCA volta inteiro.
+ *
+ * O que volta é "tem token salvo" e o finalzinho dele — o suficiente para a
+ * pessoa reconhecer qual é e apertar o X para trocar, sem o token trafegar
+ * de volta a cada abertura da tela.
+ */
+function zigParaOPainel(config: {
+  token: string | null;
+  loja: string | null;
+  ativo: boolean;
+  hora_envio: number;
+  teto_por_dia: number;
+  nao_repetir_dias: number;
+  ultimo_dia: string | null;
+}): Record<string, unknown> {
+  return {
+    loja: config.loja,
+    ativo: config.ativo,
+    hora_envio: config.hora_envio,
+    teto_por_dia: config.teto_por_dia,
+    nao_repetir_dias: config.nao_repetir_dias,
+    ultimo_dia: config.ultimo_dia,
+    token_salvo: Boolean(config.token),
+    token_final: config.token ? config.token.slice(-4) : null,
+  };
 }
 
 function textoOpcional(corpo: Record<string, unknown>, campo: string): string | undefined {
@@ -1991,6 +2002,123 @@ async function roteasApi(
         const corpo = (await lerJson(req)) as Record<string, unknown>;
         return ok(res, await comErroDePesquisa(() => convidarParaPesquisa(venue, corpo)), 201);
       }
+    }
+
+    // POST /v1/venues/:slug/pesquisa/convites/planilha?confirmar=1
+    //
+    // O arquivo (.xlsx ou .csv) vai cru no corpo. Sem `confirmar` é só a
+    // prévia: quantos telefones valem, quais linhas foram recusadas e quantos
+    // já foram convidados há pouco — ninguém dispara cem mensagens sem antes
+    // ver esse resumo. Com `confirmar=1`, os convites saem de verdade.
+    if (
+      metodo === "POST" &&
+      recurso === "pesquisa" &&
+      p[3] === "convites" &&
+      p[4] === "planilha" &&
+      p.length === 5
+    ) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const arquivo = await lerBinario(req, LIMITE_ARQUIVO_BYTES);
+      if (arquivo.length === 0) throw erro(400, "invalid_request", "O arquivo chegou vazio.");
+
+      return ok(
+        res,
+        await comErroDePesquisa(async () => {
+          const lida = await lerPlanilhaDeClientes(arquivo);
+
+          // A trava do "não repetir" vale também para a planilha — o prazo é
+          // o mesmo configurado para a Zig (30 dias por padrão, mesmo sem Zig).
+          let naoRepetirDias = 30;
+          try {
+            naoRepetirDias = (await configZig(venue.id)).nao_repetir_dias;
+          } catch {
+            /* tabela da Zig ainda sem migração — vale o padrão */
+          }
+          const recentes = await telefonesConvidadosRecentemente(
+            venue.id,
+            naoRepetirDias,
+            new Date(),
+          );
+          const ineditos = lida.convidados.filter((c) => !recentes.has(c.telefone));
+          const repetidos = lida.convidados.length - ineditos.length;
+
+          if (url.searchParams.get("confirmar") !== "1") {
+            return {
+              previa: true,
+              validos: ineditos.length,
+              repetidos,
+              recusadas: lida.recusadas.slice(0, 30),
+              amostra: ineditos.slice(0, 8),
+            };
+          }
+
+          let enviados = 0;
+          for (const c of ineditos) {
+            try {
+              await enviarConvite(venue, { telefone: c.telefone, nome: c.nome, origem: "planilha" });
+              enviados++;
+            } catch (e) {
+              console.error(`[pesquisa] planilha: convite para ${c.telefone} falhou: ${(e as Error).message}`);
+            }
+          }
+          return { previa: false, enviados, repetidos, recusadas: lida.recusadas.slice(0, 30) };
+        }),
+        201,
+      );
+    }
+
+    // GET | PUT /v1/venues/:slug/pesquisa/zig — a conexão com a Zig
+    if (recurso === "pesquisa" && p[3] === "zig" && p.length === 4) {
+      const chave = await exigirChave(req, metodo === "GET" ? "reservations:read" : "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      if (metodo === "GET") {
+        return ok(res, zigParaOPainel(await comErroDePesquisa(() => configZig(venue.id))));
+      }
+      if (metodo === "PUT") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        const config = await comErroDePesquisa(() =>
+          salvarConfigZig(venue.id, {
+            // undefined = não mexe; "" = apaga. É como o X das telas funciona.
+            token: typeof corpo.token === "string" ? corpo.token.trim() : undefined,
+            loja: typeof corpo.loja === "string" ? corpo.loja.trim() : undefined,
+            ativo: typeof corpo.ativo === "boolean" ? corpo.ativo : undefined,
+            hora_envio: inteiroOpcional(corpo.hora_envio, 0, 23),
+            teto_por_dia: inteiroOpcional(corpo.teto_por_dia, 1, 500),
+            nao_repetir_dias: inteiroOpcional(corpo.nao_repetir_dias, 0, 365),
+          }),
+        );
+        return ok(res, zigParaOPainel(config));
+      }
+    }
+
+    // POST /v1/venues/:slug/pesquisa/zig/testar — token e loja valem?
+    if (metodo === "POST" && recurso === "pesquisa" && p[3] === "zig" && p[4] === "testar" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req).catch(() => ({}))) as Record<string, unknown>;
+      return ok(
+        res,
+        await comErroDePesquisa(async () => {
+          // Testa o que está na tela, caindo no que está salvo: dá para
+          // conferir o token antes de salvar E conferir o que já foi salvo.
+          const salvo = await configZig(venue.id);
+          const token = (typeof corpo.token === "string" && corpo.token.trim()) || salvo.token;
+          const loja = (typeof corpo.loja === "string" && corpo.loja.trim()) || salvo.loja;
+          if (!token || !loja) {
+            throw new ErroDePesquisa(400, "Preencha o token e a loja antes de testar.");
+          }
+          return await testarZig({ token, loja });
+        }),
+      );
+    }
+
+    // POST /v1/venues/:slug/pesquisa/zig/buscar — busca o ontem agora,
+    // sem esperar a hora configurada. As travas de repetição continuam valendo.
+    if (metodo === "POST" && recurso === "pesquisa" && p[3] === "zig" && p[4] === "buscar" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDePesquisa(() => buscarEConvidar(venue, { forcar: true })));
     }
 
     // ---- Vendas: o relatório do PDV baixa o estoque ----

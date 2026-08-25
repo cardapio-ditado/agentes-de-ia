@@ -1202,6 +1202,195 @@ async function telaConvites(ctx, recarregar) {
     el("button", { classe: "btn btn-primario", type: "submit", texto: "Enviar convite", style: "margin-top:12px" }),
   ]);
 
+  /* ---- A Zig: quem esteve ontem recebe o convite hoje ---- */
+
+  let zig = null;
+  try {
+    zig = await get(`/v1/venues/${ctx.venue}/pesquisa/zig`);
+  } catch {
+    /* migração ainda não rodada — o cartão explica */
+  }
+
+  const zigToken = el("input", { type: "password", placeholder: zig?.token_salvo ? "Trocar o token…" : "Cole o token de integração da Zig" });
+  const zigLoja = el("input", { value: zig?.loja ?? "", placeholder: "Identificador da loja na Zig" });
+  const zigAtivo = caixaDeMarcar("Mandar o convite sozinho, todo dia", zig?.ativo === true);
+  const zigHora = el("input", { type: "number", min: "0", max: "23", value: String(zig?.hora_envio ?? 11) });
+  const zigTeto = el("input", { type: "number", min: "1", max: "500", value: String(zig?.teto_por_dia ?? 80) });
+  const zigRepetir = el("input", { type: "number", min: "0", max: "365", value: String(zig?.nao_repetir_dias ?? 30) });
+
+  const salvarZig = async () => {
+    const corpo = {
+      loja: zigLoja.value.trim(),
+      ativo: zigAtivo.querySelector("input").checked,
+      hora_envio: Number(zigHora.value),
+      teto_por_dia: Number(zigTeto.value),
+      nao_repetir_dias: Number(zigRepetir.value),
+    };
+    // Token só viaja quando a pessoa digitou um: campo vazio = não mexe.
+    if (zigToken.value.trim()) corpo.token = zigToken.value.trim();
+    await put(`/v1/venues/${ctx.venue}/pesquisa/zig`, corpo);
+  };
+
+  const cartaoZig = el("section", { classe: "cartao" }, [
+    el("h3", { texto: "Buscar clientes na Zig" }),
+    el("p", {
+      classe: "muted",
+      texto:
+        "Quem comprou ou fez check-in ontem recebe o convite hoje, sem ninguém digitar nada. " +
+        "O token fica só no nosso banco e você apaga quando quiser.",
+    }),
+    !zig
+      ? el("p", { classe: "muted", style: "margin-top:10px", texto: "A tabela da Zig ainda não existe no banco — rode o SQL desta versão e recarregue." })
+      : el("div", { classe: "pilha", style: "margin-top:12px" }, [
+          el("div", { classe: "grade" }, [
+            campoComValorSalvo(
+              "Token de integração",
+              zigToken,
+              zig.token_salvo ? `token salvo (…${zig.token_final})` : null,
+              async () => {
+                await put(`/v1/venues/${ctx.venue}/pesquisa/zig`, { token: "", ativo: false });
+                avisar("Token apagado — o envio automático foi desligado junto.", "ok");
+                await recarregar();
+              },
+            ),
+            campo("Loja", zigLoja),
+            campo("Hora do envio (da casa)", zigHora),
+          ]),
+          el("div", { classe: "grade" }, [
+            campo("No máximo por dia", zigTeto),
+            campo("Não repetir por (dias)", zigRepetir),
+            el("div", { classe: "campo" }, [el("label", { texto: " " }), zigAtivo]),
+          ]),
+          zig.ultimo_dia
+            ? el("p", { classe: "muted", texto: `Último dia buscado: ${zig.ultimo_dia}.` })
+            : null,
+          el("div", { classe: "linha-campos" }, [
+            el("button", {
+              classe: "btn btn-primario",
+              type: "button",
+              texto: "Salvar",
+              onclick: async (e) => {
+                e.target.disabled = true;
+                try {
+                  await salvarZig();
+                  avisar("Conexão com a Zig salva.", "ok");
+                  await recarregar();
+                } catch (err) {
+                  avisar(err.message, "erro");
+                  e.target.disabled = false;
+                }
+              },
+            }),
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "Testar conexão",
+              onclick: async (e) => {
+                e.target.disabled = true;
+                try {
+                  const r = await post(`/v1/venues/${ctx.venue}/pesquisa/zig/testar`, {
+                    token: zigToken.value.trim() || undefined,
+                    loja: zigLoja.value.trim() || undefined,
+                  });
+                  avisar(`A Zig respondeu: token e loja valem (${r.eventos} evento(s) recente(s)).`, "ok");
+                } catch (err) {
+                  avisar(err.message, "erro");
+                } finally {
+                  e.target.disabled = false;
+                }
+              },
+            }),
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "Buscar ontem agora",
+              onclick: async (e) => {
+                if (!confirm("Buscar quem esteve na casa ontem e mandar o convite agora?")) return;
+                e.target.disabled = true;
+                try {
+                  const r = await post(`/v1/venues/${ctx.venue}/pesquisa/zig/buscar`, {});
+                  avisar(
+                    r.ja_buscado
+                      ? `O dia ${r.dia} já tinha sido buscado — ninguém recebe duas vezes.`
+                      : `${r.visitantes} pessoa(s) ontem: ${r.convidados} convite(s) na fila, ${r.repetidos} já convidada(s) antes${r.alem_do_teto ? `, ${r.alem_do_teto} além do teto do dia` : ""}.`,
+                    "ok",
+                  );
+                  await recarregar();
+                } catch (err) {
+                  avisar(err.message, "erro");
+                  e.target.disabled = false;
+                }
+              },
+            }),
+          ]),
+        ]),
+  ].filter(Boolean));
+
+  /* ---- A planilha: para quem não tem Zig ---- */
+
+  const arquivoPlanilha = el("input", { type: "file", accept: ".xlsx,.csv" });
+  const resumoPlanilha = el("div", {});
+
+  const mandarPlanilha = async (confirmar, botao) => {
+    const f = arquivoPlanilha.files?.[0];
+    if (!f) return avisar("Escolha o arquivo primeiro.", "erro");
+    botao.disabled = true;
+    try {
+      const r = await postArquivo(
+        `/v1/venues/${ctx.venue}/pesquisa/convites/planilha${confirmar ? "?confirmar=1" : ""}`,
+        f,
+      );
+      limpar(resumoPlanilha);
+      if (r.previa) {
+        resumoPlanilha.append(
+          el("p", {
+            texto: `${r.validos} telefone(s) prontos para convidar · ${r.repetidos} já convidado(s) há pouco · ${r.recusadas.length} linha(s) recusada(s).`,
+          }),
+          r.recusadas.length
+            ? el("ul", { classe: "muted", style: "margin:6px 0 0;padding-left:20px" },
+                r.recusadas.slice(0, 8).map((x) => el("li", { texto: `linha ${x.linha}: ${x.motivo}` })))
+            : null,
+          r.validos > 0
+            ? el("button", {
+                classe: "btn btn-primario",
+                type: "button",
+                style: "margin-top:10px",
+                texto: `Enviar ${r.validos} convite(s)`,
+                onclick: (e2) => mandarPlanilha(true, e2.target),
+              })
+            : null,
+        );
+      } else {
+        avisar(`${r.enviados} convite(s) na fila — saem espaçados pelo WhatsApp da casa.`, "ok");
+        await recarregar();
+      }
+    } catch (err) {
+      avisar(err.message, "erro");
+    } finally {
+      botao.disabled = false;
+    }
+  };
+
+  const cartaoPlanilha = el("section", { classe: "cartao" }, [
+    el("h3", { texto: "Importar planilha de clientes" }),
+    el("p", {
+      classe: "muted",
+      texto:
+        "Sem Zig? Exporte a lista de onde tiver e mande aqui (.xlsx ou .csv). " +
+        "Basta uma coluna chamada telefone (ou whatsapp/celular) — nome é opcional. Primeiro você vê o resumo; nada sai sem confirmar.",
+    }),
+    el("div", { classe: "linha-campos", style: "margin-top:12px" }, [
+      arquivoPlanilha,
+      el("button", {
+        classe: "btn",
+        type: "button",
+        texto: "Ler planilha",
+        onclick: (e) => mandarPlanilha(false, e.target),
+      }),
+    ]),
+    resumoPlanilha,
+  ]);
+
   const respondidos = convites.filter((c) => c.respondido_em).length;
 
   const lista = el("section", { classe: "cartao" }, [
@@ -1249,7 +1438,7 @@ async function telaConvites(ctx, recarregar) {
         ]),
   ]);
 
-  return el("div", { classe: "pilha" }, [form, lista]);
+  return el("div", { classe: "pilha" }, [form, cartaoZig, cartaoPlanilha, lista]);
 }
 
 /* ============ peças ============ */

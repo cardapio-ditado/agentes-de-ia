@@ -9,6 +9,7 @@ import {
 import { dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
+import { cicloDaPesquisaZig } from "./pesquisaZig.js";
 import { listAgentsInOrg } from "./repository.js";
 import {
   consumirComandoPonte,
@@ -210,8 +211,13 @@ setInterval(() => void cicloDosChecklists(), 60_000);
 // ter estado fora do ar na hora "certa".
 setInterval(() => {
   cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
+  // No mesmo relógio, em falha separada: quem esteve na casa ontem (segundo
+  // a Zig) recebe o convite da pesquisa. `ultimo_dia` + índice único seguram
+  // a repetição — rodar de hora em hora é resiliência, não risco.
+  cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
 }, 60 * 60_000);
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
+void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));
