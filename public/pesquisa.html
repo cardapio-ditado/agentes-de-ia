@@ -180,6 +180,11 @@
       .chip:active { transform: scale(.95); }
       .chip[aria-pressed="true"].bom { background: rgba(78,203,141,.16); border-color: var(--ok); color: var(--ok); }
       .chip[aria-pressed="true"].ruim { background: rgba(193,18,31,.18); border-color: #e2565f; color: #ff9aa1; }
+      /* O "não se aplica": menor e apagado de propósito — é a saída de
+         emergência, não uma resposta que se convida a dar. */
+      .pular-pergunta { margin-top: 8px; }
+      .pular-pergunta .chip { padding: 8px 13px; font-size: 13px; color: var(--creme-2); }
+      .chip[aria-pressed="true"].neutro { background: rgba(255,248,240,.10); border-color: var(--creme-2); color: var(--creme); }
 
       /* ---- Atendente ---- */
       .pessoas { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
@@ -571,7 +576,13 @@
         const bloco = novoPasso();
         const perguntas = dados.perguntas.filter((p) => p.categoria === categoria);
 
-        bloco.append(titulo(categoria), ajuda("Toque na nota. Pode pular o que não se aplica."));
+        bloco.append(
+          titulo(categoria),
+          // Dizer que 0 é a pior nota importa: sem isso, quem não consumiu
+          // usa o 0 como "não se aplica" — aconteceu, e o 0 falso derruba a
+          // média de uma noite que foi um 10.
+          ajuda("Toque na nota — 0 é a pior, 10 é a melhor. Não consumiu? Use o “não se aplica”."),
+        );
 
         for (const pergunta of perguntas) {
           const grupo = document.createElement("div");
@@ -611,6 +622,10 @@
       function temResposta(pergunta) {
         const r = resposta.itens.get(pergunta.id);
         if (!r) return false;
+        // "Não se aplica" CONTA como resposta: é a saída honesta de uma
+        // pergunta obrigatória sobre algo que a pessoa não consumiu — sem
+        // ela, a obrigatoriedade forçaria uma nota inventada.
+        if (r.pulada === true) return true;
         return pergunta.tipo === "texto" ? Boolean(r.texto?.trim()) : r.valor !== undefined && r.valor !== null;
       }
 
@@ -632,10 +647,10 @@
             b.className = "nota";
             b.textContent = String(n);
             b.setAttribute("aria-pressed", String(atual.valor === n));
-            b.onclick = () => marcar(pergunta, { valor: atual.valor === n ? null : n });
+            b.onclick = () => marcar(pergunta, { valor: atual.valor === n ? null : n, pulada: false });
             grade.append(b);
           }
-          return grade;
+          return comNaoSeAplica(pergunta, atual, grade);
         }
 
         if (pergunta.tipo === "estrelas") {
@@ -647,10 +662,10 @@
             b.className = `estrela ${atual.valor >= n ? "acesa" : ""}`;
             b.textContent = "★";
             b.setAttribute("aria-label", `${n} de 5`);
-            b.onclick = () => marcar(pergunta, { valor: atual.valor === n ? null : n });
+            b.onclick = () => marcar(pergunta, { valor: atual.valor === n ? null : n, pulada: false });
             caixa.append(b);
           }
-          return caixa;
+          return comNaoSeAplica(pergunta, atual, caixa);
         }
 
         if (pergunta.tipo === "sim_nao") {
@@ -671,6 +686,38 @@
         const campo = document.createElement("textarea");
         campo.placeholder = "Escreva à vontade…";
         campo.value = atual.texto ?? "";
+        return campoDeTextoDaPergunta(pergunta, campo);
+      }
+
+      /**
+       * A régua da pergunta mais a saída de emergência: "não se aplica".
+       *
+       * Existe porque aconteceu: um cliente que deu 10 em tudo marcou 0 no
+       * chopp que NÃO TOMOU — o 0 era o jeito que ele achou de dizer "não
+       * consumi". Zero falso derruba a média da categoria e dispara alerta
+       * de problema numa noite que foi um 10. Marcar "não se aplica" grava
+       * a pergunta como pulada de verdade (sem nota, fora de média) e vale
+       * como resposta nas perguntas obrigatórias.
+       */
+      function comNaoSeAplica(pergunta, atual, controle) {
+        const caixa = document.createElement("div");
+        caixa.append(controle);
+
+        const linha = document.createElement("div");
+        linha.className = "chips pular-pergunta";
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip neutro";
+        b.textContent = "Não consumi / não se aplica";
+        b.setAttribute("aria-pressed", String(atual.pulada === true));
+        b.onclick = () => marcar(pergunta, { valor: null, pulada: atual.pulada !== true });
+        linha.append(b);
+
+        caixa.append(linha);
+        return caixa;
+      }
+
+      function campoDeTextoDaPergunta(pergunta, campo) {
         campo.maxLength = 2000;
         // Sem `desenhar()` a cada tecla: redesenhar o passo tiraria o foco do
         // campo e a pessoa perderia o teclado no meio da frase.
