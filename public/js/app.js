@@ -23,6 +23,7 @@ import { cadastros } from "./pages/cadastros.js";
 import { fichas } from "./pages/fichas.js";
 import { contagem } from "./pages/contagem.js";
 import { estoque } from "./pages/estoque.js";
+import { kardex } from "./pages/kardex.js";
 import { cmvPainel } from "./pages/cmvPainel.js";
 import { engenhariaCardapio } from "./pages/engenhariaCardapio.js";
 import { vendas } from "./pages/vendas.js";
@@ -80,7 +81,8 @@ const PAGINAS = [
   { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },
   { id: "vendas", modulo: "cmv", rotulo: "Vendas", icone: ICONES.raio, render: vendas, subtitulo: "O relatório do seu PDV baixa o estoque pelas fichas" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
-  { id: "estoque", modulo: "cmv", rotulo: "Estoque", icone: ICONES.painel, render: estoque, subtitulo: "Posição, extrato, transferência, perda — e os locais de estoque" },
+  { id: "estoque", modulo: "cmv", rotulo: "Estoque", icone: ICONES.painel, render: estoque, subtitulo: "Posição, transferência, perda — e os locais de estoque" },
+  { id: "kardex", modulo: "cmv", rotulo: "Kardex", icone: ICONES.relogio, render: kardex, subtitulo: "A conta corrente do estoque: tudo que aconteceu, por produto e por fornecedor" },
   { id: "cadastros", modulo: "cmv", rotulo: "Cadastros", icone: ICONES.organizacao, render: cadastros, subtitulo: "Itens, categorias e fornecedores — a base de tudo" },
   { id: "fichas", modulo: "cmv", rotulo: "Fichas técnicas", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
 

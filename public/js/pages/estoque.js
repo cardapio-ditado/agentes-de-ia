@@ -1,172 +1,24 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, buscador, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, buscador, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { abrirKardex } from "./kardex.js";
 
 /**
  * Posição do estoque: o que há, onde, e quanto vale.
  *
- * A tela responde três perguntas na ordem em que elas doem:
+ * A tela responde duas perguntas na ordem em que elas doem:
  *   1. quanto dinheiro está parado em estoque (o total no topo);
- *   2. em que ele está parado (a lista, do mais valioso para o menos);
- *   3. por que o saldo é esse (o extrato, um toque no item).
+ *   2. em que ele está parado (a lista, do mais valioso para o menos).
  *
- * Transferência e perda vivem aqui porque é olhando a posição que a pessoa
- * percebe "isso está no lugar errado" ou "isso venceu" — a ação nasce do
- * olhar, e mudar de tela no meio mata o impulso.
+ * O "por que o saldo é esse" mora na página Kardex — o botão em cada linha
+ * pula para lá já no item certo. Transferência e perda vivem aqui porque é
+ * olhando a posição que a pessoa percebe "isso está no lugar errado" ou
+ * "isso venceu" — a ação nasce do olhar, e mudar de tela no meio mata o
+ * impulso.
  */
 
-const NOME_DO_TIPO = {
-  compra: "compra",
-  venda: "venda",
-  producao_entrada: "produção (entrada)",
-  producao_saida: "produção (saída)",
-  transferencia_entrada: "transferência (entrou)",
-  transferencia_saida: "transferência (saiu)",
-  perda: "perda",
-  ajuste_contagem: "ajuste de contagem",
-};
-
 export async function estoque(raiz, ctx) {
-  let abaAtual = "posicao";
   const conteudo = el("div", {});
-
-  const ABAS = [
-    ["posicao", "Posição"],
-    ["movimentos", "Movimentação"],
-  ];
-  const barra = el(
-    "div",
-    { classe: "abas" },
-    ABAS.map(([id, rotulo]) =>
-      el("button", {
-        classe: `aba ${id === abaAtual ? "aba-ativa" : ""}`.trim(),
-        type: "button",
-        texto: rotulo,
-        "data-aba": id,
-        onclick: async () => {
-          abaAtual = id;
-          for (const b of barra.querySelectorAll("[data-aba]")) {
-            b.classList.toggle("aba-ativa", b.dataset.aba === id);
-          }
-          if (id === "movimentos") await desenharMovimentos();
-          else await desenhar();
-        },
-      }),
-    ),
-  );
-  raiz.append(el("div", { classe: "pilha" }, [barra, conteudo]));
-
-  /**
-   * A aba de movimentação: o razão do estoque numa tela.
-   *
-   * Tudo que entrou, saiu, quebrou, transferiu e ajustou, do mais novo para o
-   * mais velho — com filtro por insumo e por tipo. A posição diz ONDE o
-   * dinheiro está; esta diz POR ONDE ele passou.
-   */
-  async function desenharMovimentos() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando a movimentação…" }));
-
-    let insumos = [];
-    try {
-      insumos = await get(`/v1/venues/${ctx.venue}/insumos`);
-    } catch {
-      /* sem a lista, o filtro por insumo só não aparece */
-    }
-
-    const seletorInsumo = el(
-      "select",
-      { classe: "select" },
-      [
-        el("option", { value: "", texto: "Todos os insumos" }),
-        ...insumos.map((i) => el("option", { value: i.id, texto: i.nome })),
-      ],
-    );
-    const seletorTipo = el(
-      "select",
-      { classe: "select" },
-      [
-        el("option", { value: "", texto: "Todos os tipos" }),
-        ...Object.entries(NOME_DO_TIPO).map(([v, r]) => el("option", { value: v, texto: r })),
-      ],
-    );
-    const area = el("div");
-    seletorInsumo.addEventListener("change", buscar);
-    seletorTipo.addEventListener("change", buscar);
-
-    limpar(conteudo).append(
-      el("section", { classe: "pilha" }, [
-        el("div", { classe: "cartao" }, [
-          el("h2", { texto: "Movimentação do estoque" }),
-          el("p", { classe: "muted", texto: "Tudo que aconteceu, do mais novo para o mais velho. A posição diz onde o dinheiro está; aqui é por onde ele passou." }),
-        ]),
-        el("div", { classe: "linha-campos" }, [
-          el("label", { classe: "campo-rotulado", style: "min-width:220px" }, [el("span", { texto: "Insumo" }), seletorInsumo]),
-          el("label", { classe: "campo-rotulado", style: "min-width:180px" }, [el("span", { texto: "Tipo" }), seletorTipo]),
-        ]),
-        area,
-      ]),
-    );
-    await buscar();
-
-    async function buscar() {
-      limpar(area).append(el("p", { classe: "muted", texto: "Buscando…" }));
-      let movimentos;
-      try {
-        const filtros = new URLSearchParams();
-        if (seletorInsumo.value) filtros.set("insumo", seletorInsumo.value);
-        if (seletorTipo.value) filtros.set("tipo", seletorTipo.value);
-        movimentos = await get(`/v1/venues/${ctx.venue}/estoque/movimentos?${filtros}`);
-      } catch (e) {
-        limpar(area).append(vazio("Movimentação indisponível", e.message));
-        return;
-      }
-      limpar(area);
-      if (movimentos.length === 0) {
-        area.append(vazio("Nenhum movimento", "Mude os filtros, ou receba uma compra."));
-        return;
-      }
-      area.append(
-        el("div", { classe: "cartao" }, [
-          el("div", { classe: "rolagem-x" }, [
-            el("table", { classe: "planilha" }, [
-              el("thead", {}, [
-                el("tr", {}, [
-                  el("th", { texto: "Quando" }),
-                  el("th", { texto: "Tipo" }),
-                  el("th", { texto: "Insumo" }),
-                  el("th", { texto: "Estoque" }),
-                  el("th", { classe: "col-num", texto: "Quantidade" }),
-                  el("th", { classe: "col-num", texto: "Valor" }),
-                  el("th", { texto: "Observação" }),
-                ]),
-              ]),
-              el(
-                "tbody",
-                {},
-                movimentos.map((m) =>
-                  el("tr", {}, [
-                    el("td", { texto: dataHora(m.criado_em) }),
-                    el("td", {}, [etiqueta(NOME_DO_TIPO[m.tipo] ?? m.tipo, m.quantidade < 0 ? "etiqueta-perigo" : "etiqueta-ok")]),
-                    el("td", {}, [el("strong", { texto: m.insumo })]),
-                    el("td", { texto: m.local }),
-                    el("td", {
-                      classe: "col-num",
-                      texto: `${m.quantidade > 0 ? "+" : ""}${m.quantidade} ${m.unidade}`,
-                    }),
-                    el("td", { classe: "col-num", texto: m.valor ? dinheiro(m.valor) : "—" }),
-                    // A observação quebra o nowrap: é onde mora o "contado 88,
-                    // sistema 90" que explica o movimento.
-                    el("td", { style: "white-space:normal;max-width:32ch" }, [
-                      el("span", { classe: "muted", texto: m.observacao ?? "" }),
-                    ]),
-                  ]),
-                ),
-              ),
-            ]),
-          ]),
-        ]),
-      );
-    }
-  }
+  raiz.append(conteudo);
   await desenhar();
 
   async function desenhar() {
@@ -260,7 +112,8 @@ export async function estoque(raiz, ctx) {
                         classe: "btn btn-peq",
                         type: "button",
                         texto: "Kardex",
-                        onclick: () => extrato(p),
+                        // Atalho: pula para a página Kardex já neste produto.
+                        onclick: () => abrirKardex({ aba: "produto", id: p.insumo_id, nome: p.insumo }),
                       }),
                     ]),
                   ].filter(Boolean)),
@@ -302,65 +155,6 @@ export async function estoque(raiz, ctx) {
       ]),
     );
     desenharLista();
-
-    async function extrato(p) {
-      limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo o extrato…" }));
-      let movimentos;
-      try {
-        movimentos = await get(`/v1/venues/${ctx.venue}/estoque/extrato/${p.insumo_id}`);
-      } catch (e) {
-        limpar(conteudo).append(vazio("Extrato indisponível", e.message));
-        return;
-      }
-      limpar(conteudo).append(
-        el("section", { classe: "pilha" }, [
-          el("div", { classe: "cabecalho-secao" }, [
-            el("div", {}, [
-              el("h2", { texto: `Kardex — ${p.insumo}` }),
-              el("p", { classe: "muted", texto: "A conta corrente do produto: cada entrada e saída, com o saldo depois de cada uma." }),
-            ]),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
-          ]),
-          el("div", { classe: "cartao" }, [
-            el("div", { classe: "rolagem-x" }, [
-              el("table", { classe: "planilha" }, [
-                el("thead", {}, [
-                  el("tr", {}, [
-                    el("th", { texto: "Quando" }),
-                    el("th", { texto: "Movimento" }),
-                    el("th", { texto: "Estoque" }),
-                    el("th", { classe: "col-num", texto: "Entrada/Saída" }),
-                    el("th", { classe: "col-num", texto: "Saldo após" }),
-                    el("th", { texto: "Observação" }),
-                  ]),
-                ]),
-                el(
-                  "tbody",
-                  {},
-                  movimentos.map((m) =>
-                    el("tr", {}, [
-                      el("td", { texto: dataHora(m.criado_em) }),
-                      el("td", { texto: NOME_DO_TIPO[m.tipo] ?? m.tipo }),
-                      el("td", { texto: m.local_nome }),
-                      el("td", { classe: "col-num" }, [
-                        el("strong", {
-                          style: Number(m.quantidade) < 0 ? "color:var(--marca-forte)" : "",
-                          texto: `${Number(m.quantidade) > 0 ? "+" : ""}${m.quantidade}`,
-                        }),
-                      ]),
-                      el("td", { classe: "col-num", texto: String(m.saldo_apos ?? "—") }),
-                      el("td", { style: "white-space:normal;max-width:32ch" }, [
-                        el("span", { classe: "muted", texto: m.observacao ?? "" }),
-                      ]),
-                    ]),
-                  ),
-                ),
-              ]),
-            ]),
-          ]),
-        ]),
-      );
-    }
 
     /**
      * Os lugares onde o estoque mora, com TIPO: principal (recebe compras
