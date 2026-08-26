@@ -32,9 +32,12 @@ import { versaoDoCodigo } from "./version.js";
  * Cada papel roda em SEU processo, com sua pasta de sessão. Dois processos
  * também isolam falha: a sessão do agente cair não para o checklist.
  *
- * Limite conhecido: um conector por papel por organização. Ele consome
- * comandos de qualquer venue — com vários estabelecimentos, o consumo
- * precisaria filtrar por venue.
+ * MULTI-CASA: cada estabelecimento tem os SEUS conectores. A variável
+ * `WHATSAPP_VENUE` (slug da casa) amarra o processo a uma casa só — ele
+ * consome apenas os comandos dela, publica estado só nela e envia apenas as
+ * notificações dela. Sem a variável, vale o modo de uma casa só (a primeira
+ * ativa), com aviso alto no log quando existir mais de uma: duas casas nunca
+ * podem compartilhar um número.
  */
 
 const CHAVE_ESTADO = "whatsapp_ponte";
@@ -175,21 +178,27 @@ export interface ComandoRecebido {
 }
 
 /**
- * Pega (e apaga) o próximo comando pendente, de qualquer venue.
+ * Pega (e apaga) o próximo comando pendente.
+ *
+ * Com `venueId`, só comandos DAQUELA casa: o conector do The 20 não pode
+ * engolir o "conectar" clicado no painel do Ditado e parear o número errado
+ * — este era exatamente o furo do modo uma-casa-só.
  *
  * Apagar antes de executar é deliberado: um comando que falha não pode ficar
  * reexecutando para sempre — quem clicou vê o status e clica de novo.
  */
 export async function consumirComandoPonte(
   papel: PapelWhatsapp = "agente",
+  venueId?: string,
 ): Promise<ComandoRecebido | null> {
-  const { data, error } = await db()
+  let busca = db()
     .from("venues")
     .select("id, slug, settings")
     // Só o comando DESTE papel: o conector administrativo não pode engolir o
     // "conectar" que era do agente e parear o número errado.
-    .not(`settings->${CHAVE_COMANDO}->${papel}`, "is", null)
-    .limit(1);
+    .not(`settings->${CHAVE_COMANDO}->${papel}`, "is", null);
+  if (venueId) busca = busca.eq("id", venueId);
+  const { data, error } = await busca.limit(1);
   if (error) throw new Error(`Falha ao buscar comandos: ${error.message}`);
 
   const venue = data?.[0];
@@ -201,7 +210,8 @@ export async function consumirComandoPonte(
   if (!comando) return null;
 
   // Tira só o comando deste papel; o do outro continua esperando o dono dele.
-  const { [papel]: _consumido, ...restoDaFila } = fila;
+  const restoDaFila = { ...fila };
+  delete restoDaFila[papel];
   const { error: erroLimpar } = await db()
     .from("venues")
     .update({ settings: { ...settings, [CHAVE_COMANDO]: restoDaFila } as unknown as Json })
@@ -212,18 +222,52 @@ export async function consumirComandoPonte(
   return { venueId: venue.id, venueSlug: venue.slug, comando };
 }
 
-/** Para o heartbeat antes do primeiro comando: o único venue da organização. */
-export async function primeiroVenueAtivo(): Promise<
+/**
+ * A casa que ESTE conector serve.
+ *
+ * `WHATSAPP_VENUE` (slug) amarra o processo a uma casa; é a configuração
+ * obrigatória a partir da segunda casa. Sem ela, vale o modo antigo de uma
+ * casa só — com um aviso alto no log quando existir mais de uma, porque aí a
+ * escolha "a primeira ativa" é um chute, e chute com WhatsApp manda a
+ * mensagem de um bar pelo número do outro.
+ */
+export async function venueDoConector(): Promise<
   { id: string; slug: string; org_id: string } | null
 > {
+  const slug = process.env.WHATSAPP_VENUE?.trim();
+  if (slug) {
+    const { data, error } = await db()
+      .from("venues")
+      .select("id, slug, org_id")
+      .eq("slug", slug)
+      .eq("active", true)
+      .maybeSingle();
+    if (error) throw new Error(`Falha ao buscar a casa do conector: ${error.message}`);
+    if (!data) {
+      // Erro de configuração não pode virar "conectei na casa errada": sem a
+      // casa pedida, este conector fica parado e gritando no log.
+      console.error(
+        `[ponte] WHATSAPP_VENUE="${slug}" não corresponde a nenhum estabelecimento ativo. ` +
+          `Este conector NÃO vai atender nem enviar nada até o slug ser corrigido no .env.`,
+      );
+      return null;
+    }
+    return data;
+  }
+
   const { data, error } = await db()
     .from("venues")
-    // A organização vem junto porque o religamento precisa dela para achar o
-    // agente da casa quando o slug não está gravado no estado.
     .select("id, slug, org_id")
     .eq("active", true)
     .order("created_at", { ascending: true })
-    .limit(1);
+    .limit(2);
   if (error) throw new Error(`Falha ao buscar o venue: ${error.message}`);
+  if ((data?.length ?? 0) > 1) {
+    console.warn(
+      `[ponte] HÁ MAIS DE UM ESTABELECIMENTO ATIVO e WHATSAPP_VENUE não está definido. ` +
+        `Este conector vai servir apenas "${data![0]!.slug}". Defina WHATSAPP_VENUE no .env ` +
+        `de cada serviço — cada casa precisa dos seus próprios conectores.`,
+    );
+  }
   return data?.[0] ?? null;
 }

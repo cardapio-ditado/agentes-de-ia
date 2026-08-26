@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { longoDemais, transcreverAudio, transcricaoConfigurada } from "../transcrever.js";
-import { lerEstadoPonte, primeiroVenueAtivo, type PapelWhatsapp } from "../ponteWhatsapp.js";
+import { lerEstadoPonte, venueDoConector, type PapelWhatsapp } from "../ponteWhatsapp.js";
 import { db } from "../supabase.js";
 import {
   jidConhecidoDoTelefone,
@@ -42,7 +42,17 @@ import { interpretarComando, responderComandoDeReserva } from "../comandosDeRese
  * credenciais da outra — e as duas caem, alternadamente, sem que ninguém
  * entenda por quê.
  */
-const RAIZ_SESSAO = resolve(process.cwd(), process.env.WHATSAPP_SESSION_DIR ?? ".whatsapp");
+/**
+ * Multi-casa: com `WHATSAPP_VENUE` definido (e sem WHATSAPP_SESSION_DIR
+ * explícito), cada casa ganha a própria pasta de sessão —
+ * `.whatsapp/casas/<slug>/<papel>`. Dois conectores de casas diferentes na
+ * mesma máquina nunca disputam as mesmas credenciais.
+ */
+const CASA_FIXADA = (process.env.WHATSAPP_VENUE ?? "").trim().replace(/[^a-z0-9-]/gi, "") || null;
+const RAIZ_SESSAO = resolve(
+  process.cwd(),
+  process.env.WHATSAPP_SESSION_DIR ?? (CASA_FIXADA ? `.whatsapp/casas/${CASA_FIXADA}` : ".whatsapp"),
+);
 const pastaDaSessao = (papel: PapelWhatsapp) => resolve(RAIZ_SESSAO, papel);
 
 /**
@@ -158,8 +168,18 @@ export interface OpcoesWhatsapp {
   /** Vazio no papel administrativo: lá ninguém responde. */
   agentSlug: string;
   venueSlug: string;
+  /**
+   * O id da casa que este conector serve. É o que amarra a entrega: só as
+   * notificações desta casa saem por este número, e só as conversas dela
+   * ensinam endereços. Ausente (instalação antiga de casa única), o conector
+   * resolve sozinho pela ponte.
+   */
+  venueId?: string | null;
   papel?: PapelWhatsapp;
 }
+
+/** A casa deste conector, para os filtros de fila e de conversa. */
+let venueIdDoConector: string | null = null;
 
 /**
  * Sobe o conector e mantém a conexão. Reconecta sozinho, exceto quando a
@@ -178,6 +198,7 @@ export async function iniciarWhatsapp(opcoes: OpcoesWhatsapp): Promise<void> {
   estado.agentSlug = opcoes.agentSlug;
   estado.venueSlug = opcoes.venueSlug;
   estado.papel = papel;
+  if (opcoes.venueId) venueIdDoConector = opcoes.venueId;
 
   socket = makeWASocket({
     auth: state,
@@ -517,7 +538,10 @@ async function resolverJid(destino: string): Promise<string | null> {
   if (!telefone) return null;
   const candidatos = variacoesDoTelefone(telefone);
 
-  const conhecido = await jidConhecidoDoTelefone(candidatos).catch(() => null);
+  // Só as conversas desta casa ensinam endereço — dado de um bar não serve
+  // (nem pode servir) ao número do outro.
+  const conhecido = await jidConhecidoDoTelefone(candidatos, await venueDesteConector())
+    .catch(() => null);
   if (conhecido) {
     console.log(`[whatsapp] ${destino} → ${conhecido} (conversa conhecida)`);
     return conhecido;
@@ -653,9 +677,11 @@ async function existeAdministrativoNoAr(): Promise<boolean> {
     return administrativoNoAr.valor;
   }
   try {
-    const venue = await primeiroVenueAtivo();
-    if (!venue) return false;
-    const { data } = await db().from("venues").select("settings").eq("id", venue.id).single();
+    // O administrativo DESTA casa — o do The 20 estar no ar não diz nada
+    // sobre quem envia no Ditado.
+    const venueId = await venueDesteConector();
+    if (!venueId) return false;
+    const { data } = await db().from("venues").select("settings").eq("id", venueId).single();
     const outro = lerEstadoPonte(data?.settings ?? null, "administrativo");
     const vivo = outro?.status === "conectado";
     administrativoNoAr = { valor: vivo, em: Date.now() };
@@ -666,12 +692,27 @@ async function existeAdministrativoNoAr(): Promise<boolean> {
   }
 }
 
+/**
+ * O id da casa deste conector, resolvendo uma vez quando a conexão veio de
+ * um religamento antigo que só conhecia o slug.
+ */
+async function venueDesteConector(): Promise<string | null> {
+  if (venueIdDoConector) return venueIdDoConector;
+  const venue = await venueDoConector();
+  venueIdDoConector = venue?.id ?? null;
+  return venueIdDoConector;
+}
+
 async function processarFila(): Promise<void> {
   if (processandoFila || estado.status !== "conectado") return;
   if (estado.papel === "agente" && (await existeAdministrativoNoAr())) return;
   processandoFila = true;
   try {
-    const pendentes = await listPendingNotifications();
+    // Só a fila DESTA casa. Sem casa resolvida, não envia nada: mandar a
+    // mensagem de um bar pelo número do outro é pior que atrasar a entrega.
+    const venueId = await venueDesteConector();
+    if (!venueId) return;
+    const pendentes = await listPendingNotifications(50, venueId);
     let enviadas = 0;
     for (const notificacao of pendentes) {
       if (notificacao.channel !== "whatsapp") continue;

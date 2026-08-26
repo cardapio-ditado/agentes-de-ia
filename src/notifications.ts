@@ -263,13 +263,19 @@ export function variacoesDoTelefone(e164: string): string[] {
  * responde. Contas migradas para LID só são alcançáveis por esse endereço —
  * reconstruir a partir do telefone aponta para o vazio.
  */
-export async function jidConhecidoDoTelefone(candidatos: string[]): Promise<string | null> {
-  const { data, error } = await db()
+export async function jidConhecidoDoTelefone(
+  candidatos: string[],
+  venueId?: string | null,
+): Promise<string | null> {
+  let busca = db()
     .from("conversations")
     .select("external_id, metadata")
-    .eq("channel", "whatsapp")
-    .order("updated_at", { ascending: false })
-    .limit(200);
+    .eq("channel", "whatsapp");
+  // Só as conversas DESTA casa: o endereço aprendido no número do Ditado não
+  // serve para o conector do The 20 — e olhar a conversa de outro bar é
+  // exatamente o "compartilhar" que o multi-casa proíbe.
+  if (venueId) busca = busca.eq("venue_id", venueId);
+  const { data, error } = await busca.order("updated_at", { ascending: false }).limit(200);
   if (error || !data) return null;
 
   const alvos = new Set(candidatos);
@@ -403,15 +409,24 @@ export async function tentarEnviar(notificacao: Notification): Promise<Notificat
   return data;
 }
 
-/** Notificações que ainda merecem uma nova tentativa. */
-export async function listPendingNotifications(limite = 50): Promise<Notification[]> {
-  const { data, error } = await db()
+/**
+ * Notificações que ainda merecem uma nova tentativa.
+ *
+ * Com `venueId`, só as DAQUELA casa: cada conector entrega as mensagens do
+ * seu estabelecimento e de mais nenhum — sem o filtro, o convite de pesquisa
+ * do The 20 sairia pelo número do Ditado, com o nome do bar errado no perfil.
+ */
+export async function listPendingNotifications(
+  limite = 50,
+  venueId?: string | null,
+): Promise<Notification[]> {
+  let busca = db()
     .from("notifications")
     .select("*")
     .in("status", ["pending", "failed"])
-    .lt("attempts", MAX_TENTATIVAS)
-    .order("created_at", { ascending: true })
-    .limit(limite);
+    .lt("attempts", MAX_TENTATIVAS);
+  if (venueId) busca = busca.eq("venue_id", venueId);
+  const { data, error } = await busca.order("created_at", { ascending: true }).limit(limite);
 
   if (error) throw new Error(`Falha ao listar notificações: ${error.message}`);
   return data ?? [];

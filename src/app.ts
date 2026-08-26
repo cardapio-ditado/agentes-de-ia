@@ -92,7 +92,6 @@ import {
   criarComandoPonte,
   lerEstadoPonte,
   papelValido,
-  primeiroVenueAtivo,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
@@ -288,6 +287,8 @@ export interface ConectorWhatsapp {
   iniciar(opcoes: {
     agentSlug: string;
     venueSlug: string;
+    /** A casa deste conector: amarra fila, conversas e sessão a ela. */
+    venueId?: string | null;
     papel?: "agente" | "administrativo";
   }): Promise<void>;
   parar(): Promise<void>;
@@ -989,10 +990,17 @@ async function roteasApi(
       // slug, e sumir com ele deixaria a sessão do WhatsApp conectada
       // atendendo em nome de um agente que não existe mais — o mesmo
       // 'Agente "" não encontrado' que já nos custou uma tarde.
-      const venue = await primeiroVenueAtivo();
-      if (venue) {
-        const { data } = await db().from("venues").select("settings").eq("id", venue.id).single();
-        const noAr = lerEstadoPonte(data?.settings ?? null, "agente");
+      //
+      // TODAS as casas da organização são conferidas: com mais de um
+      // estabelecimento, o agente pode estar atendendo na segunda casa e a
+      // primeira dizer que está tudo livre.
+      const { data: casas } = await db()
+        .from("venues")
+        .select("settings")
+        .eq("org_id", chave.org_id)
+        .eq("active", true);
+      for (const casa of casas ?? []) {
+        const noAr = lerEstadoPonte(casa.settings ?? null, "agente");
         if (noAr?.agentSlug === slug && noAr.status === "conectado") {
           throw erro(
             409,
@@ -3464,7 +3472,7 @@ async function roteasApi(
       }
 
       if (conectorWhatsapp) {
-        await conectorWhatsapp.iniciar({ agentSlug, venueSlug, papel });
+        await conectorWhatsapp.iniciar({ agentSlug, venueSlug, venueId: venue.id, papel });
         return ok(res, conectorWhatsapp.estado());
       }
       await criarComandoPonte(venue.id, papel, { acao: "conectar", agent: agentSlug || undefined });

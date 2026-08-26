@@ -15,8 +15,8 @@ import {
   consumirComandoPonte,
   lerEstadoPonte,
   papelValido,
-  primeiroVenueAtivo,
   publicarEstadoPonte,
+  venueDoConector,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
 
@@ -68,7 +68,12 @@ async function cicloDaPonte(): Promise<void> {
   if (cicloEmAndamento) return;
   cicloEmAndamento = true;
   try {
-    const recebido = await consumirComandoPonte(PAPEL_DESTE_CONECTOR);
+    // A casa deste processo se resolve ANTES de consumir comando: sem isso,
+    // o conector do Ditado engoliria o "conectar" clicado no painel do The 20
+    // e parearia o número da casa errada. Com WHATSAPP_VENUE no .env, cada
+    // processo só enxerga a fila da sua casa.
+    if (!venueDaPonte) venueDaPonte = await venueDoConector();
+    const recebido = await consumirComandoPonte(PAPEL_DESTE_CONECTOR, venueDaPonte?.id);
     if (recebido) {
       venueDaPonte = { id: recebido.venueId, slug: recebido.venueSlug };
       const { comando } = recebido;
@@ -85,6 +90,7 @@ async function cicloDaPonte(): Promise<void> {
           // No administrativo não há agente — e não precisa: ninguém responde.
           agentSlug: comando.agent ?? "",
           venueSlug: recebido.venueSlug,
+          venueId: recebido.venueId,
           papel: PAPEL_DESTE_CONECTOR,
         });
       } else if (comando.acao === "desconectar") {
@@ -95,9 +101,8 @@ async function cicloDaPonte(): Promise<void> {
       }
     }
 
-    // Sem comando ainda? Publica mesmo assim no único venue: é o heartbeat
-    // que diz ao site "tem conector vivo aqui".
-    if (!venueDaPonte) venueDaPonte = await primeiroVenueAtivo();
+    // Sem comando ainda? Publica mesmo assim na casa deste processo: é o
+    // heartbeat que diz ao site "tem conector vivo aqui".
     if (venueDaPonte) {
       const e = estadoWhatsapp();
       await publicarEstadoPonte(venueDaPonte.id, PAPEL_DESTE_CONECTOR, {
@@ -132,7 +137,8 @@ async function religarSeJaPareado(): Promise<void> {
   try {
     if (!(await temSessaoSalva(PAPEL_DESTE_CONECTOR))) return;
 
-    const venue = await primeiroVenueAtivo();
+    // A casa deste processo — a fixada por WHATSAPP_VENUE, ou a única ativa.
+    const venue = await venueDoConector();
     if (!venue) return;
     venueDaPonte = venue;
 
@@ -162,6 +168,7 @@ async function religarSeJaPareado(): Promise<void> {
     await iniciarWhatsapp({
       agentSlug,
       venueSlug: anterior?.venueSlug ?? venue.slug,
+      venueId: venue.id,
       papel: PAPEL_DESTE_CONECTOR,
     });
   } catch (e) {
