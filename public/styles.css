@@ -2369,52 +2369,123 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .bloco-codigo { border: 0; font-size: 0.8rem; }
 }
 
-/* ---- Imprimir UMA avaliação (o PDF que vai para a equipe) ----
-   O painel é escuro e cheio de tela em volta; o papel precisa do oposto.
-   Com `data-imprimindo` no <html>, tudo some menos o cartão marcado — que
-   sobe para o topo da folha e vira preto no branco, legível impresso e
-   pequeno o bastante para mandar no WhatsApp. */
-html[data-imprimindo] body * { visibility: hidden; }
-html[data-imprimindo] .para-imprimir,
-html[data-imprimindo] .para-imprimir * { visibility: visible; }
-html[data-imprimindo] .para-imprimir {
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  box-shadow: none;
-  background: #fff;
-  color: #111;
+/* ============================================================
+   A FOLHA DA AVALIAÇÃO — o PDF de uma página que vai para a equipe
+   ============================================================
+   Não é o cartão da tela impresso: é um documento desenhado para A4. O
+   cartão do painel é feito para rolar num monitor escuro; papel não rola,
+   e o que cabe numa folha é o que a equipe lê. Por isso os números viram
+   selos no topo, as notas por assunto vão para duas colunas (linha curta,
+   muita altura desperdiçada em uma coluna só) e a tipografia encolhe.
+
+   Fora da impressão a folha não existe na tela — ela é montada escondida e
+   só aparece no papel. */
+.folha { display: none; }
+
+@media print {
+  html[data-imprimindo] body > *:not(.folha) { display: none !important; }
+  html[data-imprimindo] .folha {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    background: #fff;
+    color: #14100e;
+    font-family: var(--fonte, system-ui), sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.35;
+  }
 }
-html[data-imprimindo] .para-imprimir .muted { color: #555; }
-html[data-imprimindo] .para-imprimir h3,
-html[data-imprimindo] .para-imprimir h4,
-html[data-imprimindo] .para-imprimir strong { color: #111; }
-/* A etiqueta colorida some no papel P&B; a borda mantém a leitura. */
-html[data-imprimindo] .para-imprimir .etiqueta {
-  border: 1px solid #999;
-  background: transparent;
-  color: #111;
+
+.folha-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 2.5pt solid #14100e;
+  padding-bottom: 5pt;
 }
-html[data-imprimindo] .para-imprimir .citacao {
-  border-left: 3px solid #999;
-  background: transparent;
-  color: #111;
+.folha-casa { font-family: var(--fonte-titulo, Georgia), serif; font-size: 15pt; font-weight: 700; }
+.folha-tipo { font-size: 8.5pt; letter-spacing: 0.09em; text-transform: uppercase; color: #6b5d55; }
+
+/* Os selos: o número é o que a equipe olha primeiro, e ele precisa
+   sobreviver a um PDF aberto no celular com a tela pequena. */
+.folha-selos { display: flex; gap: 10pt; align-items: stretch; margin-top: 12pt; }
+.folha-selo {
+  border: 1.2pt solid #14100e;
+  border-radius: 7pt;
+  padding: 7pt 12pt;
+  text-align: center;
+  min-width: 74pt;
 }
-/* Categoria fechada esconderia justamente as notas que o PDF precisa levar. */
-html[data-imprimindo] .para-imprimir details > *:not(summary) { display: block !important; }
-html[data-imprimindo] .para-imprimir .categoria { break-inside: avoid; }
-/* O cabeçalho da casa só existe no papel: na tela ele seria repetição. */
-.cabecalho-impressao { display: none; }
-html[data-imprimindo] .cabecalho-impressao {
-  display: block;
-  border-bottom: 2px solid #111;
-  padding-bottom: 8px;
-  margin-bottom: 14px;
+.folha-selo b { display: block; font-size: 26pt; line-height: 1; font-family: var(--fonte-titulo, Georgia), serif; }
+.folha-selo span { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: #6b5d55; }
+/* Detrator ganha peso visual: é a folha que alguém vai ter de resolver. */
+.folha-selo.ruim { border-color: #c1121f; color: #c1121f; }
+.folha-selo.ruim span { color: #c1121f; }
+.folha-quem { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-left: 4pt; }
+.folha-quem b { font-size: 13pt; }
+.folha-quem span { color: #6b5d55; font-size: 9pt; }
+
+.folha-citacao {
+  margin: 12pt 0 0;
+  padding: 8pt 11pt;
+  border-left: 3pt solid #ff6b35;
+  background: #faf6f2;
+  font-size: 11pt;
+  font-style: italic;
+  break-inside: avoid;
 }
-@page { margin: 14mm; }
+
+.folha-tags { display: flex; flex-wrap: wrap; gap: 5pt; margin-top: 9pt; align-items: center; }
+.folha-tag { border: 0.9pt solid #b9aca3; border-radius: 999pt; padding: 2.5pt 8pt; font-size: 8.5pt; }
+.folha-tag.bom { border-color: #2e8b57; color: #2e6b46; }
+.folha-tag.ruim { border-color: #c1121f; color: #c1121f; }
+.folha-rotulo { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.07em; color: #6b5d55; }
+
+.folha-secao {
+  margin-top: 14pt;
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #6b5d55;
+  border-bottom: 0.8pt solid #ddd2ca;
+  padding-bottom: 3pt;
+}
+
+/* Duas colunas: cada linha de pergunta é curta, e uma coluna só gastaria a
+   folha inteira em espaço vazio à direita. */
+.folha-assuntos { columns: 2; column-gap: 16pt; margin-top: 8pt; }
+.folha-assunto { break-inside: avoid; margin-bottom: 9pt; }
+.folha-assunto-topo {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  border-bottom: 0.8pt solid #e6ddd6;
+  padding-bottom: 2pt;
+}
+.folha-assunto-nota { font-family: var(--fonte-titulo, Georgia), serif; }
+.folha-pergunta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8pt;
+  font-size: 9pt;
+  padding: 2pt 0;
+  color: #3d332e;
+}
+.folha-pergunta b { font-variant-numeric: tabular-nums; }
+.folha-pergunta.ruim { color: #c1121f; }
+
+.folha-rodape {
+  margin-top: 14pt;
+  border-top: 0.8pt solid #ddd2ca;
+  padding-top: 6pt;
+  display: flex;
+  justify-content: space-between;
+  font-size: 8.5pt;
+  color: #6b5d55;
+}
+
+@page { margin: 13mm; size: A4; }
 
 /* ---- Notas por assunto (pesquisa) ---- */
 .categorias { display: grid; gap: 4px; margin-top: 10px; }

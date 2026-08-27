@@ -164,18 +164,114 @@ function classeDaNota(nota) {
 /* ---------- a resposta inteira ---------- */
 
 /**
+ * A folha A4 da avaliação — desenhada para o papel, não copiada da tela.
+ *
+ * O cartão do painel é feito para rolar num monitor; papel não rola, e o que
+ * cabe numa folha é o que a equipe lê. Então os números viram selos no topo
+ * (é o que se olha primeiro num PDF aberto no celular), a fala do cliente
+ * ganha destaque logo abaixo, e as notas por assunto vão para duas colunas —
+ * cada linha é curta, e uma coluna só gastaria metade da folha em branco.
+ */
+function folhaDaAvaliacao(r) {
+  const media = mediaDaExperiencia(r.itens ?? []);
+  const casa = document.getElementById("marca-org")?.textContent || "Brasa Food";
+
+  const porCategoria = new Map();
+  for (const item of r.itens ?? []) {
+    if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
+    porCategoria.get(item.categoria).push(item);
+  }
+  const categorias = [...porCategoria.entries()]
+    .map(([nome, itens]) => ({ nome, itens, media: mediaDe(itens) }))
+    .sort((a, b) => (a.media ?? 99) - (b.media ?? 99));
+
+  const selo = (valor, rotulo, ruim) =>
+    el("div", { classe: `folha-selo ${ruim ? "ruim" : ""}`.trim() }, [
+      el("b", { texto: valor }),
+      el("span", { texto: rotulo }),
+    ]);
+
+  const tags = (rotulo, valores, classe) => {
+    const lista = (valores ?? []).filter(Boolean);
+    if (lista.length === 0) return null;
+    return el("div", { classe: "folha-tags" }, [
+      el("span", { classe: "folha-rotulo", texto: rotulo }),
+      ...lista.map((v) => el("span", { classe: `folha-tag ${classe}`, texto: v })),
+    ]);
+  };
+
+  return el("div", { classe: "folha" }, [
+    el("div", { classe: "folha-topo" }, [
+      el("span", { classe: "folha-casa", texto: casa }),
+      el("span", { classe: "folha-tipo", texto: `Avaliação de cliente · ${dataHora(r.created_at)}` }),
+    ]),
+
+    el("div", { classe: "folha-selos" }, [
+      selo(String(r.nota), "Recomendação", r.nota <= 6),
+      media !== null ? selo(numero(media), "Experiência", media < 6) : null,
+      el("div", { classe: "folha-quem" }, [
+        el("b", { texto: r.cliente_nome || "Cliente anônimo" }),
+        el("span", { texto: linhaDeContexto(r) }),
+        r.cliente_contato ? el("span", { texto: r.cliente_contato }) : null,
+      ]),
+    ]),
+
+    r.comentario ? el("p", { classe: "folha-citacao", texto: `“${r.comentario}”` }) : null,
+
+    tags("Agradou", r.elogios, "bom"),
+    tags("Incomodou", r.criticas, "ruim"),
+
+    categorias.length > 0
+      ? el("div", {}, [
+          el("div", { classe: "folha-secao", texto: "Notas por assunto" }),
+          el(
+            "div",
+            { classe: "folha-assuntos" },
+            categorias.map((c) =>
+              el("div", { classe: "folha-assunto" }, [
+                el("div", { classe: "folha-assunto-topo" }, [
+                  el("span", { texto: c.nome }),
+                  el("span", {
+                    classe: "folha-assunto-nota",
+                    texto: c.media === null ? "—" : numero(c.media),
+                  }),
+                ]),
+                ...c.itens.map((i) =>
+                  el("div", { classe: `folha-pergunta ${i.nota !== null && i.nota < 6 ? "ruim" : ""}`.trim() }, [
+                    el("span", { texto: i.pergunta }),
+                    el("b", { texto: i.nota === null ? "—" : numero(i.nota) }),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+        ])
+      : null,
+
+    el("div", { classe: "folha-rodape" }, [
+      el("span", {
+        texto: r.atendente_nome
+          ? `Atendeu: ${r.atendente_nome}${r.atendente_nota ? ` — ${estrelas(r.atendente_nota)}` : ""}`
+          : "Sem atendente indicado",
+      }),
+      el("span", { texto: r.premio ? `Cupom ${r.premio.codigo}` : "" }),
+    ]),
+  ]);
+}
+
+/**
  * Gera o PDF pelo próprio navegador.
  *
- * Sem biblioteca e sem rota nova: marcar o cartão, mandar imprimir e deixar
- * o "Salvar como PDF" do aparelho fazer o resto. Funciona no computador do
+ * Sem biblioteca e sem rota nova: monta a folha, manda imprimir e deixa o
+ * "Salvar como PDF" do aparelho fazer o resto. Funciona no computador do
  * escritório e no celular do gerente — que é de onde o arquivo vai ser
  * encaminhado para a equipe.
  *
  * O título da página vira o NOME DO ARQUIVO na maioria dos navegadores, e
- * por isso ele é trocado antes de imprimir: "avaliacao-pedro-vidal-nota-2.pdf"
+ * por isso ele é trocado antes de imprimir: "avaliacao-pedro-vidal-nota-4.pdf"
  * diz o que é no grupo do WhatsApp; "app.pdf" não diz nada.
  */
-function imprimirAvaliacao(cartao, r) {
+function imprimirAvaliacao(r) {
   const tituloAntes = document.title;
   const soLetras = (t) =>
     (t ?? "")
@@ -187,17 +283,21 @@ function imprimirAvaliacao(cartao, r) {
 
   const dia = new Date(r.created_at).toLocaleDateString("pt-BR").replaceAll("/", "-");
   document.title = `avaliacao-${soLetras(r.cliente_nome) || "anonimo"}-nota-${r.nota}-${dia}`;
-  cartao.classList.add("para-imprimir");
+
+  // A folha nasce agora e morre depois de imprimir: deixá-la no documento
+  // faria a próxima avaliação aberta empilhar mais uma no papel.
+  const folha = folhaDaAvaliacao(r);
+  document.body.append(folha);
   document.documentElement.setAttribute("data-imprimindo", "1");
 
   const limpar = () => {
     document.documentElement.removeAttribute("data-imprimindo");
-    cartao.classList.remove("para-imprimir");
+    folha.remove();
     document.title = tituloAntes;
   };
   // `afterprint` cobre o caminho normal; o tempo é a rede de segurança para
   // navegador que não dispara o evento (acontece em alguns celulares) e
-  // deixaria o painel com metade da tela invisível.
+  // deixaria a folha pendurada no documento.
   addEventListener("afterprint", limpar, { once: true });
   setTimeout(limpar, 60_000);
 
@@ -228,17 +328,6 @@ function cartaoDaResposta(r, fechar) {
     .sort((a, b) => (a.media ?? 99) - (b.media ?? 99));
 
   const cartao = el("section", { classe: `cartao ${r.nota <= 6 ? "cartao-atencao" : ""}` }, [
-    // Só aparece no papel: quem receber o PDF precisa saber de que casa é e
-    // que documento é, sem depender da mensagem que veio junto.
-    el("div", { classe: "cabecalho-impressao" }, [
-      el("strong", { texto: document.getElementById("marca-org")?.textContent || "Brasa Food" }),
-      el("p", {
-        classe: "muted",
-        style: "margin:2px 0 0",
-        texto: `Avaliação de cliente · ${dataHora(r.created_at)}`,
-      }),
-    ]),
-
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h3", { texto: `Nota ${r.nota} — ${r.cliente_nome || "Anônimo"}` }),
@@ -307,7 +396,7 @@ function cartaoDaResposta(r, fechar) {
       : null,
   ]);
 
-  botaoPdf.addEventListener("click", () => imprimirAvaliacao(cartao, r));
+  botaoPdf.addEventListener("click", () => imprimirAvaliacao(r));
   return cartao;
 }
 
