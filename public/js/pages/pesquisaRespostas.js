@@ -163,9 +163,57 @@ function classeDaNota(nota) {
 
 /* ---------- a resposta inteira ---------- */
 
+/**
+ * Gera o PDF pelo próprio navegador.
+ *
+ * Sem biblioteca e sem rota nova: marcar o cartão, mandar imprimir e deixar
+ * o "Salvar como PDF" do aparelho fazer o resto. Funciona no computador do
+ * escritório e no celular do gerente — que é de onde o arquivo vai ser
+ * encaminhado para a equipe.
+ *
+ * O título da página vira o NOME DO ARQUIVO na maioria dos navegadores, e
+ * por isso ele é trocado antes de imprimir: "avaliacao-pedro-vidal-nota-2.pdf"
+ * diz o que é no grupo do WhatsApp; "app.pdf" não diz nada.
+ */
+function imprimirAvaliacao(cartao, r) {
+  const tituloAntes = document.title;
+  const soLetras = (t) =>
+    (t ?? "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+
+  const dia = new Date(r.created_at).toLocaleDateString("pt-BR").replaceAll("/", "-");
+  document.title = `avaliacao-${soLetras(r.cliente_nome) || "anonimo"}-nota-${r.nota}-${dia}`;
+  cartao.classList.add("para-imprimir");
+  document.documentElement.setAttribute("data-imprimindo", "1");
+
+  const limpar = () => {
+    document.documentElement.removeAttribute("data-imprimindo");
+    cartao.classList.remove("para-imprimir");
+    document.title = tituloAntes;
+  };
+  // `afterprint` cobre o caminho normal; o tempo é a rede de segurança para
+  // navegador que não dispara o evento (acontece em alguns celulares) e
+  // deixaria o painel com metade da tela invisível.
+  addEventListener("afterprint", limpar, { once: true });
+  setTimeout(limpar, 60_000);
+
+  print();
+}
+
 function cartaoDaResposta(r, fechar) {
   const fechado = el("button", { classe: "btn btn-peq", texto: "Fechar" });
   fechado.addEventListener("click", fechar);
+
+  const botaoPdf = el("button", {
+    classe: "btn btn-peq",
+    type: "button",
+    texto: "📄 Gerar PDF",
+    title: "Abre a impressão — escolha “Salvar como PDF” para mandar à equipe",
+  });
 
   // As perguntas ficam agrupadas por categoria, e as piores primeiro. É a
   // mesma razão do painel: a tela existe para achar o problema, e em ordem
@@ -179,13 +227,24 @@ function cartaoDaResposta(r, fechar) {
     .map(([nome, itens]) => ({ nome, itens, media: mediaDe(itens) }))
     .sort((a, b) => (a.media ?? 99) - (b.media ?? 99));
 
-  return el("section", { classe: `cartao ${r.nota <= 6 ? "cartao-atencao" : ""}` }, [
+  const cartao = el("section", { classe: `cartao ${r.nota <= 6 ? "cartao-atencao" : ""}` }, [
+    // Só aparece no papel: quem receber o PDF precisa saber de que casa é e
+    // que documento é, sem depender da mensagem que veio junto.
+    el("div", { classe: "cabecalho-impressao" }, [
+      el("strong", { texto: document.getElementById("marca-org")?.textContent || "Brasa Food" }),
+      el("p", {
+        classe: "muted",
+        style: "margin:2px 0 0",
+        texto: `Avaliação de cliente · ${dataHora(r.created_at)}`,
+      }),
+    ]),
+
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h3", { texto: `Nota ${r.nota} — ${r.cliente_nome || "Anônimo"}` }),
         el("p", { classe: "muted", texto: linhaDeContexto(r) }),
       ]),
-      fechado,
+      el("div", { classe: "linha-campos" }, [botaoPdf, fechado]),
     ]),
 
     // A recomendação e a experiência lado a lado. Elas discordam com
@@ -247,6 +306,9 @@ function cartaoDaResposta(r, fechar) {
         ])
       : null,
   ]);
+
+  botaoPdf.addEventListener("click", () => imprimirAvaliacao(cartao, r));
+  return cartao;
 }
 
 function linhaDeContexto(r) {

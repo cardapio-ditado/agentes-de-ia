@@ -2369,6 +2369,53 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .bloco-codigo { border: 0; font-size: 0.8rem; }
 }
 
+/* ---- Imprimir UMA avaliação (o PDF que vai para a equipe) ----
+   O painel é escuro e cheio de tela em volta; o papel precisa do oposto.
+   Com `data-imprimindo` no <html>, tudo some menos o cartão marcado — que
+   sobe para o topo da folha e vira preto no branco, legível impresso e
+   pequeno o bastante para mandar no WhatsApp. */
+html[data-imprimindo] body * { visibility: hidden; }
+html[data-imprimindo] .para-imprimir,
+html[data-imprimindo] .para-imprimir * { visibility: visible; }
+html[data-imprimindo] .para-imprimir {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: #fff;
+  color: #111;
+}
+html[data-imprimindo] .para-imprimir .muted { color: #555; }
+html[data-imprimindo] .para-imprimir h3,
+html[data-imprimindo] .para-imprimir h4,
+html[data-imprimindo] .para-imprimir strong { color: #111; }
+/* A etiqueta colorida some no papel P&B; a borda mantém a leitura. */
+html[data-imprimindo] .para-imprimir .etiqueta {
+  border: 1px solid #999;
+  background: transparent;
+  color: #111;
+}
+html[data-imprimindo] .para-imprimir .citacao {
+  border-left: 3px solid #999;
+  background: transparent;
+  color: #111;
+}
+/* Categoria fechada esconderia justamente as notas que o PDF precisa levar. */
+html[data-imprimindo] .para-imprimir details > *:not(summary) { display: block !important; }
+html[data-imprimindo] .para-imprimir .categoria { break-inside: avoid; }
+/* O cabeçalho da casa só existe no papel: na tela ele seria repetição. */
+.cabecalho-impressao { display: none; }
+html[data-imprimindo] .cabecalho-impressao {
+  display: block;
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+}
+@page { margin: 14mm; }
+
 /* ---- Notas por assunto (pesquisa) ---- */
 .categorias { display: grid; gap: 4px; margin-top: 10px; }
 .categoria { border-bottom: 1px solid var(--borda); }
