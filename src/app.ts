@@ -80,6 +80,7 @@ import {
   listChecklists,
   listRuns,
   marcarEmAndamento,
+  respostasDaRun,
   salvarFotoDeItem,
   updateChecklist,
   urlAssinadaDaFoto,
@@ -3225,8 +3226,13 @@ async function roteasApi(
     if (!venueRow) throw erro(404, "not_found", "Estabelecimento não encontrado.");
 
     // GET /v1/checklist-publico/:token — perguntas e estado
+    //
+    // Concluído, o mesmo link vira a PRESTAÇÃO DE CONTAS: quem recebe o
+    // resumo no WhatsApp abre e vê cada resposta e cada foto, sem login e
+    // sem caçar a execução no painel.
     if (metodo === "GET" && p.length === 2) {
-      await marcarEmAndamento(run);
+      const concluida = run.status === "concluida";
+      if (!concluida) await marcarEmAndamento(run);
       return ok(res, {
         checklist: checklist.name,
         descricao: checklist.description,
@@ -3235,6 +3241,14 @@ async function roteasApi(
         status: run.status,
         executor: run.executor_nome,
         itens: itensDe(checklist),
+        ...(concluida
+          ? {
+              concluido_em: run.completed_at,
+              resumo: run.resumo_ia,
+              alertas: Array.isArray(run.alertas_ia) ? run.alertas_ia : [],
+              respostas: await respostasDaRun(run, checklist),
+            }
+          : {}),
       });
     }
 

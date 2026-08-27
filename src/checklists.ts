@@ -459,6 +459,49 @@ export async function urlAssinadaDaFoto(caminho: string): Promise<string | null>
   return data.signedUrl;
 }
 
+export interface ItemRespondido {
+  pergunta: string;
+  tipo: string;
+  valor: string | null;
+  observacao: string | null;
+  /** URL temporária da foto (1h), pronta para o <img>. Null quando não há foto. */
+  foto: string | null;
+}
+
+/**
+ * O checklist concluído, item por item, pronto para quem NÃO preencheu ler.
+ *
+ * O resumo da IA no WhatsApp responde "deu tudo certo?" — esta lista responde
+ * "certo COMO?". Sem ela, o gerente que quisesse conferir a foto da câmara
+ * fria tinha que abrir o painel, achar a execução e caçar o item; com o
+ * telefone na mão, no meio do turno, isso não acontece — e a foto que ninguém
+ * abre é foto que não valeu o trabalho de tirar.
+ *
+ * As fotos ganham URL assinada aqui porque o bucket é privado: link direto
+ * não abriria, e deixar o bucket público entregaria as fotos de todas as
+ * casas a quem adivinhasse um caminho.
+ */
+export async function respostasDaRun(
+  run: ChecklistRun,
+  checklist: Checklist,
+): Promise<ItemRespondido[]> {
+  const respostas = Array.isArray(run.answers) ? (run.answers as unknown as RespostaItem[]) : [];
+  const porItem = new Map(respostas.map((r) => [r.item, r]));
+
+  return await Promise.all(
+    itensDe(checklist).map(async (item) => {
+      const r = porItem.get(item.id);
+      return {
+        pergunta: item.pergunta,
+        tipo: item.tipo,
+        valor: r?.valor ?? null,
+        observacao: r?.observacao ?? null,
+        foto: r?.foto ? await urlAssinadaDaFoto(r.foto) : null,
+      };
+    }),
+  );
+}
+
 export interface ResultadoConclusao {
   run: ChecklistRun;
   resumo: string | null;
@@ -527,6 +570,14 @@ export async function concluirRun(params: {
     ];
     if (analise?.resumo) linhas.push(``, analise.resumo);
     if (alertas.length > 0) linhas.push(``, ...alertas.map((a) => `• ${a}`));
+
+    // O link para conferir item por item, com as fotos.
+    //
+    // O resumo responde "deu tudo certo?"; o link responde "certo COMO?" —
+    // e sem ele a foto da câmara fria só existiria para quem abrisse o
+    // painel e caçasse a execução, que no meio do turno é ninguém.
+    const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
+    linhas.push(``, `Ver as respostas e as fotos:`, `${base}/checklist?t=${run.token}`);
 
     // Uma notificação POR PESSOA, e não uma com vários destinos: cada uma
     // tem o seu status de entrega, e o gerente receber não pode fazer o

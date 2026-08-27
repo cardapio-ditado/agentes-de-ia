@@ -350,6 +350,88 @@ function telaFinal(resultado) {
   scrollTo({ top: 0, behavior: "smooth" });
 }
 
+/** Escapa o que veio do banco: resposta escrita à mão não pode virar HTML. */
+function seguro(texto) {
+  const d = document.createElement("div");
+  d.textContent = texto ?? "";
+  return d.innerHTML;
+}
+
+/**
+ * O checklist concluído, aberto por quem NÃO preencheu.
+ *
+ * É o que o gerente recebe no WhatsApp: além do veredito da IA, cada
+ * pergunta com a resposta dada, a observação escrita e a foto tirada — sem
+ * login, no mesmo link. A foto que ninguém abre é foto que não valeu o
+ * trabalho de tirar.
+ */
+function telaResultado(dados) {
+  rodape.hidden = true;
+  barra.style.width = "100%";
+
+  const alertas = Array.isArray(dados.alertas) ? dados.alertas : [];
+  const respostas = Array.isArray(dados.respostas) ? dados.respostas : [];
+
+  const quando = dados.concluido_em
+    ? new Date(dados.concluido_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+    : null;
+
+  const cabecalho = `
+    <div class="final" style="padding:28px 20px 10px">
+      <div style="font-size:44px">${alertas.length > 0 ? "⚠️" : "✅"}</div>
+      <h2>${alertas.length > 0 ? "Concluído com pontos de atenção" : "Concluído sem pendências"}</h2>
+      <p>${dados.executor ? `Por ${seguro(dados.executor)}` : "Executado"}${quando ? ` · ${quando}` : ""}</p>
+      ${dados.resumo ? `<p style="margin-top:10px">${seguro(dados.resumo)}</p>` : ""}
+      ${
+        alertas.length > 0
+          ? `<div class="alertas"><strong>A IA marcou:</strong><ul style="margin:8px 0 0;padding-left:18px">${alertas
+              .map((a) => `<li>${seguro(a)}</li>`)
+              .join("")}</ul></div>`
+          : ""
+      }
+    </div>`;
+
+  // A resposta vira texto de gente: "sim"/"nao" no banco é bom para contar,
+  // ruim para ler no meio do turno.
+  const comoTexto = (r) => {
+    if (r.tipo === "foto") return r.foto ? "Foto enviada" : "Sem foto";
+    if (r.valor === "sim") return "Sim ✓";
+    if (r.valor === "nao") return "Não ✗";
+    return r.valor?.trim() ? seguro(r.valor) : "— não respondeu";
+  };
+
+  const itensHtml = respostas
+    .map((r, i) => {
+      // "Não" é o que o gerente abriu o link para achar: fica em destaque.
+      const ruim = r.valor === "nao" || (r.tipo === "foto" && !r.foto);
+      return `
+        <section class="cartao" ${ruim ? 'style="border-color:rgba(226,86,95,.55)"' : ""}>
+          <p class="pergunta">${i + 1}. ${seguro(r.pergunta)}</p>
+          <p style="margin:0;font-weight:600;color:${ruim ? "#ff9aa1" : "var(--creme)"}">${comoTexto(r)}</p>
+          ${
+            r.foto
+              ? `<a href="${r.foto}" target="_blank" rel="noopener">
+                   <img src="${r.foto}" alt="Foto de ${seguro(r.pergunta)}" loading="lazy"
+                        style="width:100%;border-radius:12px;margin-top:10px;display:block">
+                 </a>`
+              : ""
+          }
+          ${
+            r.observacao
+              ? `<p style="margin:10px 0 0;color:var(--creme-2);font-size:14px">💬 ${seguro(r.observacao)}</p>`
+              : ""
+          }
+        </section>`;
+    })
+    .join("");
+
+  conteudo.innerHTML =
+    cabecalho +
+    (itensHtml ||
+      `<div class="final"><p>As respostas deste checklist não ficaram registradas.</p></div>`);
+  scrollTo({ top: 0 });
+}
+
 async function iniciar() {
   if (!token) return erroFatal("Este link está incompleto. Peça para reenviarem pelo WhatsApp.");
   let dados;
@@ -368,9 +450,7 @@ async function iniciar() {
   const [ano, mes, dia] = String(dados.data).split("-");
   subtitulo.textContent = `${dados.venue} · ${dia}/${mes}/${ano}`;
 
-  if (dados.status === "concluida") {
-    return telaFinal({ resumo: `Já foi concluído${dados.executor ? ` por ${dados.executor}` : ""}. Nada mais a fazer aqui.` });
-  }
+  if (dados.status === "concluida") return telaResultado(dados);
 
   itens = dados.itens ?? [];
   if (itens.length === 0) return erroFatal("Este checklist está sem perguntas.");
