@@ -120,19 +120,51 @@ export class ErroApi extends Error {
   }
 }
 
+/**
+ * Prazo de espera. Sem ele, uma requisição que nunca responde deixa a tela
+ * "carregando" para sempre — e "carregando para sempre" não diz à pessoa o
+ * que fazer, enquanto "o servidor não respondeu, tente de novo" diz.
+ *
+ * Upload ganha prazo largo: enviar a foto de uma nota e esperar a IA lê-la
+ * leva um minuto com folga, e cortar isso em 30s transformaria o caminho
+ * mais lento do produto num erro constante.
+ */
+const ESPERA_MS = 30_000;
+const ESPERA_UPLOAD_MS = 180_000;
+
 export async function api(caminho, opcoes = {}, jaRenovou = false) {
   const chave = chaveSalva();
   // Corpo texto (JSON.stringify) leva content-type json; corpo binário
   // (File/Blob) deixa o navegador decidir — forçar json quebraria o upload.
   const corpoJson = typeof opcoes.body === "string";
-  const resposta = await fetch(caminho, {
-    ...opcoes,
-    headers: {
-      ...(corpoJson ? { "content-type": "application/json" } : {}),
-      ...(chave ? { authorization: `Bearer ${chave}` } : {}),
-      ...opcoes.headers,
-    },
-  });
+  const ehUpload = opcoes.body !== undefined && !corpoJson;
+
+  let resposta;
+  try {
+    resposta = await fetch(caminho, {
+      ...opcoes,
+      signal: opcoes.signal ?? AbortSignal.timeout(ehUpload ? ESPERA_UPLOAD_MS : ESPERA_MS),
+      headers: {
+        ...(corpoJson ? { "content-type": "application/json" } : {}),
+        ...(chave ? { authorization: `Bearer ${chave}` } : {}),
+        ...opcoes.headers,
+      },
+    });
+  } catch (e) {
+    // Estourou o prazo, ou o aparelho está sem rede. As duas coisas se
+    // resolvem do mesmo jeito — tentar de novo — mas dizer QUAL das duas é
+    // a diferença entre a pessoa conferir o wi-fi e a pessoa nos chamar.
+    const semRede = typeof navigator !== "undefined" && navigator.onLine === false;
+    throw new ErroApi(
+      0,
+      e?.name === "TimeoutError" ? "tempo_esgotado" : "sem_conexao",
+      semRede
+        ? "Seu aparelho está sem internet. Confira a conexão e tente de novo."
+        : e?.name === "TimeoutError"
+          ? "O servidor demorou demais para responder. Tente de novo em instantes."
+          : "Não deu para falar com o servidor. Confira a internet e tente de novo.",
+    );
+  }
 
   // Token vencido: renova uma vez e repete. `jaRenovou` impede laço infinito
   // quando o refresh também não vale mais.

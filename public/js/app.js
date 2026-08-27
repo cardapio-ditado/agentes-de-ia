@@ -613,10 +613,23 @@ formAcesso.addEventListener("submit", async (e) => {
   try {
     // Sem `post()`: ainda não há sessão, e mandar Authorization com um token
     // velho aqui faria o servidor recusar um login legítimo.
+    //
+    // Com prazo: sem ele, um servidor que não responde deixa o botão em
+    // "Entrando…" para sempre, e a pessoa fica olhando uma tela que nunca
+    // vai mudar sem saber se a culpa é da senha, da internet ou de nós.
     const resposta = await fetch("/v1/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, senha }),
+      signal: AbortSignal.timeout(30_000),
+    }).catch((e) => {
+      throw new Error(
+        navigator.onLine === false
+          ? "Seu aparelho está sem internet. Confira a conexão e tente de novo."
+          : e?.name === "TimeoutError"
+            ? "O servidor demorou demais para responder. Tente de novo em instantes."
+            : "Não deu para falar com o servidor. Confira a internet e tente de novo.",
+      );
     });
     const corpo = await resposta.json();
     if (!resposta.ok || corpo?.success === false) {
@@ -739,6 +752,9 @@ formNovaSenha.addEventListener("submit", async (e) => {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${tokenDeTroca}` },
       body: JSON.stringify({ senha }),
+      signal: AbortSignal.timeout(30_000),
+    }).catch(() => {
+      throw new Error("O servidor não respondeu. Tente salvar a senha de novo.");
     });
     const corpo = await resposta.json();
     if (!resposta.ok || corpo?.success === false) {
