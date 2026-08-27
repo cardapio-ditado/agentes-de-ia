@@ -176,8 +176,17 @@ function folhaDaAvaliacao(r) {
   const media = mediaDaExperiencia(r.itens ?? []);
   const casa = document.getElementById("marca-org")?.textContent || "Brasa Food";
 
+  // O que o cliente ESCREVEU sai das colunas de nota e ganha bloco próprio.
+  //
+  // Nota é para varrer com o olho; frase é para ler. Espremer "Colocaria
+  // queijo no recheio do bolinho de costela" numa coluna estreita ao lado de
+  // um número é perder justamente a parte que faz a equipe mudar alguma
+  // coisa — e foi o que aconteceu: no papel a frase saía como "—".
+  const escritas = (r.itens ?? []).filter((i) => i.texto && String(i.texto).trim());
+  const comNota = (r.itens ?? []).filter((i) => !escritas.includes(i));
+
   const porCategoria = new Map();
-  for (const item of r.itens ?? []) {
+  for (const item of comNota) {
     if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
     porCategoria.get(item.categoria).push(item);
   }
@@ -236,12 +245,34 @@ function folhaDaAvaliacao(r) {
                     texto: c.media === null ? "—" : numero(c.media),
                   }),
                 ]),
+                // `respostaLegivel` é a mesma leitura da tela: sim_nao vira
+                // "Sim"/"Não" e estrelas viram estrelas. Sem ela o papel
+                // mostrava a nota NORMALIZADA — um "Sim" virava 10, um "Não"
+                // virava 0, e o gerente lia um número que ninguém deu.
                 ...c.itens.map((i) =>
                   el("div", { classe: `folha-pergunta ${i.nota !== null && i.nota < 6 ? "ruim" : ""}`.trim() }, [
                     el("span", { texto: i.pergunta }),
-                    el("b", { texto: i.nota === null ? "—" : numero(i.nota) }),
+                    el("b", { texto: respostaLegivel(i) }),
                   ]),
                 ),
+              ]),
+            ),
+          ),
+        ])
+      : null,
+
+    // O que ele escreveu, por extenso e em largura cheia. Vem depois das
+    // notas porque as notas dizem ONDE doeu; estas dizem O QUÊ.
+    escritas.length > 0
+      ? el("div", {}, [
+          el("div", { classe: "folha-secao", texto: "O que o cliente escreveu" }),
+          el(
+            "div",
+            { classe: "folha-escritas" },
+            escritas.map((i) =>
+              el("div", { classe: "folha-escrita" }, [
+                el("span", { classe: "folha-escrita-pergunta", texto: i.pergunta }),
+                el("p", { texto: String(i.texto).trim() }),
               ]),
             ),
           ),
