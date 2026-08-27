@@ -38,8 +38,39 @@ export interface AgendaChecklist {
   responsavel_nome: string;
   /** WhatsApp de quem executa — recebe o link. */
   responsavel_telefone: string;
-  /** WhatsApp de quem gerencia — recebe o resumo da IA. Vazio = ninguém. */
+  /**
+   * WhatsApp de quem acompanha o resultado — recebe o resumo da IA.
+   *
+   * Aceita MAIS DE UM, separados por vírgula: numa casa de verdade quem
+   * cobra o checklist não é uma pessoa só — o gerente responde pelo turno e
+   * o líder está no salão. Guardado como texto (e não lista) porque é o
+   * formato que já está gravado em produção; quem lê usa `telefonesDeAviso`.
+   * Vazio = ninguém.
+   */
   avisar_telefone: string;
+}
+
+/**
+ * Os números que recebem o resumo, um por destinatário.
+ *
+ * Aceita vírgula, ponto-e-vírgula, barra e quebra de linha como separador —
+ * quem digita não vai lembrar qual é o certo, e recusar por causa da
+ * pontuação seria transformar um detalhe em suporte. Repetido entra uma vez
+ * só: o mesmo gerente cadastrado duas vezes receberia a mensagem em dobro.
+ */
+export function telefonesDeAviso(bruto: string): string[] {
+  const vistos = new Set<string>();
+  for (const pedaco of (bruto ?? "").split(/[,;/\n]+/)) {
+    const limpo = pedaco.trim();
+    if (!limpo) continue;
+    // Só dígitos para comparar: "(65) 99999-0000" e "65999990000" são a
+    // mesma pessoa, e sem isto os dois formatos virariam duas mensagens.
+    const digitos = limpo.replace(/\D/g, "");
+    if (digitos.length < 10 || digitos.length > 15) continue;
+    if (vistos.has(digitos)) continue;
+    vistos.add(digitos);
+  }
+  return [...vistos];
 }
 
 export interface RespostaItem {
@@ -485,7 +516,8 @@ export async function concluirRun(params: {
   // Resumo no WhatsApp de quem gerencia — com ou sem problemas, saber que
   // o checklist foi feito já vale a mensagem.
   const agenda = agendaDe(checklist);
-  if (agenda.avisar_telefone) {
+  const destinatarios = telefonesDeAviso(agenda.avisar_telefone);
+  if (destinatarios.length > 0) {
     const alertas = analise?.alertas ?? [];
     const linhas = [
       alertas.length > 0
@@ -496,13 +528,20 @@ export async function concluirRun(params: {
     if (analise?.resumo) linhas.push(``, analise.resumo);
     if (alertas.length > 0) linhas.push(``, ...alertas.map((a) => `• ${a}`));
 
-    const { error: erroNotif } = await db().from("notifications").insert({
-      venue_id: venue.id,
-      channel: "whatsapp",
-      destination: agenda.avisar_telefone,
-      template: "checklist_resumo",
-      body: linhas.join("\n"),
-    });
+    // Uma notificação POR PESSOA, e não uma com vários destinos: cada uma
+    // tem o seu status de entrega, e o gerente receber não pode fazer o
+    // sistema achar que o líder também recebeu.
+    const { error: erroNotif } = await db()
+      .from("notifications")
+      .insert(
+        destinatarios.map((destino) => ({
+          venue_id: venue.id,
+          channel: "whatsapp",
+          destination: destino,
+          template: "checklist_resumo",
+          body: linhas.join("\n"),
+        })),
+      );
     if (erroNotif) console.error(`[checklists] não enfileirou o resumo: ${erroNotif.message}`);
   }
 

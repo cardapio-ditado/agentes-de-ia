@@ -109,7 +109,18 @@ export async function checklists(raiz, ctx) {
       ]),
       linha("Perguntas", String((c.items ?? []).length)),
       linha("Agenda", resumoAgenda(c.schedule)),
-      c.schedule?.avisar_telefone ? linha("Resumo da IA vai para", c.schedule.avisar_telefone) : null,
+      // Vários números aparecem separados por "·": o gestor confere de
+      // bate-pronto se esqueceu de incluir alguém.
+      c.schedule?.avisar_telefone
+        ? linha(
+            "Resumo da IA vai para",
+            c.schedule.avisar_telefone
+              .split(/[,;/\n]+/)
+              .map((t) => t.trim())
+              .filter(Boolean)
+              .join("  ·  "),
+          )
+        : null,
       el("div", { classe: "reserva-acoes" }, [
         btnDisparar,
         el("button", {
@@ -171,7 +182,13 @@ export async function checklists(raiz, ctx) {
       hora: el("input", { type: "time", value: agenda.hora ?? "09:00" }),
       respNome: el("input", { placeholder: "Quem executa", value: agenda.responsavel_nome ?? "" }),
       respFone: el("input", { placeholder: "WhatsApp de quem executa", value: agenda.responsavel_telefone ?? "" }),
-      avisarFone: el("input", { placeholder: "WhatsApp de quem recebe o resumo", value: agenda.avisar_telefone ?? "" }),
+      // Mais de um número, separados por vírgula: quem cobra o checklist
+      // numa casa de verdade não é uma pessoa só — o gerente responde pelo
+      // turno e o líder está no salão.
+      avisarFone: el("input", {
+        placeholder: "WhatsApp de quem recebe o resumo (vírgula separa vários)",
+        value: agenda.avisar_telefone ?? "",
+      }),
     };
 
     const checksDias = DIAS.map(([valor, rotulo]) => {

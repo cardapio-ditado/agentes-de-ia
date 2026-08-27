@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { agoraLocal, estaNaHora, validarItens, type AgendaChecklist } from "./checklists.js";
+import { agoraLocal, estaNaHora, telefonesDeAviso, validarItens, type AgendaChecklist } from "./checklists.js";
 
 const TZ = "America/Cuiaba"; // UTC-4, sem horário de verão
 
@@ -63,5 +63,42 @@ describe("validarItens", () => {
   it("recusa lista vazia e tipo desconhecido", () => {
     assert.throws(() => validarItens([]));
     assert.throws(() => validarItens([{ tipo: "nota", pergunta: "x" }]));
+  });
+});
+
+/**
+ * Quem cobra o checklist numa casa de verdade não é uma pessoa só: o gerente
+ * responde pelo turno e o líder está no salão. O campo aceita os dois.
+ */
+describe("telefonesDeAviso", () => {
+  it("separa vários números, seja qual for a pontuação", () => {
+    assert.deepEqual(telefonesDeAviso("65999990001, 65999990002"), ["65999990001", "65999990002"]);
+    assert.deepEqual(telefonesDeAviso("65999990001; 65999990002"), ["65999990001", "65999990002"]);
+    assert.deepEqual(telefonesDeAviso("65999990001 / 65999990002"), ["65999990001", "65999990002"]);
+    assert.deepEqual(telefonesDeAviso("65999990001\n65999990002"), ["65999990001", "65999990002"]);
+  });
+
+  it("limpa a formatação — o número é o que importa", () => {
+    assert.deepEqual(telefonesDeAviso("(65) 99999-0001, +55 65 99999-0002"), [
+      "65999990001",
+      "5565999990002",
+    ]);
+  });
+
+  it("a mesma pessoa duas vezes recebe UMA mensagem", () => {
+    assert.deepEqual(telefonesDeAviso("(65) 99999-0001, 65999990001"), ["65999990001"]);
+  });
+
+  it("descarta o que não é telefone em vez de gastar disparo", () => {
+    assert.deepEqual(telefonesDeAviso("65999990001, 1234, , abc"), ["65999990001"]);
+  });
+
+  it("campo vazio não avisa ninguém", () => {
+    assert.deepEqual(telefonesDeAviso(""), []);
+    assert.deepEqual(telefonesDeAviso("  ,  ; "), []);
+  });
+
+  it("um número só continua funcionando como sempre", () => {
+    assert.deepEqual(telefonesDeAviso("65999990001"), ["65999990001"]);
   });
 });
