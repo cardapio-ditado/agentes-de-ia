@@ -20,6 +20,59 @@ const campoExecutor = document.getElementById("executor");
 const respostas = new Map();
 let itens = [];
 
+/**
+ * Rascunho no próprio aparelho.
+ *
+ * Checklist de limpeza não se responde de uma sentada: a pessoa recebe às
+ * 17h, limpa o salão, tira foto, vai pra cozinha, atende alguém, volta. Nesse
+ * meio-tempo o celular troca de app dez vezes — e navegador de celular
+ * DESCARTA aba em segundo plano quando a memória aperta. Sem rascunho, ela
+ * voltava para um checklist em branco depois de meia hora de trabalho, e a
+ * segunda vez ninguém faz com o mesmo cuidado.
+ *
+ * As fotos já eram salvas no servidor na hora; o que se perdia era o resto.
+ * Guardar aqui é de graça e resolve os três jeitos de perder: fechou a aba,
+ * o sistema matou o navegador, acabou a bateria.
+ */
+const RASCUNHO = `brasa.checklist.${token ?? ""}`;
+
+function guardarRascunho() {
+  try {
+    localStorage.setItem(
+      RASCUNHO,
+      JSON.stringify({
+        executor: campoExecutor.value ?? "",
+        respostas: [...respostas.entries()],
+        em: Date.now(),
+      }),
+    );
+  } catch {
+    /* aparelho sem espaço ou em aba anônima: o checklist segue, só sem rede de segurança */
+  }
+}
+
+function lerRascunho() {
+  try {
+    const bruto = localStorage.getItem(RASCUNHO);
+    if (!bruto) return null;
+    const dados = JSON.parse(bruto);
+    // Rascunho de mais de dois dias é de outro serviço: o token é da
+    // execução, mas deixar ressuscitar resposta velha seria pior que perder.
+    if (!dados?.em || Date.now() - dados.em > 2 * 86_400_000) return null;
+    return dados;
+  } catch {
+    return null;
+  }
+}
+
+function apagarRascunho() {
+  try {
+    localStorage.removeItem(RASCUNHO);
+  } catch {
+    /* nada a fazer — e nada se perde por isso */
+  }
+}
+
 // A câmera de um celular atual entrega de 3 a 8 MB por foto. Para conferir se a
 // câmara fria está limpa isso é desperdício puro: 1600px já mostra qualquer
 // coisa que um gerente precise enxergar, e o arquivo cai umas 20 vezes — o que
@@ -115,11 +168,14 @@ function cartaoSimNao(item) {
     btn.type = "button";
     btn.className = `opcao ${classe}`;
     btn.textContent = rotulo;
+    // Vindo do rascunho, a escolha anterior já nasce acesa.
+    if (respostas.get(item.id)?.valor === valor) btn.setAttribute("data-on", "1");
     btn.addEventListener("click", () => {
       resposta(item.id).valor = valor;
       for (const b of div.children) b.removeAttribute("data-on");
       btn.setAttribute("data-on", "1");
       atualizarProgresso();
+      guardarRascunho();
     });
     div.append(btn);
   }
@@ -129,9 +185,11 @@ function cartaoSimNao(item) {
 function cartaoTexto(item) {
   const area = document.createElement("textarea");
   area.placeholder = "Escreva aqui…";
+  area.value = respostas.get(item.id)?.valor ?? "";
   area.addEventListener("input", () => {
     resposta(item.id).valor = area.value;
     atualizarProgresso();
+    guardarRascunho();
   });
   return area;
 }
@@ -146,7 +204,9 @@ function cartaoFoto(item) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "btn-foto";
-  btn.innerHTML = "📷 Tirar foto";
+  // A foto já subiu para o servidor numa sessão anterior: dizer isso evita
+  // que a pessoa tire tudo de novo achando que perdeu.
+  btn.innerHTML = respostas.get(item.id)?.foto ? "✓ Foto enviada — trocar" : "📷 Tirar foto";
   btn.addEventListener("click", () => input.click());
 
   input.addEventListener("change", async () => {
@@ -170,6 +230,7 @@ function cartaoFoto(item) {
         throw new Error(json?.error?.message ?? "Falha ao enviar a foto.");
       }
       resposta(item.id).foto = json.data.foto;
+      guardarRascunho();
       btn.innerHTML = "";
       const img = document.createElement("img");
       const previa = URL.createObjectURL(envio);
@@ -213,7 +274,14 @@ function cartaoDoItem(item, indice) {
   resumo.textContent = "+ observação";
   const areaObs = document.createElement("textarea");
   areaObs.placeholder = "Algo a registrar sobre este item?";
-  areaObs.addEventListener("input", () => (resposta(item.id).observacao = areaObs.value));
+  areaObs.value = respostas.get(item.id)?.observacao ?? "";
+  // Com observação escrita, o bloco nasce aberto — senão ela fica invisível
+  // atrás do "+ observação" e a pessoa acha que se perdeu.
+  if (areaObs.value) obs.open = true;
+  areaObs.addEventListener("input", () => {
+    resposta(item.id).observacao = areaObs.value;
+    guardarRascunho();
+  });
   obs.append(resumo, areaObs);
   cartao.append(obs);
 
@@ -253,6 +321,7 @@ async function concluir() {
     if (!res.ok || json?.success === false) {
       throw new Error(json?.error?.message ?? "Falha ao concluir.");
     }
+    apagarRascunho();
     telaFinal(json.data);
   } catch (e) {
     avisar(e.message);
@@ -306,9 +375,23 @@ async function iniciar() {
   itens = dados.itens ?? [];
   if (itens.length === 0) return erroFatal("Este checklist está sem perguntas.");
 
+  // O rascunho ENTRA antes de desenhar: assim cada cartão já nasce com o que
+  // a pessoa tinha respondido, em vez de piscar vazio e preencher depois.
+  const rascunho = lerRascunho();
+  if (rascunho) {
+    for (const [id, r] of rascunho.respostas ?? []) respostas.set(id, r);
+    if (rascunho.executor) campoExecutor.value = rascunho.executor;
+  }
+
   for (const [i, item] of itens.entries()) conteudo.append(cartaoDoItem(item, i));
   rodape.hidden = false;
+  campoExecutor.addEventListener("input", guardarRascunho);
   btnEnviar.addEventListener("click", concluir);
+
+  if (rascunho && respostas.size > 0) {
+    atualizarProgresso();
+    avisar("Continuando de onde você parou — o que já respondeu está aqui.");
+  }
 }
 
 void iniciar();
