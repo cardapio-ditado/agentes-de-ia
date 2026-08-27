@@ -111,17 +111,26 @@ describe("telefonesDeAviso", () => {
  * mostrava "Unexpected end of JSON input", que não diz nada a quem só queria
  * montar um checklist.
  */
-const resposta = (texto, stop = "end_turn") =>
-  ({ content: [{ type: "text", text: texto }], stop_reason: stop });
+// Só os dois campos que jsonDaResposta lê; o resto de Message não importa aqui.
+const resposta = (texto: string, stop = "end_turn") =>
+  ({ content: [{ type: "text", text: texto }], stop_reason: stop }) as unknown as Parameters<
+    typeof jsonDaResposta
+  >[0];
 
 describe("jsonDaResposta", () => {
   it("lê o JSON quando a resposta veio inteira", () => {
-    const r = jsonDaResposta(resposta('{"tipo":"pergunta","texto":"quantos itens?"}'), "a rotina");
+    const r = jsonDaResposta<{ tipo: string; texto: string }>(
+      resposta('{"tipo":"pergunta","texto":"quantos itens?"}'),
+      "a rotina",
+    );
     assert.equal(r.tipo, "pergunta");
   });
 
   it("aceita conversa em volta do JSON", () => {
-    const r = jsonDaResposta(resposta('Claro!\n{"tipo":"pergunta","texto":"oi"}\nEspero ajudar.'), "a rotina");
+    const r = jsonDaResposta<{ tipo: string; texto: string }>(
+      resposta('Claro!\n{"tipo":"pergunta","texto":"oi"}\nEspero ajudar.'),
+      "a rotina",
+    );
     assert.equal(r.texto, "oi");
   });
 
