@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ETIQUETAS, etiquetasValidas, liberacaoDoPremio, notaDoNps, telefoneLimpo } from "./pesquisa.js";
+import { ETIQUETAS, etiquetasValidas, liberacaoDoPremio, notaDoNps, primeiraMinuscula, telefoneLimpo } from "./pesquisa.js";
 import type { ItemDaPesquisa } from "./pesquisaModelo.js";
 
 test("etiqueta fora da lista não entra no gráfico da casa", () => {
@@ -156,4 +156,23 @@ test("valor explicitamente vazio APAGA — é diferente de ausente", () => {
   );
   assert.equal("detrator_avisar_whatsapp" in informados, true);
   assert.equal("premio_titulo" in informados, false);
+});
+
+/**
+ * O prêmio entra no convite por extenso, e a emenda tem que soar natural:
+ * "quem responde ganha um chopp por nossa conta na próxima visita".
+ */
+test("primeiraMinuscula emenda o prêmio no meio da frase", () => {
+  assert.equal(
+    primeiraMinuscula("Um chopp por nossa conta na próxima visita"),
+    "um chopp por nossa conta na próxima visita",
+  );
+  assert.equal(primeiraMinuscula("Uma sobremesa"), "uma sobremesa");
+});
+
+test("primeiraMinuscula não estraga marca escrita em maiúscula", () => {
+  // "Chopp Brahma" tem maiúscula no meio? Não — mas "IPA" e "CHOPP" têm, e
+  // rebaixá-las faria a casa ver o próprio produto escrito errado.
+  assert.equal(primeiraMinuscula("IPA da casa"), "IPA da casa");
+  assert.equal(primeiraMinuscula("CHOPP grátis"), "CHOPP grátis");
 });

@@ -1158,11 +1158,23 @@ function cartaoCupons(premios) {
 /* ============ Convites ============ */
 
 async function telaConvites(ctx, recarregar) {
-  const convites = await get(`/v1/venues/${ctx.venue}/pesquisa/convites`);
+  const [convites, config] = await Promise.all([
+    get(`/v1/venues/${ctx.venue}/pesquisa/convites`),
+    // O prêmio entra na mensagem por extenso; mostrar aqui o texto que VAI
+    // sair evita a surpresa de descobrir o que foi prometido pelo print que
+    // o cliente manda de volta.
+    get(`/v1/venues/${ctx.venue}/pesquisa/config`).catch(() => null),
+  ]);
 
   const telefone = el("input", { type: "tel", placeholder: "(65) 99999-0000", required: true });
   const nome = el("input", { placeholder: "Nome do cliente (opcional)" });
   const mensagem = el("input", { placeholder: "Deixe vazio para usar o texto padrão" });
+
+  const premioNaMensagem =
+    config?.premio_ativo && config.premio_titulo?.trim() ? config.premio_titulo.trim() : null;
+  const previaDaMensagem = premioNaMensagem
+    ? `Sai assim: “…São 30 segundos — e quem responde ganha ${premioNaMensagem.charAt(0).toLowerCase() + premioNaMensagem.slice(1)}.”`
+    : "O prêmio está desligado, então a mensagem não promete nada. Ligue em “O prêmio” para citá-lo aqui.";
 
   const form = el("form", {
     classe: "cartao",
@@ -1194,6 +1206,7 @@ async function telaConvites(ctx, recarregar) {
       classe: "muted",
       texto: "Sai pelo WhatsApp da casa (o administrativo), nunca pelo número do agente. Cada link vale uma resposta só.",
     }),
+    el("p", { classe: "muted", style: "margin-top:6px", texto: previaDaMensagem }),
     el("div", { classe: "grade", style: "margin-top:12px" }, [
       campo("WhatsApp com DDD", telefone),
       campo("Nome", nome),

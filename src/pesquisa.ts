@@ -823,6 +823,57 @@ export async function criarConvite(params: {
  * É o MESMO caminho para o convite digitado no painel, o buscado na Zig e o
  * importado de planilha — três portas, um corredor.
  */
+/**
+ * O texto do convite, com o prêmio DITO POR EXTENSO.
+ *
+ * Antes o convite prometia "um mimo por nossa conta" — vago de propósito,
+ * para servir a qualquer casa. Mas vago não convence: "concorre a um mimo"
+ * parece sorteio (e sorteio a pessoa acha que não ganha), enquanto "ganha um
+ * chopp na próxima visita" é uma troca clara — trinta segundos por uma
+ * bebida. A diferença aparece na taxa de resposta.
+ *
+ * O prêmio sai da configuração DA CASA (`premio_titulo`), não do código: o
+ * Ditado dá chopp, o vizinho dá sobremesa, e cada um escreve o seu na tela
+ * de Ajustes da pesquisa. Prêmio desligado volta ao convite sem promessa —
+ * prometer o que a casa não vai entregar é pior do que não prometer nada.
+ */
+async function textoDoConvite(
+  venue: { id: string; name: string },
+  nome: string | null,
+  link: string,
+): Promise<string> {
+  const primeiroNome = nome ? `${nome.split(/\s+/)[0]}, ` : "";
+
+  let premio: string | null = null;
+  try {
+    const config = await configDaPesquisa(venue.id);
+    if (config.premio_ativo && config.premio_titulo.trim()) {
+      premio = config.premio_titulo.trim();
+    }
+  } catch {
+    // Ajuste ilegível não pode impedir o convite de sair: sem o prêmio, vale
+    // a versão sem promessa.
+  }
+
+  const convite = premio
+    ? `Conta pra gente como foi? São 30 segundos — e quem responde ganha ${primeiraMinuscula(premio)}:`
+    : `Conta pra gente como foi? São 30 segundos, e a sua opinião ajuda demais:`;
+
+  return [`${primeiroNome}obrigado pela visita ao ${venue.name}! 🙌`, ``, convite, link].join("\n");
+}
+
+/**
+ * "Um chopp por nossa conta" no meio da frase vira "um chopp por nossa
+ * conta". Só a primeira letra, e só quando a palavra não é um nome próprio
+ * (que a casa escreveu em maiúscula de propósito, como "Chopp Brahma").
+ */
+export function primeiraMinuscula(texto: string): string {
+  const [primeira = ""] = texto.split(/\s+/);
+  // Palavra toda em maiúscula, ou com maiúscula no meio, é marca: não mexe.
+  if (primeira.length > 1 && primeira.slice(1) !== primeira.slice(1).toLowerCase()) return texto;
+  return texto.charAt(0).toLowerCase() + texto.slice(1);
+}
+
 export async function enviarConvite(
   venue: { id: string; name: string },
   params: {
@@ -843,13 +894,7 @@ export async function enviarConvite(
 
   const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
   const link = `${base}/pesquisa?t=${convite.token}`;
-  const primeiroNome = convite.nome ? `${convite.nome.split(/\s+/)[0]}, ` : "";
-  const mensagemPadrao = [
-    `${primeiroNome}obrigado pela visita ao ${venue.name}! 🙌`,
-    ``,
-    `Conta pra gente como foi? São 30 segundos, e quem responde concorre a um mimo por nossa conta:`,
-    link,
-  ].join("\n");
+  const mensagemPadrao = await textoDoConvite(venue, convite.nome, link);
 
   const { error } = await cliente().from("notifications").insert({
     venue_id: venue.id,
