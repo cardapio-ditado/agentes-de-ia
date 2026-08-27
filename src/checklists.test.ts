@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { agoraLocal, estaNaHora, telefonesDeAviso, validarItens, type AgendaChecklist } from "./checklists.js";
+import { agoraLocal, estaNaHora, jsonDaResposta, telefonesDeAviso, validarItens, type AgendaChecklist } from "./checklists.js";
 
 const TZ = "America/Cuiaba"; // UTC-4, sem horário de verão
 
@@ -100,5 +100,51 @@ describe("telefonesDeAviso", () => {
 
   it("um número só continua funcionando como sempre", () => {
     assert.deepEqual(telefonesDeAviso("65999990001"), ["65999990001"]);
+  });
+});
+
+/**
+ * A resposta da IA cortada no limite de tokens.
+ *
+ * Foi o que aconteceu ao gerar uma rotina grande de limpeza: o recorte do
+ * primeiro "{" ao último "}" pegava um pedaço inválido — ou nada — e o painel
+ * mostrava "Unexpected end of JSON input", que não diz nada a quem só queria
+ * montar um checklist.
+ */
+const resposta = (texto, stop = "end_turn") =>
+  ({ content: [{ type: "text", text: texto }], stop_reason: stop });
+
+describe("jsonDaResposta", () => {
+  it("lê o JSON quando a resposta veio inteira", () => {
+    const r = jsonDaResposta(resposta('{"tipo":"pergunta","texto":"quantos itens?"}'), "a rotina");
+    assert.equal(r.tipo, "pergunta");
+  });
+
+  it("aceita conversa em volta do JSON", () => {
+    const r = jsonDaResposta(resposta('Claro!\n{"tipo":"pergunta","texto":"oi"}\nEspero ajudar.'), "a rotina");
+    assert.equal(r.texto, "oi");
+  });
+
+  it("cortada no limite: explica o que houve, e o que fazer", () => {
+    const truncada = resposta('{"tipo":"itens","itens":[{"tipo":"foto","pergunta":"Foto do arm', "max_tokens");
+    assert.throws(() => jsonDaResposta(truncada, "a rotina"), /cortada no meio|menos itens/i);
+  });
+
+  it("cortada DEPOIS de um item completo também é recusada", () => {
+    // O caso traiçoeiro: existe um "}" no fim, mas ele fecha o item, não a
+    // lista. Sem olhar o stop_reason, isso viraria JSON inválido silencioso.
+    const truncada = resposta(
+      '{"tipo":"itens","itens":[{"tipo":"foto","pergunta":"Foto do armário","obrigatorio":true}',
+      "max_tokens",
+    );
+    assert.throws(() => jsonDaResposta(truncada, "a rotina"), /cortada no meio|menos itens/i);
+  });
+
+  it("resposta sem JSON nenhum não estoura com erro técnico", () => {
+    assert.throws(() => jsonDaResposta(resposta("Desculpe, não entendi."), "a rotina"), /formato inesperado/i);
+  });
+
+  it("JSON malformado não estoura com erro técnico", () => {
+    assert.throws(() => jsonDaResposta(resposta('{"tipo": itens}'), "a rotina"), /formato inesperado/i);
   });
 });

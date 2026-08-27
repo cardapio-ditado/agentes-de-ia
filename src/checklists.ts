@@ -603,6 +603,43 @@ export async function concluirRun(params: {
 // IA
 // ============================================================
 
+/**
+ * O JSON que a IA respondeu — ou um erro que diz o que houve.
+ *
+ * Recortar do primeiro "{" ao último "}" funciona enquanto a resposta chega
+ * inteira. Truncada no limite de tokens, o último "}" é o de um objeto de
+ * DENTRO da lista (JSON inválido) — ou não existe nenhum, e o recorte vira
+ * texto vazio: `JSON.parse("")` estoura com "Unexpected end of JSON input",
+ * que não diz nada a quem só queria montar um checklist.
+ *
+ * Foi exatamente o que aconteceu com uma rotina grande de limpeza: a
+ * resposta passou de 1500 tokens no meio da lista de itens.
+ */
+export function jsonDaResposta<T>(resposta: Anthropic.Message, oQueEra: string): T {
+  const texto = resposta.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+
+  if (resposta.stop_reason === "max_tokens") {
+    throw new Error(
+      `A resposta da IA ficou grande demais e foi cortada no meio. ` +
+        `Tente descrever ${oQueEra} em menos itens, ou divida em dois checklists.`,
+    );
+  }
+
+  const inicio = texto.indexOf("{");
+  const fim = texto.lastIndexOf("}");
+  if (inicio < 0 || fim <= inicio) {
+    throw new Error("A IA respondeu num formato inesperado — tente de novo.");
+  }
+  try {
+    return JSON.parse(texto.slice(inicio, fim + 1)) as T;
+  } catch {
+    throw new Error("A IA respondeu num formato inesperado — tente de novo.");
+  }
+}
+
 async function analisarComIA(
   checklist: Checklist,
   itens: ItemChecklist[],
@@ -624,7 +661,9 @@ async function analisarComIA(
 
   const resposta = await anthropic().messages.create({
     model: MODELO_IA(),
-    max_tokens: 800,
+    // Um checklist de 15 itens com muitos alertas passava dos 800 e a
+    // análise vinha cortada — e cortada ela não vira JSON nenhum.
+    max_tokens: 2000,
     system:
       "Você analisa checklists operacionais de bares e restaurantes. " +
       "Responda APENAS um JSON válido no formato " +
@@ -640,14 +679,7 @@ async function analisarComIA(
     ],
   });
 
-  const texto = resposta.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-  const json = JSON.parse(texto.slice(texto.indexOf("{"), texto.lastIndexOf("}") + 1)) as {
-    resumo?: string;
-    alertas?: string[];
-  };
+  const json = jsonDaResposta<{ resumo?: string; alertas?: string[] }>(resposta, "a execução");
   return {
     resumo: typeof json.resumo === "string" ? json.resumo : "",
     alertas: Array.isArray(json.alertas)
@@ -676,7 +708,12 @@ export async function conversarGeracao(mensagens: MensagemGeracao[]): Promise<Re
 
   const resposta = await anthropic().messages.create({
     model: MODELO_IA(),
-    max_tokens: 1500,
+    // Quinze itens em português, cada um com a pergunta escrita por extenso,
+    // não cabiam em 1500: a lista era cortada no meio e o painel recebia
+    // "Unexpected end of JSON input" no lugar do checklist. Aconteceu com uma
+    // rotina de limpeza de louça e talheres, que é exatamente o tamanho de
+    // rotina que mais precisa de checklist.
+    max_tokens: 8000,
     system:
       "Você monta checklists operacionais para bares e restaurantes brasileiros, " +
       "conversando com o dono antes de gerar. Entenda primeiro: quais itens são " +
@@ -696,15 +733,10 @@ export async function conversarGeracao(mensagens: MensagemGeracao[]): Promise<Re
     })),
   });
 
-  const texto = resposta.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-  const bruto = JSON.parse(texto.slice(texto.indexOf("{"), texto.lastIndexOf("}") + 1)) as {
-    tipo?: string;
-    texto?: string;
-    itens?: unknown;
-  };
+  const bruto = jsonDaResposta<{ tipo?: string; texto?: string; itens?: unknown }>(
+    resposta,
+    "a rotina",
+  );
 
   if (bruto.tipo === "itens") return { tipo: "itens", itens: validarItens(bruto.itens) };
   if (bruto.tipo === "pergunta" && typeof bruto.texto === "string" && bruto.texto.trim()) {
