@@ -106,13 +106,49 @@ export function categoriasEmAlerta(
     .sort((a, b) => a.media - b.media);
 }
 
+export interface PerguntaEmAlerta {
+  categoria: string;
+  pergunta: string;
+  nota: number;
+}
+
+/**
+ * As perguntas que o cliente pontuou no chão, uma a uma.
+ *
+ * A TERCEIRA PORTA, E ELA EXISTE POR UM CASO REAL.
+ *
+ * Um cliente deu 9 na recomendação e 8,6 de experiência — e, no meio disso,
+ * 5 em "a reposição das carnes acompanhou o ritmo da sua mesa?" e 5 em
+ * "percebeu um gerente presente no salão?". Escreveu que faltou petisco 35
+ * minutos antes do fim do rodízio e que não conseguiu se divertir. Ninguém
+ * foi avisado: a média de Comida deu 7, a de Atendimento deu 8, e as duas
+ * passaram longe do corte.
+ *
+ * A média por categoria continua existindo e é boa para o que faz — ver um
+ * assunto inteiro afundando. Mas ela dilui: duas notas boas ao lado de uma 5
+ * apagam a 5. E uma nota 5 não é ruído estatístico; é uma pessoa dizendo que
+ * alguma coisa deu errado, com nome e endereço.
+ */
+export function perguntasEmAlerta(
+  categorias: CategoriaDaResposta[],
+  limite: number,
+): PerguntaEmAlerta[] {
+  const corte = corteValido(limite);
+  return (categorias ?? [])
+    .filter((c): c is CategoriaDaResposta & { nota: number } =>
+      typeof c.nota === "number" && Number.isFinite(c.nota) && c.nota <= corte,
+    )
+    .map((c) => ({ categoria: c.categoria, pergunta: c.pergunta, nota: c.nota }))
+    .sort((a, b) => a.nota - b.nota);
+}
+
 /**
  * Esta resposta merece aviso?
  *
- * Duas portas, e basta uma: a nota de recomendação no chão, OU qualquer
- * categoria no chão. Exigir as duas deixaria passar exatamente o cliente que
- * mais dá para recuperar — o que gosta da casa e teve um problema com nome e
- * endereço.
+ * Três portas, e basta uma: a nota de recomendação no chão, uma categoria
+ * inteira no chão, OU uma única pergunta no chão. Exigir mais de uma deixaria
+ * passar exatamente o cliente que mais dá para recuperar — o que gosta da
+ * casa e teve um problema com nome e endereço.
  */
 export function mereceAviso(params: {
   nota: number;
@@ -120,7 +156,8 @@ export function mereceAviso(params: {
   limite: number;
 }): boolean {
   if (ehDetrator(params.nota, params.limite)) return true;
-  return categoriasEmAlerta(params.categorias, params.limite).length > 0;
+  if (categoriasEmAlerta(params.categorias, params.limite).length > 0) return true;
+  return perguntasEmAlerta(params.categorias, params.limite).length > 0;
 }
 
 export interface CategoriaDaResposta {
@@ -155,21 +192,30 @@ export interface DadosDoAlerta {
 export function textoDoAlerta(dados: DadosDoAlerta): string {
   const limite = dados.limite ?? 6;
   const emAlerta = categoriasEmAlerta(dados.categorias ?? [], limite);
+  const perguntasRuins = perguntasEmAlerta(dados.categorias ?? [], limite);
   const experiencia = mediaDaExperiencia(dados.categorias ?? []);
   const notaNoChao = ehDetrator(dados.nota, limite);
 
-  // O TÍTULO DIZ QUAL DOS DOIS CASOS É.
+  // O TÍTULO DIZ QUAL DOS TRÊS CASOS É.
   //
   // "🚨 Nota 8" faria o dono abrir achando que erramos a conta. O aviso por
-  // categoria existe justamente para o cliente que indicaria a casa e mesmo
-  // assim teve um problema — e o título tem de contar isso na primeira linha,
-  // que é a única que aparece na notificação do celular.
+  // categoria — e o por pergunta — existem justamente para o cliente que
+  // indicaria a casa e mesmo assim teve um problema, e o título tem de contar
+  // isso na primeira linha, que é a única que aparece na notificação do
+  // celular.
   const linhas: string[] = notaNoChao
     ? [`🚨 Nota ${dados.nota} na pesquisa — ${dados.casa}`]
-    : [
-        `⚠️ ${nomesDasCategorias(emAlerta)} com nota baixa — ${dados.casa}`,
-        `O cliente deu ${dados.nota} na recomendação, mas não em tudo.`,
-      ];
+    : emAlerta.length > 0
+      ? [
+          `⚠️ ${nomesDasCategorias(emAlerta)} com nota baixa — ${dados.casa}`,
+          `O cliente deu ${dados.nota} na recomendação, mas não em tudo.`,
+        ]
+      : [
+          // A média ficou boa e mesmo assim algo doeu: o título nomeia o
+          // ponto, senão o dono lê "nota 9" e fecha sem entender o alarme.
+          `⚠️ ${perguntasRuins.length === 1 ? "Um ponto" : `${perguntasRuins.length} pontos`} com nota baixa — ${dados.casa}`,
+          `O cliente deu ${dados.nota} na recomendação, mas não em tudo.`,
+        ];
 
   const onde = [dados.mesa?.trim() ? `Mesa ${dados.mesa.trim()}` : null, dados.atendente?.trim() || null]
     .filter(Boolean)
@@ -186,6 +232,21 @@ export function textoDoAlerta(dados: DadosDoAlerta): string {
     linhas.push(``, `Categorias em alerta:`);
     for (const c of emAlerta.slice(0, 6)) {
       linhas.push(`• ${c.categoria} — ${formatarNota(c.media)}${perguntasDaCategoria(dados, c.categoria)}`);
+    }
+  }
+
+  // AS PERGUNTAS, UMA A UMA, MESMO QUANDO A CATEGORIA PASSOU.
+  //
+  // É a parte acionável do aviso quando a média escondeu o estrago: o gerente
+  // lê "reposição das carnes — 5" e sabe o que conferir hoje à noite. Sem
+  // isto, sobra um "algo foi mal" que obriga a abrir o painel.
+  const soPergunta = perguntasRuins.filter(
+    (p) => !emAlerta.some((c) => c.categoria === p.categoria),
+  );
+  if (soPergunta.length > 0) {
+    linhas.push(``, `Notas baixas em:`);
+    for (const p of soPergunta.slice(0, 6)) {
+      linhas.push(`• ${formatarNota(p.nota)} — ${p.pergunta}`);
     }
   }
 

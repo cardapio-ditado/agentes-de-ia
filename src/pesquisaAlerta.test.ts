@@ -5,6 +5,7 @@ import {
   ehDetrator,
   mediaDaExperiencia,
   mereceAviso,
+  perguntasEmAlerta,
   textoDoAlerta,
 } from "./pesquisaAlerta.js";
 import type { DadosDoAlerta } from "./pesquisaAlerta.js";
@@ -279,4 +280,82 @@ test("várias categorias viram um título legível", () => {
     categorias: [cat("Cozinha", 1), cat("Salão", 2), cat("Bar", 3), cat("Música", 4)],
   });
   assert.match(texto, /^⚠️ Cozinha, Salão e mais 2 com nota baixa/);
+});
+
+/* ---------- a terceira porta: uma pergunta sozinha no chão ---------- */
+
+/**
+ * O CASO DO THIAGO, 28/08/2026.
+ *
+ * Nota 9 na recomendação, 8,6 de experiência — e, no meio disso, 5 em "a
+ * reposição das carnes acompanhou o ritmo da sua mesa?" e 5 em "percebeu um
+ * gerente presente no salão?". Escreveu que faltou petisco 35 minutos antes
+ * do fim do rodízio e que não conseguiu se divertir.
+ *
+ * Ninguém foi avisado. A média de Comida deu 7, a de Atendimento deu 8, e as
+ * duas passaram longe do corte de 6. O cliente disse exatamente o que estava
+ * errado e a média engoliu.
+ */
+const THIAGO: DadosDoAlerta["categorias"] = [
+  { categoria: "Comida", pergunta: "O quanto a reposição das carnes e do chopp acompanhou o ritmo da sua mesa?", nota: 5 },
+  { categoria: "Comida", pergunta: "O quanto a comida entregou o que você esperava?", nota: 8 },
+  { categoria: "Comida", pergunta: "O quanto ficou claro a diferença entre o rodízio tradicional e o premium?", nota: 8 },
+  { categoria: "Atendimento", pergunta: "O quanto você foi bem recebido e acomodado quando chegou?", nota: 9 },
+  { categoria: "Atendimento", pergunta: "O quanto o garçom te ajudou a escolher, em vez de só anotar o pedido?", nota: 10 },
+  { categoria: "Atendimento", pergunta: "O quanto você percebeu um gerente ou responsável presente no salão?", nota: 5 },
+  { categoria: "Tempo de espera", pergunta: "O quanto sua primeira bebida chegou rápido?", nota: 8 },
+  { categoria: "NPS", pergunta: "De 0 a 10, o quanto você indicaria o Ditado Popular?", nota: 9 },
+];
+
+test("nenhuma categoria do Thiago cai — é por isso que a terceira porta existe", () => {
+  // Comida: (5+8+8)/3 = 7. Atendimento: (9+10+5)/3 = 8. Nenhuma no corte.
+  assert.deepEqual(categoriasEmAlerta(THIAGO, 6), []);
+});
+
+test("as perguntas no chão aparecem, da pior para a menos pior", () => {
+  const ruins = perguntasEmAlerta(THIAGO, 6);
+  assert.equal(ruins.length, 2);
+  for (const p of ruins) assert.equal(p.nota, 5);
+  assert.ok(ruins.every((p) => p.pergunta.length > 10), "a pergunta inteira vem junto");
+});
+
+test("o Thiago agora dispara aviso — nota 9, categorias boas, duas perguntas em 5", () => {
+  assert.equal(mereceAviso({ nota: 9, categorias: THIAGO, limite: 6 }), true);
+});
+
+test("cliente que foi bem em tudo continua sem gerar aviso", () => {
+  // A terceira porta não pode virar "avisa sempre": aviso que chega todo dia
+  // é aviso que ninguém abre.
+  const feliz = THIAGO.map((c) => ({ ...c, nota: 9 }));
+  assert.equal(mereceAviso({ nota: 10, categorias: feliz, limite: 6 }), false);
+});
+
+test("a régua da pergunta é a mesma da casa", () => {
+  const um = [{ categoria: "Comida", pergunta: "O prato saiu no tempo?", nota: 7 }];
+  assert.equal(mereceAviso({ nota: 10, categorias: um, limite: 6 }), false);
+  // Casa exigente que quer saber de tudo abaixo de 8.
+  assert.equal(mereceAviso({ nota: 10, categorias: um, limite: 7 }), true);
+});
+
+test("o aviso do Thiago diz QUAL pergunta — senão não dá para agir", () => {
+  const texto = textoDoAlerta({ casa: "Ditado Popular", nota: 9, categorias: THIAGO, limite: 6 });
+
+  // O título não pode dizer "nota 9": o dono abriria achando erro de conta.
+  assert.ok(texto.includes("2 pontos com nota baixa"), texto);
+  assert.ok(texto.includes("Ditado Popular"), texto);
+  // E as duas perguntas, com a nota, para o gerente saber o que conferir hoje.
+  assert.ok(texto.includes("reposição das carnes"), texto);
+  assert.ok(texto.includes("gerente ou responsável presente no salão"), texto);
+});
+
+test("categoria no chão não repete a pergunta na lista de baixo", () => {
+  // Quando a categoria inteira já aparece em "Categorias em alerta", repetir
+  // as perguntas dela embaixo faria o aviso dizer a mesma coisa duas vezes.
+  const tudoRuim = [
+    { categoria: "Comida", pergunta: "O prato saiu no tempo?", nota: 2 },
+    { categoria: "Comida", pergunta: "A comida entregou o que esperava?", nota: 3 },
+  ];
+  const texto = textoDoAlerta({ casa: "Ditado", nota: 3, categorias: tudoRuim, limite: 6 });
+  assert.ok(texto.includes("Categorias em alerta"), texto);
+  assert.ok(!texto.includes("Notas baixas em:"), texto);
 });
