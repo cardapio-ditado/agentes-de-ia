@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { db } from "../supabase.js";
+import { db, ehMigracaoPendente } from "../supabase.js";
 import { inserirAvisos } from "../notifications.js";
 
 /**
@@ -67,7 +67,7 @@ export async function configDoCmv(venueId: string): Promise<ConfigDoCmv> {
 
   if (error) {
     // Tabela ainda não existe (42P01): o CMV segue mudo, como sempre foi.
-    if (/cmv_config|42P01|PGRST/i.test(error.message)) return { ...CONFIG_CMV_PADRAO };
+    if (ehMigracaoPendente(error.message)) return { ...CONFIG_CMV_PADRAO };
     throw new Error(`Falha ao ler os avisos do CMV: ${error.message}`);
   }
   if (!data) return { ...CONFIG_CMV_PADRAO };
@@ -324,7 +324,7 @@ export async function enfileirarAvisoCmv(params: {
       // Índice único: o aviso deste evento já saiu. É a trava trabalhando.
       if (/duplicate key|unique/i.test(error.message)) return false;
       // Coluna ainda não existe: a migração não rodou, e o CMV segue mudo.
-      if (/cmv_origem_id|42703|PGRST/i.test(error.message)) return false;
+      if (ehMigracaoPendente(error.message)) return false;
       console.error(`[cmv] aviso ${params.template} não entrou: ${error.message}`);
       return false;
     }
@@ -513,7 +513,7 @@ export async function cicloDiarioDoCmv(agora = new Date()): Promise<void> {
       .eq("modulo", "cmv")
       .eq("ativo", true);
     if (error) {
-      if (/venue_modulos|42P01|PGRST/i.test(error.message)) return;
+      if (ehMigracaoPendente(error.message)) return;
       throw error;
     }
     casas = data ?? [];

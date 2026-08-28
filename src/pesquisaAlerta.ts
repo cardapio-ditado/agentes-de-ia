@@ -1,4 +1,5 @@
 import { inserirAvisos } from "./notifications.js";
+import { ehMigracaoPendente } from "./supabase.js";
 
 /**
  * O aviso de nota ruim, na hora que ela entra.
@@ -338,7 +339,7 @@ export async function avisarDetrator(params: {
       if (/duplicate key|unique/i.test(error.message)) return false;
       // Coluna ainda não existe (migração não rodou): a pesquisa segue
       // funcionando sem aviso, em vez de a resposta do cliente virar erro.
-      if (/pesquisa_resposta_id|42703|PGRST/i.test(error.message)) return false;
+      if (ehMigracaoPendente(error.message)) return false;
       console.error(`[pesquisa] aviso de detrator não entrou: ${error.message}`);
       return false;
     }

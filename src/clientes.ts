@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 
 /**
  * A base de clientes da casa.
@@ -238,10 +238,18 @@ async function gravarVisita(
 
   // Tabela ainda sem migração: o cadastro do cliente já está gravado, e é ele
   // que importa. O histórico entra quando o SQL rodar.
+  //
+  // O TESTE É PELA CAUSA, NÃO PELO NOME DA TABELA. Procurar "clientes_visitas"
+  // na mensagem engoliria também um erro de permissão ou de coluna — que
+  // citam a tabela e não são "migração pendente". Foi assim que uma varredura
+  // quebrada ficou muda por uma tarde inteira.
   if (error) {
-    if (!/clientes_visitas|42P01|PGRST/i.test(error.message)) {
-      console.error(`[clientes] visita de ${pessoa.telefone} não entrou: ${error.message}`);
-    }
+    const semTabela = ehMigracaoPendente(error.message);
+    console[semTabela ? "warn" : "error"](
+      semTabela
+        ? `[clientes] tabela clientes_visitas ainda não existe — rode a migração pendente.`
+        : `[clientes] visita de ${pessoa.telefone} não entrou: ${error.message}`,
+    );
     return;
   }
   // Vazio = o dia já estava lá. Nada a somar.
@@ -299,7 +307,7 @@ export async function registrarClienteSeDer(
     return await registrarCliente(venueId, origem, dados);
   } catch (e) {
     // Tabela ainda sem migração também cai aqui, e em silêncio de propósito.
-    if (!/clientes|42P01|PGRST/i.test((e as Error).message)) {
+    if (!ehMigracaoPendente((e as Error).message)) {
       console.error(`[clientes] não registrei ${dados.telefone}: ${(e as Error).message}`);
     }
     return null;

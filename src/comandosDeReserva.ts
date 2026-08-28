@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { codigoDaReserva } from "./codigoDeReserva.js";
 import type { Reservation, Venue } from "./venues.js";
@@ -262,7 +262,7 @@ async function casasQueEsteNumeroGerencia(telefone: string): Promise<Venue[]> {
   if (error) {
     // Coluna ainda não existe (migração não rodou): ninguém gerencia por
     // WhatsApp, e o administrativo segue mudo como antes.
-    if (/reservas_avisar_whatsapp|42703|PGRST/i.test(error.message)) return [];
+    if (ehMigracaoPendente(error.message)) return [];
     throw new Error(`Falha ao conferir o gestor: ${error.message}`);
   }
 

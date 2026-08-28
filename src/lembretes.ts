@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import type { Reservation, Venue } from "./venues.js";
 import { inserirAvisos } from "./notifications.js";
 
@@ -135,7 +135,7 @@ export async function lembrarReservasProximas(agora = new Date()): Promise<numbe
     // A coluna pode não existir num banco que ainda não recebeu a migração.
     // Nesse caso o resto do sistema segue funcionando sem lembrete, em vez de
     // o laço de minuto virar um despejo de erro no log.
-    if (/reserva_lembrete_minutos|42703|PGRST/i.test(error.message)) return 0;
+    if (ehMigracaoPendente(error.message)) return 0;
     throw new Error(`Falha ao varrer reservas: ${error.message}`);
   }
 

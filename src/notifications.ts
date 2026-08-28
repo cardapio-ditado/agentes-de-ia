@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import type { Tables } from "./database.types.js";
 import type { Reservation, Venue } from "./venues.js";
 import type { PapelWhatsapp } from "./ponteWhatsapp.js";
@@ -535,7 +535,7 @@ export async function listPendingNotifications(
   if (error) {
     // Banco sem a migração ainda: a coluna não existe, e a fila volta a ser
     // uma só em vez de parar. Degradar é melhor que emudecer.
-    if (papel && /papel|42703|PGRST/i.test(error.message)) {
+    if (papel && ehMigracaoPendente(error.message)) {
       return await listPendingNotifications(limite, venueId, null);
     }
     throw new Error(`Falha ao listar notificações: ${error.message}`);

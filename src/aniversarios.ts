@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { configDeClientes } from "./clientes.js";
@@ -345,7 +345,7 @@ export async function varrerAniversarios(agora = new Date()): Promise<void> {
       .limit(TETO_DE_CASAS);
     if (error) {
       // Banco ainda sem a migração: silêncio é o comportamento certo.
-      if (/clientes_config|42P01|PGRST/i.test(error.message)) return;
+      if (ehMigracaoPendente(error.message)) return;
       throw error;
     }
     casas = data ?? [];

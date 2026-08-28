@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import { ErroDePesquisa, enviarConvite, telefoneLimpo } from "./pesquisa.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { registrarClienteSeDer } from "./clientes.js";
@@ -359,29 +359,56 @@ export async function alimentarBasePelaZig(
  * Falha de uma casa não pode calar as outras.
  */
 export async function varrerBaseDeClientes(agora = new Date()): Promise<void> {
-  let casas: any[];
+  // DUAS CONSULTAS SIMPLES, E NENHUM `embed`.
+  //
+  // A versão anterior pedia `venues:venue_id(...)` numa tabela em que
+  // `venue_id` é chave primária E estrangeira. Quando o PostgREST não resolve
+  // essa relação, ele devolve um erro cuja mensagem cita "pesquisa_zig" — que
+  // era exatamente o que o filtro de silêncio procurava. A varredura falhava
+  // e não dizia nada, e o log ficava mudo enquanto a base ficava vazia.
+  //
+  // Buscar as casas por id, num segundo pedido, não depende de o banco
+  // adivinhar relação nenhuma.
+  let conexoes: { venue_id: string; token: string | null; loja: string | null }[];
   try {
     const { data, error } = await cliente()
       .from("pesquisa_zig")
-      .select("venue_id, token, loja, venues:venue_id(id, name, timezone)")
+      .select("venue_id, token, loja")
       .not("token", "is", null)
       .limit(200);
-    if (error) {
-      // Banco sem a migração: silêncio é o comportamento certo.
-      if (/pesquisa_zig|42P01|PGRST/i.test(error.message)) return;
-      throw error;
-    }
-    casas = data ?? [];
+    if (error) throw new Error(error.message);
+    conexoes = data ?? [];
   } catch (e) {
-    console.error(`[clientes-zig] varredura não listou as casas: ${(e as Error).message}`);
+    console.error(`[clientes-zig] não consegui listar as conexões: ${(e as Error).message}`);
     return;
   }
 
-  for (const casa of casas) {
-    const venue = casa.venues;
-    if (!venue || !casa.token || !casa.loja) continue;
+  const prontas = conexoes.filter((c) => c.token?.trim() && c.loja?.trim());
+  if (prontas.length === 0) {
+    // Fala mesmo quando não há nada a fazer: "nenhuma casa com Zig" é uma
+    // resposta, e foi justamente a ausência dela que custou uma tarde.
+    console.log(
+      `[clientes-zig] nenhuma casa com token e loja preenchidos ` +
+        `(${conexoes.length} conexão(ões) encontrada(s)).`,
+    );
+    return;
+  }
+
+  const { data: casas, error: erroCasas } = await cliente()
+    .from("venues")
+    .select("id, name, timezone")
+    .in("id", prontas.map((c) => c.venue_id));
+  if (erroCasas) {
+    console.error(`[clientes-zig] não consegui carregar as casas: ${erroCasas.message}`);
+    return;
+  }
+
+  for (const venue of (casas ?? []) as { id: string; name: string; timezone: string }[]) {
     try {
-      await alimentarBasePelaZig(venue, { agora });
+      const r = await alimentarBasePelaZig(venue, { agora });
+      if (r.ja_buscado) {
+        console.log(`[clientes-zig] ${venue.name}: ${r.dia} já estava na base, pulei a Zig.`);
+      }
     } catch (e) {
       console.error(`[clientes-zig] ${venue.name}: ${(e as Error).message}`);
     }
@@ -636,7 +663,7 @@ export async function cicloDaPesquisaZig(agora = new Date()): Promise<void> {
       .eq("modulo", "pesquisa")
       .eq("ativo", true);
     if (error) {
-      if (/venue_modulos|42P01|PGRST/i.test(error.message)) return;
+      if (ehMigracaoPendente(error.message)) return;
       throw error;
     }
     casas = data ?? [];
@@ -656,7 +683,7 @@ export async function cicloDaPesquisaZig(agora = new Date()): Promise<void> {
     } catch (e) {
       // A tabela pode nem existir ainda (migração pendente) — silêncio é o
       // comportamento certo para casa sem Zig configurada.
-      if (!/pesquisa_zig|42P01|PGRST/i.test((e as Error).message)) {
+      if (!ehMigracaoPendente((e as Error).message)) {
         console.error(`[pesquisa-zig] ${venue.name}: ${(e as Error).message}`);
       }
     }

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import { montarPainel } from "./pesquisaMetricas.js";
 import type { NotaBruta, PainelDaPesquisa, RespostaBruta } from "./pesquisaMetricas.js";
 import { notaNormalizada, pesquisaAtiva } from "./pesquisaModelo.js";
@@ -1289,7 +1289,7 @@ export async function vincularRespostaAoCliente(
     .from("pesquisa_respostas")
     .update({ cliente_id: clienteId } as never)
     .eq("id", respostaId);
-  if (error && !/cliente_id|42703|PGRST/i.test(error.message)) {
+  if (error && !ehMigracaoPendente(error.message)) {
     console.error(`[pesquisa] resposta ${respostaId} sem vínculo: ${error.message}`);
   }
 }
