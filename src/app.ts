@@ -235,6 +235,19 @@ import {
   telefonesConvidadosRecentemente,
   testarZig,
 } from "./pesquisaZig.js";
+import {
+  ErroDeClientes,
+  apagarCliente,
+  configDeClientes,
+  editarCliente,
+  // `listarClientes` já é o nome do que lista as CASAS clientes da Brasa Food
+  // (tenants). Aqui são os clientes DA casa — gente que bebe no bar.
+  listarClientes as listarClientesDaCasa,
+  registrarCliente,
+  salvarConfigDeClientes,
+} from "./clientes.js";
+import type { OrigemDeCliente } from "./clientes.js";
+import { mandarParabens, proximosAniversariantes } from "./aniversarios.js";
 import { lerPlanilhaDeClientes } from "./pesquisaPlanilha.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
 import type { Venue } from "./venues.js";
@@ -553,6 +566,18 @@ async function comErroDeEstoque<T>(acao: () => Promise<T>): Promise<T> {
     return await acao();
   } catch (e) {
     if (e instanceof ErroDoEstoque) {
+      throw erro(e.status, e.status === 404 ? "not_found" : "invalid_request", e.message);
+    }
+    throw e;
+  }
+}
+
+/** E para os erros da base de clientes. */
+async function comErroDeClientes<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDeClientes) {
       throw erro(e.status, e.status === 404 ? "not_found" : "invalid_request", e.message);
     }
     throw e;
@@ -2028,6 +2053,144 @@ async function roteasApi(
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       await comErroDePesquisa(() => apagarConvite(venue.id, p[4]!));
       return ok(res, { apagado: true });
+    }
+
+    // ============================================================
+    // A base de clientes da casa
+    // ============================================================
+    //
+    // Não é um módulo: é da CASA. Uma casa que só comprou o CMV cadastra
+    // clientes na mão e manda parabéns; quem tem Zig e agente vê a base
+    // encher sozinha. Por isso a permissão é a mesma das reservas, e não
+    // uma de módulo.
+
+    // GET | PUT /v1/venues/:slug/clientes/config — o parabéns de aniversário.
+    // Antes da rota de :id de propósito: "config" não é um id.
+    if (recurso === "clientes" && p[3] === "config" && p.length === 4) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDeClientes(() => configDeClientes(venue.id)));
+      }
+      if (metodo === "PUT") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDeClientes(() =>
+            salvarConfigDeClientes(venue.id, {
+              aniversario_ativo:
+                corpo.aniversario_ativo === undefined ? undefined : Boolean(corpo.aniversario_ativo),
+              aniversario_hora: numeroOuNulo(corpo.aniversario_hora) ?? undefined,
+              aniversario_antecedencia: numeroOuNulo(corpo.aniversario_antecedencia) ?? undefined,
+              // `textoOpcional` devolve undefined para "" — e "" aqui é como a
+              // tela diz "volte ao texto padrão". Sem isto, limpar o campo
+              // viraria um salvamento que não faz nada.
+              aniversario_texto:
+                corpo.aniversario_texto === undefined
+                  ? undefined
+                  : String(corpo.aniversario_texto ?? "").trim() || null,
+              aniversario_teto_por_dia: numeroOuNulo(corpo.aniversario_teto_por_dia) ?? undefined,
+            }),
+          ),
+        );
+      }
+    }
+
+    // GET | POST /v1/venues/:slug/clientes
+    if (recurso === "clientes" && p.length === 3) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const origem = url.searchParams.get("origem");
+        return ok(
+          res,
+          await comErroDeClientes(() =>
+            listarClientesDaCasa(venue.id, {
+              busca: url.searchParams.get("busca") ?? undefined,
+              origem: (origem as OrigemDeCliente | null) ?? undefined,
+              comAniversario: url.searchParams.get("aniversario") === "1",
+              mes: Number(url.searchParams.get("mes")) || undefined,
+              limite: Number(url.searchParams.get("limite")) || undefined,
+            }),
+          ),
+        );
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDeClientes(() =>
+            registrarCliente(venue.id, "manual", {
+              telefone: texto(corpo, "telefone"),
+              nome: textoOpcional(corpo, "nome") ?? null,
+              nascimento: textoOpcional(corpo, "nascimento") ?? null,
+              email: textoOpcional(corpo, "email") ?? null,
+              documento: textoOpcional(corpo, "documento") ?? null,
+              observacoes: textoOpcional(corpo, "observacoes") ?? null,
+            }),
+          ),
+          201,
+        );
+      }
+    }
+
+    // PATCH | DELETE /v1/venues/:slug/clientes/:id
+    if (recurso === "clientes" && p.length === 4) {
+      if (metodo === "PATCH") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        // Aqui o vazio APAGA: quem abriu a ficha e limpou o campo quis limpar.
+        // É o oposto da coleta automática, e é de propósito.
+        const campo = (nome: string) =>
+          corpo[nome] === undefined ? undefined : String(corpo[nome] ?? "");
+        return ok(
+          res,
+          await comErroDeClientes(() =>
+            editarCliente(venue.id, p[3]!, {
+              nome: campo("nome"),
+              nascimento: campo("nascimento"),
+              email: campo("email"),
+              documento: campo("documento"),
+              observacoes: campo("observacoes"),
+              descadastrado:
+                corpo.descadastrado === undefined ? undefined : Boolean(corpo.descadastrado),
+            }),
+          ),
+        );
+      }
+      if (metodo === "DELETE") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        await comErroDeClientes(() => apagarCliente(venue.id, p[3]!));
+        return ok(res, { apagado: true });
+      }
+    }
+
+    // GET /v1/venues/:slug/aniversariantes?dias=N — quem faz aniversário nos
+    // próximos N dias, com o parabéns deste ano já marcado.
+    if (metodo === "GET" && recurso === "aniversariantes" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const dias = Math.min(Math.max(Number(url.searchParams.get("dias")) || 30, 1), 366);
+      return ok(res, await comErroDeClientes(() => proximosAniversariantes(venue, dias)));
+    }
+
+    // POST /v1/venues/:slug/aniversariantes/enviar — o "Mandar agora" do
+    // painel. Ignora a HORA configurada, nunca a trava de um por ano.
+    if (
+      metodo === "POST" &&
+      recurso === "aniversariantes" &&
+      p[3] === "enviar" &&
+      p.length === 4
+    ) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeClientes(() => mandarParabens(venue, { forcar: true })));
     }
 
     // POST /v1/venues/:slug/pesquisa/convites/planilha?confirmar=1

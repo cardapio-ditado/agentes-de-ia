@@ -1,6 +1,7 @@
 import { db } from "./supabase.js";
 import { ErroDePesquisa, enviarConvite, telefoneLimpo } from "./pesquisa.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
+import { registrarClienteSeDer } from "./clientes.js";
 
 /**
  * A ponte da pesquisa com a Zig: quem esteve ontem recebe o convite hoje.
@@ -135,11 +136,14 @@ interface CompradorDaZig {
   userName?: string | null;
   /** Valor dos produtos da transação, em centavos. */
   productsValue?: number | null;
+  /** Data de nascimento do cadastro da Zig, quando a pessoa preencheu. */
+  userBirthdate?: string | null;
 }
 
 interface CheckinDaZig {
   phone?: string | null;
   name?: string | null;
+  birthDate?: string | null;
 }
 
 /** O visitante como a pesquisa o entende: telefone, nome e o que gastou. */
@@ -148,6 +152,11 @@ export interface Visitante {
   nome: string | null;
   /** Soma das compras da pessoa no dia, em centavos. Check-in sem compra = 0. */
   gasto_centavos: number;
+  /**
+   * O nascimento, quando a Zig tem. Não serve para o convite — serve para a
+   * base de clientes, que é quem manda o parabéns depois.
+   */
+  nascimento: string | null;
 }
 
 /**
@@ -168,6 +177,7 @@ export function mesclarVisitantes(
     telefoneBruto: string | null | undefined,
     nome: string | null | undefined,
     gastoCentavos: number,
+    nascimento: string | null | undefined,
   ) => {
     let telefone = telefoneLimpo(telefoneBruto ?? "");
     if (telefone.length < 10 || telefone.length > 15) return;
@@ -179,14 +189,22 @@ export function mesclarVisitantes(
     if (existente) {
       // Um nome de verdade vale mais que nenhum — de qualquer uma das fontes.
       if (!existente.nome && nome?.trim()) existente.nome = nome.trim();
+      if (!existente.nascimento && nascimento?.trim()) existente.nascimento = nascimento.trim();
       // Cada transação é uma linha em Compradores; a pessoa é a soma delas.
       existente.gasto_centavos += gastoCentavos;
       return;
     }
-    porTelefone.set(telefone, { telefone, nome: nome?.trim() || null, gasto_centavos: gastoCentavos });
+    porTelefone.set(telefone, {
+      telefone,
+      nome: nome?.trim() || null,
+      gasto_centavos: gastoCentavos,
+      nascimento: nascimento?.trim() || null,
+    });
   };
-  for (const c of compradores) acrescentar(c.userPhone, c.userName, Math.max(0, Number(c.productsValue ?? 0)));
-  for (const c of checkins) acrescentar(c.phone, c.name, 0);
+  for (const c of compradores) {
+    acrescentar(c.userPhone, c.userName, Math.max(0, Number(c.productsValue ?? 0)), c.userBirthdate);
+  }
+  for (const c of checkins) acrescentar(c.phone, c.name, 0, c.birthDate);
   return [...porTelefone.values()].sort((a, b) => b.gasto_centavos - a.gasto_centavos);
 }
 
@@ -249,6 +267,36 @@ export async function visitantesDoDia(
   }
 
   return mesclarVisitantes(compradores ?? [], checkins);
+}
+
+/**
+ * Passa os visitantes do dia para a base de clientes da casa.
+ *
+ * Isto acontece TODA vez que a Zig é consultada — inclusive quando ninguém é
+ * convidado (teto batido, todo mundo repetido, pesquisa desligada). O convite
+ * é uma decisão do dono; conhecer quem esteve na casa não é: se a pessoa
+ * apareceu, ela entra na base, e é da base que sai o parabéns de aniversário.
+ *
+ * Nunca derruba a busca: alimentar o cadastro é acessório, convidar é o
+ * essencial. Mesma regra de sempre.
+ */
+export async function alimentarBaseDeClientes(
+  venueId: string,
+  visitantes: Visitante[],
+  diaISO: string,
+): Promise<void> {
+  for (const v of visitantes) {
+    await registrarClienteSeDer(venueId, "zig", {
+      telefone: v.telefone,
+      nome: v.nome,
+      nascimento: v.nascimento,
+      // Uma visita por dia buscado, e o gasto do dia somado ao histórico. A
+      // varredura só processa cada dia uma vez, então isto não conta dobrado.
+      visitas: 1,
+      gastoCentavos: v.gasto_centavos,
+      ultimaVisita: diaISO,
+    });
+  }
 }
 
 /**
@@ -337,6 +385,9 @@ export async function buscarEConvidar(
   }
 
   const visitantes = await visitantesDoDia({ token: config.token, loja: config.loja }, ontem);
+  // Antes de decidir quem convidar: todo mundo que esteve na casa entra na
+  // base. Quem não recebe convite hoje ainda pode receber o parabéns em maio.
+  await alimentarBaseDeClientes(venue.id, visitantes, ontem);
   const recentes = await telefonesConvidadosRecentemente(venue.id, config.nao_repetir_dias, agora);
   const ineditos = visitantes.filter((v) => !recentes.has(v.telefone));
   const convidaveis = ineditos.slice(0, config.teto_por_dia);
@@ -407,6 +458,16 @@ export async function listarVisitantes(
     : diaAnterior(hojeNaCasa(fuso));
 
   const visitantes = await visitantesDoDia({ token: config.token, loja: config.loja }, dia);
+  // Só a identidade — nome e nascimento — e nenhum contador. Esta tela pode
+  // ser aberta cinco vezes para o mesmo dia enquanto o dono escolhe; somar
+  // visita a cada abertura inventaria movimento que não existiu.
+  for (const v of visitantes) {
+    await registrarClienteSeDer(venue.id, "zig", {
+      telefone: v.telefone,
+      nome: v.nome,
+      nascimento: v.nascimento,
+    });
+  }
   const recentes = await telefonesConvidadosRecentemente(
     venue.id,
     Math.max(1, config.nao_repetir_dias),

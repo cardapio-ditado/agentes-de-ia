@@ -1,5 +1,6 @@
 import { db } from "./supabase.js";
 import { FERRAMENTAS_PADRAO } from "./tools/index.js";
+import { registrarClienteSeDer } from "./clientes.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 
 export type Agent = Tables<"agents">;
@@ -269,6 +270,16 @@ export async function atualizarContatoConversa(
   const meta = (conversa.metadata ?? {}) as Record<string, unknown>;
   const nome = contato.nome?.trim() || null;
   const telefone = contato.telefone?.trim() || null;
+
+  // Quem conversa com o agente é cliente da casa. Este é o único ponto do
+  // sistema em que o telefone e o nome de quem escreveu chegam juntos — é
+  // aqui que a base aprende quem falou com a casa sem ninguém digitar nada.
+  //
+  // A casa precisa estar definida: conversa de agente sem venue (execução
+  // avulsa pelo CLI, teste) não tem a quem pertencer.
+  if (telefone && conversa.venue_id) {
+    await registrarClienteSeDer(conversa.venue_id, "agente", { telefone, nome });
+  }
 
   const mudancas: { title?: string; metadata?: Json } = {};
   if (nome && conversa.title !== nome) mudancas.title = nome;

@@ -8,6 +8,7 @@ import {
 } from "./channels/whatsapp.js";
 import { dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
+import { varrerAniversarios } from "./aniversarios.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig } from "./pesquisaZig.js";
 import { listAgentsInOrg } from "./repository.js";
@@ -222,9 +223,13 @@ setInterval(() => {
   // a Zig) recebe o convite da pesquisa. `ultimo_dia` + índice único seguram
   // a repetição — rodar de hora em hora é resiliência, não risco.
   cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
+  // E o parabéns de aniversário, também em falha separada. A trava de um por
+  // ano é índice único no banco: rodar de hora em hora não manda de novo.
+  varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));
 }, 60 * 60_000);
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
 void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
+void varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));

@@ -7,6 +7,7 @@ import type { ItemDaPesquisa } from "./pesquisaModelo.js";
 import { instanteNaCasa } from "./fuso.js";
 import { avisarDetrator, mereceAviso } from "./pesquisaAlerta.js";
 import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
+import { registrarClienteSeDer } from "./clientes.js";
 
 /**
  * Pesquisa de satisfação: a opinião do cliente enquanto ele ainda está na mesa.
@@ -420,6 +421,19 @@ export async function registrarResposta(params: {
   }
 
   const respostaId = (data as { id: string }).id;
+
+  // Quem respondeu e deixou o contato entra na base de clientes da casa.
+  //
+  // A pesquisa pergunta "como foi?"; a base guarda QUEM respondeu — e é dela
+  // que sai o parabéns de aniversário meses depois. Sem isto, o contato mais
+  // valioso que a casa recebe (alguém que gostou o bastante para responder)
+  // morria dentro de uma única resposta.
+  if (params.clienteContato?.trim()) {
+    await registrarClienteSeDer(params.venueId, "pesquisa", {
+      telefone: params.clienteContato,
+      nome: params.clienteNome,
+    });
+  }
 
   // As notas por pergunta entram DEPOIS da resposta, e falhar aqui não
   // desfaz nada: a nota geral e o comentário já estão gravados, e é melhor
