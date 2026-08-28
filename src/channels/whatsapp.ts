@@ -14,7 +14,9 @@ import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { longoDemais, transcreverAudio, transcricaoConfigurada } from "../transcrever.js";
 import { venueDoConector, type PapelWhatsapp } from "../ponteWhatsapp.js";
+import { db } from "../supabase.js";
 import {
+  inserirAvisos,
   jidConhecidoDoTelefone,
   listPendingNotifications,
   normalizarTelefone,
@@ -270,12 +272,14 @@ async function aoAtualizarConexao(
       // isto pedia para "apagar a pasta de sessão" — instrução que ninguém
       // executa numa VPS, e que deixava o painel sem gerar QR sem explicar
       // por quê.
+      const numeroCaido = estado.telefone;
       estado.qr = null;
       estado.telefone = null;
       await esquecerSessaoSalva(estado.papel);
       console.warn(
         `[whatsapp:${estado.papel}] desconectado pelo aparelho. Use Conectar no painel para parear outro número.`,
       );
+      await avisarQuedaDoNumero(estado.papel, numeroCaido);
       return;
     }
 
@@ -661,6 +665,108 @@ async function venueDesteConector(): Promise<string | null> {
 }
 
 /**
+ * Um disparo em massa — a casa falando primeiro com muita gente de uma vez.
+ *
+ * É o padrão que o WhatsApp pune. O resto da fila é mensagem que alguém está
+ * esperando: confirmação de reserva, link do checklist, aviso de nota baixa.
+ */
+function ehDisparoEmMassa(template: string | null): boolean {
+  const t = template ?? "";
+  return t === "pesquisa_convite" || t.startsWith("aniversario_");
+}
+
+/**
+ * Quanto esperar antes da PRÓXIMA mensagem.
+ *
+ * DOIS RITMOS, PORQUE SÃO DUAS COISAS DIFERENTES.
+ *
+ * O disparo em massa vai devagar: 20 a 40 segundos. Vinte convites levam uns
+ * dez minutos, e é isso que faz o padrão parecer gente. O intervalo antigo
+ * (2 a 5 segundos) mandava vinte em um minuto e meio — e foi assim que o
+ * número administrativo do Ditado levou uma restrição por alcance e foi
+ * derrubado pelo WhatsApp no mesmo segundo.
+ *
+ * O resto continua rápido: quem confirmou uma reserva está com o celular na
+ * mão esperando, e não pode ficar atrás de vinte convites de pesquisa numa
+ * fila lenta. A separação é o que permite ir devagar onde precisa sem
+ * atrasar o que é urgente.
+ *
+ * O intervalo varia de propósito nos dois casos: ritmo cravado também é
+ * assinatura de robô.
+ */
+export function esperaAntesDe(template: string | null): number {
+  return ehDisparoEmMassa(template)
+    ? 20_000 + Math.random() * 20_000
+    : 2_000 + Math.random() * 3_000;
+}
+
+/**
+ * Avisa a casa, pelo OUTRO número, que este aqui caiu de vez.
+ *
+ * Existe por um caso real: o administrativo do Ditado foi derrubado pelo
+ * WhatsApp às 14h28 de uma quinta ("device_removed", logo depois de uma
+ * restrição por disparo em massa). O sistema soube na hora, escreveu no log
+ * — e ninguém lê log. O dono descobriu no dia seguinte, investigando outra
+ * coisa, depois de um dia inteiro de mensagem saindo pelo número errado.
+ *
+ * Só na queda DEFINITIVA: queda comum reconecta sozinha em três segundos, e
+ * avisar a cada oscilação de rede é ensinar o dono a ignorar o aviso.
+ *
+ * Vai com o papel do OUTRO conector porque é ele quem está vivo — mandar
+ * pelo número que acabou de morrer seria escrever a carta e deixá-la na
+ * gaveta. E nunca estoura: perder o aviso não pode virar mais um problema
+ * em cima do problema.
+ */
+async function avisarQuedaDoNumero(
+  papelCaido: PapelWhatsapp,
+  numero: string | null,
+): Promise<void> {
+  try {
+    const venueId = await venueDesteConector();
+    if (!venueId) return;
+
+    // `database.types.ts` ainda não conhece `reservas_avisar_whatsapp` — é
+    // coluna de migração recente, e os tipos só são regerados depois.
+    const { data } = (await db()
+      .from("venues")
+      .select("name, reservas_avisar_whatsapp")
+      .eq("id", venueId)
+      .single()) as { data: { name?: string; reservas_avisar_whatsapp?: string } | null };
+    const destino = (data?.reservas_avisar_whatsapp ?? "").trim();
+    if (!destino) return;
+
+    const qual = papelCaido === "administrativo" ? "administrativo" : "do agente";
+    const corpo = [
+      `🔌 O WhatsApp ${qual} do ${data?.name ?? "seu estabelecimento"} caiu.`,
+      ``,
+      numero ? `Número: ${numero}` : null,
+      `O WhatsApp encerrou a sessão deste aparelho — não é queda de internet, e ele não volta sozinho.`,
+      ``,
+      papelCaido === "administrativo"
+        ? `Enquanto isso, checklist, convite de pesquisa e avisos saem pelo número do agente, que responde com IA.`
+        : `Enquanto isso, o atendimento ao cliente está parado.`,
+      ``,
+      `Para religar: painel → Ajustes da casa → WhatsApp da casa → Conectar. Vai pedir QR.`,
+    ]
+      .filter((l) => l !== null)
+      .join("\n");
+
+    await inserirAvisos({
+      venue_id: venueId,
+      channel: "whatsapp",
+      destination: destino,
+      // Pelo outro número: este aqui é justamente o que morreu.
+      papel: papelCaido === "administrativo" ? "agente" : "administrativo",
+      template: "conector_caiu",
+      body: corpo,
+    });
+    console.log(`[whatsapp:${papelCaido}] aviso de queda enfileirado para ${destino}.`);
+  } catch (e) {
+    console.error(`[whatsapp] não avisei a queda: ${(e as Error).message}`);
+  }
+}
+
+/**
  * Entrega o que é DESTE número.
  *
  * Antes o critério era por processo: o agente cedia a fila INTEIRA quando via
@@ -687,12 +793,8 @@ async function processarFila(): Promise<void> {
     let enviadas = 0;
     for (const notificacao of pendentes) {
       if (notificacao.channel !== "whatsapp") continue;
-      // Pausa entre mensagens quando a fila tem volume (convites da pesquisa
-      // em lote): rajada de dezenas de mensagens idênticas é o padrão que o
-      // WhatsApp pune com banimento do número. O intervalo varia de propósito
-      // — ritmo cravado também é assinatura de robô.
       if (enviadas > 0) {
-        await new Promise((r) => setTimeout(r, 2_000 + Math.random() * 3_000));
+        await new Promise((r) => setTimeout(r, esperaAntesDe(notificacao.template)));
       }
       const resultado = await tentarEnviar(notificacao);
       enviadas++;
