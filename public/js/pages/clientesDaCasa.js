@@ -211,18 +211,71 @@ export async function clientesDaCasa(raiz, ctx) {
               texto: "Quem já esteve na casa. A base enche sozinha pela Zig, pelo WhatsApp do agente e pela pesquisa — e você cadastra à mão quem faltar.",
             }),
           ]),
-          el("button", {
-            classe: "btn btn-primario",
-            type: "button",
-            texto: "+ Novo cliente",
-            onclick: () => ficha(null),
-          }),
+          el("div", { classe: "linha-campos" }, [
+            puxarDaZig(recarregar),
+            el("button", {
+              classe: "btn btn-primario",
+              type: "button",
+              texto: "+ Novo cliente",
+              onclick: () => ficha(null),
+            }),
+          ]),
         ]),
         el("div", { classe: "linha-campos" }, [busca, filtroOrigem]),
         lista,
       ]),
     );
     await recarregar();
+  }
+
+  /**
+   * O botão de puxar a Zig na mão.
+   *
+   * A varredura já faz isto sozinha, de hora em hora — este botão não existe
+   * porque falta automação, existe porque "está funcionando?" precisa de
+   * resposta em cinco segundos, e não amanhã. No primeiro dia, ninguém quer
+   * esperar o relógio para saber se o token está certo.
+   *
+   * O dia padrão é ONTEM, e não hoje, pelo mesmo motivo do convite: o
+   * movimento de hoje ainda está acontecendo, e a conta da mesa que ainda não
+   * fechou não está na Zig.
+   */
+  function puxarDaZig(aoTerminar) {
+    const ontem = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const dia = el("input", { classe: "campo", type: "date", value: ontem, style: "max-width:170px" });
+
+    const botao = el("button", {
+      classe: "btn",
+      type: "button",
+      texto: "Puxar da Zig",
+      onclick: async () => {
+        botao.disabled = true;
+        const rotulo = botao.textContent;
+        botao.textContent = "Buscando…";
+        try {
+          // `forcar` porque foi um humano que pediu: se ele apertou de novo,
+          // é porque quer conferir, e não porque esqueceu que já apertou.
+          const r = await post(`/v1/venues/${ctx.venue}/clientes/zig`, {
+            dia: dia.value,
+            forcar: true,
+          });
+          avisar(
+            r.visitantes
+              ? `${r.visitantes} pessoa(s) de ${dia.value.split("-").reverse().join("/")} na base.`
+              : `A Zig não trouxe ninguém em ${dia.value.split("-").reverse().join("/")}.`,
+            r.visitantes ? "ok" : "info",
+          );
+          await aoTerminar();
+        } catch (e) {
+          avisar(e.message, "erro");
+        } finally {
+          botao.disabled = false;
+          botao.textContent = rotulo;
+        }
+      },
+    });
+
+    return el("div", { classe: "linha-campos", style: "flex:0 0 auto" }, [dia, botao]);
   }
 
   /* ================= A ficha de um cliente ================= */

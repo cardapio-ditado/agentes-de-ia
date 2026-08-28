@@ -236,6 +236,7 @@ import {
   salvarConfigZig,
   telefonesConvidadosRecentemente,
   testarZig,
+  alimentarBasePelaZig,
 } from "./pesquisaZig.js";
 import {
   ErroDeClientes,
@@ -2154,6 +2155,31 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await comErroDePesquisa(() => avaliacoesDoCliente(venue.id, p[3]!)));
+    }
+
+    // POST /v1/venues/:slug/clientes/zig — puxar a Zig agora, na mão.
+    //
+    // A varredura já faz isto sozinha de hora em hora. O botão existe porque
+    // "está funcionando?" precisa de uma resposta em cinco segundos, e não no
+    // dia seguinte — e porque no primeiro dia ninguém quer esperar o relógio.
+    if (
+      metodo === "POST" &&
+      recurso === "clientes" &&
+      p[3] === "zig" &&
+      p.length === 4
+    ) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req).catch(() => ({}))) as Record<string, unknown>;
+      const dia = typeof corpo.dia === "string" && /^\d{4}-\d{2}-\d{2}$/.test(corpo.dia)
+        ? corpo.dia
+        : undefined;
+      return ok(
+        res,
+        await comErroDePesquisa(() =>
+          alimentarBasePelaZig(venue, { dia, forcar: corpo.forcar === true }),
+        ),
+      );
     }
 
     // GET /v1/venues/:slug/clientes/:id/visitas — quando veio e quanto gastou.

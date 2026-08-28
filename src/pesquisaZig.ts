@@ -321,19 +321,35 @@ export async function alimentarBaseDeClientes(
  */
 export async function alimentarBasePelaZig(
   venue: { id: string; name: string; timezone: string },
-  opcoes: { agora?: Date; dia?: string } = {},
-): Promise<{ dia: string; visitantes: number }> {
+  opcoes: { agora?: Date; dia?: string; forcar?: boolean } = {},
+): Promise<{ dia: string; visitantes: number; ja_buscado: boolean }> {
   const agora = opcoes.agora ?? new Date();
   const config = await configZig(venue.id);
   const dia = opcoes.dia ?? diaAnterior(hojeNaCasa(venue.timezone, agora));
-  if (!config.token || !config.loja) return { dia, visitantes: 0 };
+  if (!config.token || !config.loja) {
+    throw new ErroDePesquisa(400, "Preencha o token e a loja da Zig antes.");
+  }
+
+  // O DADO É O PRÓPRIO MARCADOR.
+  //
+  // A varredura roda de hora em hora — é assim que ela sobrevive ao conector
+  // ter estado fora do ar na hora certa. Mas repetir a busca não é de graça:
+  // são dezenas de páginas de check-in na API da Zig, por casa, por hora. Se
+  // o dia já tem visita gravada, ele já foi buscado, e não é preciso guardar
+  // "último dia" em lugar nenhum para saber disso.
+  if (!opcoes.forcar) {
+    const { count } = await cliente()
+      .from("clientes_visitas")
+      .select("id", { count: "exact", head: true })
+      .eq("venue_id", venue.id)
+      .eq("dia", dia);
+    if ((count ?? 0) > 0) return { dia, visitantes: count ?? 0, ja_buscado: true };
+  }
 
   const visitantes = await visitantesDoDia({ token: config.token, loja: config.loja }, dia);
   await alimentarBaseDeClientes(venue.id, visitantes, dia);
-  if (visitantes.length) {
-    console.log(`[clientes-zig] ${venue.name}: ${visitantes.length} visitante(s) de ${dia} na base.`);
-  }
-  return { dia, visitantes: visitantes.length };
+  console.log(`[clientes-zig] ${venue.name}: ${visitantes.length} visitante(s) de ${dia} na base.`);
+  return { dia, visitantes: visitantes.length, ja_buscado: false };
 }
 
 /**
