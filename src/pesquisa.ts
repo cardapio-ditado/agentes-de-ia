@@ -435,12 +435,20 @@ export async function registrarResposta(params: {
   // O vínculo é gravado agora, e não descoberto depois: aqui o telefone
   // normalizado ainda está em mãos. Procurar por texto livre mais tarde
   // ("(65) 99999-0000" contra "5565999990000") erraria nas bordas.
+  // O try/catch é redundante — as duas funções já engolem o que dá errado — e
+  // fica assim mesmo. A RESPOSTA DO CLIENTE É O OURO DESTE MÓDULO: nada
+  // acessório colocado depois dela pode ter chance de derrubá-la, nem por um
+  // caminho que ninguém previu. Redundância aqui custa três linhas.
   if (params.clienteContato?.trim()) {
-    const pessoa = await registrarClienteSeDer(params.venueId, "pesquisa", {
-      telefone: params.clienteContato,
-      nome: params.clienteNome,
-    });
-    if (pessoa) await vincularRespostaAoCliente(respostaId, pessoa.id);
+    try {
+      const pessoa = await registrarClienteSeDer(params.venueId, "pesquisa", {
+        telefone: params.clienteContato,
+        nome: params.clienteNome,
+      });
+      if (pessoa) await vincularRespostaAoCliente(respostaId, pessoa.id);
+    } catch (e) {
+      console.error(`[pesquisa] resposta ${respostaId} sem cliente: ${(e as Error).message}`);
+    }
   }
 
   // As notas por pergunta entram DEPOIS da resposta, e falhar aqui não
