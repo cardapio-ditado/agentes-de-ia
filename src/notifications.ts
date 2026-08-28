@@ -1,6 +1,7 @@
 import { db } from "./supabase.js";
 import type { Tables } from "./database.types.js";
 import type { Reservation, Venue } from "./venues.js";
+import type { PapelWhatsapp } from "./ponteWhatsapp.js";
 
 export type Notification = Tables<"notifications">;
 
@@ -356,8 +357,16 @@ export async function notificarCliente(params: {
       channel: entrega.canal,
       destination: entrega.destino,
       template,
+      // A CONFIRMAÇÃO VOLTA PELO NÚMERO EM QUE O CLIENTE PEDIU.
+      //
+      // Ele conversou com o agente para reservar; receber a resposta de um
+      // número desconhecido é o mesmo que não reconhecer a reserva. E se ele
+      // responder "obrigado, dá para mudar para as 21h?", quem precisa estar
+      // do outro lado é justamente a IA.
+      papel: "agente",
       body: corpo,
-    })
+      // `as never` até `database.types.ts` ser regerado com a coluna `papel`.
+    } as never)
     .select()
     .single();
 
@@ -410,15 +419,49 @@ export async function tentarEnviar(notificacao: Notification): Promise<Notificat
 }
 
 /**
+ * Quanto tempo um aviso espera pelo número certo antes de aceitar o outro.
+ *
+ * O administrativo reinicia (systemd sobe de novo em 5 segundos) e some da
+ * ponte por até 45. Sem carência, esses 45 segundos bastavam para o agente
+ * assumir um lote inteiro de convites de pesquisa e mandá-los pelo número
+ * que responde com IA — dano que não se desfaz, porque mensagem enviada não
+ * volta.
+ *
+ * Dez minutos é a conta: muito mais que qualquer reinício, muito menos que um
+ * conector realmente morto. Passado isso, entregar pelo número errado é
+ * melhor que não entregar — o checklist das 17h não pode esperar o técnico.
+ */
+export const CARENCIA_DO_OUTRO_PAPEL_MS = 10 * 60_000;
+
+/**
+ * O filtro que decide o que ESTE conector pode entregar agora.
+ *
+ * Três casos, nesta ordem de leitura: o que é meu; o que não tem dono (tudo
+ * que existia antes desta coluna, e o que nenhum produtor marcou); e o que é
+ * do outro mas está parado há tempo demais para continuar esperando.
+ *
+ * Separado da consulta porque é a regra que decide qual número o cliente vê —
+ * e regra que decide isso merece teste, não confiança.
+ */
+export function filtroDePapel(papel: PapelWhatsapp, agora = new Date()): string {
+  const corte = new Date(agora.getTime() - CARENCIA_DO_OUTRO_PAPEL_MS).toISOString();
+  return `papel.is.null,papel.eq.${papel},created_at.lt.${corte}`;
+}
+
+/**
  * Notificações que ainda merecem uma nova tentativa.
  *
  * Com `venueId`, só as DAQUELA casa: cada conector entrega as mensagens do
  * seu estabelecimento e de mais nenhum — sem o filtro, o convite de pesquisa
  * do The 20 sairia pelo número do Ditado, com o nome do bar errado no perfil.
+ *
+ * Com `papel`, só as que são deste número. Sem ele (scripts de reenvio, testes
+ * manuais), a fila inteira, como sempre foi.
  */
 export async function listPendingNotifications(
   limite = 50,
   venueId?: string | null,
+  papel?: PapelWhatsapp | null,
 ): Promise<Notification[]> {
   let busca = db()
     .from("notifications")
@@ -426,9 +469,17 @@ export async function listPendingNotifications(
     .in("status", ["pending", "failed"])
     .lt("attempts", MAX_TENTATIVAS);
   if (venueId) busca = busca.eq("venue_id", venueId);
+  if (papel) busca = busca.or(filtroDePapel(papel));
   const { data, error } = await busca.order("created_at", { ascending: true }).limit(limite);
 
-  if (error) throw new Error(`Falha ao listar notificações: ${error.message}`);
+  if (error) {
+    // Banco sem a migração ainda: a coluna não existe, e a fila volta a ser
+    // uma só em vez de parar. Degradar é melhor que emudecer.
+    if (papel && /papel|42703|PGRST/i.test(error.message)) {
+      return await listPendingNotifications(limite, venueId, null);
+    }
+    throw new Error(`Falha ao listar notificações: ${error.message}`);
+  }
   return data ?? [];
 }
 

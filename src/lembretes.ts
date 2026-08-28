@@ -163,6 +163,10 @@ export async function lembrarReservasProximas(agora = new Date()): Promise<numbe
       channel: "whatsapp",
       destination: telefone,
       template: TEMPLATE_LEMBRETE,
+      // O lembrete é sobre a reserva que o cliente fez com o agente, e a
+      // resposta provável é "não vou poder ir" ou "dá para mudar a hora?" —
+      // conversa, e conversa é com a IA. Sai pelo mesmo número da reserva.
+      papel: "agente",
       body: textoDoLembrete(linha as unknown as Reservation, venue as unknown as Venue),
     });
 

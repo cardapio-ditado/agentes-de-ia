@@ -345,8 +345,10 @@ export async function dispararChecklist(
       channel: "whatsapp",
       destination: agenda.responsavel_telefone,
       template: "checklist_link",
+      papel: "administrativo",
       body: corpo,
-    });
+      // `as never` até `database.types.ts` ser regerado com a coluna `papel`.
+    } as never);
     if (erroNotif) console.error(`[checklists] não enfileirou o link: ${erroNotif.message}`);
   }
 
@@ -590,8 +592,9 @@ export async function concluirRun(params: {
           channel: "whatsapp",
           destination: destino,
           template: "checklist_resumo",
+          papel: "administrativo",
           body: linhas.join("\n"),
-        })),
+        })) as never,
       );
     if (erroNotif) console.error(`[checklists] não enfileirou o resumo: ${erroNotif.message}`);
   }

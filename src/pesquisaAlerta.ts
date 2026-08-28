@@ -271,6 +271,7 @@ export async function avisarDetrator(params: {
       channel: "whatsapp",
       destination: destino,
       template: TEMPLATE_DETRATOR,
+      papel: "administrativo",
       body: textoDoAlerta(params.dados),
     });
 

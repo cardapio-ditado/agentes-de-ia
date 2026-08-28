@@ -11,9 +11,22 @@
 # internet é também uma máquina com muito menos superfície de ataque.
 #
 # Uso (como root):
-#   bash instalar-vps.sh
+#   bash instalar-vps.sh <slug-da-casa>
 #
+# O SLUG É O QUE AMARRA ESTE CONECTOR A UMA CASA.
+#
+# Sem ele, o processo cai no modo "primeira casa ativa" — um chute que, com
+# mais de um estabelecimento no banco, faz o convite de pesquisa de um bar
+# sair pelo número do outro. Foi assim que este instalador nasceu, quando só
+# existia uma casa; a partir da segunda, o slug é obrigatório.
+#
+# Este script instala SÓ o número do agente (o que atende com IA). Para uma
+# casa nova, prefira `instalar-casa.sh <slug>`: ele sobe os dois números —
+# agente e administrativo — de uma vez, e é o administrativo que manda
+# checklist, resumo e aviso ao gestor.
 set -euo pipefail
+
+SLUG="${1:-${WHATSAPP_VENUE:-}}"
 
 REPO="${REPO:-https://github.com/cardapio-ditado/cardapiodigital.git}"
 URL_DESTE_SCRIPT="https://raw.githubusercontent.com/cardapio-ditado/cardapiodigital/claude/ia-agents-github-supabase-jpt5ok/scripts/instalar-vps.sh"
@@ -44,7 +57,19 @@ como_usuario() {
 }
 
 if [ "$(id -u)" -ne 0 ]; then
-  vermelho "Rode como root:  sudo bash instalar-vps.sh"
+  vermelho "Rode como root:  sudo bash instalar-vps.sh <slug-da-casa>"
+  exit 1
+fi
+
+if [ -z "$SLUG" ]; then
+  vermelho "Falta o slug da casa:  bash instalar-vps.sh <slug-da-casa>"
+  echo
+  echo "O slug é o que amarra este conector a UM estabelecimento. Sem ele o"
+  echo "processo escolhe \"a primeira casa ativa\" — e, com mais de uma casa"
+  echo "no banco, a mensagem de um bar sai pelo número do outro."
+  echo
+  echo "Para uma casa nova, prefira:  bash instalar-casa.sh <slug-da-casa>"
+  echo "Ele sobe os DOIS números (agente e administrativo) de uma vez."
   exit 1
 fi
 
@@ -159,7 +184,12 @@ Type=simple
 User=$USUARIO
 WorkingDirectory=$DESTINO
 EnvironmentFile=$DESTINO/.env
-ExecStart=/usr/bin/node dist/src/server.js
+# A casa e o papel vão no ExecStart, via \`env\`, e NUNCA em Environment=:
+# EnvironmentFile sobrescreve Environment= no systemd, e o .env engoliria os
+# dois. Sem WHATSAPP_VENUE o processo escolhe "a primeira casa ativa" — chute
+# que, com mais de um estabelecimento, manda a mensagem de um bar pelo número
+# do outro.
+ExecStart=/usr/bin/env WHATSAPP_VENUE=$SLUG WHATSAPP_PAPEL=agente /usr/bin/node dist/src/server.js
 # Reinicia sempre: queda de rede e reinício da máquina não podem exigir que
 # alguém lembre de ligar o agente de novo.
 Restart=always

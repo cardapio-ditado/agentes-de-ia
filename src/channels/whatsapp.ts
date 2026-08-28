@@ -13,8 +13,7 @@ import { resolve } from "node:path";
 import { runAgent } from "../agent.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { longoDemais, transcreverAudio, transcricaoConfigurada } from "../transcrever.js";
-import { lerEstadoPonte, venueDoConector, type PapelWhatsapp } from "../ponteWhatsapp.js";
-import { db } from "../supabase.js";
+import { venueDoConector, type PapelWhatsapp } from "../ponteWhatsapp.js";
 import {
   jidConhecidoDoTelefone,
   listPendingNotifications,
@@ -651,48 +650,6 @@ function pararFilaDeNotificacoes(): void {
 }
 
 /**
- * O agente cede a fila quando existe um administrativo no ar.
- *
- * A preferência pelo administrativo já existia em `notifications.ts`, mas ela
- * só vale DENTRO de um processo — e cada papel roda no seu, com sua própria
- * memória. No processo do agente o único provedor registrado é o dele, então
- * ele varria a mesma fila e mandava o link do checklist pelo número do
- * atendimento: justamente o que a separação dos dois números existe para
- * evitar.
- *
- * A resposta está na ponte, que os dois publicam no banco. Se há sinal
- * recente do administrativo, o agente não toca na fila. Se não há — casa que
- * não contratou o segundo número, ou conector caído — ele volta a enviar, e
- * o checklist chega de qualquer jeito. Rede, não regra: mensagem não
- * entregue é pior que mensagem pelo número errado.
- *
- * O resultado é lembrado por meio minuto: são 4 ciclos de fila por consulta
- * ao banco, em vez de uma consulta a cada 15 segundos para sempre.
- */
-const LEMBRAR_QUEM_ENVIA_MS = 30_000;
-let administrativoNoAr: { valor: boolean; em: number } | null = null;
-
-async function existeAdministrativoNoAr(): Promise<boolean> {
-  if (administrativoNoAr && Date.now() - administrativoNoAr.em < LEMBRAR_QUEM_ENVIA_MS) {
-    return administrativoNoAr.valor;
-  }
-  try {
-    // O administrativo DESTA casa — o do The 20 estar no ar não diz nada
-    // sobre quem envia no Ditado.
-    const venueId = await venueDesteConector();
-    if (!venueId) return false;
-    const { data } = await db().from("venues").select("settings").eq("id", venueId).single();
-    const outro = lerEstadoPonte(data?.settings ?? null, "administrativo");
-    const vivo = outro?.status === "conectado";
-    administrativoNoAr = { valor: vivo, em: Date.now() };
-    return vivo;
-  } catch {
-    // Banco fora do ar não pode travar a entrega: na dúvida, envia.
-    return false;
-  }
-}
-
-/**
  * O id da casa deste conector, resolvendo uma vez quando a conexão veio de
  * um religamento antigo que só conhecia o slug.
  */
@@ -703,16 +660,30 @@ async function venueDesteConector(): Promise<string | null> {
   return venueIdDoConector;
 }
 
+/**
+ * Entrega o que é DESTE número.
+ *
+ * Antes o critério era por processo: o agente cedia a fila INTEIRA quando via
+ * um administrativo no ar. Errava dos dois lados. Bastava o administrativo
+ * reiniciar para o agente assumir um lote de convites de pesquisa e mandá-los
+ * pelo número que responde com IA — o cliente respondia "não gostei do
+ * garçom" e era atendido como quem quer fazer reserva. E, com o
+ * administrativo no ar, o agente não entregava nem a confirmação de reserva
+ * do cliente que estava conversando com ele.
+ *
+ * Agora o critério é por MENSAGEM: cada aviso nasce sabendo quem deve
+ * entregá-lo, e a carência de dez minutos (ver `filtroDePapel`) mantém a rede
+ * de segurança sem abrir a porta para um reinício de quarenta segundos.
+ */
 async function processarFila(): Promise<void> {
   if (processandoFila || estado.status !== "conectado") return;
-  if (estado.papel === "agente" && (await existeAdministrativoNoAr())) return;
   processandoFila = true;
   try {
     // Só a fila DESTA casa. Sem casa resolvida, não envia nada: mandar a
     // mensagem de um bar pelo número do outro é pior que atrasar a entrega.
     const venueId = await venueDesteConector();
     if (!venueId) return;
-    const pendentes = await listPendingNotifications(50, venueId);
+    const pendentes = await listPendingNotifications(50, venueId, estado.papel);
     let enviadas = 0;
     for (const notificacao of pendentes) {
       if (notificacao.channel !== "whatsapp") continue;

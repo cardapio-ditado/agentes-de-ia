@@ -922,6 +922,7 @@ export async function enviarConvite(
     channel: "whatsapp",
     destination: convite.telefone,
     template: "pesquisa_convite",
+    papel: "administrativo",
     body: params.mensagem ? `${params.mensagem}\n\n${link}` : mensagemPadrao,
   } as never);
 

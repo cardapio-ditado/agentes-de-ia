@@ -103,6 +103,10 @@ async function avisarGestorDaCasa(reserva: Reservation, venue: Venue): Promise<v
       channel: "whatsapp",
       destination: destino,
       template: "reserva_nova_gestor",
+      // Vai para o gestor, e é dele que vêm as respostas "aprovo"/"recuso" —
+      // que só o número administrativo entende. Pelo número do agente, o
+      // gestor seria atendido pela IA como se fosse um cliente novo.
+      papel: "administrativo",
       body: textoParaOGestor(reserva, venue),
     } as never);
     // Índice único: o aviso desta reserva já saiu. Não é erro.

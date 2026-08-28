@@ -316,6 +316,7 @@ export async function enfileirarAvisoCmv(params: {
       channel: "whatsapp",
       destination: params.destino,
       template: params.template,
+      papel: "administrativo",
       body: params.corpo,
     });
     if (error) {

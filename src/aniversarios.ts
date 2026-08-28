@@ -270,6 +270,7 @@ export async function mandarParabens(
       channel: "whatsapp",
       destination: p.telefone,
       template: `aniversario_${alvo.ano}`,
+      papel: "administrativo",
       body: textoDeParabens(config, venue.name, p.nome),
     } as never);
 
