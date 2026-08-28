@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { inserirAvisos } from "./notifications.js";
 
 /**
  * O aviso de nota ruim, na hora que ela entra.
@@ -23,9 +23,6 @@ import { db } from "./supabase.js";
  * com ela. O texto vai cru e completo; quem lê é dono de bar, não precisa de
  * tradução.
  */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const cliente = () => db() as any;
 
 export const TEMPLATE_DETRATOR = "pesquisa_detrator";
 
@@ -265,7 +262,7 @@ export async function avisarDetrator(params: {
   if (!destino) return false;
 
   try {
-    const { error } = await cliente().from("notifications").insert({
+    const { error } = await inserirAvisos({
       venue_id: params.venueId,
       pesquisa_resposta_id: params.respostaId,
       channel: "whatsapp",

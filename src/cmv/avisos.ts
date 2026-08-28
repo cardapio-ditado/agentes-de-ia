@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { db } from "../supabase.js";
+import { inserirAvisos } from "../notifications.js";
 
 /**
  * Os avisos do CMV: o módulo deixa de ser mudo.
@@ -310,7 +311,7 @@ export async function enfileirarAvisoCmv(params: {
   corpo: string;
 }): Promise<boolean> {
   try {
-    const { error } = await cliente().from("notifications").insert({
+    const { error } = await inserirAvisos({
       venue_id: params.venueId,
       cmv_origem_id: params.origemId,
       channel: "whatsapp",

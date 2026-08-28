@@ -1,5 +1,9 @@
 import { db } from "./supabase.js";
 import type { Reservation, Venue } from "./venues.js";
+import { inserirAvisos } from "./notifications.js";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const cliente = () => db() as any;
 
 /**
  * O lembrete da reserva, uma hora antes.
@@ -13,9 +17,6 @@ import type { Reservation, Venue } from "./venues.js";
  * A varredura roda a cada minuto no processo longo (o conector), pelo mesmo
  * motivo do agendador de checklists: a Vercel não tem processo de pé.
  */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const cliente = () => db() as any;
 
 export const TEMPLATE_LEMBRETE = "reserva_lembrete";
 
@@ -157,7 +158,7 @@ export async function lembrarReservasProximas(agora = new Date()): Promise<numbe
     const telefone = (linha.customer_phone ?? "").trim();
     if (!telefone) continue;
 
-    const { error: erroInsert } = await cliente().from("notifications").insert({
+    const { error: erroInsert } = await inserirAvisos({
       venue_id: linha.venue_id,
       reservation_id: linha.id,
       channel: "whatsapp",

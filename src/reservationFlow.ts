@@ -1,8 +1,7 @@
-import { notificarCliente, type Notification } from "./notifications.js";
+import { inserirAvisos, notificarCliente, type Notification } from "./notifications.js";
 import { dispatchWebhooks } from "./webhooks.js";
 import { getVenue, reviewReservation, type Reservation, type Venue } from "./venues.js";
 import type { Json } from "./database.types.js";
-import { db } from "./supabase.js";
 import { codigoDaReserva } from "./codigoDeReserva.js";
 
 export interface DecisaoResultado {
@@ -97,7 +96,7 @@ async function avisarGestorDaCasa(reserva: Reservation, venue: Venue): Promise<v
   if (!destino) return;
 
   try {
-    const { error } = await db().from("notifications").insert({
+    const { error } = await inserirAvisos({
       venue_id: venue.id,
       reservation_id: reserva.id,
       channel: "whatsapp",
@@ -108,7 +107,7 @@ async function avisarGestorDaCasa(reserva: Reservation, venue: Venue): Promise<v
       // gestor seria atendido pela IA como se fosse um cliente novo.
       papel: "administrativo",
       body: textoParaOGestor(reserva, venue),
-    } as never);
+    });
     // Índice único: o aviso desta reserva já saiu. Não é erro.
     if (error && !/duplicate key|unique/i.test(error.message)) {
       console.error(`[reservas] aviso ao gestor não entrou: ${error.message}`);

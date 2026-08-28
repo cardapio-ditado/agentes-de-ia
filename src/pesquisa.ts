@@ -8,6 +8,7 @@ import { instanteNaCasa } from "./fuso.js";
 import { avisarDetrator, mereceAviso } from "./pesquisaAlerta.js";
 import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
 import { registrarClienteSeDer } from "./clientes.js";
+import { inserirAvisos } from "./notifications.js";
 
 /**
  * Pesquisa de satisfação: a opinião do cliente enquanto ele ainda está na mesa.
@@ -917,14 +918,14 @@ export async function enviarConvite(
   const link = `${base}/pesquisa?t=${convite.token}`;
   const mensagemPadrao = await textoDoConvite(venue, convite.nome, link);
 
-  const { error } = await cliente().from("notifications").insert({
+  const { error } = await inserirAvisos({
     venue_id: venue.id,
     channel: "whatsapp",
     destination: convite.telefone,
     template: "pesquisa_convite",
     papel: "administrativo",
     body: params.mensagem ? `${params.mensagem}\n\n${link}` : mensagemPadrao,
-  } as never);
+  });
 
   if (error) {
     console.error(`[pesquisa] convite ${convite.id} sem envio: ${error.message}`);

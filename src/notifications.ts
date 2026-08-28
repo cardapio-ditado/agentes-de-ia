@@ -349,9 +349,8 @@ export async function notificarCliente(params: {
   // Baileys não roda) — nesse caso ela NÃO é "enviada" para um console que
   // ninguém lê: fica `pending` na fila, e o conector, onde estiver rodando,
   // entrega em segundos. Instagram é só HTTPS e sai de qualquer processo.
-  const { data: notificacao, error } = await db()
-    .from("notifications")
-    .insert({
+  const { data: notificacao, error } = await inserirAvisos<Notification>(
+    {
       venue_id: venue.id,
       reservation_id: reserva.id,
       channel: entrega.canal,
@@ -365,13 +364,12 @@ export async function notificarCliente(params: {
       // do outro lado é justamente a IA.
       papel: "agente",
       body: corpo,
-      // `as never` até `database.types.ts` ser regerado com a coluna `papel`.
-    } as never)
-    .select()
-    .single();
+    },
+    { devolver: true },
+  );
 
-  if (error) {
-    console.error(`[notifications] não registrou a notificação: ${error.message}`);
+  if (error || !notificacao) {
+    console.error(`[notifications] não registrou a notificação: ${error?.message}`);
     return null;
   }
 
@@ -416,6 +414,68 @@ export async function tentarEnviar(notificacao: Notification): Promise<Notificat
     console.error(`[notifications] ${notificacao.id} falhou: ${resultado.erro}`);
   }
   return data;
+}
+
+/**
+ * O nome da coluna que o banco não reconheceu — ou null, se o erro é outro.
+ *
+ * O Postgres e o PostgREST dizem a mesma coisa de dois jeitos:
+ *   column "papel" of relation "notifications" does not exist        (42703)
+ *   Could not find the 'papel' column of 'notifications' ...         (PGRST204)
+ */
+export function colunaFaltante(mensagem: string): string | null {
+  const aspasDuplas = /column "([^"]+)" of relation .* does not exist/i.exec(mensagem);
+  if (aspasDuplas) return aspasDuplas[1]!;
+  const aspasSimples = /could not find the '([^']+)' column/i.exec(mensagem);
+  if (aspasSimples) return aspasSimples[1]!;
+  return null;
+}
+
+/**
+ * Enfileira avisos — e sobrevive a um banco que ainda não recebeu a migração.
+ *
+ * O CÓDIGO SOBE ANTES DO SQL RODAR, SEMPRE.
+ *
+ * O painel está na Vercel e publica sozinho a cada push; a migração é um SQL
+ * que alguém cola no Supabase depois. Entre as duas coisas há uma janela — e
+ * nessa janela um `insert` com uma coluna nova falha inteiro. Não é um detalhe
+ * teórico: foi assim que a coluna `papel` derrubou, de uma vez, o convite da
+ * pesquisa, o link do checklist, o aviso de ruptura e o parabéns — todos
+ * silenciosamente, porque cada um só registra o erro no log e segue.
+ *
+ * Aqui a coluna que o banco recusa é retirada e o aviso entra sem ela. Pior
+ * que um aviso sem a marca do número é um aviso que nunca sai.
+ */
+export async function inserirAvisos<T = unknown>(
+  linhas: Record<string, unknown> | Record<string, unknown>[],
+  opcoes: { devolver?: boolean } = {},
+): Promise<{ data: T | null; error: { message: string } | null }> {
+  let corpo = Array.isArray(linhas) ? linhas : [linhas];
+
+  // Três voltas: são três colunas novas em circulação (papel, cliente_id,
+  // pesquisa_resposta_id) e um banco muito atrasado pode não ter nenhuma.
+  for (let volta = 0; volta < 4; volta++) {
+    const consulta = db().from("notifications").insert(corpo as never);
+    const r = opcoes.devolver ? await consulta.select().single() : await consulta;
+    if (!r.error) return { data: (r.data ?? null) as T | null, error: null };
+
+    const faltando = colunaFaltante(r.error.message);
+    // Coluna que nem estava na linha: o erro é outro, e mascará-lo esconderia
+    // o problema de verdade de quem lê o log.
+    if (!faltando || !corpo.some((l) => faltando in l)) {
+      return { data: null, error: r.error };
+    }
+    console.warn(
+      `[notifications] a coluna "${faltando}" ainda não existe no banco — ` +
+        `enfileirando sem ela. Rode a migração pendente.`,
+    );
+    corpo = corpo.map((linha) => {
+      const semAColuna = { ...linha };
+      delete semAColuna[faltando];
+      return semAColuna;
+    });
+  }
+  return { data: null, error: { message: "Colunas demais faltando na tabela notifications." } };
 }
 
 /**

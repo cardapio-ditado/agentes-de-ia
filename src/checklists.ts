@@ -5,6 +5,7 @@ import { anthropicConfig } from "./config.js";
 import { db } from "./supabase.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 import type { Venue } from "./venues.js";
+import { inserirAvisos } from "./notifications.js";
 
 export type Checklist = Tables<"checklists">;
 export type ChecklistRun = Tables<"checklist_runs">;
@@ -340,15 +341,14 @@ export async function dispararChecklist(
       linkDaExecucao(criada!.token),
     ].join("\n");
 
-    const { error: erroNotif } = await db().from("notifications").insert({
+    const { error: erroNotif } = await inserirAvisos({
       venue_id: venue.id,
       channel: "whatsapp",
       destination: agenda.responsavel_telefone,
       template: "checklist_link",
       papel: "administrativo",
       body: corpo,
-      // `as never` até `database.types.ts` ser regerado com a coluna `papel`.
-    } as never);
+    });
     if (erroNotif) console.error(`[checklists] não enfileirou o link: ${erroNotif.message}`);
   }
 
@@ -584,18 +584,16 @@ export async function concluirRun(params: {
     // Uma notificação POR PESSOA, e não uma com vários destinos: cada uma
     // tem o seu status de entrega, e o gerente receber não pode fazer o
     // sistema achar que o líder também recebeu.
-    const { error: erroNotif } = await db()
-      .from("notifications")
-      .insert(
-        destinatarios.map((destino) => ({
-          venue_id: venue.id,
-          channel: "whatsapp",
-          destination: destino,
-          template: "checklist_resumo",
-          papel: "administrativo",
-          body: linhas.join("\n"),
-        })) as never,
-      );
+    const { error: erroNotif } = await inserirAvisos(
+      destinatarios.map((destino) => ({
+        venue_id: venue.id,
+        channel: "whatsapp",
+        destination: destino,
+        template: "checklist_resumo",
+        papel: "administrativo",
+        body: linhas.join("\n"),
+      })),
+    );
     if (erroNotif) console.error(`[checklists] não enfileirou o resumo: ${erroNotif.message}`);
   }
 

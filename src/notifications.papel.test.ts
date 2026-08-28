@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { CARENCIA_DO_OUTRO_PAPEL_MS, filtroDePapel } from "./notifications.js";
+import { CARENCIA_DO_OUTRO_PAPEL_MS, colunaFaltante, filtroDePapel } from "./notifications.js";
 import type { PapelWhatsapp } from "./ponteWhatsapp.js";
 
 /**
@@ -59,5 +59,46 @@ describe("filtroDePapel", () => {
     // tempo em que alguém percebe que o conector morreu de vez.
     assert.ok(CARENCIA_DO_OUTRO_PAPEL_MS > 60_000);
     assert.ok(CARENCIA_DO_OUTRO_PAPEL_MS <= 30 * 60_000);
+  });
+});
+
+/**
+ * O CÓDIGO SOBE ANTES DO SQL RODAR, SEMPRE.
+ *
+ * A Vercel publica sozinha a cada push; a migração é um SQL que alguém cola
+ * no Supabase depois. Nessa janela, um `insert` com coluna nova falha
+ * inteiro — e cada produtor de aviso só registra o erro no log e segue. Foi
+ * assim que a coluna `papel` calou, de uma vez, o convite da pesquisa, o
+ * link do checklist e o aviso de nota baixa.
+ */
+describe("colunaFaltante", () => {
+  it("entende o Postgres", () => {
+    assert.equal(
+      colunaFaltante('column "papel" of relation "notifications" does not exist'),
+      "papel",
+    );
+  });
+
+  it("entende o PostgREST", () => {
+    assert.equal(
+      colunaFaltante(
+        "Could not find the 'papel' column of 'notifications' in the schema cache",
+      ),
+      "papel",
+    );
+  });
+
+  it("serve para qualquer coluna nova, não só a de hoje", () => {
+    assert.equal(
+      colunaFaltante('column "cliente_id" of relation "notifications" does not exist'),
+      "cliente_id",
+    );
+  });
+
+  it("erro que não é de coluna continua sendo erro", () => {
+    // Mascarar isto esconderia o problema de verdade de quem lê o log.
+    assert.equal(colunaFaltante("duplicate key value violates unique constraint"), null);
+    assert.equal(colunaFaltante("permission denied for table notifications"), null);
+    assert.equal(colunaFaltante(""), null);
   });
 });

@@ -1,4 +1,5 @@
 import { db } from "./supabase.js";
+import { inserirAvisos } from "./notifications.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { configDeClientes } from "./clientes.js";
 import type { Cliente, ConfigDeClientes } from "./clientes.js";
@@ -264,7 +265,7 @@ export async function mandarParabens(
 
     // O ano no template é o que faz a trava do banco permitir o parabéns do
     // ano que vem sem permitir dois no mesmo ano.
-    const { error } = await cliente().from("notifications").insert({
+    const { error } = await inserirAvisos({
       venue_id: venue.id,
       cliente_id: p.id,
       channel: "whatsapp",
