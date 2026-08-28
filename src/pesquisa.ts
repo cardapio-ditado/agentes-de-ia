@@ -422,17 +422,24 @@ export async function registrarResposta(params: {
 
   const respostaId = (data as { id: string }).id;
 
-  // Quem respondeu e deixou o contato entra na base de clientes da casa.
+  // Quem respondeu e deixou o contato entra na base de clientes da casa, e a
+  // resposta passa a apontar para ele.
   //
-  // A pesquisa pergunta "como foi?"; a base guarda QUEM respondeu — e é dela
+  // A pesquisa pergunta "como foi?"; a base guarda QUEM respondeu. Ligados,
+  // a ficha do cliente mostra o que aquela pessoa achou da casa — e é da base
   // que sai o parabéns de aniversário meses depois. Sem isto, o contato mais
   // valioso que a casa recebe (alguém que gostou o bastante para responder)
   // morria dentro de uma única resposta.
+  //
+  // O vínculo é gravado agora, e não descoberto depois: aqui o telefone
+  // normalizado ainda está em mãos. Procurar por texto livre mais tarde
+  // ("(65) 99999-0000" contra "5565999990000") erraria nas bordas.
   if (params.clienteContato?.trim()) {
-    await registrarClienteSeDer(params.venueId, "pesquisa", {
+    const pessoa = await registrarClienteSeDer(params.venueId, "pesquisa", {
       telefone: params.clienteContato,
       nome: params.clienteNome,
     });
+    if (pessoa) await vincularRespostaAoCliente(respostaId, pessoa.id);
   }
 
   // As notas por pergunta entram DEPOIS da resposta, e falhar aqui não
@@ -1174,4 +1181,105 @@ export async function listarRespostas(params: {
   const { data, error } = await consulta;
   if (error) throw new ErroDePesquisa(500, `Falha ao listar as respostas: ${error.message}`);
   return (data ?? []) as RespostaBruta[];
+}
+
+// ============================================================
+// O que ESTE cliente achou da casa
+// ============================================================
+//
+// A ponte entre a base de clientes e a pesquisa, e ela só atravessa num
+// sentido: a pesquisa sabe o que é um cliente, a base de clientes não sabe o
+// que é uma pesquisa. Assim uma casa que só comprou o CMV continua com a
+// base inteira funcionando — a ficha simplesmente não mostra este pedaço.
+//
+// Nada aqui estoura quando a coluna `cliente_id` ainda não existe: devolve
+// vazio, e a tela some sozinha em vez de quebrar.
+
+/** Uma nota que a pessoa deu, com o que ela escreveu junto. */
+export interface AvaliacaoDoCliente {
+  id: string;
+  nota: number;
+  comentario: string | null;
+  elogios: string[];
+  criticas: string[];
+  created_at: string;
+}
+
+export async function avaliacoesDoCliente(
+  venueId: string,
+  clienteId: string,
+): Promise<AvaliacaoDoCliente[]> {
+  const { data, error } = await cliente()
+    .from("pesquisa_respostas")
+    .select("id, nota, comentario, elogios, criticas, created_at")
+    .eq("venue_id", venueId)
+    .eq("cliente_id", clienteId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) return [];
+  return (data ?? []) as AvaliacaoDoCliente[];
+}
+
+/** A nota de cada um, para a lista de clientes: quantas deu e a média. */
+export interface NotaDoCliente {
+  respostas: number;
+  media: number;
+  ultima: number;
+}
+
+/**
+ * As notas de vários clientes de uma vez.
+ *
+ * Numa consulta só, e não uma por linha: a lista mostra até duzentas pessoas,
+ * e duzentas idas ao banco para desenhar uma etiqueta é como uma tela rápida
+ * vira uma tela lenta sem ninguém perceber onde.
+ */
+export async function notasPorCliente(
+  venueId: string,
+  clienteIds: string[],
+): Promise<Map<string, NotaDoCliente>> {
+  const mapa = new Map<string, NotaDoCliente>();
+  if (!clienteIds.length) return mapa;
+
+  const { data, error } = await cliente()
+    .from("pesquisa_respostas")
+    .select("cliente_id, nota, created_at")
+    .eq("venue_id", venueId)
+    .in("cliente_id", clienteIds)
+    .order("created_at", { ascending: false })
+    .limit(TETO_DE_RESPOSTAS);
+  if (error) return mapa;
+
+  for (const r of (data ?? []) as { cliente_id: string; nota: number }[]) {
+    const atual = mapa.get(r.cliente_id);
+    if (!atual) {
+      // Vem ordenado do mais novo para o mais velho, então a primeira que
+      // aparece é a última que a pessoa deu.
+      mapa.set(r.cliente_id, { respostas: 1, media: r.nota, ultima: r.nota });
+      continue;
+    }
+    atual.media = (atual.media * atual.respostas + r.nota) / (atual.respostas + 1);
+    atual.respostas += 1;
+  }
+  for (const v of mapa.values()) v.media = Math.round(v.media * 10) / 10;
+  return mapa;
+}
+
+/**
+ * Amarra uma resposta a quem a deu.
+ *
+ * Nunca derruba a resposta: o cliente ter respondido importa mais do que o
+ * vínculo existir. Mesma regra de sempre — acessório não mata o essencial.
+ */
+export async function vincularRespostaAoCliente(
+  respostaId: string,
+  clienteId: string,
+): Promise<void> {
+  const { error } = await cliente()
+    .from("pesquisa_respostas")
+    .update({ cliente_id: clienteId } as never)
+    .eq("id", respostaId);
+  if (error && !/cliente_id|42703|PGRST/i.test(error.message)) {
+    console.error(`[pesquisa] resposta ${respostaId} sem vínculo: ${error.message}`);
+  }
 }

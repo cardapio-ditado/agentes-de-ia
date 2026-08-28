@@ -214,14 +214,15 @@ export async function registrarClienteSeDer(
   venueId: string,
   origem: OrigemDeCliente,
   dados: DadosDoCliente,
-): Promise<void> {
+): Promise<Cliente | null> {
   try {
-    await registrarCliente(venueId, origem, dados);
+    return await registrarCliente(venueId, origem, dados);
   } catch (e) {
     // Tabela ainda sem migração também cai aqui, e em silêncio de propósito.
     if (!/clientes|42P01|PGRST/i.test((e as Error).message)) {
       console.error(`[clientes] não registrei ${dados.telefone}: ${(e as Error).message}`);
     }
+    return null;
   }
 }
 

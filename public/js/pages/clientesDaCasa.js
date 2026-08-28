@@ -44,6 +44,20 @@ function telefoneLegivel(bruto) {
   return bruto ?? "";
 }
 
+/**
+ * A nota que a pessoa deu, na régua do NPS.
+ *
+ * 9 e 10 promotor, 7 e 8 neutro, de 0 a 6 detrator. A cor importa mais que o
+ * número: o gerente varre a lista com o olho, e vermelho é quem merece um
+ * telefonema antes de qualquer campanha de aniversário.
+ */
+function selosDaNota(nps) {
+  if (!nps || !nps.respostas) return null;
+  const variante = nps.media >= 9 ? "etiqueta-ok" : nps.media >= 7 ? "etiqueta-alerta" : "etiqueta-perigo";
+  const texto = nps.respostas > 1 ? `nota ${nps.media} · ${nps.respostas} respostas` : `nota ${nps.media}`;
+  return etiqueta(texto, variante);
+}
+
 /** "faz aniversário hoje", "…amanhã", "…em 12 dias". */
 function quandoFaz(dias) {
   if (dias === 0) return "faz aniversário hoje";
@@ -168,6 +182,7 @@ export async function clientesDaCasa(raiz, ctx) {
         ]),
         el("span", { classe: "linha-detalhes" }, [
           c.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
+          selosDaNota(c.nps),
           c.visitas ? el("span", { classe: "muted", texto: `${c.visitas} visita${c.visitas > 1 ? "s" : ""}` }) : null,
           c.gasto_total_centavos ? el("strong", { texto: dinheiro(c.gasto_total_centavos / 100) }) : null,
         ].filter(Boolean)),
@@ -283,6 +298,10 @@ export async function clientesDaCasa(raiz, ctx) {
       ].filter(Boolean)),
     );
 
+    // A voz dela, embaixo da ficha. Só para quem já existe: cliente sendo
+    // cadastrado agora não tem passado a mostrar.
+    if (existente) corpo.append(vozDoCliente(existente));
+
     async function salvar() {
       try {
         if (existente) {
@@ -324,6 +343,83 @@ export async function clientesDaCasa(raiz, ctx) {
         avisar(e.message, "erro");
       }
     }
+  }
+
+  /* ================= O que este cliente achou da casa ================= */
+
+  /**
+   * A voz da pessoa dentro da ficha dela.
+   *
+   * Aqui está a junção entre a base de clientes e a pesquisa, e ela é de
+   * propósito num só lugar: a ficha. Uma aba paralela obrigaria o gerente a
+   * cruzar duas telas para saber que a aniversariante de sexta é a mesma que
+   * escreveu "demorou 40 minutos" — e mandar parabéns para ela sem saber
+   * disso é pior que não mandar.
+   *
+   * Casa sem o módulo vê o bloco apagado. Não é propaganda no vazio: é o
+   * momento exato em que a falta se sente, olhando a ficha de um cliente de
+   * verdade sem saber o que ele achou da casa.
+   */
+  function vozDoCliente(cliente) {
+    const caixa = el("section", { classe: "cartao pilha" }, [
+      el("h3", { texto: "O que essa pessoa achou da casa" }),
+    ]);
+
+    if (!ctx.temModulo("pesquisa")) {
+      caixa.dataset.apagado = "1";
+      caixa.append(
+        el("p", {
+          classe: "muted",
+          texto: "Com a Voz do Cliente, aqui aparecem as notas e os comentários que esta pessoa deixou — e você sabe quem elogiou e quem precisa de um telefonema antes de mandar qualquer mensagem.",
+        }),
+      );
+      return caixa;
+    }
+
+    caixa.append(el("p", { classe: "muted", texto: "Carregando as respostas…" }));
+    get(`/v1/venues/${ctx.venue}/clientes/${cliente.id}/avaliacoes`)
+      .then((respostas) => {
+        limpar(caixa).append(el("h3", { texto: "O que essa pessoa achou da casa" }));
+        if (!respostas.length) {
+          caixa.append(
+            el("p", {
+              classe: "muted",
+              texto: "Ainda não respondeu à pesquisa. Convide na aba Convites, em Ajustes da pesquisa.",
+            }),
+          );
+          return;
+        }
+        for (const r of respostas) caixa.append(umaResposta(r));
+      })
+      .catch(() => {
+        limpar(caixa).append(el("h3", { texto: "O que essa pessoa achou da casa" }));
+        caixa.append(el("p", { classe: "muted", texto: "Não deu para carregar as respostas agora." }));
+      });
+
+    return caixa;
+  }
+
+  function umaResposta(r) {
+    const variante = r.nota >= 9 ? "etiqueta-ok" : r.nota >= 7 ? "etiqueta-alerta" : "etiqueta-perigo";
+    const dia = String(r.created_at ?? "").slice(0, 10).split("-").reverse().join("/");
+    return el("div", { classe: "linha-tabela" }, [
+      el("span", { classe: "linha-principal" }, [
+        // O que ela ESCREVEU vem primeiro e em destaque: a nota é o resumo, a
+        // frase é o motivo — e é o motivo que faz alguém agir.
+        r.comentario
+          ? el("strong", { texto: `“${r.comentario}”` })
+          : el("strong", { classe: "muted", texto: "Deu a nota, sem escrever nada." }),
+        el("small", {
+          classe: "muted",
+          texto: [
+            dia,
+            ...(r.elogios ?? []).map((e) => `👍 ${e}`),
+            ...(r.criticas ?? []).map((c) => `👎 ${c}`),
+          ].join(" · "),
+        }),
+      ]),
+      el("span", { classe: "linha-detalhes" }, [etiqueta(`nota ${r.nota}`, variante)]),
+    ]);
   }
 
   /* ================= Aniversariantes ================= */

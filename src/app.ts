@@ -220,6 +220,8 @@ import {
   listarConvites,
   listarPremios,
   listarRespostas,
+  avaliacoesDoCliente,
+  notasPorCliente,
   painelDaPesquisa,
   registrarResposta,
   respostaCompleta,
@@ -2104,18 +2106,20 @@ async function roteasApi(
         const chave = await exigirChave(req, "reservations:read");
         const venue = await findVenueBySlugInOrg(chave.org_id, slug);
         const origem = url.searchParams.get("origem");
-        return ok(
-          res,
-          await comErroDeClientes(() =>
-            listarClientesDaCasa(venue.id, {
-              busca: url.searchParams.get("busca") ?? undefined,
-              origem: (origem as OrigemDeCliente | null) ?? undefined,
-              comAniversario: url.searchParams.get("aniversario") === "1",
-              mes: Number(url.searchParams.get("mes")) || undefined,
-              limite: Number(url.searchParams.get("limite")) || undefined,
-            }),
-          ),
+        const lista = await comErroDeClientes(() =>
+          listarClientesDaCasa(venue.id, {
+            busca: url.searchParams.get("busca") ?? undefined,
+            origem: (origem as OrigemDeCliente | null) ?? undefined,
+            comAniversario: url.searchParams.get("aniversario") === "1",
+            mes: Number(url.searchParams.get("mes")) || undefined,
+            limite: Number(url.searchParams.get("limite")) || undefined,
+          }),
         );
+        // A nota que cada um deu, quando a casa tem a pesquisa. Numa consulta
+        // só, e sem travar a lista: casa sem o módulo recebe o mapa vazio e a
+        // etiqueta simplesmente não aparece.
+        const notas = await notasPorCliente(venue.id, lista.map((c) => c.id));
+        return ok(res, lista.map((c) => ({ ...c, nps: notas.get(c.id) ?? null })));
       }
       if (metodo === "POST") {
         const chave = await exigirChave(req, "reservations:write");
@@ -2136,6 +2140,19 @@ async function roteasApi(
           201,
         );
       }
+    }
+
+    // GET /v1/venues/:slug/clientes/:id/avaliacoes — o que esta pessoa achou
+    // da casa. Vive na ficha do cliente, não numa tela separada: é sobre ela.
+    if (
+      metodo === "GET" &&
+      recurso === "clientes" &&
+      p[4] === "avaliacoes" &&
+      p.length === 5
+    ) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDePesquisa(() => avaliacoesDoCliente(venue.id, p[3]!)));
     }
 
     // PATCH | DELETE /v1/venues/:slug/clientes/:id

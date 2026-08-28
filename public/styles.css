@@ -1051,6 +1051,19 @@ textarea:focus {
   padding: 16px;
   box-shadow: var(--sombra);
 }
+/**
+ * O cartão de um módulo que a casa ainda não tem.
+ *
+ * Apagado e não escondido: é na hora de olhar a ficha de um cliente real que
+ * a falta se sente. Contorno tracejado e sem sombra dizem "isto existe, mas
+ * não é seu" sem virar propaganda piscando no meio do trabalho.
+ */
+.cartao[data-apagado] {
+  border-style: dashed;
+  box-shadow: none;
+  background: transparent;
+  opacity: 0.72;
+}
 .cabecalho-secao {
   display: flex;
   align-items: center;

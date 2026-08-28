@@ -256,6 +256,17 @@ const ctx = {
   aoSair(fn) {
     limpezas.push(fn);
   },
+  /**
+   * A casa contratou este módulo?
+   *
+   * Para telas que mostram um pedaço a mais quando outro módulo existe — a
+   * ficha do cliente exibindo o que ele achou da casa, por exemplo. É só para
+   * DESENHAR: o servidor confere de novo em cada rota, e é lá que está a
+   * trava. Aqui é para não prometer ao dono um botão que não vai funcionar.
+   */
+  temModulo(id) {
+    return modulosDoCliente.get(id)?.ativo === true;
+  },
   atualizarContador(id, valor) {
     const alvo = nav.querySelector(`[data-pagina="${id}"] .nav-contador`);
     if (!alvo) return;
