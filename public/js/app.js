@@ -29,6 +29,11 @@ import { engenhariaCardapio } from "./pages/engenhariaCardapio.js";
 import { vendas } from "./pages/vendas.js";
 import { pesquisa } from "./pages/pesquisa.js";
 import { pesquisaAjustes } from "./pages/pesquisaAjustes.js";
+// Dois "clientes" no produto, e são coisas diferentes: `clientes` (acima) é a
+// carteira da Brasa Food — as CASAS que pagam —, e `clientesDaCasa` é a base
+// de uma casa: a gente que bebe no bar. Os nomes precisam brigar aqui, no
+// import, e não numa tela onde alguém veria a lista errada.
+import { clientesDaCasa } from "./pages/clientesDaCasa.js";
 import { pesquisaRespostas } from "./pages/pesquisaRespostas.js";
 import { producao } from "./pages/producao.js";
 
@@ -71,6 +76,9 @@ const PAGINAS = [
   { id: "pesquisa", modulo: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
   { id: "pesquisa-respostas", modulo: "pesquisa", rotulo: "Respostas da pesquisa", icone: ICONES.conversas, render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
   { id: "pesquisa-ajustes", modulo: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
+
+  // A base da casa: quem já esteve aqui, e o parabéns que faz voltar.
+  { id: "clientes-casa", modulo: "clientes", rotulo: "Clientes", icone: ICONES.pessoa, render: clientesDaCasa, subtitulo: "A base da casa: cadastro à mão, Zig, WhatsApp — e o aniversário de cada um" },
 
   // A ordem é a do dia de trabalho: o número primeiro, depois o que se faz
   // toda manhã, depois o que se faz às vezes, por fim o que se cadastra uma
@@ -188,6 +196,19 @@ const MODULOS = [
     // centro: é o primeiro que o olho encontra depois dos quatro de cima.
     pos: { x: 0, y: 1 },
   },
+  {
+    id: "clientes",
+    nome: "Clientes",
+    descricao:
+      "Quem já esteve na casa, num lugar só: cadastrado à mão, vindo da Zig ou de uma conversa no WhatsApp — e o parabéns de aniversário que faz ele voltar.",
+    icone: ICONES.pessoa,
+    // Não se compra: a base de clientes é da CASA, não de um módulo. Quem só
+    // comprou o CMV cadastra clientes na mão e manda parabéns do mesmo jeito.
+    // Diferente de "Ajustes": aquilo é configuração e vive no cabeçalho; isto
+    // se usa todo dia e merece o favo que sobrava na colmeia.
+    daCasa: true,
+    pos: { x: -1.5, y: 0 },
+  },
   // ---- Fora da colmeia ----
   //
   // A colmeia é a vitrine do que a casa COMPROU. Estes dois não são produto:
@@ -214,7 +235,7 @@ const MODULOS = [
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
-const FAVOS_VAZIOS = [{ x: -1.5, y: 0 }];
+const FAVOS_VAZIOS = [{ x: 1.5, y: 0 }];
 
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");
@@ -418,6 +439,9 @@ function moduloAceso(m) {
   // ela um cliente que só comprou Checklist não teria como conectar o
   // WhatsApp nem criar o login do gerente.
   if (m.interno) return true;
+  // Nem a base de clientes: ela é da casa, e não um módulo contratado. Quem
+  // pode ver o quê continua sendo decidido pelo servidor em cada rota.
+  if (m.daCasa) return true;
   if (modulosDoCliente.get(m.id)?.ativo !== true) return false;
   // A restrição da pessoa, por cima da contratação da casa.
   return meusModulos === null || meusModulos.includes(m.id);
