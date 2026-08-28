@@ -247,6 +247,7 @@ import {
   listarClientes as listarClientesDaCasa,
   registrarCliente,
   salvarConfigDeClientes,
+  visitasDoCliente,
 } from "./clientes.js";
 import type { OrigemDeCliente } from "./clientes.js";
 import { mandarParabens, proximosAniversariantes } from "./aniversarios.js";
@@ -2153,6 +2154,18 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await comErroDePesquisa(() => avaliacoesDoCliente(venue.id, p[3]!)));
+    }
+
+    // GET /v1/venues/:slug/clientes/:id/visitas — quando veio e quanto gastou.
+    if (
+      metodo === "GET" &&
+      recurso === "clientes" &&
+      p[4] === "visitas" &&
+      p.length === 5
+    ) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeClientes(() => visitasDoCliente(venue.id, p[3]!)));
     }
 
     // PATCH | DELETE /v1/venues/:slug/clientes/:id

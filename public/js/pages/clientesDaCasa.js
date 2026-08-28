@@ -35,6 +35,17 @@ function nascimentoLegivel(c) {
   return c.nascimento_ano ? `${base}/${c.nascimento_ano}` : base;
 }
 
+/** "25/12/2026, quinta" — a data como quem lê uma agenda. */
+function diaLegivel(dia) {
+  const [ano, mes, d] = String(dia ?? "").split("-");
+  if (!ano || !mes || !d) return String(dia ?? "");
+  // Meio-dia UTC: em qualquer fuso do Brasil o dia continua o mesmo, e sem
+  // isso "2026-08-28" vira 27 de agosto na virada.
+  const data = new Date(Date.UTC(Number(ano), Number(mes) - 1, Number(d), 12));
+  const semana = data.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "UTC" });
+  return `${d}/${mes}/${ano}, ${semana}`;
+}
+
 /** "(65) 99999-0000" a partir do que está guardado com o 55 na frente. */
 function telefoneLegivel(bruto) {
   const d = String(bruto ?? "").replace(/\D/g, "");
@@ -298,9 +309,12 @@ export async function clientesDaCasa(raiz, ctx) {
       ].filter(Boolean)),
     );
 
-    // A voz dela, embaixo da ficha. Só para quem já existe: cliente sendo
+    // O passado dela, embaixo da ficha. Só para quem já existe: cliente sendo
     // cadastrado agora não tem passado a mostrar.
-    if (existente) corpo.append(vozDoCliente(existente));
+    if (existente) {
+      corpo.append(historicoDeVisitas(existente));
+      corpo.append(vozDoCliente(existente));
+    }
 
     async function salvar() {
       try {
@@ -343,6 +357,83 @@ export async function clientesDaCasa(raiz, ctx) {
         avisar(e.message, "erro");
       }
     }
+  }
+
+  /* ================= O histórico de visitas ================= */
+
+  /**
+   * Quando a pessoa veio e quanto gastou, visita a visita.
+   *
+   * É o que separa "um telefone na lista" de "um cliente". Dois números
+   * soltos — 7 visitas, R$ 483 — não dizem se ela vinha toda semana e sumiu
+   * há dois meses, que é exatamente a informação que decide se vale ligar
+   * para ela antes do aniversário.
+   *
+   * O intervalo entre a primeira e a última visita, no rodapé, responde a
+   * pergunta que o gerente faz de verdade: "de quanto em quanto tempo esse
+   * cliente volta?".
+   */
+  function historicoDeVisitas(cliente) {
+    const caixa = el("section", { classe: "cartao pilha" }, [
+      el("h3", { texto: "Histórico de visitas" }),
+      el("p", { classe: "muted", texto: "Carregando…" }),
+    ]);
+
+    get(`/v1/venues/${ctx.venue}/clientes/${cliente.id}/visitas`)
+      .then((visitas) => {
+        limpar(caixa).append(el("h3", { texto: "Histórico de visitas" }));
+        if (!visitas.length) {
+          caixa.append(
+            el("p", {
+              classe: "muted",
+              texto: cliente.visitas
+                ? `${cliente.visitas} visita(s) registradas antes de o histórico existir — a partir de agora cada dia entra aqui.`
+                : "Nenhuma visita registrada ainda. A Zig alimenta esta lista todo dia.",
+            }),
+          );
+          return;
+        }
+
+        const total = visitas.reduce((s, v) => s + Number(v.gasto_centavos ?? 0), 0);
+        const comGasto = visitas.filter((v) => Number(v.gasto_centavos) > 0);
+        const ticket = comGasto.length ? total / comGasto.length : 0;
+
+        caixa.append(
+          el("p", { classe: "muted" }, [
+            el("strong", { texto: `${visitas.length} visita${visitas.length > 1 ? "s" : ""}` }),
+            el("span", { texto: ` · ${dinheiro(total / 100)} no total` }),
+            comGasto.length
+              ? el("span", { texto: ` · ${dinheiro(ticket / 100)} por visita` })
+              : null,
+          ].filter(Boolean)),
+        );
+
+        const lista = el("div", { classe: "tabela" });
+        for (const v of visitas) {
+          lista.append(
+            el("div", { classe: "linha-tabela" }, [
+              el("span", { classe: "linha-principal" }, [
+                el("strong", { texto: diaLegivel(v.dia) }),
+                el("small", { classe: "muted", texto: NOME_DA_ORIGEM[v.origem] ?? v.origem }),
+              ]),
+              el("span", { classe: "linha-detalhes" }, [
+                Number(v.gasto_centavos) > 0
+                  ? el("strong", { texto: dinheiro(Number(v.gasto_centavos) / 100) })
+                  : el("span", { classe: "muted", texto: "sem consumo no nome dela" }),
+              ]),
+            ]),
+          );
+        }
+        caixa.append(lista);
+      })
+      .catch(() => {
+        limpar(caixa).append(
+          el("h3", { texto: "Histórico de visitas" }),
+          el("p", { classe: "muted", texto: "Não deu para carregar o histórico agora." }),
+        );
+      });
+
+    return caixa;
   }
 
   /* ================= O que este cliente achou da casa ================= */
@@ -548,7 +639,7 @@ export async function clientesDaCasa(raiz, ctx) {
         value: config.aniversario_hora,
       }),
       antecedencia: el("input", {
-        classe: "campo-numero", type: "number", min: "0", max: "30",
+        classe: "campo-numero", type: "number", min: "0", max: "60",
         value: config.aniversario_antecedencia,
       }),
       teto: el("input", {
@@ -587,13 +678,13 @@ export async function clientesDaCasa(raiz, ctx) {
         ]),
         el("div", { classe: "linha-campos" }, [
           linha("Hora do envio", campos.hora, "Meio da manhã costuma ser o melhor: às 7h acorda gente, às 22h a festa já acabou."),
-          linha("Dias de antecedência", campos.antecedencia, "0 = no dia. 2 ou 3 dá tempo de a pessoa marcar a mesa aqui."),
+          linha("Dias de antecedência", campos.antecedencia, "No dia é tarde: a pessoa já escolheu onde comemorar. 10 a 30 dias antes ela ainda está decidindo — e é aí que a mensagem muda alguma coisa."),
         ]),
         linha("Teto por dia", campos.teto, "WhatsApp comum disparando muita mensagem de uma vez é WhatsApp banido. O teto protege o número da casa."),
         linha(
           "Texto da mensagem",
           campos.texto,
-          "Use {nome} para o primeiro nome e {casa} para o nome da casa. Deixe em branco para usar o texto padrão.",
+          "Use {nome} para o primeiro nome, {casa} para o nome da casa e {quando} para \"daqui a 10 dias\". Em branco, o texto padrão se ajusta sozinho à antecedência.",
         ),
         el("div", { classe: "linha-campos" }, [
           el("button", {

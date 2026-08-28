@@ -290,12 +290,85 @@ export async function alimentarBaseDeClientes(
       telefone: v.telefone,
       nome: v.nome,
       nascimento: v.nascimento,
-      // Uma visita por dia buscado, e o gasto do dia somado ao histórico. A
-      // varredura só processa cada dia uma vez, então isto não conta dobrado.
-      visitas: 1,
-      gastoCentavos: v.gasto_centavos,
-      ultimaVisita: diaISO,
+      // O DIA, e não um contador. A trava única de (cliente, dia) no banco faz
+      // esta varredura poder rodar dez vezes sem inventar dez visitas — o que
+      // é exatamente o que ela faz, de hora em hora, de propósito.
+      visita: { dia: diaISO, gastoCentavos: v.gasto_centavos, origem: "zig" },
     });
+  }
+}
+
+// ============================================================
+// A base de clientes enche sozinha, todo dia
+// ============================================================
+
+/**
+ * Puxa os visitantes de ontem e grava na base — sem mandar nada.
+ *
+ * SEPARADO DO CONVITE DE PROPÓSITO.
+ *
+ * Conhecer quem esteve na casa e convidar alguém para responder a pesquisa
+ * são decisões diferentes. O convite tem teto, tem trava de repetição e
+ * depende do módulo Voz do Cliente estar contratado e ligado; conhecer o
+ * próprio cliente não depende de nada disso. Uma casa que desligou a pesquisa
+ * — ou que nunca a comprou — continua com a base enchendo, e é dela que sai o
+ * parabéns de aniversário meses depois.
+ *
+ * Idempotente por construção: a trava (cliente, dia) no banco absorve a
+ * repetição, então rodar de hora em hora é resiliência, não risco. Não usa
+ * `ultimo_dia` justamente por isso — aquele campo é do convite, e reaproveitá-lo
+ * faria uma coisa depender da outra pela porta dos fundos.
+ */
+export async function alimentarBasePelaZig(
+  venue: { id: string; name: string; timezone: string },
+  opcoes: { agora?: Date; dia?: string } = {},
+): Promise<{ dia: string; visitantes: number }> {
+  const agora = opcoes.agora ?? new Date();
+  const config = await configZig(venue.id);
+  const dia = opcoes.dia ?? diaAnterior(hojeNaCasa(venue.timezone, agora));
+  if (!config.token || !config.loja) return { dia, visitantes: 0 };
+
+  const visitantes = await visitantesDoDia({ token: config.token, loja: config.loja }, dia);
+  await alimentarBaseDeClientes(venue.id, visitantes, dia);
+  if (visitantes.length) {
+    console.log(`[clientes-zig] ${venue.name}: ${visitantes.length} visitante(s) de ${dia} na base.`);
+  }
+  return { dia, visitantes: visitantes.length };
+}
+
+/**
+ * A volta diária, em toda casa que tem a Zig ligada.
+ *
+ * Lista por quem TEM TOKEN, e não por módulo: a base de clientes é da casa.
+ * Falha de uma casa não pode calar as outras.
+ */
+export async function varrerBaseDeClientes(agora = new Date()): Promise<void> {
+  let casas: any[];
+  try {
+    const { data, error } = await cliente()
+      .from("pesquisa_zig")
+      .select("venue_id, token, loja, venues:venue_id(id, name, timezone)")
+      .not("token", "is", null)
+      .limit(200);
+    if (error) {
+      // Banco sem a migração: silêncio é o comportamento certo.
+      if (/pesquisa_zig|42P01|PGRST/i.test(error.message)) return;
+      throw error;
+    }
+    casas = data ?? [];
+  } catch (e) {
+    console.error(`[clientes-zig] varredura não listou as casas: ${(e as Error).message}`);
+    return;
+  }
+
+  for (const casa of casas) {
+    const venue = casa.venues;
+    if (!venue || !casa.token || !casa.loja) continue;
+    try {
+      await alimentarBasePelaZig(venue, { agora });
+    } catch (e) {
+      console.error(`[clientes-zig] ${venue.name}: ${(e as Error).message}`);
+    }
   }
 }
 
@@ -466,6 +539,9 @@ export async function listarVisitantes(
       telefone: v.telefone,
       nome: v.nome,
       nascimento: v.nascimento,
+      // Com o dia: a trava do banco já impede a contagem dobrada, então abrir
+      // esta tela cinco vezes para o mesmo dia grava uma visita só.
+      visita: { dia, gastoCentavos: v.gasto_centavos, origem: "zig" },
     });
   }
   const recentes = await telefonesConvidadosRecentemente(

@@ -10,7 +10,7 @@ import { dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
-import { cicloDaPesquisaZig } from "./pesquisaZig.js";
+import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
 import { listAgentsInOrg } from "./repository.js";
 import {
   consumirComandoPonte,
@@ -226,10 +226,15 @@ setInterval(() => {
   // E o parabéns de aniversário, também em falha separada. A trava de um por
   // ano é índice único no banco: rodar de hora em hora não manda de novo.
   varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));
+  // E a base de clientes enche sozinha pela Zig, sem mandar nada e sem
+  // depender do módulo da pesquisa: a trava (cliente, dia) no banco absorve a
+  // repetição, então rodar de hora em hora é resiliência.
+  varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura:", e));
 }, 60 * 60_000);
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
 void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
 void varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));
+void varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));

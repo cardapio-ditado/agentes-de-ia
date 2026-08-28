@@ -70,16 +70,50 @@ export function textoDeParabens(
   config: Pick<ConfigDeClientes, "aniversario_texto">,
   casa: string,
   nome: string | null,
+  diasAntes = 0,
 ): string {
   const primeiro = primeiroNome(nome);
-  const modelo =
-    config.aniversario_texto?.trim() ||
-    (primeiro
-      ? "Oi, {nome}! Hoje é seu dia e a gente não podia deixar passar em branco. " +
-        "Feliz aniversário! 🎉 Vem comemorar com a gente — {casa}."
-      : "Feliz aniversário! 🎉 Hoje é seu dia e a gente não podia deixar passar " +
-        "em branco. Vem comemorar com a gente — {casa}.");
-  return modelo.replaceAll("{nome}", primeiro).replaceAll("{casa}", casa).trim();
+  const modelo = config.aniversario_texto?.trim() || padraoDoParabens(primeiro, diasAntes);
+  return modelo
+    .replaceAll("{nome}", primeiro)
+    .replaceAll("{casa}", casa)
+    .replaceAll("{quando}", quandoEmPalavras(diasAntes))
+    .trim();
+}
+
+/** "hoje", "amanhã", "daqui a 10 dias" — para o texto padrão e para o {quando}. */
+function quandoEmPalavras(diasAntes: number): string {
+  if (diasAntes <= 0) return "hoje";
+  if (diasAntes === 1) return "amanhã";
+  return `daqui a ${diasAntes} dias`;
+}
+
+/**
+ * O texto padrão MUDA com a antecedência, e isso não é enfeite.
+ *
+ * "Hoje é seu dia" mandado dez dias antes é uma mensagem errada — o cliente
+ * lê, confere o calendário e conclui que a casa não sabe quando ele nasce.
+ * Foi o defeito real desta função: a antecedência já existia como opção e o
+ * texto continuava falando do dia.
+ *
+ * E o objetivo é outro em cada caso. No dia, é carinho: a pessoa já escolheu
+ * onde vai comemorar. Antes, é convite — ela ainda está decidindo, e é essa
+ * a única janela em que a mensagem muda alguma coisa.
+ */
+function padraoDoParabens(primeiro: string, diasAntes: number): string {
+  const oi = primeiro ? "Oi, {nome}! " : "";
+
+  if (diasAntes <= 0) {
+    return (
+      `${oi}Hoje é seu dia e a gente não podia deixar passar em branco. ` +
+      `Feliz aniversário! 🎉 Vem comemorar com a gente — {casa}.`
+    );
+  }
+  return (
+    `${oi}Vimos aqui que seu aniversário é {quando} e a gente já quer comemorar junto! 🎉 ` +
+    `Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa ` +
+    `pra você. Um abraço, {casa}.`
+  );
 }
 
 /**
@@ -272,7 +306,7 @@ export async function mandarParabens(
       destination: p.telefone,
       template: `aniversario_${alvo.ano}`,
       papel: "administrativo",
-      body: textoDeParabens(config, venue.name, p.nome),
+      body: textoDeParabens(config, venue.name, p.nome, config.aniversario_antecedencia),
     } as never);
 
     if (error) {

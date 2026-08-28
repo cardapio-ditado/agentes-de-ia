@@ -111,3 +111,56 @@ describe("textoDeParabens", () => {
     assert.ok(t.length > 20, t);
   });
 });
+
+/**
+ * O DEFEITO QUE ESTES TESTES FECHAM.
+ *
+ * A antecedência já existia como opção e o texto padrão continuava dizendo
+ * "hoje é seu dia". Dez dias antes, isso é uma mensagem errada: o cliente lê,
+ * confere o calendário e conclui que a casa não sabe quando ele nasce.
+ */
+describe("textoDeParabens com antecedência", () => {
+  const casa = "Ditado Popular";
+
+  it("dez dias antes NÃO diz que é hoje", () => {
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 10);
+    assert.ok(!/hoje/i.test(t), t);
+    assert.ok(t.includes("daqui a 10 dias"), t);
+    assert.ok(t.includes(casa), t);
+  });
+
+  it("no dia continua sendo a mensagem de sempre", () => {
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 0);
+    assert.ok(/hoje é seu dia/i.test(t), t);
+  });
+
+  it("amanhã é amanhã, não \"daqui a 1 dias\"", () => {
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 1);
+    assert.ok(t.includes("amanhã"), t);
+    assert.ok(!t.includes("1 dias"), t);
+  });
+
+  it("antes do dia, a mensagem CONVIDA — é para isso que ela existe", () => {
+    // No dia é carinho: a pessoa já escolheu onde comemorar. Antes é convite,
+    // e convite sem chamada para ação é só um cartão.
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 15);
+    assert.ok(/responder|mesa/i.test(t), t);
+  });
+
+  it("{quando} funciona no texto que a casa escreveu", () => {
+    const t = textoDeParabens(
+      { aniversario_texto: "Oi {nome}, seu niver é {quando}! Vem pro {casa}." },
+      casa,
+      "Ana",
+      10,
+    );
+    assert.equal(t, "Oi Ana, seu niver é daqui a 10 dias! Vem pro Ditado Popular.");
+  });
+
+  it("nenhum marcador sobra na mensagem, em nenhuma antecedência", () => {
+    for (const dias of [0, 1, 7, 10, 30, 60]) {
+      const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", dias);
+      assert.ok(!t.includes("{"), `${dias} dias: ${t}`);
+    }
+  });
+});

@@ -121,10 +121,14 @@ export interface DadosDoCliente {
   email?: string | null;
   documento?: string | null;
   observacoes?: string | null;
-  /** Só cresce com o que a fonte realmente sabe. */
-  visitas?: number;
-  gastoCentavos?: number;
-  ultimaVisita?: string | null;
+  /**
+   * Uma visita que aconteceu, com o dia e o que a pessoa gastou.
+   *
+   * Um DIA, não um contador. Contador soma toda vez que alguém chama; dia é
+   * um fato, e o banco recusa o mesmo fato duas vezes. É o que deixa a
+   * varredura rodar de hora em hora sem inventar movimento.
+   */
+  visita?: { dia: string; gastoCentavos?: number; origem?: string };
 }
 
 /**
@@ -179,19 +183,11 @@ export async function registrarCliente(
     nascimento_ano: manter(nasc.ano, atual?.nascimento_ano),
   };
 
-  // Movimento é acumulado, não substituído: cada visita soma à anterior.
-  if (dados.visitas !== undefined) {
-    linha.visitas = Number(atual?.visitas ?? 0) + Math.max(0, dados.visitas);
-  }
-  if (dados.gastoCentavos !== undefined) {
-    linha.gasto_total_centavos =
-      Number(atual?.gasto_total_centavos ?? 0) + Math.max(0, dados.gastoCentavos);
-  }
   // A última visita só anda para frente: um dia antigo chegando atrasado
   // (venda offline que sincronizou depois) não pode rejuvenescer o cadastro.
-  if (dados.ultimaVisita) {
+  if (dados.visita?.dia) {
     linha.ultima_visita =
-      dados.ultimaVisita > (atual?.ultima_visita ?? "") ? dados.ultimaVisita : atual?.ultima_visita;
+      dados.visita.dia > (atual?.ultima_visita ?? "") ? dados.visita.dia : atual?.ultima_visita;
   }
 
   const { data, error } = await cliente()
@@ -200,7 +196,91 @@ export async function registrarCliente(
     .select("*")
     .single();
   if (error) throw new ErroDeClientes(500, `Falha ao gravar o cliente: ${error.message}`);
-  return data as Cliente;
+
+  const pessoa = data as Cliente;
+  if (dados.visita?.dia) await gravarVisita(venueId, pessoa, dados.visita);
+  return pessoa;
+}
+
+/**
+ * Grava a visita do dia — e só mexe nos totais se o dia for novo.
+ *
+ * A ORDEM AQUI É A REGRA INTEIRA.
+ *
+ * Primeiro tenta inserir o dia. O banco tem `unique (cliente_id, dia)`, então
+ * a segunda tentativa do mesmo dia não insere nada — e é justamente por não
+ * ter inserido que os contadores não sobem. Somar antes de saber se o dia era
+ * novo é como a mesma noite virava três visitas no cadastro.
+ *
+ * `ignoreDuplicates` faz o banco devolver lista vazia em vez de erro no dia
+ * repetido: repetir não é falha, é a varredura rodando de novo como deve.
+ */
+async function gravarVisita(
+  venueId: string,
+  pessoa: Cliente,
+  visita: { dia: string; gastoCentavos?: number; origem?: string },
+): Promise<void> {
+  const gasto = Math.max(0, Math.trunc(visita.gastoCentavos ?? 0));
+
+  const { data, error } = await cliente()
+    .from("clientes_visitas")
+    .upsert(
+      {
+        venue_id: venueId,
+        cliente_id: pessoa.id,
+        dia: visita.dia,
+        gasto_centavos: gasto,
+        origem: visita.origem ?? "zig",
+      } as never,
+      { onConflict: "cliente_id,dia", ignoreDuplicates: true },
+    )
+    .select("id");
+
+  // Tabela ainda sem migração: o cadastro do cliente já está gravado, e é ele
+  // que importa. O histórico entra quando o SQL rodar.
+  if (error) {
+    if (!/clientes_visitas|42P01|PGRST/i.test(error.message)) {
+      console.error(`[clientes] visita de ${pessoa.telefone} não entrou: ${error.message}`);
+    }
+    return;
+  }
+  // Vazio = o dia já estava lá. Nada a somar.
+  if (!data?.length) return;
+
+  const { error: erroTotais } = await cliente()
+    .from("clientes")
+    .update({
+      visitas: Number(pessoa.visitas ?? 0) + 1,
+      gasto_total_centavos: Number(pessoa.gasto_total_centavos ?? 0) + gasto,
+    } as never)
+    .eq("id", pessoa.id);
+  if (erroTotais) {
+    console.error(`[clientes] totais de ${pessoa.telefone} não subiram: ${erroTotais.message}`);
+  }
+}
+
+export interface VisitaDoCliente {
+  dia: string;
+  gasto_centavos: number;
+  origem: string;
+}
+
+/** O histórico de um cliente: quando veio e quanto gastou, do mais recente. */
+export async function visitasDoCliente(
+  venueId: string,
+  clienteId: string,
+  limite = 60,
+): Promise<VisitaDoCliente[]> {
+  const { data, error } = await cliente()
+    .from("clientes_visitas")
+    .select("dia, gasto_centavos, origem")
+    .eq("venue_id", venueId)
+    .eq("cliente_id", clienteId)
+    .order("dia", { ascending: false })
+    .limit(limite);
+  // Sem a migração, a ficha mostra o resto e não quebra por causa do extrato.
+  if (error) return [];
+  return (data ?? []) as VisitaDoCliente[];
 }
 
 /**
@@ -339,7 +419,8 @@ export interface ConfigDeClientes {
 const CONFIG_PADRAO: ConfigDeClientes = {
   aniversario_ativo: false,
   aniversario_hora: 10,
-  aniversario_antecedencia: 0,
+  // Dez dias: no dia é tarde, a pessoa já escolheu onde comemorar.
+  aniversario_antecedencia: 10,
   aniversario_texto: null,
   aniversario_teto_por_dia: 40,
 };
