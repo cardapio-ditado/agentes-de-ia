@@ -85,6 +85,31 @@ function nomeAproximadoDaCasa(slug) {
     .join(" ");
 }
 
+/**
+ * O que aconteceu com a mensagem daquela pessoa.
+ *
+ * "Enfileirado" não é "entregue": entre uma coisa e outra estão o conector, o
+ * WhatsApp e o número da pessoa. Sem este selo, um disparo em que metade
+ * falhou parece um disparo inteiro — e foi assim que se perdeu meia lista sem
+ * ninguém ter onde olhar.
+ */
+function seloDoEnvio(envio) {
+  if (!envio) return null;
+  if (envio.status === "sent") {
+    const hora = envio.enviado_em
+      ? new Date(envio.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+      : "";
+    return etiqueta(hora ? `entregue ${hora}` : "entregue", "etiqueta-ok");
+  }
+  if (envio.status === "failed") {
+    return etiqueta(envio.erro ? `falhou: ${envio.erro.slice(0, 60)}` : "falhou", "etiqueta-perigo");
+  }
+  // pending: saiu da tela e está com o conector. Numa casa cujo número
+  // administrativo caiu, é aqui que a fila fica parada — e é isto que o
+  // gerente precisa ver antes de achar que mandou.
+  return etiqueta("na fila, ainda não entregue", "etiqueta-alerta");
+}
+
 /** "faz aniversário hoje", "…amanhã", "…em 12 dias". */
 function quandoFaz(dias) {
   if (dias === 0) return "faz aniversário hoje";
@@ -655,7 +680,7 @@ export async function clientesDaCasa(raiz, ctx) {
               ]),
               el("span", { classe: "linha-detalhes" }, [
                 p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
-                p.ja_avisado ? etiqueta("parabéns enviado", "etiqueta-ok") : null,
+                seloDoEnvio(p.envio),
                 !p.telefone ? etiqueta("sem telefone", "etiqueta-alerta") : null,
                 el("strong", {
                   texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}`,
@@ -663,6 +688,7 @@ export async function clientesDaCasa(raiz, ctx) {
               ].filter(Boolean)),
             ]),
             el("p", { classe: "previa-mensagem", texto: p.mensagem }),
+            rodapeDoCartao(p, bloqueado),
           ]),
         );
       }
@@ -701,6 +727,97 @@ export async function clientesDaCasa(raiz, ctx) {
         marcas.length ? rodapeDeEnvio() : null,
       ].filter(Boolean)),
     );
+
+    /**
+     * O rodapé do cartão: o motivo, ou o botão de mandar só para esta pessoa.
+     *
+     * O botão fica AQUI, e não só no fim da lista, porque na prática o gerente
+     * abre a agenda, lê a mensagem de uma pessoa e quer mandar aquela. Rolar
+     * até o rodapé para disparar quem está no topo da tela é o tipo de atrito
+     * que faz a ferramenta ser usada pela metade.
+     *
+     * E quando não dá para mandar, o cartão DIZ POR QUÊ. Botão que some sem
+     * explicação vira "o sistema não funciona".
+     */
+    function rodapeDoCartao(pessoa, bloqueado) {
+      const area = el("div", { classe: "linha-campos", style: "align-items:center;margin-top:4px" });
+
+      if (pessoa.descadastrado_em) {
+        area.append(el("small", { classe: "muted", texto: "Pediu para não receber mensagens — não entra em nenhum envio." }));
+        return area;
+      }
+      if (!pessoa.telefone) {
+        area.append(el("small", { classe: "muted", texto: "Sem telefone na base. Cadastre na ficha para poder enviar." }));
+        return area;
+      }
+      if (pessoa.envio) {
+        const explicacao =
+          pessoa.envio.status === "sent"
+            ? "Já entregue. Cada pessoa recebe uma vez por ano."
+            : pessoa.envio.status === "failed"
+              ? "O envio falhou. Confira se o número do WhatsApp da casa está conectado."
+              : "Na fila do conector. Se ficar parado, o número da casa pode estar desconectado.";
+        area.append(el("small", { classe: "muted", texto: explicacao }));
+        return area;
+      }
+
+      const botao = el("button", {
+        classe: "btn btn-peq",
+        type: "button",
+        texto: "Mandar só para esta pessoa",
+        onclick: async (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (!confirm(`Mandar o parabéns agora para ${pessoa.nome || telefoneLegivel(pessoa.telefone)}?`)) return;
+          botao.disabled = true;
+          botao.textContent = "Enviando…";
+          try {
+            const r = await post(`/v1/venues/${ctx.venue}/aniversariantes/enviar`, {
+              clientes: [pessoa.id],
+            });
+            // Troca o rodapé no lugar, sem redesenhar a lista: redesenhar
+            // jogaria a rolagem para o topo, que é justamente o incômodo que
+            // este botão existe para resolver.
+            limpar(area).append(
+              el("small", {
+                classe: "muted",
+                texto: r.enfileirados
+                  ? "Na fila do conector — vai sair em instantes."
+                  : explicarResultado(r),
+              }),
+            );
+            if (marca) marca.disabled = true;
+            atualizarRodape();
+          } catch (e) {
+            avisar(e.message, "erro");
+            botao.disabled = false;
+            botao.textContent = "Mandar só para esta pessoa";
+          }
+        },
+      });
+      // `bloqueado` cobre o que a lista já sabe; o botão confere de novo por
+      // segurança, mas a essa altura ele nem chega a ser desenhado.
+      botao.disabled = bloqueado;
+      const marca = marcas.find((m) => m.pessoa.id === pessoa.id)?.marca ?? null;
+      area.append(botao);
+      return area;
+    }
+
+    /**
+     * Por que não saiu ninguém, em português.
+     *
+     * O servidor devolve os quatro motivos separados; mostrar só "0 enviados"
+     * transforma uma explicação completa em mistério. Foi o que aconteceu num
+     * disparo em que parte da lista não saiu: a resposta estava ali e a tela
+     * jogava fora.
+     */
+    function explicarResultado(r) {
+      const partes = [];
+      if (r.repetidos) partes.push(`${r.repetidos} já tinham recebido este ano`);
+      if (r.alem_do_teto) partes.push(`${r.alem_do_teto} ficaram para amanhã (teto do dia)`);
+      if (r.sem_telefone) partes.push(`${r.sem_telefone} sem telefone`);
+      return partes.length ? partes.join(" · ") : "Ninguém elegível nesta seleção.";
+    }
 
     function marcarTodos(valor) {
       for (const { marca } of marcas) if (!marca.disabled) marca.checked = valor;
@@ -757,10 +874,14 @@ export async function clientesDaCasa(raiz, ctx) {
         const r = await post(`/v1/venues/${ctx.venue}/aniversariantes/enviar`, {
           clientes: alvos.map(({ pessoa }) => pessoa.id),
         });
+        // O resultado INTEIRO, e não só o número que saiu: quem ficou de
+        // fora e por quê é a metade da informação que faltava.
+        const fora = explicarResultado(r);
+        const detalhe = r.enfileirados && fora !== "Ninguém elegível nesta seleção." ? ` · ${fora}` : "";
         avisar(
           r.enfileirados
-            ? `${r.enfileirados} parabéns na fila de envio.`
-            : "Ninguém novo para avisar — já tinham recebido este ano.",
+            ? `${r.enfileirados} parabéns na fila de envio${detalhe}.`
+            : fora,
           r.enfileirados ? "ok" : "info",
         );
         abaAniversarios();

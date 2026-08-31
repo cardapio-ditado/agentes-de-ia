@@ -161,6 +161,14 @@ export async function aniversariantesDoDia(
   return (data ?? []) as Cliente[];
 }
 
+export interface EnvioDoParabens {
+  /** pending, sent ou failed — como a fila de avisos registra. */
+  status: string;
+  erro: string | null;
+  criado_em: string;
+  enviado_em: string | null;
+}
+
 export interface Aniversariante extends Cliente {
   /** Quantos dias faltam. Zero = hoje. */
   dias_ate: number;
@@ -168,6 +176,15 @@ export interface Aniversariante extends Cliente {
   proximo: string;
   /** Já recebeu o parabéns deste ano — a tela mostra e não repete. */
   ja_avisado: boolean;
+  /**
+   * O que aconteceu com a mensagem dela, quando já foi disparada.
+   *
+   * "Enfileirado" não é "entregue": entre uma coisa e outra estão o conector,
+   * o WhatsApp e o número da pessoa. Sem mostrar isto, um disparo em que
+   * metade falhou parece um disparo bem-sucedido — que foi exatamente o que
+   * aconteceu e ninguém tinha onde ver.
+   */
+  envio: EnvioDoParabens | null;
   /**
    * A mensagem EXATA que sairia para esta pessoa.
    *
@@ -234,6 +251,7 @@ export async function proximosAniversariantes(
       ...c,
       ...diasAte(c.nascimento_dia!, c.nascimento_mes!, hojeISO),
       ja_avisado: false,
+      envio: null as EnvioDoParabens | null,
     }))
     .map(({ dias: d, proximo, ...resto }) => ({
       ...resto,
@@ -250,23 +268,41 @@ export async function proximosAniversariantes(
 
   if (!proximos.length) return proximos;
 
-  // Quem já recebeu o parabéns do ano da PRÓXIMA comemoração. Numa consulta
-  // só: uma por cliente viraria centenas de idas ao banco para abrir a tela.
+  // O que já foi disparado para o ano da PRÓXIMA comemoração, com o status de
+  // entrega. Numa consulta só: uma por cliente viraria centenas de idas ao
+  // banco para abrir a tela.
   const anos = [...new Set(proximos.map((c) => `aniversario_${c.proximo.slice(0, 4)}`))];
   const { data: avisados } = await cliente()
     .from("notifications")
-    .select("cliente_id, template")
+    .select("cliente_id, template, status, error, created_at, sent_at")
     .eq("venue_id", venue.id)
     .in("template", anos)
     .in("cliente_id", proximos.map((c) => c.id));
 
-  const jaFoi = new Set(
-    ((avisados ?? []) as { cliente_id: string; template: string }[]).map(
-      (n) => `${n.cliente_id}|${n.template}`,
-    ),
-  );
+  type LinhaDeAviso = {
+    cliente_id: string;
+    template: string;
+    status: string;
+    error: string | null;
+    created_at: string;
+    sent_at: string | null;
+  };
+  const porPessoa = new Map<string, LinhaDeAviso>();
+  for (const n of (avisados ?? []) as LinhaDeAviso[]) {
+    porPessoa.set(`${n.cliente_id}|${n.template}`, n);
+  }
+
   for (const c of proximos) {
-    c.ja_avisado = jaFoi.has(`${c.id}|aniversario_${c.proximo.slice(0, 4)}`);
+    const achado = porPessoa.get(`${c.id}|aniversario_${c.proximo.slice(0, 4)}`);
+    c.ja_avisado = Boolean(achado);
+    c.envio = achado
+      ? {
+          status: achado.status,
+          erro: achado.error,
+          criado_em: achado.created_at,
+          enviado_em: achado.sent_at,
+        }
+      : null;
   }
   return proximos;
 }
