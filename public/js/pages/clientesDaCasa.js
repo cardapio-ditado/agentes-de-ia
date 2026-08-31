@@ -647,7 +647,10 @@ export async function clientesDaCasa(raiz, ctx) {
       // código que monta a mensagem de verdade — prévia feita na tela mente
       // no dia em que as duas se desencontram.
       for (const p of pessoas) {
-        const bloqueado = Boolean(p.descadastrado_em) || p.ja_avisado || !p.telefone;
+        // "Já avisado" só trava quem foi ENTREGUE. Quem falhou ou está parado
+        // na fila continua marcável: a mensagem dele nunca chegou.
+        const entregue = p.envio?.status === "sent";
+        const bloqueado = Boolean(p.descadastrado_em) || entregue || !p.telefone;
         const marca = el("input", {
           type: "checkbox",
           disabled: bloqueado,
@@ -750,25 +753,41 @@ export async function clientesDaCasa(raiz, ctx) {
         area.append(el("small", { classe: "muted", texto: "Sem telefone na base. Cadastre na ficha para poder enviar." }));
         return area;
       }
-      if (pessoa.envio) {
-        const explicacao =
-          pessoa.envio.status === "sent"
-            ? "Já entregue. Cada pessoa recebe uma vez por ano."
-            : pessoa.envio.status === "failed"
-              ? "O envio falhou. Confira se o número do WhatsApp da casa está conectado."
-              : "Na fila do conector. Se ficar parado, o número da casa pode estar desconectado.";
-        area.append(el("small", { classe: "muted", texto: explicacao }));
+      // Já entregue é ponto final: mandar de novo seria dois parabéns no
+      // mesmo ano, que é justamente o que a trava existe para impedir.
+      if (pessoa.envio?.status === "sent") {
+        area.append(el("small", { classe: "muted", texto: "Já entregue. Cada pessoa recebe uma vez por ano." }));
         return area;
+      }
+
+      // Falhou ou está parada na fila: o botão vira SEGUNDA CHANCE. A trava de
+      // um por ano impede entrega dobrada, não entrega nenhuma — e uma
+      // mensagem que nunca chegou não é uma mensagem enviada.
+      const jaTentou = Boolean(pessoa.envio);
+      if (jaTentou) {
+        area.append(
+          el("small", {
+            classe: "muted",
+            style: "flex:1",
+            texto:
+              pessoa.envio.status === "failed"
+                ? "O envio falhou. Com o WhatsApp da casa conectado, dá para tentar de novo."
+                : "Na fila do conector. Se ficar parado, tente de novo com o WhatsApp da casa conectado.",
+          }),
+        );
       }
 
       const botao = el("button", {
         classe: "btn btn-peq",
         type: "button",
-        texto: "Mandar só para esta pessoa",
+        texto: jaTentou ? "Tentar de novo" : "Mandar só para esta pessoa",
         onclick: async (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          if (!confirm(`Mandar o parabéns agora para ${pessoa.nome || telefoneLegivel(pessoa.telefone)}?`)) return;
+          const quem = pessoa.nome || telefoneLegivel(pessoa.telefone);
+          if (!confirm(jaTentou
+            ? `Tentar entregar de novo para ${quem}?\n\nA mensagem anterior não chegou.`
+            : `Mandar o parabéns agora para ${quem}?`)) return;
           botao.disabled = true;
           botao.textContent = "Enviando…";
           try {
@@ -791,7 +810,7 @@ export async function clientesDaCasa(raiz, ctx) {
           } catch (e) {
             avisar(e.message, "erro");
             botao.disabled = false;
-            botao.textContent = "Mandar só para esta pessoa";
+            botao.textContent = jaTentou ? "Tentar de novo" : "Mandar só para esta pessoa";
           }
         },
       });

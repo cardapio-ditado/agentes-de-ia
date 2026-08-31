@@ -324,6 +324,46 @@ async function clientesEscolhidos(venueId: string, ids: string[]): Promise<Clien
   return (data ?? []) as Cliente[];
 }
 
+/**
+ * Devolve à fila um parabéns que existe mas nunca chegou.
+ *
+ * Devolve `true` quando ressuscitou algo, `false` quando a mensagem já foi
+ * entregue de verdade — e aí "repetido" é a resposta certa, porque mandar de
+ * novo seria dois parabéns no mesmo ano.
+ *
+ * Zera as tentativas porque o teto de quatro é o que tirou a mensagem da fila;
+ * sem zerar, o conector continuaria ignorando. E regrava o corpo: entre a
+ * falha e agora a casa pode ter mudado o texto da campanha, e é o texto de
+ * hoje que deve sair.
+ */
+async function reenfileirarSeNaoChegou(
+  venueId: string,
+  clienteId: string,
+  template: string,
+  corpo: string,
+): Promise<boolean> {
+  const { data, error } = await cliente()
+    .from("notifications")
+    .select("id, status")
+    .eq("venue_id", venueId)
+    .eq("cliente_id", clienteId)
+    .eq("template", template)
+    .maybeSingle();
+  if (error || !data) return false;
+  if (data.status === "sent") return false;
+
+  const { error: erroUpdate } = await cliente()
+    .from("notifications")
+    .update({ status: "pending", attempts: 0, error: null, body: corpo } as never)
+    .eq("id", data.id);
+  if (erroUpdate) {
+    console.error(`[aniversarios] não reenfileirei ${data.id}: ${erroUpdate.message}`);
+    return false;
+  }
+  console.log(`[aniversarios] aviso ${data.id} voltou para a fila — nunca tinha chegado.`);
+  return true;
+}
+
 /** Quantos parabéns esta casa já enfileirou nas últimas 24 horas. */
 async function parabensRecentes(venueId: string, agora: Date): Promise<number> {
   const desde = new Date(agora.getTime() - 24 * 60 * 60_000).toISOString();
@@ -416,6 +456,11 @@ export async function mandarParabens(
       ? diasAte(p.nascimento_dia, p.nascimento_mes, hojeISO)
       : { dias: 0, proximo: diaISO };
     const ano = Number(dela.proximo.slice(0, 4));
+    const corpo = textoDeParabens(config, venue.name, p.nome, {
+      dia: p.nascimento_dia ?? alvo.dia,
+      mes: p.nascimento_mes ?? alvo.mes,
+      diasAntes: dela.dias,
+    });
 
     const { error } = await inserirAvisos({
       venue_id: venue.id,
@@ -426,17 +471,27 @@ export async function mandarParabens(
       // ano que vem sem permitir dois no mesmo ano.
       template: `aniversario_${ano}`,
       papel: "administrativo",
-      body: textoDeParabens(config, venue.name, p.nome, {
-        dia: p.nascimento_dia ?? alvo.dia,
-        mes: p.nascimento_mes ?? alvo.mes,
-        diasAntes: dela.dias,
-      }),
+      body: corpo,
     } as never);
 
     if (error) {
-      // Índice único: já mandamos este ano. Não é erro — é a trava trabalhando.
-      if (/duplicate key|unique/i.test(error.message)) resultado.repetidos += 1;
-      else console.error(`[aniversarios] ${p.telefone}: ${error.message}`);
+      if (/duplicate key|unique/i.test(error.message)) {
+        // A TRAVA IMPEDE ENTREGA DOBRADA, NÃO ENTREGA NENHUMA.
+        //
+        // Já existe um aviso deste ano para esta pessoa — mas "existe" não
+        // quer dizer "chegou". Se o número da casa estava fora do ar quando
+        // ele foi criado, ele falhou quatro vezes, saiu da fila (o teto de
+        // tentativas) e ficou morto no banco. Sem isto, a trava transformaria
+        // uma falha de conexão numa condenação: aquela pessoa nunca mais
+        // receberia o parabéns, e a tela contaria como "já avisado".
+        if (await reenfileirarSeNaoChegou(venue.id, p.id, `aniversario_${ano}`, corpo)) {
+          resultado.enfileirados += 1;
+        } else {
+          resultado.repetidos += 1;
+        }
+      } else {
+        console.error(`[aniversarios] ${p.telefone}: ${error.message}`);
+      }
       continue;
     }
     resultado.enfileirados += 1;
