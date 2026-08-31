@@ -2717,3 +2717,21 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   border: 1px solid var(--borda);
   box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
 }
+
+/**
+ * A prévia da mensagem, dentro do cartão do aniversariante.
+ *
+ * Formato de balão de conversa porque é assim que ela vai chegar: o dono
+ * precisa ler a frase como o cliente vai ler, e não como um campo de
+ * formulário. Marcar sem ler o que sai é assinar em branco.
+ */
+.previa-mensagem {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

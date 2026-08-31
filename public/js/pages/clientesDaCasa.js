@@ -586,7 +586,10 @@ export async function clientesDaCasa(raiz, ctx) {
     }
 
     limpar(corpo);
-    const lista = el("div", { classe: "tabela" });
+    const lista = el("div", { classe: "pilha" });
+    const marcas = [];
+    let botaoEnviar = null;
+    let contador = null;
     if (!pessoas.length) {
       lista.append(
         vazio(
@@ -595,31 +598,55 @@ export async function clientesDaCasa(raiz, ctx) {
         ),
       );
     } else {
-      // Agrupado por "hoje / amanhã / em N dias": o gerente lê a agenda de
-      // cima para baixo e para quando o dia deixa de interessar.
+      // Uma caixa por pessoa, com a MENSAGEM à vista.
+      //
+      // Marcar sem ler o que vai sair é assinar em branco: o dono precisa ver
+      // a frase inteira, com o nome e a data que o cliente vai ler, antes de
+      // apertar. É por isso que a prévia vem do servidor, montada pelo mesmo
+      // código que monta a mensagem de verdade — prévia feita na tela mente
+      // no dia em que as duas se desencontram.
       for (const p of pessoas) {
+        const bloqueado = Boolean(p.descadastrado_em) || p.ja_avisado || !p.telefone;
+        const marca = el("input", {
+          type: "checkbox",
+          disabled: bloqueado,
+          // Quem faz nos próximos dias já vem marcado: é o caso comum, e
+          // desmarcar quem não interessa dá menos trabalho que marcar um a um.
+          checked: !bloqueado && p.dias_ate <= 15,
+        });
+        marca.dataset.cliente = p.id;
+        marcas.push({ marca, pessoa: p });
+
         lista.append(
-          el("div", { classe: "linha-tabela" }, [
-            el("span", { classe: "linha-principal" }, [
-              el("strong", { texto: p.nome || telefoneLegivel(p.telefone) }),
-              el("small", {
-                classe: "muted",
-                texto: [
-                  telefoneLegivel(p.telefone),
-                  quandoFaz(p.dias_ate),
-                  // A idade só quando a base sabe o ano: metade dos cadastros
-                  // tem só dia e mês, e chutar a idade é pior que não dizer.
-                  p.nascimento_ano
-                    ? `faz ${Number(p.proximo.slice(0, 4)) - p.nascimento_ano} anos`
-                    : null,
-                ].filter(Boolean).join(" · "),
-              }),
+          el("label", { classe: "cartao pilha", style: "cursor:pointer" }, [
+            el("div", { classe: "cabecalho-secao", style: "margin-bottom:6px" }, [
+              el("span", { classe: "linha-principal", style: "flex-direction:row;align-items:center;gap:10px" }, [
+                marca,
+                el("span", {}, [
+                  el("strong", { texto: p.nome || telefoneLegivel(p.telefone) }),
+                  el("br"),
+                  el("small", {
+                    classe: "muted",
+                    texto: [
+                      telefoneLegivel(p.telefone),
+                      quandoFaz(p.dias_ate),
+                      p.nascimento_ano
+                        ? `faz ${Number(p.proximo.slice(0, 4)) - p.nascimento_ano} anos`
+                        : null,
+                    ].filter(Boolean).join(" · "),
+                  }),
+                ]),
+              ]),
+              el("span", { classe: "linha-detalhes" }, [
+                p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
+                p.ja_avisado ? etiqueta("parabéns enviado", "etiqueta-ok") : null,
+                !p.telefone ? etiqueta("sem telefone", "etiqueta-alerta") : null,
+                el("strong", {
+                  texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}`,
+                }),
+              ].filter(Boolean)),
             ]),
-            el("span", { classe: "linha-detalhes" }, [
-              p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
-              p.ja_avisado ? etiqueta("parabéns enviado", "etiqueta-ok") : null,
-              el("strong", { texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}` }),
-            ].filter(Boolean)),
+            el("p", { classe: "previa-mensagem", texto: p.mensagem }),
           ]),
         );
       }
@@ -633,39 +660,97 @@ export async function clientesDaCasa(raiz, ctx) {
             el("p", {
               classe: "muted",
               texto: config.aniversario_ativo
-                ? `O parabéns sai sozinho às ${config.aniversario_hora}h` +
-                  (config.aniversario_antecedencia
-                    ? `, ${config.aniversario_antecedencia} dia(s) antes do aniversário.`
-                    : ", no dia.")
-                : "O parabéns automático está desligado. Ligue na aba Parabéns — ou use esta lista para ligar você mesmo.",
+                ? `Marque quem deve receber e confira a mensagem antes de enviar. O parabéns também sai sozinho às ${config.aniversario_hora}h, ${config.aniversario_antecedencia} dia(s) antes.`
+                : "Marque quem deve receber e confira a mensagem antes de enviar. O envio automático está desligado — ligue na aba Parabéns se quiser que saia sozinho.",
             }),
           ]),
-          config.aniversario_ativo
-            ? el("button", {
-                classe: "btn btn-peq",
-                type: "button",
-                texto: "Mandar agora",
-                onclick: mandarAgora,
-              })
+          marcas.length
+            ? el("div", { classe: "linha-campos", style: "flex:0 0 auto" }, [
+                el("button", {
+                  classe: "btn btn-peq",
+                  type: "button",
+                  texto: "Marcar todos",
+                  onclick: () => marcarTodos(true),
+                }),
+                el("button", {
+                  classe: "btn btn-peq",
+                  type: "button",
+                  texto: "Desmarcar",
+                  onclick: () => marcarTodos(false),
+                }),
+              ])
             : null,
         ].filter(Boolean)),
         lista,
-      ]),
+        marcas.length ? rodapeDeEnvio() : null,
+      ].filter(Boolean)),
     );
 
-    async function mandarAgora() {
-      if (!confirm("Mandar o parabéns agora para quem faz aniversário hoje? Quem já recebeu este ano não recebe de novo.")) return;
+    function marcarTodos(valor) {
+      for (const { marca } of marcas) if (!marca.disabled) marca.checked = valor;
+      atualizarRodape();
+    }
+
+    /**
+     * O rodapé que diz em cima de quantos vai agir.
+     *
+     * O número vai no PRÓPRIO botão, e não numa linha acima: é o último lugar
+     * onde o olho passa antes do clique, e disparo em massa merece que a
+     * conta esteja ali.
+     */
+    function rodapeDeEnvio() {
+      contador = el("p", { classe: "muted" });
+      botaoEnviar = el("button", {
+        classe: "btn btn-primario",
+        type: "button",
+        onclick: mandarAosMarcados,
+      });
+      for (const { marca } of marcas) marca.addEventListener("change", atualizarRodape);
+      const rodape = el("section", { classe: "cartao linha-campos", style: "align-items:center" }, [
+        contador,
+        el("span", { style: "margin-left:auto" }, [botaoEnviar]),
+      ]);
+      atualizarRodape();
+      return rodape;
+    }
+
+    function escolhidos() {
+      return marcas.filter(({ marca }) => marca.checked && !marca.disabled);
+    }
+
+    function atualizarRodape() {
+      if (!botaoEnviar) return;
+      const n = escolhidos().length;
+      botaoEnviar.textContent = n === 1 ? "Mandar para 1 pessoa" : `Mandar para ${n} pessoas`;
+      botaoEnviar.disabled = n === 0;
+      const fora = marcas.filter(({ marca }) => marca.disabled).length;
+      contador.textContent = fora
+        ? `${n} marcado(s) · ${fora} fora da lista (já avisados, sem telefone ou que pediram para não receber)`
+        : `${n} marcado(s)`;
+    }
+
+    async function mandarAosMarcados() {
+      const alvos = escolhidos();
+      if (!alvos.length) return;
+      const nomes = alvos.slice(0, 3).map(({ pessoa }) => pessoa.nome || pessoa.telefone).join(", ");
+      const resto = alvos.length > 3 ? ` e mais ${alvos.length - 3}` : "";
+      if (!confirm(`Mandar o parabéns agora para ${nomes}${resto}?\n\nCada pessoa recebe uma vez por ano.`)) return;
+
+      botaoEnviar.disabled = true;
       try {
-        const r = await post(`/v1/venues/${ctx.venue}/aniversariantes/enviar`, {});
+        const r = await post(`/v1/venues/${ctx.venue}/aniversariantes/enviar`, {
+          clientes: alvos.map(({ pessoa }) => pessoa.id),
+        });
         avisar(
           r.enfileirados
             ? `${r.enfileirados} parabéns na fila de envio.`
-            : "Ninguém para avisar agora — ou já tinham recebido este ano.",
+            : "Ninguém novo para avisar — já tinham recebido este ano.",
           r.enfileirados ? "ok" : "info",
         );
         abaAniversarios();
       } catch (e) {
         avisar(e.message, "erro");
+        botaoEnviar.disabled = false;
       }
     }
   }

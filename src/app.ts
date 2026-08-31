@@ -2246,7 +2246,17 @@ async function roteasApi(
     ) {
       const chave = await exigirChave(req, "reservations:write");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      return ok(res, await comErroDeClientes(() => mandarParabens(venue, { forcar: true })));
+      const corpo = (await lerJson(req).catch(() => ({}))) as Record<string, unknown>;
+      // Com a lista, manda só para quem o dono marcou; sem ela, a lista do dia.
+      const escolhidos = Array.isArray(corpo.clientes)
+        ? corpo.clientes.filter((v): v is string => typeof v === "string")
+        : [];
+      return ok(
+        res,
+        await comErroDeClientes(() =>
+          mandarParabens(venue, { forcar: true, clienteIds: escolhidos }),
+        ),
+      );
     }
 
     // POST /v1/venues/:slug/pesquisa/convites/planilha?confirmar=1

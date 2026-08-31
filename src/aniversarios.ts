@@ -66,22 +66,43 @@ export function primeiroNome(nome: string | null | undefined): string {
  * configurado, um padrão que já cita a casa — porque mensagem de número
  * desconhecido sem dizer quem está falando é mensagem denunciada.
  */
+export interface QuandoFaz {
+  /** Dia do aniversário, 1 a 31. */
+  dia: number;
+  /** Mês do aniversário, 1 a 12. */
+  mes: number;
+  /** Quantos dias faltam. Só para o texto antigo com {quando}. */
+  diasAntes?: number;
+}
+
+/** "25 de dezembro" — a data como uma pessoa fala. */
+export function dataPorExtenso(dia: number, mes: number): string {
+  const meses = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+  ];
+  return `${dia} de ${meses[mes - 1] ?? "?"}`;
+}
+
 export function textoDeParabens(
   config: Pick<ConfigDeClientes, "aniversario_texto">,
   casa: string,
   nome: string | null,
-  diasAntes = 0,
+  quando: QuandoFaz,
 ): string {
   const primeiro = primeiroNome(nome);
+  const data = dataPorExtenso(quando.dia, quando.mes);
+  const diasAntes = quando.diasAntes ?? 0;
   const modelo = config.aniversario_texto?.trim() || padraoDoParabens(primeiro, diasAntes);
   return modelo
     .replaceAll("{nome}", primeiro)
     .replaceAll("{casa}", casa)
+    .replaceAll("{data}", data)
     .replaceAll("{quando}", quandoEmPalavras(diasAntes))
     .trim();
 }
 
-/** "hoje", "amanhã", "daqui a 10 dias" — para o texto padrão e para o {quando}. */
+/** "hoje", "amanhã", "daqui a 10 dias" — só para quem já usa {quando}. */
 function quandoEmPalavras(diasAntes: number): string {
   if (diasAntes <= 0) return "hoje";
   if (diasAntes === 1) return "amanhã";
@@ -89,16 +110,16 @@ function quandoEmPalavras(diasAntes: number): string {
 }
 
 /**
- * O texto padrão MUDA com a antecedência, e isso não é enfeite.
+ * O texto padrão diz a DATA, não a contagem.
  *
- * "Hoje é seu dia" mandado dez dias antes é uma mensagem errada — o cliente
- * lê, confere o calendário e conclui que a casa não sabe quando ele nasce.
- * Foi o defeito real desta função: a antecedência já existia como opção e o
- * texto continuava falando do dia.
+ * "Daqui a 10 dias" é uma conta, e conta erra: basta a mensagem sair com uma
+ * hora de atraso, o fuso virar o dia, ou a fila segurar o envio, para o
+ * cliente ler um número que não bate com o calendário dele. "Dia 25 de
+ * dezembro" não tem como estar errado — e é assim que uma pessoa fala.
  *
- * E o objetivo é outro em cada caso. No dia, é carinho: a pessoa já escolheu
- * onde vai comemorar. Antes, é convite — ela ainda está decidindo, e é essa
- * a única janela em que a mensagem muda alguma coisa.
+ * No dia do aniversário o texto muda de objetivo: ali é carinho, porque ele
+ * já escolheu onde comemorar. Antes é convite — a única janela em que a
+ * mensagem muda alguma coisa.
  */
 function padraoDoParabens(primeiro: string, diasAntes: number): string {
   const oi = primeiro ? "Oi, {nome}! " : "";
@@ -110,9 +131,9 @@ function padraoDoParabens(primeiro: string, diasAntes: number): string {
     );
   }
   return (
-    `${oi}Vimos aqui que seu aniversário é {quando} e a gente já quer comemorar junto! 🎉 ` +
-    `Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa ` +
-    `pra você. Um abraço, {casa}.`
+    `${oi}Vimos aqui que dia {data} é seu aniversário e a gente já quer ` +
+    `comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem ` +
+    `que a gente separa a melhor mesa pra você. Um abraço, {casa}.`
   );
 }
 
@@ -147,6 +168,14 @@ export interface Aniversariante extends Cliente {
   proximo: string;
   /** Já recebeu o parabéns deste ano — a tela mostra e não repete. */
   ja_avisado: boolean;
+  /**
+   * A mensagem EXATA que sairia para esta pessoa.
+   *
+   * Montada aqui, no mesmo lugar que monta a de verdade, e não na tela. Uma
+   * prévia construída por outro código é uma prévia que mente — mostra uma
+   * coisa e manda outra, e ninguém descobre até um cliente estranhar.
+   */
+  mensagem: string;
 }
 
 /**
@@ -184,11 +213,12 @@ export function diasAte(
  * gerente achar que o cadastro sumiu.
  */
 export async function proximosAniversariantes(
-  venue: { id: string; timezone: string },
+  venue: { id: string; name?: string; timezone: string },
   dias = 30,
   agora = new Date(),
 ): Promise<Aniversariante[]> {
   const hojeISO = hojeNaCasa(venue.timezone, agora);
+  const config = await configDeClientes(venue.id);
 
   const { data, error } = await cliente()
     .from("clientes")
@@ -205,7 +235,16 @@ export async function proximosAniversariantes(
       ...diasAte(c.nascimento_dia!, c.nascimento_mes!, hojeISO),
       ja_avisado: false,
     }))
-    .map(({ dias: d, proximo, ...resto }) => ({ ...resto, dias_ate: d, proximo }))
+    .map(({ dias: d, proximo, ...resto }) => ({
+      ...resto,
+      dias_ate: d,
+      proximo,
+      mensagem: textoDeParabens(config, venue.name ?? "sua casa", resto.nome, {
+        dia: resto.nascimento_dia!,
+        mes: resto.nascimento_mes!,
+        diasAntes: d,
+      }),
+    }))
     .filter((c) => c.dias_ate <= dias)
     .sort((a, b) => a.dias_ate - b.dias_ate);
 
@@ -230,6 +269,23 @@ export async function proximosAniversariantes(
     c.ja_avisado = jaFoi.has(`${c.id}|aniversario_${c.proximo.slice(0, 4)}`);
   }
   return proximos;
+}
+
+/**
+ * Os clientes que o dono marcou na tela.
+ *
+ * O filtro de descadastrado vem junto e não é negociável: quem pediu para não
+ * receber não recebe nem quando alguém clica no nome dele por engano.
+ */
+async function clientesEscolhidos(venueId: string, ids: string[]): Promise<Cliente[]> {
+  const { data, error } = await cliente()
+    .from("clientes")
+    .select("*")
+    .eq("venue_id", venueId)
+    .in("id", ids.slice(0, 200))
+    .is("descadastrado_em", null);
+  if (error) throw new Error(`Falha ao carregar os escolhidos: ${error.message}`);
+  return (data ?? []) as Cliente[];
 }
 
 /** Quantos parabéns esta casa já enfileirou nas últimas 24 horas. */
@@ -257,18 +313,33 @@ export interface ResultadoDoParabens {
 }
 
 /**
- * Uma volta do parabéns numa casa.
+ * Manda o parabéns — para a lista do dia, ou para quem o dono escolheu.
  *
- * `forcar` ignora a HORA configurada (o botão "Mandar agora" do painel), mas
- * nunca ignora a trava de um por ano nem o teto: forçar duas vezes não manda
- * duas vezes.
+ * DOIS MODOS, E O MANUAL NÃO PEDE LICENÇA À AGENDA.
+ *
+ * A varredura escolhe sozinha pelo dia-alvo (hoje + antecedência) e só age
+ * com o envio automático ligado, na hora configurada. Quando o dono marca
+ * gente na tela, nada disso se aplica: ele já olhou a lista, leu a mensagem e
+ * apertou o botão — pedir que ele também ligue o automático e espere as 10h
+ * seria transformar uma decisão tomada num formulário.
+ *
+ * O que NÃO muda em nenhum dos dois: a trava de um por ano, o teto do dia,
+ * quem pediu para não receber, e quem está sem telefone. Essas existem para
+ * proteger o cliente e o número da casa, e clicar não desfaz nenhuma.
  */
 export async function mandarParabens(
   venue: { id: string; name: string; timezone: string },
-  opcoes: { agora?: Date; forcar?: boolean; config?: ConfigDeClientes } = {},
+  opcoes: {
+    agora?: Date;
+    forcar?: boolean;
+    config?: ConfigDeClientes;
+    /** Escolhidos a dedo na tela. Vazio ou ausente = a lista do dia. */
+    clienteIds?: string[];
+  } = {},
 ): Promise<ResultadoDoParabens> {
   const agora = opcoes.agora ?? new Date();
   const config = opcoes.config ?? (await configDeClientes(venue.id));
+  const aDedo = (opcoes.clienteIds ?? []).length > 0;
   const alvo = diaDoParabens(venue.timezone, config.aniversario_antecedencia, agora);
   const diaISO = `${alvo.ano}-${String(alvo.mes).padStart(2, "0")}-${String(alvo.dia).padStart(2, "0")}`;
   const vazio: ResultadoDoParabens = {
@@ -280,11 +351,16 @@ export async function mandarParabens(
     alem_do_teto: 0,
   };
 
-  if (!config.aniversario_ativo) return vazio;
-  if (!opcoes.forcar && horaNaCasa(venue.timezone, agora) < config.aniversario_hora) return vazio;
+  if (!aDedo) {
+    if (!config.aniversario_ativo) return vazio;
+    if (!opcoes.forcar && horaNaCasa(venue.timezone, agora) < config.aniversario_hora) return vazio;
+  }
 
-  const pessoas = await aniversariantesDoDia(venue.id, alvo.dia, alvo.mes);
+  const pessoas = aDedo
+    ? await clientesEscolhidos(venue.id, opcoes.clienteIds!)
+    : await aniversariantesDoDia(venue.id, alvo.dia, alvo.mes);
   const sobra = Math.max(0, config.aniversario_teto_por_dia - (await parabensRecentes(venue.id, agora)));
+  const hojeISO = hojeNaCasa(venue.timezone, agora);
 
   const resultado = { ...vazio, aniversariantes: pessoas.length };
   for (const p of pessoas) {
@@ -297,16 +373,28 @@ export async function mandarParabens(
       continue;
     }
 
-    // O ano no template é o que faz a trava do banco permitir o parabéns do
-    // ano que vem sem permitir dois no mesmo ano.
+    // Cada pessoa tem o SEU aniversário: no modo a dedo, o dono pode marcar
+    // quem faz amanhã e quem faz daqui a um mês na mesma leva. O ano da trava
+    // e a data do texto saem da data dela, não do dia-alvo da varredura.
+    const dela = p.nascimento_dia && p.nascimento_mes
+      ? diasAte(p.nascimento_dia, p.nascimento_mes, hojeISO)
+      : { dias: 0, proximo: diaISO };
+    const ano = Number(dela.proximo.slice(0, 4));
+
     const { error } = await inserirAvisos({
       venue_id: venue.id,
       cliente_id: p.id,
       channel: "whatsapp",
       destination: p.telefone,
-      template: `aniversario_${alvo.ano}`,
+      // O ano no template é o que faz a trava do banco permitir o parabéns do
+      // ano que vem sem permitir dois no mesmo ano.
+      template: `aniversario_${ano}`,
       papel: "administrativo",
-      body: textoDeParabens(config, venue.name, p.nome, config.aniversario_antecedencia),
+      body: textoDeParabens(config, venue.name, p.nome, {
+        dia: p.nascimento_dia ?? alvo.dia,
+        mes: p.nascimento_mes ?? alvo.mes,
+        diasAntes: dela.dias,
+      }),
     } as never);
 
     if (error) {

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { diaDoParabens, diasAte, primeiroNome, textoDeParabens } from "./aniversarios.js";
+import { dataPorExtenso, diaDoParabens, diasAte, primeiroNome, textoDeParabens } from "./aniversarios.js";
 
 /**
  * As três decisões que a varredura toma antes de tocar no banco: QUE dia
@@ -87,6 +87,7 @@ describe("textoDeParabens", () => {
       { aniversario_texto: "Parabéns, {nome}! Seu chopp te espera no {casa}." },
       "Ditado Popular",
       "MARIA SILVA",
+      { dia: 25, mes: 12 },
     );
     assert.equal(t, "Parabéns, Maria! Seu chopp te espera no Ditado Popular.");
   });
@@ -94,56 +95,78 @@ describe("textoDeParabens", () => {
   it("o padrão sempre diz de onde a mensagem veio", () => {
     // Mensagem de número desconhecido que não se identifica é mensagem
     // denunciada — e denúncia derruba o WhatsApp da casa.
-    const t = textoDeParabens({ aniversario_texto: null }, "Ditado Popular", "Ana");
+    const t = textoDeParabens({ aniversario_texto: null }, "Ditado Popular", "Ana", { dia: 25, mes: 12 });
     assert.ok(t.includes("Ditado Popular"), t);
     assert.ok(t.includes("Ana"), t);
   });
 
   it("sem nome, não sobra um buraco na frase", () => {
-    const t = textoDeParabens({ aniversario_texto: null }, "Ditado Popular", null);
+    const t = textoDeParabens({ aniversario_texto: null }, "Ditado Popular", null, { dia: 25, mes: 12 });
     assert.ok(!t.includes("{nome}"), t);
     assert.ok(!/Oi, !/.test(t), t);
     assert.ok(t.includes("Ditado Popular"), t);
   });
 
   it("texto em branco cai no padrão em vez de mandar nada", () => {
-    const t = textoDeParabens({ aniversario_texto: "   " }, "Ditado Popular", "Ana");
+    const t = textoDeParabens({ aniversario_texto: "   " }, "Ditado Popular", "Ana", { dia: 25, mes: 12 });
     assert.ok(t.length > 20, t);
   });
 });
 
 /**
- * O DEFEITO QUE ESTES TESTES FECHAM.
+ * OS DOIS DEFEITOS QUE ESTES TESTES FECHAM.
  *
- * A antecedência já existia como opção e o texto padrão continuava dizendo
- * "hoje é seu dia". Dez dias antes, isso é uma mensagem errada: o cliente lê,
- * confere o calendário e conclui que a casa não sabe quando ele nasce.
+ * O primeiro: a antecedência já existia como opção e o texto padrão continuava
+ * dizendo "hoje é seu dia". Dez dias antes, isso é uma mensagem errada — o
+ * cliente lê, confere o calendário e conclui que a casa não sabe quando ele
+ * nasce.
+ *
+ * O segundo: dizer "daqui a 10 dias" é uma CONTA, e conta erra. Basta a
+ * mensagem sair com atraso, a fila segurar o envio ou o fuso virar o dia para
+ * o número não bater com o calendário de quem lê. "Dia 25 de dezembro" não tem
+ * como estar errado.
  */
 describe("textoDeParabens com antecedência", () => {
   const casa = "Ditado Popular";
 
-  it("dez dias antes NÃO diz que é hoje", () => {
-    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 10);
+  it("antes do dia, diz a DATA e não a contagem", () => {
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", { dia: 25, mes: 12, diasAntes: 10 });
     assert.ok(!/hoje/i.test(t), t);
-    assert.ok(t.includes("daqui a 10 dias"), t);
+    assert.ok(t.includes("25 de dezembro"), t);
+    // A contagem é o que pode sair errado — não pode aparecer no padrão.
+    assert.ok(!/daqui a|dias/i.test(t), t);
     assert.ok(t.includes(casa), t);
   });
 
+  it("a data está certa em qualquer antecedência", () => {
+    // O mesmo aniversário, avisado com 1 ou 40 dias, mostra a mesma data.
+    for (const dias of [1, 10, 40]) {
+      const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", { dia: 3, mes: 9, diasAntes: dias });
+      assert.ok(t.includes("3 de setembro"), `${dias}: ${t}`);
+    }
+  });
+
   it("no dia continua sendo a mensagem de sempre", () => {
-    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 0);
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", { dia: 25, mes: 12, diasAntes: 0 });
     assert.ok(/hoje é seu dia/i.test(t), t);
   });
 
-  it("amanhã é amanhã, não \"daqui a 1 dias\"", () => {
-    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 1);
-    assert.ok(t.includes("amanhã"), t);
-    assert.ok(!t.includes("1 dias"), t);
+  it("{quando} continua servindo a quem já escreveu o texto assim", () => {
+    // Casa que escreveu o próprio texto com {quando} antes desta mudança não
+    // pode ver o marcador cru na mensagem do cliente.
+    const com = (dias: number) =>
+      textoDeParabens({ aniversario_texto: "Seu niver é {quando}." }, casa, "Ana", {
+        dia: 25, mes: 12, diasAntes: dias,
+      });
+    assert.equal(com(0), "Seu niver é hoje.");
+    assert.equal(com(1), "Seu niver é amanhã.");
+    assert.equal(com(10), "Seu niver é daqui a 10 dias.");
   });
 
   it("antes do dia, a mensagem CONVIDA — é para isso que ela existe", () => {
     // No dia é carinho: a pessoa já escolheu onde comemorar. Antes é convite,
     // e convite sem chamada para ação é só um cartão.
-    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", 15);
+    const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", { dia: 25, mes: 12, diasAntes: 15 });
     assert.ok(/responder|mesa/i.test(t), t);
   });
 
@@ -152,15 +175,27 @@ describe("textoDeParabens com antecedência", () => {
       { aniversario_texto: "Oi {nome}, seu niver é {quando}! Vem pro {casa}." },
       casa,
       "Ana",
-      10,
+      { dia: 25, mes: 12, diasAntes: 10 },
     );
     assert.equal(t, "Oi Ana, seu niver é daqui a 10 dias! Vem pro Ditado Popular.");
   });
 
   it("nenhum marcador sobra na mensagem, em nenhuma antecedência", () => {
     for (const dias of [0, 1, 7, 10, 30, 60]) {
-      const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", dias);
+      const t = textoDeParabens({ aniversario_texto: null }, casa, "Ana", { dia: 25, mes: 12, diasAntes: dias });
       assert.ok(!t.includes("{"), `${dias} dias: ${t}`);
     }
+  });
+});
+
+describe("dataPorExtenso", () => {
+  it("fala a data como uma pessoa fala", () => {
+    assert.equal(dataPorExtenso(25, 12), "25 de dezembro");
+    assert.equal(dataPorExtenso(1, 1), "1 de janeiro");
+    assert.equal(dataPorExtenso(3, 9), "3 de setembro");
+  });
+
+  it("mês fora da faixa não estoura a mensagem", () => {
+    assert.ok(dataPorExtenso(10, 13).startsWith("10 de "));
   });
 });
