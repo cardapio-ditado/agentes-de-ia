@@ -69,6 +69,22 @@ function selosDaNota(nps) {
   return etiqueta(texto, variante);
 }
 
+/**
+ * "ditado-popular" vira "Ditado Popular".
+ *
+ * Só para a prévia enquanto se escreve: ali o nome de verdade ainda não está
+ * em mãos, e mostrar o slug cru no meio de uma frase de campanha atrapalha
+ * mais do que ajuda. Na mensagem que sai, quem preenche {casa} é o servidor,
+ * com o nome cadastrado.
+ */
+function nomeAproximadoDaCasa(slug) {
+  return String(slug ?? "")
+    .split("-")
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+}
+
 /** "faz aniversário hoje", "…amanhã", "…em 12 dias". */
 function quandoFaz(dias) {
   if (dias === 0) return "faz aniversário hoje";
@@ -784,7 +800,11 @@ export async function clientesDaCasa(raiz, ctx) {
         classe: "campo-numero", type: "number", min: "1", max: "500",
         value: config.aniversario_teto_por_dia,
       }),
-      texto: el("textarea", { classe: "campo", rows: 4, texto: config.aniversario_texto ?? "" }),
+      // Dez linhas: uma campanha de verdade tem blocos, emoji e regra. Numa
+      // caixa de quatro linhas ela vira uma fresta por onde não se enxerga o
+      // que se está escrevendo — e texto que ninguém consegue ler inteiro é
+      // texto que sai com erro.
+      texto: el("textarea", { classe: "campo", rows: 10, texto: config.aniversario_texto ?? "" }),
     };
 
     const linha = (rotulo, campo, ajuda) =>
@@ -793,6 +813,37 @@ export async function clientesDaCasa(raiz, ctx) {
         campo,
         ajuda ? el("small", { classe: "muted", texto: ajuda }) : null,
       ].filter(Boolean));
+
+    /**
+     * A prévia enquanto se escreve.
+     *
+     * APROXIMADA, E ISSO ESTÁ DITO NA TELA. Aqui o texto ainda nem foi salvo,
+     * então não há como pedir ao servidor a mensagem de verdade — a troca dos
+     * marcadores acontece no navegador, e duas implementações da mesma regra
+     * podem se desencontrar um dia. A prévia que vale é a da aba
+     * Aniversariantes, montada pelo mesmo código que monta o envio.
+     *
+     * Ainda assim ela existe: escrever campanha às cegas, com {nome} e {data}
+     * crus no meio da frase, é como se erra o texto que vai para trezentas
+     * pessoas.
+     */
+    const balao = el("p", { classe: "previa-mensagem" });
+    const previa = el("div", { classe: "pilha" }, [
+      el("small", { classe: "muted", texto: "Prévia aproximada — a real aparece na aba Aniversariantes, por pessoa." }),
+      balao,
+    ]);
+    const atualizarPrevia = () => {
+      const cru = campos.texto.value.trim();
+      balao.textContent = cru
+        ? cru
+            .replaceAll("{nome}", "Maria")
+            .replaceAll("{casa}", nomeAproximadoDaCasa(ctx.venue))
+            .replaceAll("{data}", "25 de dezembro")
+            .replaceAll("{quando}", "daqui a 10 dias")
+        : "Em branco: o sistema usa o texto padrão dele, que se ajusta à antecedência.";
+    };
+    campos.texto.addEventListener("input", atualizarPrevia);
+    atualizarPrevia();
 
     limpar(corpo);
     corpo.append(
@@ -822,8 +873,9 @@ export async function clientesDaCasa(raiz, ctx) {
         linha(
           "Texto da mensagem",
           campos.texto,
-          "Use {nome} para o primeiro nome, {casa} para o nome da casa e {quando} para \"daqui a 10 dias\". Em branco, o texto padrão se ajusta sozinho à antecedência.",
+          "Marcadores: {nome} vira o primeiro nome, {casa} o nome da casa, {data} a data do aniversário (\"25 de dezembro\"). Em branco, vale o texto padrão do sistema.",
         ),
+        previa,
         el("div", { classe: "linha-campos" }, [
           el("button", {
             classe: "btn btn-primario",
