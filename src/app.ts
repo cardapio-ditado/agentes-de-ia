@@ -243,6 +243,7 @@ import {
   apagarCliente,
   configDeClientes,
   editarCliente,
+  lerNascimento,
   // `listarClientes` já é o nome do que lista as CASAS clientes da Brasa Food
   // (tenants). Aqui são os clientes DA casa — gente que bebe no bar.
   listarClientes as listarClientesDaCasa,
@@ -252,7 +253,8 @@ import {
 } from "./clientes.js";
 import type { OrigemDeCliente } from "./clientes.js";
 import { mandarParabens, proximosAniversariantes } from "./aniversarios.js";
-import { lerPlanilhaDeClientes } from "./pesquisaPlanilha.js";
+import { lerPlanilhaDeClientes } from "./planilhaDeClientes.js";
+import type { LinhaRecusada } from "./planilhaDeClientes.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
 import type { Venue } from "./venues.js";
 import {
@@ -2175,6 +2177,79 @@ async function roteasApi(
       }
     }
 
+    // POST /v1/venues/:slug/clientes/planilha?confirmar=1
+    //
+    // O arquivo (.xlsx ou .csv) vai cru no corpo. Sem `confirmar` é só a
+    // PRÉVIA: quantas pessoas valem, quantas trazem aniversário, quantas já
+    // estão na base e quais linhas foram recusadas com o motivo. Ninguém
+    // despeja mil linhas na base de clientes sem antes ver esse resumo.
+    //
+    // Antes da rota de :id de propósito: "planilha" não é um id.
+    if (metodo === "POST" && recurso === "clientes" && p[3] === "planilha" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const arquivo = await lerBinario(req, LIMITE_ARQUIVO_BYTES);
+      if (arquivo.length === 0) throw erro(400, "invalid_request", "O arquivo chegou vazio.");
+
+      const lida = await lerPlanilhaDeClientes(arquivo);
+      const comAniversario = lida.pessoas.filter(
+        (pessoa) => lerNascimento(pessoa.nascimento).dia !== null,
+      ).length;
+
+      // Aniversário que a planilha trouxe mas o leitor não entendeu é o
+      // silêncio mais caro daqui: a pessoa entra na base sem data, e a casa
+      // só descobre no ano seguinte, quando o parabéns não sai. Dizer o
+      // número na prévia transforma isso em "ah, minha coluna está errada".
+      const dataIlegivel = lida.pessoas.filter(
+        (pessoa) => pessoa.nascimento !== null && lerNascimento(pessoa.nascimento).dia === null,
+      ).length;
+
+      if (url.searchParams.get("confirmar") !== "1") {
+        return ok(res, {
+          previa: true,
+          validos: lida.pessoas.length,
+          com_aniversario: comAniversario,
+          data_ilegivel: dataIlegivel,
+          recusadas: lida.recusadas.slice(0, 30),
+          total_recusadas: lida.recusadas.length,
+          amostra: lida.pessoas.slice(0, 8),
+        });
+      }
+
+      // Uma linha ruim não pode derrubar as outras novecentas: a planilha é
+      // de gente de verdade, e importar 900 e avisar sobre 3 é infinitamente
+      // melhor do que recusar o arquivo inteiro por causa de 3.
+      let importados = 0;
+      const falhas: LinhaRecusada[] = [];
+      for (const [i, pessoa] of lida.pessoas.entries()) {
+        try {
+          await registrarCliente(venue.id, "planilha", {
+            telefone: pessoa.telefone,
+            nome: pessoa.nome,
+            nascimento: pessoa.nascimento,
+            email: pessoa.email,
+            observacoes: pessoa.observacoes,
+          });
+          importados++;
+        } catch (e) {
+          falhas.push({ linha: i + 1, motivo: (e as Error).message });
+        }
+      }
+
+      return ok(
+        res,
+        {
+          previa: false,
+          importados,
+          com_aniversario: comAniversario,
+          data_ilegivel: dataIlegivel,
+          recusadas: [...lida.recusadas, ...falhas].slice(0, 30),
+          total_recusadas: lida.recusadas.length + falhas.length,
+        },
+        201,
+      );
+    }
+
     // GET | POST /v1/venues/:slug/clientes
     if (recurso === "clientes" && p.length === 3) {
       if (metodo === "GET") {
@@ -2368,8 +2443,8 @@ async function roteasApi(
             naoRepetirDias,
             new Date(),
           );
-          const ineditos = lida.convidados.filter((c) => !recentes.has(c.telefone));
-          const repetidos = lida.convidados.length - ineditos.length;
+          const ineditos = lida.pessoas.filter((c) => !recentes.has(c.telefone));
+          const repetidos = lida.pessoas.length - ineditos.length;
 
           if (url.searchParams.get("confirmar") !== "1") {
             return {

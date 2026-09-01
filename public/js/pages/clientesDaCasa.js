@@ -1,4 +1,4 @@
-import { del, get, patch, post, put } from "../api.js";
+import { del, get, patch, post, postArquivo, put } from "../api.js";
 import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
@@ -179,6 +179,129 @@ export async function clientesDaCasa(raiz, ctx) {
     );
     const lista = el("div", { classe: "tabela" });
 
+    /* ---- Importar planilha ----
+     *
+     * O seletor de arquivo fica escondido e um botão comum o aciona: um
+     * `<input type=file>` cru na barra de ferramentas mostra "Nenhum arquivo
+     * selecionado" para sempre e não se parece com nada do resto da tela.
+     *
+     * Escolher o arquivo já faz a PRÉVIA sozinha — ninguém escolhe uma
+     * planilha para depois não querer ver o que tem nela. O que exige clique
+     * é gravar, que é o passo que mexe na base.
+     */
+    const painelDaPlanilha = el("div", {});
+    const escolherPlanilha = el("input", {
+      type: "file",
+      accept: ".xlsx,.csv",
+      style: "display:none",
+    });
+
+    const mostrarPlanilha = async (confirmar, botao) => {
+      const arquivo = escolherPlanilha.files?.[0];
+      if (!arquivo) return;
+      if (botao) botao.disabled = true;
+      limpar(painelDaPlanilha);
+      painelDaPlanilha.append(
+        el("p", { classe: "muted", texto: confirmar ? "Importando…" : "Lendo a planilha…" }),
+      );
+      try {
+        const r = await postArquivo(
+          `/v1/venues/${ctx.venue}/clientes/planilha${confirmar ? "?confirmar=1" : ""}`,
+          arquivo,
+        );
+        if (r.previa) desenharPrevia(r, arquivo.name);
+        else {
+          limpar(painelDaPlanilha);
+          // O input guarda o arquivo escolhido; sem limpar, escolher a MESMA
+          // planilha de novo não dispara `change` e a tela parece travada.
+          escolherPlanilha.value = "";
+          avisar(
+            `${r.importados} pessoa(s) na base.` +
+              (r.com_aniversario ? ` ${r.com_aniversario} com aniversário.` : ""),
+            r.importados ? "ok" : "info",
+          );
+          await recarregar();
+        }
+      } catch (e) {
+        limpar(painelDaPlanilha);
+        painelDaPlanilha.append(vazio("Não deu para ler a planilha", e.message));
+      } finally {
+        if (botao) botao.disabled = false;
+      }
+    };
+
+    function desenharPrevia(r, nomeDoArquivo) {
+      limpar(painelDaPlanilha);
+      const linhasRuins = r.recusadas ?? [];
+      painelDaPlanilha.append(
+        el("section", { classe: "cartao" }, [
+          el("h3", { texto: `Planilha lida: ${nomeDoArquivo}` }),
+          el("p", {
+            texto:
+              `${r.validos} pessoa(s) com telefone válido` +
+              (r.com_aniversario ? ` · ${r.com_aniversario} com aniversário` : "") +
+              (r.total_recusadas ? ` · ${r.total_recusadas} linha(s) recusada(s)` : ""),
+          }),
+          // Este é o aviso que evita o prejuízo silencioso: a pessoa entra na
+          // base sem data, e a casa só descobre no ano seguinte, quando o
+          // parabéns não sai.
+          r.data_ilegivel
+            ? el("p", {
+                classe: "aviso aviso-alerta",
+                style: "margin-top:8px",
+                texto:
+                  `${r.data_ilegivel} linha(s) têm data que não consegui entender. ` +
+                  `Use 25/12/1990 ou 1990-12-25 — essas pessoas entram na base, mas sem aniversário.`,
+              })
+            : null,
+          r.validos && !r.com_aniversario
+            ? el("p", {
+                classe: "muted",
+                texto:
+                  "Nenhum aniversário veio nesta planilha. Se ela tem essa coluna, " +
+                  'renomeie o cabeçalho para "aniversário" ou "nascimento" e mande de novo.',
+              })
+            : null,
+          linhasRuins.length
+            ? el("ul", { classe: "muted", style: "margin:6px 0 0;padding-left:20px" },
+                linhasRuins.slice(0, 8).map((x) =>
+                  el("li", { texto: `linha ${x.linha}: ${x.motivo}` }),
+                ))
+            : null,
+          r.validos
+            ? el("p", {
+                classe: "muted",
+                style: "margin-top:10px",
+                texto:
+                  "Quem já está na base não vira linha nova: a planilha só preenche o que " +
+                  "estiver em branco na ficha. Nada que você já tem é apagado.",
+              })
+            : null,
+          el("div", { classe: "linha-campos", style: "margin-top:12px" }, [
+            r.validos
+              ? el("button", {
+                  classe: "btn btn-primario",
+                  type: "button",
+                  texto: `Importar ${r.validos} pessoa(s)`,
+                  onclick: (e) => mostrarPlanilha(true, e.target),
+                })
+              : null,
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "Cancelar",
+              onclick: () => {
+                limpar(painelDaPlanilha);
+                escolherPlanilha.value = "";
+              },
+            }),
+          ].filter(Boolean)),
+        ].filter(Boolean)),
+      );
+    }
+
+    escolherPlanilha.addEventListener("change", () => mostrarPlanilha(false, null));
+
     // A busca vai ao servidor, e não filtra em memória: a base pode ter
     // dezenas de milhares de pessoas, e baixar tudo para filtrar no navegador
     // é o tipo de coisa que funciona no teste do dono e trava no cliente
@@ -254,6 +377,14 @@ export async function clientesDaCasa(raiz, ctx) {
           ]),
           el("div", { classe: "linha-campos" }, [
             puxarDaZig(recarregar),
+            escolherPlanilha,
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "Importar planilha",
+              title: "Traga uma lista de clientes de .xlsx ou .csv",
+              onclick: () => escolherPlanilha.click(),
+            }),
             el("button", {
               classe: "btn btn-primario",
               type: "button",
@@ -262,6 +393,7 @@ export async function clientesDaCasa(raiz, ctx) {
             }),
           ]),
         ]),
+        painelDaPlanilha,
         el("div", { classe: "linha-campos" }, [busca, filtroOrigem]),
         lista,
       ]),
