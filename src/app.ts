@@ -1135,7 +1135,10 @@ async function roteasApi(
       consumo: "cmv",
       jogos: "agentes-ia",
       programacao: "agentes-ia",
+      conversations: "agentes-ia",
       pesquisa: "pesquisa",
+      clientes: "clientes",
+      aniversariantes: "clientes",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
