@@ -584,10 +584,43 @@ async function exigirChave(
  * endereço de uma tela entraria por ele com o favo apagado — e no CMV isso
  * significaria mexer no estoque de uma casa cujo módulo a pessoa não tem.
  */
-function exigirModulo(acesso: Acesso, modulo: string): void {
+/**
+ * Módulos que toda casa tem, e por isso não se conferem no contrato.
+ *
+ * A base de clientes é da CASA, não um produto: quem só comprou o CMV
+ * cadastra cliente na mão e manda parabéns do mesmo jeito. Não existe linha
+ * em `venue_modulos` para ela, e conferir contrato aqui trancaria a base de
+ * todo mundo. A restrição da PESSOA continua valendo — é o que impede um
+ * conferente de doca de baixar a lista de telefones da casa.
+ */
+const MODULOS_DA_CASA = new Set(["clientes"]);
+
+/**
+ * As duas perguntas que um módulo faz, e que são diferentes.
+ *
+ * 1. A CASA contratou? Se não, ninguém entra — nem o dono. É o que separa
+ *    quem paga pelo CMV de quem descobriu o endereço.
+ * 2. Esta PESSOA pode abrir? O dono contratou tudo, e mesmo assim o
+ *    conferente de doca não tem o que fazer na base de clientes.
+ *
+ * As duas viviam só no painel, apagando o favo na colmeia. Apagar o favo não
+ * tranca a porta: o endereço da API é o mesmo, e o painel inteiro é JS aberto
+ * que qualquer um lê. Agora a portaria confere as duas.
+ */
+async function exigirModulo(acesso: Acesso, modulo: string, venueId: string): Promise<void> {
+  // Suporte da Brasa Food enxerga o que o cliente enxerga — é como se
+  // descobre por telefone que o favo apagado era um módulo não contratado.
   if (acesso.plataformaAdmin) return;
-  if (acesso.modulos === null || acesso.modulos.includes(modulo)) return;
-  throw erro(403, "forbidden", "Seu acesso não inclui este módulo. Fale com o dono da conta.");
+
+  if (acesso.modulos !== null && !acesso.modulos.includes(modulo)) {
+    throw erro(403, "forbidden", "Seu acesso não inclui este módulo. Fale com o dono da conta.");
+  }
+
+  if (MODULOS_DA_CASA.has(modulo)) return;
+
+  if (!(await temModulo(venueId, modulo))) {
+    throw erro(403, "forbidden", "Esta casa não contratou este módulo. Fale com a Brasa Food.");
+  }
 }
 
 /**
@@ -1174,7 +1207,12 @@ async function roteasApi(
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
-      exigirModulo(await exigirChave(req, "reservations:read"), moduloExigido);
+      const quem = await exigirChave(req, "reservations:read");
+      // A casa sai do slug da própria URL, e não de um parâmetro: assim a
+      // trava confere o contrato DA CASA QUE A ROTA VAI MEXER, e não o de
+      // outra que o chamador tenha resolvido citar.
+      const casa = await findVenueBySlugInOrg(quem.org_id, slug);
+      await exigirModulo(quem, moduloExigido, casa.id);
     }
 
     // GET /v1/venues/:slug/modulos — quais favos acendem na colmeia deste

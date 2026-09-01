@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 
 /**
  * Quais módulos do Brasa Food o cliente contratou.
@@ -19,7 +19,26 @@ export interface ModuloDoCliente {
   url: string | null;
 }
 
+/**
+ * Memória curta do contrato da casa.
+ *
+ * A trava de módulo saiu de "uma rota" para "toda rota de módulo", e sem isto
+ * cada clique do painel viraria uma consulta a mais no banco. Contrato muda
+ * quando alguém da Brasa Food liga ou desliga um módulo — coisa de minutos em
+ * minutos, não de segundo em segundo —, e essa mudança apaga a memória na
+ * hora (ver `definirModulo`). Um minuto é folgado para o que sobrar.
+ */
+const memoria = new Map<string, { quando: number; modulos: ModuloDoCliente[] }>();
+const VALIDADE_MS = 60_000;
+
+export function esquecerModulos(venueId: string): void {
+  memoria.delete(venueId);
+}
+
 export async function listarModulos(venueId: string): Promise<ModuloDoCliente[]> {
+  const guardado = memoria.get(venueId);
+  if (guardado && Date.now() - guardado.quando < VALIDADE_MS) return guardado.modulos;
+
   const { data, error } = await db()
     .from("venue_modulos")
     .select("modulo, ativo, url")
@@ -28,14 +47,22 @@ export async function listarModulos(venueId: string): Promise<ModuloDoCliente[]>
   // A tabela pode não existir ainda num banco que não rodou a migração. Aí o
   // certo é o painel seguir com o que sempre teve, e não abrir uma colmeia
   // vazia que parece conta cancelada.
+  //
+  // Isto é um fail-open consciente, e continua certo depois de a trava ficar
+  // de verdade: banco sem a migração é banco NOVO, não casa que perdeu o
+  // contrato. O erro é reconhecido pela CAUSA (tabela/coluna que não existe),
+  // e não por casar o nome da tabela no texto — que engoliria erro de rede
+  // junto e abriria tudo por causa de um soluço do Supabase.
   if (error) {
-    if (/42P01|PGRST205|does not exist|schema cache/i.test(error.message)) {
+    if (ehMigracaoPendente(error.message)) {
       return MODULOS_ANTES_DA_MIGRACAO.map((modulo) => ({ modulo, ativo: true, url: null }));
     }
     throw new Error(`Falha ao ler os módulos do cliente: ${error.message}`);
   }
 
-  return (data ?? []) as ModuloDoCliente[];
+  const modulos = (data ?? []) as ModuloDoCliente[];
+  memoria.set(venueId, { quando: Date.now(), modulos });
+  return modulos;
 }
 
 /** O que todo cliente tinha antes de existir controle por módulo. */
@@ -78,4 +105,9 @@ export async function definirModulo(params: {
     .from("venue_modulos")
     .upsert(linha as never, { onConflict: "venue_id,modulo" });
   if (error) throw new Error(`Falha ao salvar o módulo: ${error.message}`);
+
+  // Sem isto, ligar um módulo para um cliente ao telefone teria um minuto de
+  // "não apareceu nada aqui" — e é justamente o minuto em que os dois estão
+  // olhando a tela juntos.
+  esquecerModulos(params.venueId);
 }

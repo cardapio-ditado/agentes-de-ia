@@ -450,11 +450,14 @@ function moduloAceso(m) {
   // ela um cliente que só comprou Checklist não teria como conectar o
   // WhatsApp nem criar o login do gerente.
   if (m.interno) return true;
-  // Nem a base de clientes: ela é da casa, e não um módulo contratado. Quem
-  // pode ver o quê continua sendo decidido pelo servidor em cada rota.
-  if (m.daCasa) return true;
-  if (modulosDoCliente.get(m.id)?.ativo !== true) return false;
-  // A restrição da pessoa, por cima da contratação da casa.
+  // Nem a base de clientes: ela é da casa, e não um módulo contratado — não
+  // existe linha de contrato para ela, e cobrar uma apagaria o favo de todo
+  // mundo. Só a pergunta do CONTRATO é pulada; a da pessoa continua abaixo.
+  if (!m.daCasa && modulosDoCliente.get(m.id)?.ativo !== true) return false;
+  // A restrição da pessoa, por cima da contratação da casa. Vale para o favo
+  // "da casa" também: o servidor recusa a base de clientes para quem tem
+  // acesso restrito a outro módulo, e favo que abre em 403 é pior do que favo
+  // que não abre.
   return meusModulos === null || meusModulos.includes(m.id);
 }
 
