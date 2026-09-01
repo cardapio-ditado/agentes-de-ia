@@ -18,6 +18,7 @@ import { createApiKey } from "./apikeys.js";
 import { extratoDePontos } from "./pontos.js";
 import type { ModuloDoCliente } from "./modulos.js";
 import { db, dbAuth } from "./supabase.js";
+import { senhaLegivel } from "./senhaInicial.js";
 
 export interface DadosDoCliente {
   /** Nome comercial: "Ditado Popular". Vira organização e estabelecimento. */
@@ -69,14 +70,6 @@ export function gerarSlug(texto: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
-}
-
-/** Senha inicial legível: o vendedor vai ditar isto por telefone. */
-function senhaLegivel(): string {
-  const palavras = ["brasa", "fogo", "forno", "grelha", "carvao", "chama", "sabor", "tempero"];
-  const palavra = palavras[Math.floor(Math.random() * palavras.length)];
-  const numero = String(Math.floor(Math.random() * 9000) + 1000);
-  return `${palavra}-${numero}`;
 }
 
 const PROMPT_BASE = (nome: string, cidade: string) =>

@@ -488,7 +488,25 @@ const ESCOPOS_POR_PAPEL: Record<string, string[]> = {
   viewer: ["reservations:read"],
 };
 
-async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso> {
+/**
+ * Opções de portaria. Hoje só existe uma, e ela é a exceção da senha ditada.
+ */
+interface OpcoesDeAcesso {
+  /**
+   * Deixa passar quem ainda não trocou a senha provisória.
+   *
+   * Vale para UMA rota: `GET /v1/auth/me`, que é como o painel descobre que
+   * precisa mostrar a tela de troca. Sem esta fresta, a tela que obriga a
+   * troca nunca apareceria — o painel levaria 403 antes de saber o motivo.
+   */
+  senhaProvisoriaOk?: boolean;
+}
+
+async function exigirChave(
+  req: IncomingMessage,
+  escopo: string,
+  opcoes: OpcoesDeAcesso = {},
+): Promise<Acesso> {
   const header = req.headers.authorization ?? "";
   const credencial = header.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
 
@@ -529,6 +547,20 @@ async function exigirChave(req: IncomingMessage, escopo: string): Promise<Acesso
   const scopes = ESCOPOS_POR_PAPEL[sessao.papel] ?? ESCOPOS_POR_PAPEL.viewer!;
   if (!sessao.plataformaAdmin && !scopes.includes(escopo)) {
     throw erro(403, "forbidden", "Seu perfil não permite esta ação.");
+  }
+
+  // Senha ditada é senha que outra pessoa sabe. O painel já fechava a tela
+  // até a troca, mas fechar a TELA não fecha a PORTA: o endereço da API é o
+  // mesmo, e quem chamasse direto trabalhava com a senha provisória para
+  // sempre. Quem tranca é aqui.
+  //
+  // Chave `sk_` não passa por este ponto — máquina não tem senha para trocar.
+  if (sessao.senhaProvisoria && !opcoes.senhaProvisoriaOk) {
+    throw erro(
+      403,
+      "senha_provisoria",
+      "Sua senha foi criada por outra pessoa. Troque a senha para continuar.",
+    );
   }
 
   // Admin da plataforma sem organização própria pode olhar a de um cliente
@@ -2933,7 +2965,9 @@ async function roteasApi(
 
     // GET /v1/auth/me — quem sou eu, para o painel montar o menu
     if (metodo === "GET" && p[1] === "me" && p.length === 2) {
-      const acesso = await exigirChave(req, "reservations:read");
+      // A única rota que atende quem ainda não trocou a senha ditada: é por
+      // ela que o painel fica sabendo que tem de mostrar a tela de troca.
+      const acesso = await exigirChave(req, "reservations:read", { senhaProvisoriaOk: true });
       return ok(res, {
         nome: acesso.name,
         org_id: acesso.org_id,

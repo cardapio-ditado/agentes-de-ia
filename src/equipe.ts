@@ -1,5 +1,6 @@
 import { db, dbAuth } from "./supabase.js";
 import { semMarcaDeProvisoria } from "./auth.js";
+import { senhaLegivel } from "./senhaInicial.js";
 
 /**
  * Pessoas e acessos da casa.
@@ -91,14 +92,6 @@ export async function listarEquipe(orgId: string): Promise<PessoaDaCasa[]> {
       ordem.indexOf(a.papel) - ordem.indexOf(b.papel) ||
       (a.nome ?? a.email).localeCompare(b.nome ?? b.email),
   );
-}
-
-/** Senha fácil de ditar por telefone — a pessoa troca no primeiro acesso. */
-function senhaLegivel(): string {
-  const palavras = ["brasa", "fogo", "forno", "grelha", "carvao", "chama", "sabor", "tempero"];
-  const palavra = palavras[Math.floor(Math.random() * palavras.length)];
-  const numero = String(Math.floor(Math.random() * 9000) + 1000);
-  return `${palavra}-${numero}`;
 }
 
 export class ErroDeEquipe extends Error {

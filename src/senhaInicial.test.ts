@@ -1,0 +1,62 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { senhaLegivel } from "./senhaInicial.js";
+
+/**
+ * Senha inicial tem duas exigências que puxam para lados opostos: ser fácil de
+ * DITAR e difícil de ADIVINHAR. Estes testes prendem as duas — porque é fácil
+ * "melhorar" uma delas amanhã e quebrar a outra sem perceber.
+ */
+describe("senhaLegivel", () => {
+  it("tem o formato que dá para ditar por telefone", () => {
+    for (let i = 0; i < 200; i++) {
+      // Duas palavras sem acento e quatro dígitos. Acento ao telefone vira
+      // dúvida ("carvão é com til?") e dúvida vira ligação de suporte.
+      assert.match(senhaLegivel(), /^[a-z]+-[a-z]+-\d{4}$/);
+    }
+  });
+
+  it("não repete a mesma palavra duas vezes", () => {
+    // "brasa-brasa-4821" é digitado como "brasa-4821" com frequência — e
+    // encolhe o sorteio sem que ninguém veja.
+    for (let i = 0; i < 500; i++) {
+      const [a, b] = senhaLegivel().split("-");
+      assert.notEqual(a, b);
+    }
+  });
+
+  it("não repete a senha inteira", () => {
+    // O defeito que este arquivo existe para fechar: o sorteio antigo tinha
+    // 72 mil combinações. Em 500 sorteios de 72 mil, a chance de repetir é
+    // quase certeza (aniversário); em 9 milhões, é desprezível.
+    const vistas = new Set<string>();
+    for (let i = 0; i < 500; i++) vistas.add(senhaLegivel());
+    assert.equal(vistas.size, 500);
+  });
+
+  it("usa a lista inteira de palavras, e não um cantinho dela", () => {
+    // Um erro de índice que sorteie sempre entre as 4 primeiras passaria em
+    // todos os testes acima e destruiria a senha em silêncio.
+    const palavras = new Set<string>();
+    for (let i = 0; i < 800; i++) {
+      const [a, b] = senhaLegivel().split("-");
+      palavras.add(a!);
+      palavras.add(b!);
+    }
+    assert.ok(palavras.size >= 30, `só ${palavras.size} palavras diferentes em 1600 sorteios`);
+  });
+
+  it("usa a faixa inteira dos quatro dígitos", () => {
+    // Sem zero à esquerda (senha que começa com 0 some no Excel de quem
+    // anota) e sem passar de 9999.
+    let menor = 9999;
+    let maior = 1000;
+    for (let i = 0; i < 800; i++) {
+      const n = Number(senhaLegivel().split("-")[2]);
+      assert.ok(n >= 1000 && n <= 9999, String(n));
+      menor = Math.min(menor, n);
+      maior = Math.max(maior, n);
+    }
+    assert.ok(menor < 2000 && maior > 9000, `faixa curta: ${menor}–${maior}`);
+  });
+});
