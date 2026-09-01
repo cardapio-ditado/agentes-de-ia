@@ -1,4 +1,5 @@
 import { db } from "./supabase.js";
+import { inserirAvisos } from "./notifications.js";
 import type { Json, Tables } from "./database.types.js";
 
 /**
@@ -176,7 +177,7 @@ export async function getConversationInOrg(
  * Assume ou devolve o atendimento.
  *
  * Enquanto estiver com uma pessoa, o agente não responde — quem checa isso é
- * `agenteDeveResponder()`, chamado pelo conector antes de acionar o modelo.
+ * `agenteDeveResponder()`, chamado por `runAgent` antes de acionar o modelo.
  */
 export async function definirAtendimento(params: {
   conversationId: string;
@@ -267,8 +268,12 @@ export async function apagarConversa(conversationId: string): Promise<void> {
 /**
  * Conta se o agente deve responder nesta conversa.
  *
- * O conector do WhatsApp chama isto antes de acionar o modelo: uma pessoa que
- * assumiu o atendimento não pode ser atropelada pelo agente no meio da conversa.
+ * `runAgent` chama isto antes de acionar o modelo — lá e não em cada conector,
+ * porque a decisão vale igual para WhatsApp, Instagram e o que vier depois, e
+ * porque o conector nem sabe qual é a conversa antes de `runAgent` resolvê-la.
+ *
+ * Uma pessoa que assumiu o atendimento não pode ser atropelada pelo agente no
+ * meio da conversa.
  */
 export async function agenteDeveResponder(conversationId: string): Promise<boolean> {
   const { data, error } = await db()
@@ -284,7 +289,56 @@ export async function agenteDeveResponder(conversationId: string): Promise<boole
 }
 
 /**
- * Grava uma resposta escrita por uma pessoa.
+ * Põe na fila a resposta que a pessoa escreveu, para o conector entregar.
+ *
+ * O painel não fala com o WhatsApp: quem fala é o conector, na VPS. A fila em
+ * `notifications` é o corredor entre os dois, o mesmo que já leva confirmação
+ * de reserva e convite de pesquisa.
+ *
+ * O papel é `agente` porque a conversa aconteceu no NÚMERO DO AGENTE. Sair
+ * pelo administrativo faria a resposta chegar de um número que o cliente nunca
+ * viu, no meio de um papo que ele estava tendo com outro.
+ */
+async function enfileirarRespostaHumana(conversationId: string, texto: string): Promise<void> {
+  const { data: conversa, error } = await db()
+    .from("conversations")
+    .select("channel, external_id, venue_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao ler a conversa: ${error.message}`);
+  if (!conversa) throw new Error("Conversa não encontrada.");
+
+  // Conversa de teste do painel ("Testar agente") não tem ninguém do outro
+  // lado para receber. Gravar e pronto.
+  if (conversa.channel !== "whatsapp" && conversa.channel !== "instagram") return;
+
+  if (!conversa.external_id) {
+    throw new Error("Esta conversa não tem endereço de resposta — responda pelo aplicativo.");
+  }
+  // Sem casa, a fila não sabe por qual número mandar: o conector só pega o que
+  // é da casa dele. Enfileirar assim seria criar uma mensagem que nunca sai.
+  if (!conversa.venue_id) {
+    throw new Error("Esta conversa não está ligada a um estabelecimento.");
+  }
+
+  const { error: erroFila } = await inserirAvisos({
+    venue_id: conversa.venue_id,
+    channel: conversa.channel,
+    destination: conversa.external_id,
+    // Sem ano nem id: esta mensagem PODE se repetir. O gerente responde
+    // quantas vezes quiser, e duas frases iguais seguidas são normais numa
+    // conversa de verdade.
+    template: "resposta_humana",
+    papel: "agente",
+    body: texto,
+  } as never);
+
+  if (erroFila) throw new Error(`Não consegui pôr a resposta na fila: ${erroFila.message}`);
+}
+
+/**
+ * Grava uma resposta escrita por uma pessoa, e a entrega.
  *
  * Fica em `messages` como `assistant` — para o cliente, e para o histórico que
  * o modelo lê depois, é a mesma voz do estabelecimento. O `blocks` marca a
@@ -295,6 +349,16 @@ export async function registrarMensagemHumana(params: {
   texto: string;
   autor?: string | null;
 }): Promise<Message> {
+  // ENFILEIRAR VEM ANTES DE GRAVAR, e a ordem é o ponto.
+  //
+  // Se gravasse primeiro e a entrega falhasse, o painel mostraria a resposta
+  // no histórico e o cliente não teria recebido nada — o pior estado possível,
+  // porque o gerente fica esperando uma resposta que nunca vai chegar, sem
+  // saber que precisa ligar. Falhando antes de gravar, ele vê o erro na tela e
+  // pode tentar de novo; e se o passo seguinte falhar, o cliente pelo menos
+  // recebeu, e só o histórico ficou com um buraco.
+  await enfileirarRespostaHumana(params.conversationId, params.texto);
+
   const { data, error } = await db()
     .from("messages")
     .insert({

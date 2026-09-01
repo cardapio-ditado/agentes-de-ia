@@ -181,6 +181,12 @@ async function processarEvento(
     },
   });
 
+  // Alguém do salão assumiu esta conversa: o agente não fala por cima.
+  if (!resultado.respondeu) {
+    console.log(`[instagram] ${perfil.usuario ?? igsid}: atendimento é humano, não respondi.`);
+    return;
+  }
+
   const envio = await enviarPorInstagram(
     igsid,
     resultado.text || "Desculpe, não consegui responder agora. Pode tentar de novo?",

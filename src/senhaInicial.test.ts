@@ -25,13 +25,20 @@ describe("senhaLegivel", () => {
     }
   });
 
-  it("não repete a senha inteira", () => {
+  it("o espaço de sorteio é largo — não são 72 mil como antes", () => {
     // O defeito que este arquivo existe para fechar: o sorteio antigo tinha
-    // 72 mil combinações. Em 500 sorteios de 72 mil, a chance de repetir é
-    // quase certeza (aniversário); em 9 milhões, é desprezível.
+    // 72 mil combinações, e o novo tem 8,9 milhões.
+    //
+    // Exigir ZERO repetição seria um teste que falha sozinho de vez em quando
+    // (aniversário: em 500 sorteios de 8,9 milhões, ~1,7% das rodadas repetem
+    // alguma). Teste que falha à toa é teste que o time aprende a ignorar.
+    //
+    // A margem é o que separa os dois espaços com folga: em 5.000 sorteios, o
+    // antigo repetiria umas 173 vezes e o novo repete ~1. Cortar em 50 reprova
+    // o antigo sempre e aprova o novo sempre.
     const vistas = new Set<string>();
-    for (let i = 0; i < 500; i++) vistas.add(senhaLegivel());
-    assert.equal(vistas.size, 500);
+    for (let i = 0; i < 5000; i++) vistas.add(senhaLegivel());
+    assert.ok(vistas.size >= 4950, `só ${vistas.size} senhas diferentes em 5000 sorteios`);
   });
 
   it("usa a lista inteira de palavras, e não um cantinho dela", () => {

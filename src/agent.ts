@@ -12,7 +12,7 @@ import {
   type Agent,
   type Message,
 } from "./repository.js";
-import { definirAtendimento } from "./inbox.js";
+import { agenteDeveResponder, definirAtendimento } from "./inbox.js";
 import { estadoDoPlano, PlanoBloqueadoError } from "./pontos.js";
 import { resolveTools, type AgentTool, type ToolContext } from "./tools/index.js";
 import { findVenueBySlug } from "./venues.js";
@@ -51,6 +51,15 @@ export interface RunAgentResult {
   conversationId: string;
   text: string;
   stopReason: string | null;
+  /**
+   * O agente respondeu de verdade, ou o canal deve ficar CALADO?
+   *
+   * `false` quando uma pessoa assumiu o atendimento. A diferença importa
+   * porque "sem texto" não é a mesma coisa que "não fale": os conectores
+   * trocam texto vazio por uma frase de desculpas, e mandar qualquer frase
+   * aqui atropelaria o gerente que está digitando a resposta.
+   */
+  respondeu: boolean;
 }
 
 /** Eventos emitidos durante a execução, para streaming ao cliente. */
@@ -108,6 +117,35 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     role: "user",
     content: userMessage,
   });
+
+  // Uma pessoa assumiu esta conversa: o agente cala a boca.
+  //
+  // A trava mora AQUI, e não em cada conector, porque a decisão é a mesma para
+  // WhatsApp, Instagram e qualquer canal que venha depois — e porque o
+  // conector nem sabe qual é a conversa antes desta função resolvê-la.
+  //
+  // Depois de gravar a mensagem do cliente, de propósito: quem assumiu precisa
+  // continuar VENDO o que o cliente escreve. Calar o agente não pode significar
+  // ficar cego.
+  //
+  // E antes da cobrança, também de propósito: conversa que a pessoa está
+  // atendendo não gasta ponto de IA nem esbarra em plano bloqueado.
+  if (!(await agenteDeveResponder(conversation.id))) {
+    await logEvent({
+      agentId: agent.id,
+      conversationId: conversation.id,
+      level: "info",
+      event: "atendimento_humano",
+      payload: { canal: channel },
+    }).catch(() => undefined);
+    onEvent?.({ type: "done", conversationId: conversation.id, text: "" });
+    return {
+      conversationId: conversation.id,
+      text: "",
+      stopReason: "atendimento_humano",
+      respondeu: false,
+    };
+  }
 
   // Cobrança entra DEPOIS de gravar a mensagem do cliente, de propósito: mesmo
   // com o plano travado o restaurante precisa ver na inbox quem chamou, para
@@ -180,7 +218,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
       });
       const recusa = "O modelo recusou esta solicitação por política de uso.";
       onEvent?.({ type: "done", conversationId: conversation.id, text: recusa });
-      return { conversationId: conversation.id, text: recusa, stopReason };
+      return { conversationId: conversation.id, text: recusa, stopReason, respondeu: true };
     }
 
     // Ferramenta do lado do servidor atingiu o limite de iterações: reenviar retoma.
@@ -202,7 +240,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
           payload: { max_tokens: agent.max_tokens },
         });
       }
-      return { conversationId: conversation.id, text: textoFinal, stopReason };
+      return { conversationId: conversation.id, text: textoFinal, stopReason, respondeu: true };
     }
 
     const resultados: Anthropic.ToolResultBlockParam[] = [];

@@ -439,7 +439,15 @@ async function aoReceberMensagem(
       // A inbox mostra isto no lugar do id técnico.
       contato: { nome: nomePerfil, telefone: telefoneReal },
     });
-    await responder(jid, resultado.text || "Desculpe, não consegui responder agora.");
+    if (resultado.respondeu) {
+      await responder(jid, resultado.text || "Desculpe, não consegui responder agora.");
+    } else {
+      // Alguém do salão assumiu esta conversa. Sair sem falar nada é o
+      // comportamento certo — e apagar o "digitando…" é parte disso: deixá-lo
+      // aceso promete uma resposta que o agente não vai dar.
+      await socket?.sendPresenceUpdate("paused", jid);
+      console.log(`[whatsapp] ${telefoneExibicao}: atendimento é humano, não respondi.`);
+    }
   } catch (e) {
     // Plano travado não é falha técnica: o cliente do restaurante não pode
     // receber "erro" nem ficar no vácuo. Ele é acolhido com uma frase fixa
