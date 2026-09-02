@@ -266,6 +266,7 @@ import {
   criarPesquisa,
   listarPesquisas,
   pesquisaAtiva,
+  itensDoDia,
 } from "./pesquisaModelo.js";
 import {
   baixarVendas,
@@ -3715,13 +3716,20 @@ async function roteasApi(
       // imprime o QR e já recebe resposta, em vez de o cliente achar um
       // formulário vazio na mesa.
       const modelo = await comErroDeModelo(() => pesquisaAtiva(venue.id));
+      // O dia da VISITA decide quais perguntas aparecem. Pelo convite do
+      // WhatsApp ele vem da Zig (a pessoa foi ontem); pelo QR da mesa é
+      // agora mesmo, no calendário da casa. Sem isto, a pergunta do rodízio
+      // de segunda a quinta chegaria a quem foi no sábado — e a nota que
+      // essa pessoa inventa entra na média do rodízio.
+      const diaDaVisita = convite?.dia_visita ?? hojeNaCasa(venue.timezone);
       return ok(res, {
         ativa: true,
         casa: venue.name,
         ...marcaDaCasa(venue),
         saudacao: config.saudacao,
         etiquetas: [...ETIQUETAS],
-        perguntas: modelo?.itens ?? [],
+        perguntas: itensDoDia(modelo?.itens ?? [], diaDaVisita),
+        dia_visita: diaDaVisita,
         perguntar_atendente: config.perguntar_atendente,
         perguntar_comentario: config.perguntar_comentario,
         premio: config.premio_ativo

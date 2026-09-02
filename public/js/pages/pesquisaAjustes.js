@@ -401,8 +401,77 @@ function editorDaPesquisa(ctx, pesquisa, categorias, recarregar) {
  * Devolve o elemento e uma função para ler o que está na tela — em vez de
  * manter um estado paralelo que precisaria ser sincronizado a cada tecla.
  */
+/** Os dias como o dono lê, na ordem da semana brasileira: 0 = domingo. */
+const DIAS_DA_SEMANA = [
+  [1, "seg"], [2, "ter"], [3, "qua"], [4, "qui"], [5, "sex"], [6, "sáb"], [0, "dom"],
+];
+
 function editorDeItens(itens, categorias) {
   const corpo = el("tbody");
+
+  /**
+   * QUANDO PERGUNTAR, por assunto.
+   *
+   * A regra mora em cada pergunta no banco, mas ninguém pensa "esta pergunta
+   * é de segunda a quinta" — pensa "o rodízio é de segunda a quinta". Então
+   * a tela edita por assunto e, ao salvar, carimba em todas as perguntas do
+   * grupo. Ao abrir, lê de volta da primeira pergunta de cada assunto.
+   */
+  const regras = new Map(); // assunto -> { dias: Set, de, ate }
+  for (const item of itens) {
+    const nome = (item.categoria ?? "Geral").trim();
+    if (regras.has(nome)) continue;
+    regras.set(nome, {
+      dias: new Set(Array.isArray(item.dias) ? item.dias : []),
+      de: item.de ?? "",
+      ate: item.ate ?? "",
+    });
+  }
+  const regraDe = (nome) => {
+    if (!regras.has(nome)) regras.set(nome, { dias: new Set(), de: "", ate: "" });
+    return regras.get(nome);
+  };
+
+  const painelQuando = el("div", { classe: "pilha", style: "gap:6px" });
+  function desenharQuando() {
+    limpar(painelQuando);
+    const assuntos = [...new Set([...corpo.children].map((tr) => tr._campos.categoria.value.trim() || "Geral"))];
+    if (assuntos.length === 0) return;
+    painelQuando.append(
+      el("p", { classe: "muted", style: "margin:0", texto: "Quando perguntar — sem nada marcado, o assunto aparece sempre. Marque os dias da promoção, ou um período." }),
+    );
+    for (const nome of assuntos) {
+      const r = regraDe(nome);
+      const chips = DIAS_DA_SEMANA.map(([n, rotulo]) => {
+        const b = el("button", {
+          type: "button",
+          classe: `btn btn-peq${r.dias.has(n) ? " btn-primario" : ""}`,
+          texto: rotulo,
+          "aria-pressed": String(r.dias.has(n)),
+          onclick: () => {
+            if (r.dias.has(n)) r.dias.delete(n); else r.dias.add(n);
+            desenharQuando();
+          },
+        });
+        return b;
+      });
+      const de = el("input", { type: "date", classe: "campo-celula", value: r.de, title: "Começa em", onchange: (e) => (r.de = e.target.value) });
+      const ate = el("input", { type: "date", classe: "campo-celula", value: r.ate, title: "Termina em", onchange: (e) => (r.ate = e.target.value) });
+      painelQuando.append(
+        el("div", { classe: "linha-campos", style: "align-items:center;gap:6px;flex-wrap:wrap" }, [
+          el("strong", { texto: nome, style: "min-width:140px" }),
+          ...chips,
+          el("span", { classe: "muted", texto: "de" }),
+          de,
+          el("span", { classe: "muted", texto: "até" }),
+          ate,
+        ]),
+      );
+    }
+  }
+  // Assunto renomeado, linha nova, linha removida: o painel acompanha.
+  corpo.addEventListener("change", desenharQuando);
+
   const elemento = el("div", { classe: "pilha", style: "margin-top:12px;gap:8px" }, [
     el("div", { classe: "rolagem-x" }, [
       el("table", { classe: "planilha" }, [
@@ -412,6 +481,7 @@ function editorDeItens(itens, categorias) {
             el("th", { texto: "Pergunta" }),
             el("th", { texto: "Como responde" }),
             el("th", { texto: "Obrig." }),
+            el("th", { texto: "Entrada", title: "A pergunta que abre o assunto — \"Você comeu o rodízio?\". As outras só aparecem se a resposta for sim. Só vale em pergunta de sim ou não." }),
             el("th", { texto: "É o NPS", title: "A pergunta \"o quanto você indicaria esta casa\". Marque uma: é ela que vira a nota da avaliação." }),
             el("th", { classe: "col-acoes", texto: "" }),
           ]),
@@ -424,12 +494,17 @@ function editorDeItens(itens, categorias) {
         classe: "btn btn-peq",
         type: "button",
         texto: "+ Pergunta",
-        onclick: () => corpo.append(linha({ categoria: "Geral", pergunta: "", tipo: "nota", obrigatorio: false })),
+        onclick: () => {
+          corpo.append(linha({ categoria: "Geral", pergunta: "", tipo: "nota", obrigatorio: false }));
+          desenharQuando();
+        },
       }),
     ]),
+    painelQuando,
   ]);
 
   for (const item of itens) corpo.append(linha(item));
+  desenharQuando();
 
   function linha(item) {
     const lista = `categorias-${Math.random().toString(36).slice(2, 8)}`;
@@ -442,6 +517,13 @@ function editorDeItens(itens, categorias) {
         TIPOS_DE_PERGUNTA.map(([v, r]) => el("option", { value: v, texto: r, selected: v === item.tipo })),
       ),
       obrigatorio: el("input", { type: "checkbox", checked: item.obrigatorio === true }),
+      // Só habilita em "sim ou não": é o "sim" que abre o resto do assunto.
+      portao: el("input", {
+        type: "checkbox",
+        checked: item.portao === true,
+        disabled: item.tipo !== "sim_nao",
+        title: "Esta pergunta abre o assunto: as outras só aparecem se a resposta for sim",
+      }),
       // Rádio e não caixa: só uma pergunta pode ser a do NPS, e o rádio diz
       // isso sozinho — marcar outra desmarca a anterior, sem mensagem de erro.
       nps: el("input", {
@@ -451,6 +533,11 @@ function editorDeItens(itens, categorias) {
         title: "Esta é a pergunta que vira a nota da avaliação",
       }),
     };
+    campos.tipo.addEventListener("change", () => {
+      const ehSimNao = campos.tipo.value === "sim_nao";
+      campos.portao.disabled = !ehSimNao;
+      if (!ehSimNao) campos.portao.checked = false;
+    });
 
     // `datalist` e não `select`: a lista sugere os assuntos comuns e continua
     // aceitando "Estacionamento" ou "Palco", que só existem em algumas casas.
@@ -461,6 +548,7 @@ function editorDeItens(itens, categorias) {
       el("td", {}, [campos.pergunta]),
       el("td", {}, [campos.tipo]),
       el("td", {}, [campos.obrigatorio]),
+      el("td", {}, [campos.portao]),
       el("td", {}, [campos.nps]),
       el("td", { classe: "col-acoes" }, [
         el("button", {
@@ -468,7 +556,10 @@ function editorDeItens(itens, categorias) {
           type: "button",
           title: "Remover",
           texto: "🗑️",
-          onclick: () => tr.remove(),
+          onclick: () => {
+            tr.remove();
+            desenharQuando();
+          },
         }),
       ]),
     ]);
@@ -480,14 +571,23 @@ function editorDeItens(itens, categorias) {
     elemento,
     ler: () =>
       [...corpo.children]
-        .map((tr) => ({
-          id: undefined,
-          categoria: tr._campos.categoria.value.trim(),
-          pergunta: tr._campos.pergunta.value.trim(),
-          tipo: tr._campos.tipo.value,
-          obrigatorio: tr._campos.obrigatorio.checked,
-          nps: tr._campos.nps.checked,
-        }))
+        .map((tr) => {
+          const categoria = tr._campos.categoria.value.trim() || "Geral";
+          const r = regraDe(categoria);
+          return {
+            id: undefined,
+            categoria,
+            pergunta: tr._campos.pergunta.value.trim(),
+            tipo: tr._campos.tipo.value,
+            obrigatorio: tr._campos.obrigatorio.checked,
+            portao: tr._campos.portao.checked,
+            nps: tr._campos.nps.checked,
+            // A regra do assunto, carimbada em cada pergunta dele.
+            dias: [...r.dias],
+            de: r.de || null,
+            ate: r.ate || null,
+          };
+        })
         // Linha em branco é a que o dono adicionou e desistiu de preencher:
         // mandá-la ao servidor só produziria um erro de validação.
         .filter((i) => i.pergunta),

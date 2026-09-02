@@ -651,17 +651,37 @@ async function gravarNotas(params: {
     }
   }
 
+  // As portas fechadas: categoria cuja pergunta de entrada NÃO foi "sim".
+  //
+  // A tela já esconde as outras perguntas quando a porta fecha, mas a tela é
+  // JS no celular do cliente e o POST pode vir de qualquer lugar. Quem
+  // decide o que entra na média é o servidor: nota de rodízio de quem disse
+  // que não comeu o rodízio não é nota, é ruído.
+  const portasFechadas = new Set<string>();
+  for (const item of params.itens) {
+    if (!item.portao) continue;
+    const r = porId.get(item.id);
+    const disseSim = r && notaNormalizada("sim_nao", r.valor) === 10;
+    if (!disseSim) portasFechadas.add(item.categoria);
+  }
+
   const linhas = [];
   for (const item of params.itens) {
     const resposta = porId.get(item.id);
     if (!resposta) continue;
+    if (!item.portao && portasFechadas.has(item.categoria)) continue;
 
-    const nota = notaNormalizada(item.tipo, resposta.valor);
+    // A porta é gravada com o valor ("sim"/"nao") e SEM nota: a resposta
+    // conta quantos comeram o rodízio, mas um "não" não é uma reclamação —
+    // e um zero aqui derrubaria a média da categoria e acionaria o alerta
+    // do gerente por alguém que só não pediu.
+    const nota = item.portao ? null : notaNormalizada(item.tipo, resposta.valor);
     const texto = typeof resposta.texto === "string" ? resposta.texto.trim().slice(0, 2000) : null;
+    const valorDaPorta = item.portao && notaNormalizada("sim_nao", resposta.valor) !== null;
 
     // Pergunta pulada: nada a gravar. Uma linha com nota nula e texto nulo só
     // engordaria a tabela e não entraria em conta nenhuma.
-    if (nota === null && !texto) continue;
+    if (nota === null && !texto && !valorDaPorta) continue;
 
     linhas.push({
       resposta_id: params.respostaId,
@@ -983,10 +1003,12 @@ export async function marcarConviteEnviado(id: string): Promise<void> {
 /** O convite por trás de um token, se ele ainda serve. */
 export async function conviteDoToken(
   token: string,
-): Promise<{ id: string; venue_id: string; nome: string | null } | null> {
+): Promise<{ id: string; venue_id: string; nome: string | null; dia_visita: string | null } | null> {
   const { data, error } = await cliente()
     .from("pesquisa_convites")
-    .select("id, venue_id, nome, respondido_em")
+    // `dia_visita` é o que decide QUAIS perguntas aparecem: a do rodízio de
+    // segunda a quinta só vale para quem foi de segunda a quinta.
+    .select("id, venue_id, nome, respondido_em, dia_visita")
     .eq("token", token)
     .maybeSingle();
   if (error) throw new ErroDePesquisa(500, `Falha ao conferir o convite: ${error.message}`);
@@ -1000,6 +1022,7 @@ export async function conviteDoToken(
     id: String(linha.id),
     venue_id: String(linha.venue_id),
     nome: (linha.nome as string) ?? null,
+    dia_visita: typeof linha.dia_visita === "string" ? linha.dia_visita.slice(0, 10) : null,
   };
 }
 

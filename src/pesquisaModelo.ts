@@ -53,6 +53,33 @@ export interface ItemDaPesquisa {
    * O painel mostrava 10.
    */
   nps?: boolean;
+  /**
+   * Em que dias da semana esta pergunta faz sentido. 0 = domingo … 6 = sábado.
+   *
+   * Vazio ou ausente = sempre. Existe por causa da promoção com dia fixo: o
+   * rodízio de petisco de segunda a quinta não pode ser perguntado a quem
+   * foi no sábado — a pessoa não consumiu, e a nota que ela inventa (ou o
+   * zero que ela usa como "não se aplica") entra na média do rodízio.
+   *
+   * Mora na PERGUNTA, e não na categoria, de propósito: categoria é só um
+   * texto que agrupa perguntas, sem linha própria no banco. A tela edita por
+   * categoria e carimba em cada pergunta do grupo — o efeito é o mesmo, e
+   * não precisou de coluna nova nem de migração.
+   */
+  dias?: number[];
+  /** Período (AAAA-MM-DD) em que a pergunta vale. Para festival, evento, mês temático. */
+  de?: string | null;
+  ate?: string | null;
+  /**
+   * Pergunta de ENTRADA da categoria: "Você comeu o rodízio?".
+   *
+   * Só as outras perguntas da mesma categoria aparecem se a resposta for
+   * "sim". A resposta dela é gravada (dá para saber quantos comeram), mas
+   * NUNCA vira nota: um "não" aqui não é uma reclamação, é um "não se
+   * aplica" — e um zero disparado por ele acionaria o alerta do gerente por
+   * alguém que simplesmente não pediu o rodízio.
+   */
+  portao?: boolean;
 }
 
 /** Sugestões de categoria na tela. Texto livre, porque cada casa tem as suas. */
@@ -147,7 +174,7 @@ export function validarItens(bruto: unknown): ItemDaPesquisa[] {
       ? o.categoria.trim()
       : "Geral";
 
-    return {
+    const item: ItemDaPesquisa = {
       id: typeof o.id === "string" && o.id ? o.id : randomUUID(),
       categoria,
       pergunta,
@@ -158,7 +185,41 @@ export function validarItens(bruto: unknown): ItemDaPesquisa[] {
       // é comparável com o de nenhuma outra casa.
       nps: o.nps === true && tipo === "nota",
     };
+
+    // Dias: só os válidos, sem repetição, em ordem. Lista vazia é o mesmo
+    // que "sempre", e por isso nem é gravada — o JSON fica limpo para a casa
+    // que nunca mexeu nisso.
+    if (Array.isArray(o.dias)) {
+      const dias = [...new Set(o.dias.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))]
+        .sort((a, b) => a - b);
+      if (dias.length > 0 && dias.length < 7) item.dias = dias;
+    }
+    const de = diaValido(o.de);
+    const ate = diaValido(o.ate);
+    if (de && ate && de > ate) {
+      throw new ErroDeModelo(400, `Pergunta ${i + 1}: o período termina antes de começar.`);
+    }
+    if (de) item.de = de;
+    if (ate) item.ate = ate;
+
+    // Entrada só faz sentido como "sim ou não": é a resposta "sim" que abre
+    // o resto. Uma nota de 0 a 10 como porta não tem "sim".
+    if (o.portao === true && tipo === "sim_nao") item.portao = true;
+
+    return item;
   });
+
+  // Duas portas na mesma categoria: qual abre o quê? Não há resposta boa, e
+  // a tela do cliente teria de inventar uma.
+  const portasPorCategoria = new Map<string, number>();
+  for (const item of itens) {
+    if (!item.portao) continue;
+    const n = (portasPorCategoria.get(item.categoria) ?? 0) + 1;
+    if (n > 1) {
+      throw new ErroDeModelo(400, `Só uma pergunta de entrada por assunto — "${item.categoria}" tem duas.`);
+    }
+    portasPorCategoria.set(item.categoria, n);
+  }
 
   // Duas perguntas de NPS medem a mesma coisa e dão dois números diferentes, e
   // o painel teria de escolher um deles sem ter como saber qual.
@@ -179,6 +240,46 @@ export function validarItens(bruto: unknown): ItemDaPesquisa[] {
     );
   }
   return itens;
+}
+
+/** AAAA-MM-DD de verdade, ou null. Aceita o que o navegador manda no input de data. */
+function diaValido(bruto: unknown): string | null {
+  if (typeof bruto !== "string") return null;
+  const t = bruto.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const [a, m, d] = t.split("-").map(Number);
+  const data = new Date(Date.UTC(a!, m! - 1, d!));
+  const bate = data.getUTCFullYear() === a && data.getUTCMonth() === m! - 1 && data.getUTCDate() === d;
+  return bate ? t : null;
+}
+
+/** Dia da semana de um AAAA-MM-DD, no calendário: 0 = domingo … 6 = sábado. */
+export function diaDaSemana(diaISO: string): number {
+  const [a, m, d] = diaISO.slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(a!, m! - 1, d!)).getUTCDay();
+}
+
+/**
+ * As perguntas que valem para uma visita naquele dia.
+ *
+ * É o filtro que a página pública aplica antes de mostrar qualquer coisa. O
+ * dia é o da VISITA, não o de hoje: o convite do WhatsApp sai no dia seguinte
+ * ao movimento, então quem foi na quinta recebe as perguntas de quinta na
+ * sexta. Pelo QR code da mesa a visita é agora mesmo, e o dia é o de hoje na
+ * casa.
+ *
+ * Pergunta sem dia e sem período passa sempre — é o caso de toda pesquisa
+ * montada antes desta regra existir.
+ */
+export function itensDoDia(itens: ItemDaPesquisa[], diaISO: string): ItemDaPesquisa[] {
+  const dia = diaISO.slice(0, 10);
+  const semana = diaDaSemana(dia);
+  return itens.filter((item) => {
+    if (item.dias && item.dias.length > 0 && !item.dias.includes(semana)) return false;
+    if (item.de && dia < item.de) return false;
+    if (item.ate && dia > item.ate) return false;
+    return true;
+  });
 }
 
 // ============================================================

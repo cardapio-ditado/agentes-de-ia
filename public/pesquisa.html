@@ -574,15 +574,27 @@
        */
       function telaCategoria(categoria) {
         const bloco = novoPasso();
-        const perguntas = dados.perguntas.filter((p) => p.categoria === categoria);
+        const todas = dados.perguntas.filter((p) => p.categoria === categoria);
 
-        bloco.append(
-          titulo(categoria),
-          // Dizer que 0 é a pior nota importa: sem isso, quem não consumiu
-          // usa o 0 como "não se aplica" — aconteceu, e o 0 falso derruba a
-          // média de uma noite que foi um 10.
-          ajuda("Toque na nota — 0 é a pior, 10 é a melhor. Não consumiu? Use o “não se aplica”."),
-        );
+        // A PORTA: "Você comeu o rodízio?". Enquanto não for "sim", só ela
+        // aparece — e o que estiver marcado nas outras é apagado, para a
+        // pessoa que disse "sim", deu nota e depois voltou atrás não deixar
+        // uma nota de rodízio de quem não comeu o rodízio.
+        const porta = todas.find((p) => p.portao);
+        const portaAberta = !porta || String(resposta.itens.get(porta.id)?.valor) === "sim";
+        if (porta && !portaAberta) {
+          for (const p of todas) if (p !== porta) resposta.itens.delete(p.id);
+        }
+        const perguntas = portaAberta ? todas : [porta];
+
+        bloco.append(titulo(categoria));
+        // Dizer que 0 é a pior nota importa: sem isso, quem não consumiu
+        // usa o 0 como "não se aplica" — aconteceu, e o 0 falso derruba a
+        // média de uma noite que foi um 10. Só faz sentido quando há nota
+        // na tela; com a porta fechada, a tela é um sim ou não.
+        if (perguntas.some((p) => p.tipo === "nota" || p.tipo === "estrelas")) {
+          bloco.append(ajuda("Toque na nota — 0 é a pior, 10 é a melhor. Não consumiu? Use o “não se aplica”."));
+        }
 
         for (const pergunta of perguntas) {
           const grupo = document.createElement("div");
@@ -602,7 +614,16 @@
         const faltando = perguntas.filter(
           (p) => p.obrigatorio && !temResposta(p),
         );
-        const botao = botao_(faltando.length === 0 ? "Continuar" : "Responda as marcadas com *", avancar, faltando.length > 0);
+        // A porta sem resposta também trava: sem o "sim" ou "não" dela, a
+        // tela não sabe se deve perguntar o resto, e pular seria perder a
+        // categoria inteira em silêncio.
+        const portaSemResposta = Boolean(porta) && resposta.itens.get(porta.id)?.valor === undefined;
+        const rotulo = portaSemResposta
+          ? "Responda sim ou não para continuar"
+          : faltando.length === 0
+            ? "Continuar"
+            : "Responda as marcadas com *";
+        const botao = botao_(rotulo, avancar, faltando.length > 0 || portaSemResposta);
         bloco.append(rodape(botao));
         return bloco;
       }

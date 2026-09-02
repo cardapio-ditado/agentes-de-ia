@@ -242,3 +242,99 @@ test("zero de verdade continua sendo zero", () => {
   assert.equal(notaNormalizada("nota", "0"), 0);
   assert.equal(notaNormalizada("sim_nao", "nao"), 0);
 });
+
+/* ---------- perguntas com dia: a promoção de segunda a quinta ---------- */
+
+import { diaDaSemana, itensDoDia } from "./pesquisaModelo.js";
+
+const base = (extra: Record<string, unknown> = {}) => ({
+  categoria: "Rodízio de petisco",
+  pergunta: "O rodízio agradou?",
+  tipo: "nota",
+  obrigatorio: false,
+  ...extra,
+});
+const sempre = { categoria: "Atendimento", pergunta: "Foi bem atendido?", tipo: "nota", obrigatorio: false };
+
+test("dia da semana sai do calendário, não do fuso do servidor", () => {
+  // 2026-09-03 é quinta. Lido como UTC e como qualquer fuso, é quinta.
+  assert.equal(diaDaSemana("2026-09-03"), 4);
+  assert.equal(diaDaSemana("2026-09-06"), 0); // domingo
+  assert.equal(diaDaSemana("2026-09-05"), 6); // sábado
+});
+
+test("pergunta de segunda a quinta some para quem foi no sábado", () => {
+  const itens = validarItens([base({ dias: [1, 2, 3, 4] }), sempre]);
+  const sabado = itensDoDia(itens, "2026-09-05");
+  assert.deepEqual(sabado.map((i) => i.categoria), ["Atendimento"]);
+  const terca = itensDoDia(itens, "2026-09-01");
+  assert.equal(terca.length, 2);
+});
+
+test("pergunta sem dia e sem período passa sempre — a pesquisa antiga não muda", () => {
+  const itens = validarItens([sempre]);
+  for (const dia of ["2026-09-01", "2026-09-05", "2026-09-06"]) {
+    assert.equal(itensDoDia(itens, dia).length, 1, dia);
+  }
+});
+
+test("período: o festival de 10 a 20 só pergunta dentro dele", () => {
+  const itens = validarItens([base({ de: "2026-10-10", ate: "2026-10-20" }), sempre]);
+  assert.equal(itensDoDia(itens, "2026-10-09").length, 1);
+  assert.equal(itensDoDia(itens, "2026-10-10").length, 2);
+  assert.equal(itensDoDia(itens, "2026-10-20").length, 2);
+  assert.equal(itensDoDia(itens, "2026-10-21").length, 1);
+});
+
+test("dias e período juntos: os dois precisam bater", () => {
+  // Quinta 2026-10-15 está no período e é quinta: passa. Sábado 2026-10-17
+  // está no período mas não é dia: não passa.
+  const itens = validarItens([base({ dias: [1, 2, 3, 4], de: "2026-10-10", ate: "2026-10-20" })]);
+  assert.equal(itensDoDia(itens, "2026-10-15").length, 1);
+  assert.equal(itensDoDia(itens, "2026-10-17").length, 0);
+});
+
+test("todos os sete dias marcados é o mesmo que nenhum — e não fica gravado", () => {
+  const [item] = validarItens([base({ dias: [0, 1, 2, 3, 4, 5, 6] })]);
+  assert.equal(item!.dias, undefined);
+});
+
+test("dia inválido é descartado, e a lista fica em ordem sem repetição", () => {
+  const [item] = validarItens([base({ dias: [4, 1, 9, 1, -1, "2"] })]);
+  assert.deepEqual(item!.dias, [1, 2, 4]);
+});
+
+test("período que termina antes de começar é recusado", () => {
+  assert.throws(
+    () => validarItens([base({ de: "2026-10-20", ate: "2026-10-10" })]),
+    /termina antes de começar/,
+  );
+});
+
+test("data que não existe não vira período", () => {
+  const [item] = validarItens([base({ de: "2026-02-30", ate: "31/12/2026" })]);
+  assert.equal(item!.de, undefined);
+  assert.equal(item!.ate, undefined);
+});
+
+/* ---------- a pergunta de entrada ---------- */
+
+test("entrada só vale em pergunta de sim ou não", () => {
+  const [nota, simNao] = validarItens([
+    base({ portao: true }), // tipo nota: a marca é ignorada
+    base({ pergunta: "Você comeu o rodízio?", tipo: "sim_nao", portao: true }),
+  ]);
+  assert.equal(nota!.portao, undefined);
+  assert.equal(simNao!.portao, true);
+});
+
+test("duas entradas no mesmo assunto é recusado", () => {
+  assert.throws(
+    () =>
+      validarItens([
+        base({ pergunta: "Comeu?", tipo: "sim_nao", portao: true }),
+        base({ pergunta: "Pediu?", tipo: "sim_nao", portao: true }),
+      ]),
+    /Só uma pergunta de entrada/,
+  );
+});
