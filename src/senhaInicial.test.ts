@@ -1,6 +1,28 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { senhaLegivel } from "./senhaInicial.js";
+import { pareceSenhaInicial, senhaLegivel } from "./senhaInicial.js";
+
+/**
+ * A trava "não repita a senha ditada" vivia num regex solto em auth.ts, e
+ * mudar o formato do sorteio quebrou a trava sem nenhum teste reclamar. Este
+ * é o teste que faltava: o que o sorteio gera, a trava reconhece.
+ */
+describe("pareceSenhaInicial", () => {
+  it("reconhece tudo que o sorteio de hoje gera", () => {
+    for (let i = 0; i < 300; i++) assert.ok(pareceSenhaInicial(senhaLegivel()));
+  });
+
+  it("reconhece o formato antigo — ainda tem gente com ele", () => {
+    assert.ok(pareceSenhaInicial("brasa-4821"));
+    assert.ok(pareceSenhaInicial("  Tempero-1000 "));
+  });
+
+  it("não barra senha de verdade", () => {
+    for (const s of ["minha-senha-forte", "brasa-forno-12345", "brasa-4821x", "cerveja-gelada-2024", "Xk9#mP2q"]) {
+      assert.equal(pareceSenhaInicial(s), false, s);
+    }
+  });
+});
 
 /**
  * Senha inicial tem duas exigências que puxam para lados opostos: ser fácil de

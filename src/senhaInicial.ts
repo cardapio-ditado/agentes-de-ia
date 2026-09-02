@@ -33,6 +33,26 @@ const PALAVRAS = [
 ];
 
 /**
+ * Isto tem cara de senha ditada?
+ *
+ * Usado na troca de senha: repetir a senha que foi ditada não é trocar — ela
+ * continuaria sendo a que outra pessoa falou em voz alta. Reconhece os DOIS
+ * formatos, o de hoje (duas palavras) e o antigo (uma), porque ainda existe
+ * gente com a senha antiga esperando o primeiro acesso.
+ *
+ * Mora aqui, ao lado do sorteio, de propósito: quando a trava vivia num regex
+ * solto em auth.ts, mudar o formato aqui quebrou a trava lá sem nenhum teste
+ * reclamar — foi exatamente o que aconteceu.
+ */
+export function pareceSenhaInicial(senha: string): boolean {
+  const partes = senha.trim().toLowerCase().split("-");
+  if (partes.length < 2 || partes.length > 3) return false;
+  const numero = partes[partes.length - 1]!;
+  if (!/^\d{4}$/.test(numero)) return false;
+  return partes.slice(0, -1).every((p) => PALAVRAS.includes(p));
+}
+
+/**
  * Senha inicial legível: o dono vai ditar isto por telefone, e a pessoa troca
  * no primeiro acesso.
  */

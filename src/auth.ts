@@ -18,6 +18,7 @@
  */
 
 import { db, dbAuth } from "./supabase.js";
+import { pareceSenhaInicial } from "./senhaInicial.js";
 
 export interface Sessao {
   userId: string;
@@ -238,7 +239,7 @@ export async function trocarSenha(token: string, novaSenha: string): Promise<Tok
 
   // Repetir a senha que foi ditada não é trocar: continuaria valendo a que
   // outra pessoa falou em voz alta.
-  if (/^(brasa|fogo|forno|grelha|carvao|chama|sabor|tempero)-\d{4}$/.test(novaSenha.trim())) {
+  if (pareceSenhaInicial(novaSenha)) {
     throw new ErroDeAcesso(400, "Essa é a senha provisória. Escolha uma senha sua.");
   }
 
