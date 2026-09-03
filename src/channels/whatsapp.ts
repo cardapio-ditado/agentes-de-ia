@@ -25,6 +25,7 @@ import {
   variacoesDoTelefone,
 } from "../notifications.js";
 import { interpretarComando, responderComandoDeReserva } from "../comandosDeReserva.js";
+import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
 
 /**
  * Conector WhatsApp via Baileys (protocolo do WhatsApp Web).
@@ -361,6 +362,37 @@ async function aoReceberMensagem(
     return;
   }
 
+  // UMA PESSOA ASSUMIU ESTA CONVERSA?
+  //
+  // Decidido AQUI, antes de qualquer resposta pronta. O `runAgent` já cala o
+  // agente quando há texto — mas "recebi sua mídia", "não consegui ouvir o
+  // áudio" e "pode escrever?" saem sem texto nenhum para o modelo, e por
+  // isso passavam por fora da trava. Era o que restava do "robô que não
+  // para de falar": o gerente assumia, o cliente mandava uma foto, e o robô
+  // agradecia a foto.
+  const conversaHumana = await conversaAtendidaPorHumano({
+    agentSlug: opcoes.agentSlug,
+    channel: "whatsapp",
+    externalId: jid,
+  });
+
+  /**
+   * Resposta pronta que respeita quem assumiu.
+   *
+   * Com o agente no comando, manda a frase. Com uma pessoa no comando, fica
+   * calado — e registra na conversa O QUE chegou ("[áudio]", "[foto]"), para
+   * quem assumiu ver que o cliente falou e responder pelo aplicativo.
+   */
+  const acolher = async (frase: string, oQueChegou: string): Promise<void> => {
+    if (!conversaHumana) {
+      await responder(jid, frase);
+      return;
+    }
+    await registrarRecebidoSemResposta(conversaHumana.id, oQueChegou).catch(() => undefined);
+    await socket?.sendPresenceUpdate("paused", jid);
+    console.log(`[whatsapp] ${jid.split("@")[0]}: ${oQueChegou} numa conversa com pessoa — não respondi.`);
+  };
+
   let texto = extrairTexto(mensagem.message);
 
   // Áudio vira texto antes de qualquer coisa: metade das mensagens de bar
@@ -371,9 +403,9 @@ async function aoReceberMensagem(
     try {
       const bytes = Number(mensagem.message.audioMessage.fileLength ?? 0);
       if (longoDemais(bytes)) {
-        await responder(
-          jid,
+        await acolher(
           "Esse áudio ficou longo demais para eu ouvir. Me conta em poucas palavras o que você precisa?",
+          "[áudio longo recebido — não transcrito]",
         );
         return;
       }
@@ -389,9 +421,9 @@ async function aoReceberMensagem(
       // está esperando. Ele é acolhido e convidado a escrever — que é
       // exatamente o comportamento de quando não há transcrição configurada.
       console.warn(`[whatsapp:${estado.papel}] não transcrevi o áudio:`, e);
-      await responder(
-        jid,
+      await acolher(
         "Não consegui ouvir direito o seu áudio. Pode me escrever o que precisa? 😊",
+        "[áudio recebido — não consegui transcrever]",
       );
       return;
     }
@@ -402,17 +434,17 @@ async function aoReceberMensagem(
     // Áudio ainda não é transcrito — a API do Claude não recebe áudio; quando
     // houver um provedor de transcrição configurado, este é o ponto de entrada.
     if (mensagem.message?.audioMessage) {
-      await responder(
-        jid,
+      await acolher(
         "Recebi seu áudio! Por enquanto ainda não consigo ouvir mensagens de voz — pode escrever? Prometo que respondo rapidinho. 😊",
+        "[áudio recebido]",
       );
     } else if (mensagem.message?.imageMessage || mensagem.message?.videoMessage) {
-      await responder(
-        jid,
+      await acolher(
         "Recebi sua mídia! Consigo te ajudar melhor por texto — me conta o que você precisa?",
+        mensagem.message?.imageMessage ? "[foto recebida]" : "[vídeo recebido]",
       );
     } else {
-      await responder(jid, "Por enquanto consigo ler só mensagens de texto. Pode escrever?");
+      await acolher("Por enquanto consigo ler só mensagens de texto. Pode escrever?", "[mensagem sem texto recebida]");
     }
     return;
   }

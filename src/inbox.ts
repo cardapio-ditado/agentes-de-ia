@@ -1,5 +1,6 @@
 import { db } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
+import { getAgentBySlug } from "./repository.js";
 import type { Json, Tables } from "./database.types.js";
 
 /**
@@ -335,6 +336,64 @@ async function enfileirarRespostaHumana(conversationId: string, texto: string): 
   } as never);
 
   if (erroFila) throw new Error(`Não consegui pôr a resposta na fila: ${erroFila.message}`);
+}
+
+/**
+ * A conversa deste cliente está com uma pessoa?
+ *
+ * Para o conector decidir ANTES de qualquer resposta pronta — "recebi sua
+ * mídia", "não consegui ouvir o áudio", "pode escrever?". Essas frases saem
+ * sem passar pelo `runAgent` (não há texto para o modelo), e por isso a trava
+ * de lá não as alcança. Foi por elas que o robô "não parava de falar" depois
+ * de o gerente assumir: o cliente mandava uma foto, e o robô agradecia.
+ *
+ * Devolve a conversa quando existe E está com gente; null nos outros casos —
+ * inclusive quando ainda não há conversa (cliente novo é sempre do agente).
+ * Nunca lança: na dúvida, o conector segue como sempre.
+ */
+export async function conversaAtendidaPorHumano(params: {
+  agentSlug: string;
+  channel: string;
+  externalId: string;
+}): Promise<Conversation | null> {
+  try {
+    const agente = await getAgentBySlug(params.agentSlug);
+    const { data } = await db()
+      .from("conversations")
+      .select("*")
+      .eq("agent_id", agente.id)
+      .eq("channel", params.channel)
+      .eq("external_id", params.externalId)
+      .maybeSingle();
+    if (!data) return null;
+    return atendimentoDe(data).por === "humano" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Registra o que o cliente mandou numa conversa em que o agente está calado.
+ *
+ * Quem assumiu precisa VER que chegou um áudio ou uma foto, mesmo que o
+ * sistema não tenha como mostrar o conteúdo. Sem esta linha, calar o agente
+ * significaria a conversa parar de se mexer no painel — e o gerente esperando
+ * uma resposta que o cliente já deu, em voz.
+ */
+export async function registrarRecebidoSemResposta(
+  conversationId: string,
+  descricao: string,
+): Promise<void> {
+  await db().from("messages").insert({
+    conversation_id: conversationId,
+    role: "user",
+    content: descricao,
+  });
+  // `updated_at` ordena a caixa de entrada; sem isto a conversa não sobe.
+  await db()
+    .from("conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
 }
 
 /**

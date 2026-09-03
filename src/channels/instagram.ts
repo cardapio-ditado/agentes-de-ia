@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { runAgent } from "../agent.js";
+import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
 import { enviarPorInstagram, instagramConfigurado } from "../notifications.js";
 
 /**
@@ -158,6 +159,14 @@ async function processarEvento(
   const texto = mensagem.text?.trim();
   if (!texto) {
     if (mensagem.attachments?.length) {
+      // Mesma regra do WhatsApp: com uma pessoa no comando, o robô não
+      // agradece a foto — registra que chegou e fica quieto.
+      const humana = await conversaAtendidaPorHumano({ agentSlug, channel: "instagram", externalId: igsid });
+      if (humana) {
+        await registrarRecebidoSemResposta(humana.id, "[mídia recebida]").catch(() => undefined);
+        console.log(`[instagram] ${igsid}: mídia numa conversa com pessoa — não respondi.`);
+        return;
+      }
       await enviarPorInstagram(
         igsid,
         "Recebi sua mídia! Consigo te ajudar melhor por texto — me conta o que você precisa?",
