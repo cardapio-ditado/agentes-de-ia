@@ -469,8 +469,22 @@ async function executeTool(params: {
 }
 
 /** Reconstrói uma mensagem persistida no formato que a API espera. */
-function toMessageParam(row: Message): Anthropic.MessageParam {
-  const blocks = row.blocks as Anthropic.ContentBlockParam[] | null;
+/**
+ * Uma linha de `messages` no formato que a API do modelo lê.
+ *
+ * `blocks` só é conteúdo quando é uma LISTA de blocos — o que o modelo
+ * devolveu (texto, tool_use) ou o resultado de ferramenta. A resposta que uma
+ * pessoa escreveu pelo painel usa o mesmo campo para outra coisa: uma
+ * etiqueta `{origem: "humano", autor}`, que serve ao painel e a mais ninguém.
+ *
+ * Mandar essa etiqueta como conteúdo faz a API recusar a conversa inteira. O
+ * sintoma: o gerente assume, responde, devolve ao agente — e o agente, ao
+ * reler o histórico, "tem um problema técnico" para sempre naquela conversa.
+ */
+export function toMessageParam(row: Message): Anthropic.MessageParam {
+  const blocks = Array.isArray(row.blocks)
+    ? (row.blocks as unknown as Anthropic.ContentBlockParam[])
+    : null;
 
   // Resultados de ferramenta são persistidos como role "tool", mas a API
   // os espera dentro de um turno de usuário.
