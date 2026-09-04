@@ -73,12 +73,16 @@ const PAGINAS = [
 
   { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
 
-  { id: "pesquisa", modulo: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
-  { id: "pesquisa-respostas", modulo: "pesquisa", rotulo: "Respostas da pesquisa", icone: ICONES.conversas, render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
-  { id: "pesquisa-ajustes", modulo: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
-
-  // A base da casa: quem já esteve aqui, e o parabéns que faz voltar.
+  // UM FAVO SÓ: a base de clientes e a voz deles.
+  //
+  // A base é da casa (toda casa tem) e a pesquisa é contratada. Moravam em
+  // favos separados, e o dono abria um para ver quem veio e outro para ver o
+  // que acharam — da mesma pessoa. Agora é uma porta: as telas da pesquisa
+  // ficam aqui dentro e só acendem para a casa que contratou (`requer`).
   { id: "clientes-casa", modulo: "clientes", rotulo: "Clientes", icone: ICONES.pessoa, render: clientesDaCasa, subtitulo: "A base da casa: cadastro à mão, Zig, WhatsApp — e o aniversário de cada um" },
+  { id: "pesquisa", modulo: "clientes", requer: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
+  { id: "pesquisa-respostas", modulo: "clientes", requer: "pesquisa", rotulo: "Respostas da pesquisa", icone: ICONES.conversas, render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
+  { id: "pesquisa-ajustes", modulo: "clientes", requer: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
 
   // A ordem é a do dia de trabalho: o número primeiro, depois o que se faz
   // toda manhã, depois o que se faz às vezes, por fim o que se cadastra uma
@@ -187,27 +191,20 @@ const MODULOS = [
     pos: { x: -0.75, y: -0.5 },
   },
   {
-    id: "pesquisa",
-    nome: "Voz do Cliente",
-    descricao:
-      "QR code na mesa, prêmio para quem responde, e o que a casa faz de bom e de ruim em palavras e em nota.",
-    icone: ICONES.conversas,
-    // O favo que estava reservado ao crescimento da colmeia, embaixo do
-    // centro: é o primeiro que o olho encontra depois dos quatro de cima.
-    pos: { x: 0, y: 1 },
-  },
-  {
     id: "clientes",
     nome: "Clientes",
     descricao:
-      "Quem já esteve na casa, num lugar só: cadastrado à mão, vindo da Zig ou de uma conversa no WhatsApp — e o parabéns de aniversário que faz ele voltar.",
+      "Quem já esteve na casa e o que achou dela: a base (à mão, Zig, WhatsApp), o parabéns de aniversário, e a pesquisa com QR na mesa e prêmio para quem responde.",
     icone: ICONES.pessoa,
     // Não se compra: a base de clientes é da CASA, não de um módulo. Quem só
     // comprou o CMV cadastra clientes na mão e manda parabéns do mesmo jeito.
-    // Diferente de "Ajustes": aquilo é configuração e vive no cabeçalho; isto
-    // se usa todo dia e merece o favo que sobrava na colmeia.
+    // A pesquisa (Voz do Cliente) mora AQUI DENTRO e é ela que se contrata:
+    // suas telas acendem ou apagam conforme o contrato, sem favo próprio.
     daCasa: true,
-    pos: { x: -1.5, y: 0 },
+    // Quem tem acesso restrito só à pesquisa continua entrando por este favo.
+    tambem: ["pesquisa"],
+    // Embaixo do centro: o primeiro que o olho encontra depois dos de cima.
+    pos: { x: 0, y: 1 },
   },
   // ---- Fora da colmeia ----
   //
@@ -235,7 +232,10 @@ const MODULOS = [
 ];
 
 /** Favos vazios: a colmeia mostra para onde ela ainda cresce. */
-const FAVOS_VAZIOS = [{ x: 1.5, y: 0 }];
+const FAVOS_VAZIOS = [
+  { x: 1.5, y: 0 },
+  { x: -1.5, y: 0 },
+];
 
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");
@@ -324,7 +324,7 @@ function montarNav() {
   seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
 
   limpar(nav);
-  for (const p of PAGINAS.filter((p) => p.modulo === moduloAtual && (!p.plataforma || souPlataforma))) {
+  for (const p of paginasVisiveis()) {
     nav.append(
       el(
         "a",
@@ -349,9 +349,7 @@ async function irPara(id) {
   // para um cliente comum. Ele quebraria no servidor (403), mas mostrar uma
   // tela que não vai funcionar é confundir sem motivo. A trava de verdade
   // continua sendo a do servidor — esta é conveniência, não segurança.
-  const doModulo = PAGINAS.filter(
-    (p) => p.modulo === moduloAtual && (!p.plataforma || souPlataforma),
-  );
+  const doModulo = paginasVisiveis();
   const pagina = doModulo.find((p) => p.id === id) ?? doModulo[0];
 
   // A tela anterior pode ter deixado timers rodando.
@@ -458,7 +456,29 @@ function moduloAceso(m) {
   // "da casa" também: o servidor recusa a base de clientes para quem tem
   // acesso restrito a outro módulo, e favo que abre em 403 é pior do que favo
   // que não abre.
-  return meusModulos === null || meusModulos.includes(m.id);
+  if (meusModulos === null) return true;
+  return meusModulos.includes(m.id) || (m.tambem ?? []).some((id) => meusModulos.includes(id));
+}
+
+/**
+ * As telas do módulo aberto que ESTA pessoa, NESTA casa, pode ver.
+ *
+ * Três filtros, na ordem: o módulo; plataforma só para a equipe Brasa Food;
+ * e `requer` — a tela que depende de um contrato à parte (a pesquisa dentro
+ * de Clientes) só aparece se a casa contratou e se a pessoa não está
+ * restrita a outra coisa. É o mesmo que o servidor confere em cada rota:
+ * esconder aqui é para não mostrar tela que vai abrir em 403.
+ */
+function paginasVisiveis() {
+  return PAGINAS.filter((p) => {
+    if (p.modulo !== moduloAtual) return false;
+    if (p.plataforma && !souPlataforma) return false;
+    if (p.requer) {
+      if (modulosDoCliente.get(p.requer)?.ativo !== true) return false;
+      if (meusModulos !== null && !meusModulos.includes(p.requer)) return false;
+    }
+    return true;
+  });
 }
 
 /**
@@ -582,6 +602,9 @@ function mostrarHub() {
 
 /** Abre um módulo: a lateral e as telas viram as dele. */
 function entrarNoModulo(moduloId = "agentes-ia") {
+  // A pesquisa deixou de ser favo e passou a morar em Clientes. Aba que
+  // guardou "pesquisa" antes disso, e atalho antigo, chegam no lugar certo.
+  if (moduloId === "pesquisa") moduloId = "clientes";
   const definicao = MODULOS.find((m) => m.id === moduloId);
 
   // Módulo que mora fora do painel abre noutra aba. O endereço é por cliente:
