@@ -71,15 +71,18 @@ const PAGINAS = [
   { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
 
-  { id: "avaliacoes", modulo: "avaliacoes", rotulo: "Avaliações", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
-
-  // UM FAVO SÓ: a base de clientes e a voz deles.
+  // UM FAVO SÓ: o cliente, e tudo que ele diz da casa.
   //
-  // A base é da casa (toda casa tem) e a pesquisa é contratada. Moravam em
-  // favos separados, e o dono abria um para ver quem veio e outro para ver o
-  // que acharam — da mesma pessoa. Agora é uma porta: as telas da pesquisa
-  // ficam aqui dentro e só acendem para a casa que contratou (`requer`).
+  // Eram três portas para a mesma pessoa: quem veio (base), o que respondeu
+  // (pesquisa) e o que escreveu no Google (avaliações). O dono abria uma para
+  // saber quem era e outra para saber o que ele achou. Agora é uma.
+  //
+  // A base é da CASA — toda casa tem, e o favo acende para todo mundo. A
+  // pesquisa e as avaliações se CONTRATAM: as telas delas trazem `requer` e
+  // acendem só para quem comprou, sem favo próprio e sem 403 disfarçado de
+  // tela em branco.
   { id: "clientes-casa", modulo: "clientes", rotulo: "Clientes", icone: ICONES.pessoa, render: clientesDaCasa, subtitulo: "A base da casa: cadastro à mão, Zig, WhatsApp — e o aniversário de cada um" },
+  { id: "avaliacoes", modulo: "clientes", requer: "avaliacoes", rotulo: "Avaliações do Google", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
   { id: "pesquisa", modulo: "clientes", requer: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
   { id: "pesquisa-respostas", modulo: "clientes", requer: "pesquisa", rotulo: "Respostas da pesquisa", icone: ICONES.conversas, render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
   { id: "pesquisa-ajustes", modulo: "clientes", requer: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
@@ -175,14 +178,6 @@ const MODULOS = [
     pos: { x: 0.75, y: 0.5 },
   },
   {
-    id: "avaliacoes",
-    nome: "Avaliações do Google",
-    descricao:
-      "Toda avaliação respondida, no tom da casa. Nota baixa nunca sai sem alguém ler.",
-    icone: ICONES.estrela,
-    pos: { x: 0.75, y: -0.5 },
-  },
-  {
     id: "cmv",
     nome: "CMV Inteligente",
     descricao:
@@ -194,15 +189,16 @@ const MODULOS = [
     id: "clientes",
     nome: "Clientes",
     descricao:
-      "Quem já esteve na casa e o que achou dela: a base (à mão, Zig, WhatsApp), o parabéns de aniversário, e a pesquisa com QR na mesa e prêmio para quem responde.",
+      "Quem já esteve na casa e o que ele diz dela: a base (à mão, Zig, WhatsApp), o parabéns de aniversário, a pesquisa com QR na mesa e as avaliações do Google respondidas no tom da casa.",
     icone: ICONES.pessoa,
     // Não se compra: a base de clientes é da CASA, não de um módulo. Quem só
     // comprou o CMV cadastra clientes na mão e manda parabéns do mesmo jeito.
     // A pesquisa (Voz do Cliente) mora AQUI DENTRO e é ela que se contrata:
     // suas telas acendem ou apagam conforme o contrato, sem favo próprio.
     daCasa: true,
-    // Quem tem acesso restrito só à pesquisa continua entrando por este favo.
-    tambem: ["pesquisa"],
+    // Quem tem acesso restrito só à pesquisa (ou só às avaliações) continua
+    // entrando por este favo — ele é a porta das duas agora.
+    tambem: ["pesquisa", "avaliacoes"],
     // Embaixo do centro: o primeiro que o olho encontra depois dos de cima.
     pos: { x: 0, y: 1 },
   },
@@ -235,6 +231,7 @@ const MODULOS = [
 const FAVOS_VAZIOS = [
   { x: 1.5, y: 0 },
   { x: -1.5, y: 0 },
+  { x: 0.75, y: -0.5 },
 ];
 
 const app = document.getElementById("app");
@@ -604,7 +601,7 @@ function mostrarHub() {
 function entrarNoModulo(moduloId = "agentes-ia") {
   // A pesquisa deixou de ser favo e passou a morar em Clientes. Aba que
   // guardou "pesquisa" antes disso, e atalho antigo, chegam no lugar certo.
-  if (moduloId === "pesquisa") moduloId = "clientes";
+  if (moduloId === "pesquisa" || moduloId === "avaliacoes") moduloId = "clientes";
   const definicao = MODULOS.find((m) => m.id === moduloId);
 
   // Módulo que mora fora do painel abre noutra aba. O endereço é por cliente:
