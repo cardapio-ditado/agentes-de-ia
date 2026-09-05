@@ -36,6 +36,7 @@ import { pesquisaAjustes } from "./pages/pesquisaAjustes.js";
 import { clientesDaCasa } from "./pages/clientesDaCasa.js";
 import { pesquisaRespostas } from "./pages/pesquisaRespostas.js";
 import { producao } from "./pages/producao.js";
+import { cardapioDigital } from "./pages/cardapioDigital.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -67,6 +68,10 @@ const PAGINAS = [
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
   { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número que envia checklist, avisos e confirmações" },
   { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
+
+  // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link
+  // externo por cliente. Uma tela só, com abas — é o que a casa mexe todo dia.
+  { id: "cardapio", modulo: "cardapio-digital", rotulo: "Cardápio", icone: ICONES.caixa, render: cardapioDigital, subtitulo: "Itens, fotos, banners, promoções e os comentários dos clientes" },
 
   { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
   { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
@@ -161,12 +166,12 @@ const MODULOS = [
   {
     id: "cardapio-digital",
     nome: "Cardápio Digital",
-    descricao: "QR code na mesa, cardápio sempre atualizado e pedidos sem fila no balcão.",
+    descricao:
+      "QR code na mesa, cardápio com foto e vídeo, curtidas e comentários dos clientes — e o garçom chamado pelo celular.",
     icone: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z",
-    // O cardápio é um deploy separado, com domínio próprio de cada cliente. O
-    // endereço vem do banco (venue_modulos.url) e o favo abre noutra aba: o
-    // painel continua onde estava, para quem só foi conferir um preço.
-    externo: true,
+    // Foi um deploy separado, com domínio por cliente e link em
+    // venue_modulos.url. Agora é tela do painel e página pública do próprio
+    // Brasa (/cardapio/<casa>); a coluna `url` ficou sem uso.
     pos: { x: -0.75, y: 0.5 },
   },
   {
@@ -603,20 +608,6 @@ function entrarNoModulo(moduloId = "agentes-ia") {
   // guardou "pesquisa" antes disso, e atalho antigo, chegam no lugar certo.
   if (moduloId === "pesquisa" || moduloId === "avaliacoes") moduloId = "clientes";
   const definicao = MODULOS.find((m) => m.id === moduloId);
-
-  // Módulo que mora fora do painel abre noutra aba. O endereço é por cliente:
-  // cada casa tem o seu domínio de cardápio.
-  if (definicao?.externo) {
-    const endereco = modulosDoCliente.get(moduloId)?.url;
-    if (!endereco) {
-      return avisar(
-        `O endereço do ${definicao.nome} deste estabelecimento ainda não foi cadastrado.`,
-        "erro",
-      );
-    }
-    // noopener: sem ele a aba aberta pode mexer nesta pelo window.opener.
-    return void window.open(endereco, "_blank", "noopener");
-  }
 
   // Quem guardou o endereço de uma tela entraria por ela mesmo com o favo
   // apagado. As rotas do servidor são a trava de verdade; isto evita a tela

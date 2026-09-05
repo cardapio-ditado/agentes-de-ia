@@ -17,6 +17,48 @@ import {
 import { decidirReserva } from "./reservationFlow.js";
 import { listNotificationsForReservation } from "./notifications.js";
 import {
+  ErroDoCardapio,
+  LIMITES as LIMITES_DO_CARDAPIO,
+  LIMITE_MIDIA_BYTES,
+  adicionarMidiaAoItem,
+  apagarBanner,
+  apagarCategoria,
+  apagarItem,
+  apagarPromocao,
+  atualizarBanner,
+  atualizarCategoria,
+  atualizarItem,
+  atualizarPromocao,
+  cardapioPublico,
+  chamadosRecentes,
+  chamarGarcom,
+  comentarItem,
+  comentariosLiberados,
+  contarComentariosPendentes,
+  criarBanner,
+  criarCategoria,
+  criarItem,
+  criarPromocao,
+  curtirItem,
+  definirCapaDoItem,
+  listarBannersDoPainel,
+  listarCategoriasDoPainel,
+  listarComentarios,
+  listarItensDoPainel,
+  listarPromocoesDoPainel,
+  moderarComentario,
+  removerMidiaDoItem,
+  reordenar,
+  salvarVariacoes,
+  trocarImagemDaCategoria,
+  trocarMidiaDoBanner,
+  validarComentario,
+  type DadosDaCategoria,
+  type DadosDaPromocao,
+  type DadosDoBanner,
+  type DadosDoItem,
+} from "./cardapioDigital.js";
+import {
   apagarConversa,
   atendimentoDe,
   definirAtendimento,
@@ -672,32 +714,73 @@ async function comErroDePesquisa<T>(acao: () => Promise<T>): Promise<T> {
   }
 }
 
+/** O mesmo tratamento para os erros do cardápio digital. */
+async function comErroDoCardapio<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDoCardapio) {
+      const codigo =
+        e.status === 404 ? "not_found" : e.status === 503 ? "migracao_pendente" : e.status === 429 ? "rate_limited" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
 /**
- * O endereço público da pesquisa desta casa.
+ * Como a casa aparece num endereço público.
  *
  * Pelo slug quando ele é só desta casa; pelo id quando não é. Um QR code é
  * IMPRESSO e colado na mesa: se um segundo cliente do hub escolher o mesmo
- * slug daqui a seis meses, o cartaz da mesa passaria a abrir a pesquisa do
- * vizinho, e ninguém iria descobrir por meses. O id é feio na barra de
- * endereços e nunca fica ambíguo.
+ * slug daqui a seis meses, o cartaz da mesa passaria a abrir a pesquisa (ou o
+ * cardápio) do vizinho, e ninguém iria descobrir por meses. O id é feio na
+ * barra de endereços e nunca fica ambíguo.
  */
+async function identificadorPublico(venue: { id: string; slug: string }): Promise<string> {
+  try {
+    const porSlug = await findVenueBySlug(venue.slug);
+    if (porSlug.id === venue.id) return venue.slug;
+  } catch {
+    /* slug repetido em outra organização: fica o id, que não erra */
+  }
+  return venue.id;
+}
+
+function enderecoBase(): string {
+  return (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
+}
+
+/** O endereço público da pesquisa desta casa. */
 async function enderecoDaPesquisa(
   venue: { id: string; slug: string },
   mesa?: string | null,
 ): Promise<string> {
-  const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
-
-  let identificador = venue.id;
-  try {
-    const porSlug = await findVenueBySlug(venue.slug);
-    if (porSlug.id === venue.id) identificador = venue.slug;
-  } catch {
-    /* slug repetido em outra organização: fica o id, que não erra */
-  }
-
-  const busca = new URLSearchParams({ c: identificador });
+  const busca = new URLSearchParams({ c: await identificadorPublico(venue) });
   if (mesa?.trim()) busca.set("mesa", mesa.trim());
-  return `${base}/pesquisa?${busca}`;
+  return `${enderecoBase()}/pesquisa?${busca}`;
+}
+
+/** O endereço público do cardápio desta casa: /cardapio/<casa>?mesa=7. */
+async function enderecoDoCardapio(
+  venue: { id: string; slug: string },
+  mesa?: string | null,
+): Promise<string> {
+  const caminho = `${enderecoBase()}/cardapio/${encodeURIComponent(await identificadorPublico(venue))}`;
+  return mesa?.trim() ? `${caminho}?mesa=${encodeURIComponent(mesa.trim())}` : caminho;
+}
+
+/**
+ * De onde veio a requisição, para o limite de ritmo das rotas públicas.
+ *
+ * Atrás da Vercel o endereço real está em x-forwarded-for (o primeiro da
+ * lista); direto no servidor, é o do socket. Nenhum dos dois é prova de
+ * identidade — é só a chave do balde de ritmo.
+ */
+function ipDe(req: IncomingMessage): string {
+  const encaminhado = req.headers["x-forwarded-for"];
+  const primeiro = (Array.isArray(encaminhado) ? encaminhado[0] : encaminhado)?.split(",")[0]?.trim();
+  return primeiro || req.socket?.remoteAddress || "desconhecido";
 }
 
 /**
@@ -1209,6 +1292,7 @@ async function roteasApi(
       pesquisa: "pesquisa",
       clientes: "clientes",
       aniversariantes: "clientes",
+      cardapio: "cardapio-digital",
     };
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
@@ -2130,6 +2214,219 @@ async function roteasApi(
       const mesa = url.searchParams.get("mesa");
       const endereco = await enderecoDaPesquisa(venue, mesa);
       return ok(res, { url: endereco, png: await qrcodeDataUrl(endereco), mesa: mesa ?? null });
+    }
+
+    // ---- Cardápio digital: o que a casa mexe ----
+    //
+    // Tudo aqui passa pela trava de módulo lá em cima (recurso "cardapio").
+    // Leitura com reservations:read, escrita com reservations:write — o mesmo
+    // par que separa quem olha de quem mexe no resto do painel.
+    if (recurso === "cardapio") {
+      const acao = p[3] ?? "";
+
+      // GET /v1/venues/:slug/cardapio — tudo que as telas do painel desenham
+      if (metodo === "GET" && p.length === 3) {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const [categorias, itens, banners, promocoes, pendentes, chamados] = await comErroDoCardapio(() =>
+          Promise.all([
+            listarCategoriasDoPainel(venue.id),
+            listarItensDoPainel(venue.id),
+            listarBannersDoPainel(venue.id),
+            listarPromocoesDoPainel(venue.id),
+            contarComentariosPendentes(venue.id),
+            chamadosRecentes(venue.id),
+          ]),
+        );
+        return ok(res, {
+          endereco: await enderecoDoCardapio(venue),
+          categorias,
+          itens,
+          banners,
+          promocoes,
+          comentarios_pendentes: pendentes,
+          chamados,
+        });
+      }
+
+      // GET /v1/venues/:slug/cardapio/qrcode?mesa=7 — o cartaz da mesa
+      if (metodo === "GET" && acao === "qrcode" && p.length === 4) {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const mesa = url.searchParams.get("mesa");
+        const endereco = await enderecoDoCardapio(venue, mesa);
+        return ok(res, { url: endereco, png: await qrcodeDataUrl(endereco), mesa: mesa ?? null });
+      }
+
+      // GET /v1/venues/:slug/cardapio/comentarios?situacao=pending|approved|rejected
+      if (metodo === "GET" && acao === "comentarios" && p.length === 4) {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const situacao = url.searchParams.get("situacao") ?? "pending";
+        if (situacao !== "pending" && situacao !== "approved" && situacao !== "rejected") {
+          throw erro(400, "invalid_request", "situacao precisa ser pending, approved ou rejected.");
+        }
+        return ok(res, await comErroDoCardapio(() => listarComentarios(venue.id, situacao)));
+      }
+
+      // POST /v1/venues/:slug/cardapio/comentarios/:id/liberar|recusar
+      if (metodo === "POST" && acao === "comentarios" && p.length === 6) {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const decisao = p[5] === "liberar" ? "approved" : p[5] === "recusar" ? "rejected" : null;
+        if (!decisao) throw erro(404, "not_found", `Ação "${p[5]}" não existe.`);
+        return ok(
+          res,
+          await comErroDoCardapio(() =>
+            moderarComentario({ venueId: venue.id, id: p[4]!, decisao, quem: chave.name, userId: chave.userId }),
+          ),
+        );
+      }
+
+      // Daqui para baixo é escrita.
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      // PUT /v1/venues/:slug/cardapio/{categorias|itens|banners}/ordem  { ids }
+      if (metodo === "PUT" && p[4] === "ordem" && p.length === 5) {
+        const tabela = acao === "categorias" ? "categories" : acao === "itens" ? "items" : acao === "banners" ? "banners" : null;
+        if (!tabela) throw erro(404, "not_found", "Só categorias, itens e banners têm ordem.");
+        const corpo = await lerJson(req);
+        await comErroDoCardapio(() => reordenar(tabela, venue.id, corpo.ids));
+        return ok(res, { reordenado: true });
+      }
+
+      // ---- categorias ----
+      if (acao === "categorias") {
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as DadosDaCategoria;
+          return ok(res, await comErroDoCardapio(() => criarCategoria(venue.id, corpo)), 201);
+        }
+        if (metodo === "PATCH" && p.length === 5) {
+          const corpo = (await lerJson(req)) as DadosDaCategoria;
+          await comErroDoCardapio(() => atualizarCategoria(venue.id, p[4]!, corpo));
+          return ok(res, { salvo: true });
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          await comErroDoCardapio(() => apagarCategoria(venue.id, p[4]!));
+          return ok(res, { removido: true });
+        }
+        // POST /cardapio/categorias/:id/imagem?media_type=
+        if (metodo === "POST" && p[5] === "imagem" && p.length === 6) {
+          const arquivo = await lerBinario(req, LIMITE_MIDIA_BYTES);
+          return ok(
+            res,
+            await comErroDoCardapio(() =>
+              trocarImagemDaCategoria({
+                venueId: venue.id,
+                categoriaId: p[4]!,
+                arquivo,
+                contentType: url.searchParams.get("media_type") ?? "",
+              }),
+            ),
+          );
+        }
+      }
+
+      // ---- itens ----
+      if (acao === "itens") {
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as DadosDoItem;
+          return ok(res, await comErroDoCardapio(() => criarItem(venue.id, corpo)), 201);
+        }
+        if (metodo === "PATCH" && p.length === 5) {
+          const corpo = (await lerJson(req)) as DadosDoItem;
+          await comErroDoCardapio(() => atualizarItem(venue.id, p[4]!, corpo));
+          return ok(res, { salvo: true });
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          await comErroDoCardapio(() => apagarItem(venue.id, p[4]!));
+          return ok(res, { removido: true });
+        }
+        // PUT /cardapio/itens/:id/variacoes  { grupos: [...] }
+        if (metodo === "PUT" && p[5] === "variacoes" && p.length === 6) {
+          const corpo = await lerJson(req);
+          await comErroDoCardapio(() => salvarVariacoes(venue.id, p[4]!, corpo.grupos));
+          return ok(res, { salvo: true });
+        }
+        // POST /cardapio/itens/:id/midia?media_type=  (corpo cru)
+        if (metodo === "POST" && p[5] === "midia" && p.length === 6) {
+          const arquivo = await lerBinario(req, LIMITE_MIDIA_BYTES);
+          return ok(
+            res,
+            await comErroDoCardapio(() =>
+              adicionarMidiaAoItem({
+                venueId: venue.id,
+                itemId: p[4]!,
+                arquivo,
+                contentType: url.searchParams.get("media_type") ?? "",
+              }),
+            ),
+            201,
+          );
+        }
+        // DELETE /cardapio/itens/:id/midia/:midiaId
+        if (metodo === "DELETE" && p[5] === "midia" && p.length === 7) {
+          await comErroDoCardapio(() => removerMidiaDoItem({ venueId: venue.id, itemId: p[4]!, midiaId: p[6]! }));
+          return ok(res, { removido: true });
+        }
+        // POST /cardapio/itens/:id/midia/:midiaId/capa
+        if (metodo === "POST" && p[5] === "midia" && p[7] === "capa" && p.length === 8) {
+          await comErroDoCardapio(() => definirCapaDoItem({ venueId: venue.id, itemId: p[4]!, midiaId: p[6]! }));
+          return ok(res, { salvo: true });
+        }
+      }
+
+      // ---- banners ----
+      if (acao === "banners") {
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as DadosDoBanner;
+          return ok(res, await comErroDoCardapio(() => criarBanner(venue.id, corpo)), 201);
+        }
+        if (metodo === "PATCH" && p.length === 5) {
+          const corpo = (await lerJson(req)) as DadosDoBanner;
+          await comErroDoCardapio(() => atualizarBanner(venue.id, p[4]!, corpo));
+          return ok(res, { salvo: true });
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          await comErroDoCardapio(() => apagarBanner(venue.id, p[4]!));
+          return ok(res, { removido: true });
+        }
+        // POST /cardapio/banners/:id/midia?media_type=  — foto ou vídeo
+        if (metodo === "POST" && p[5] === "midia" && p.length === 6) {
+          const arquivo = await lerBinario(req, LIMITE_MIDIA_BYTES);
+          return ok(
+            res,
+            await comErroDoCardapio(() =>
+              trocarMidiaDoBanner({
+                venueId: venue.id,
+                bannerId: p[4]!,
+                arquivo,
+                contentType: url.searchParams.get("media_type") ?? "",
+              }),
+            ),
+          );
+        }
+      }
+
+      // ---- promoções ----
+      if (acao === "promocoes") {
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as DadosDaPromocao;
+          return ok(res, await comErroDoCardapio(() => criarPromocao(venue.id, corpo)), 201);
+        }
+        if (metodo === "PATCH" && p.length === 5) {
+          const corpo = (await lerJson(req)) as DadosDaPromocao;
+          await comErroDoCardapio(() => atualizarPromocao(venue.id, p[4]!, corpo));
+          return ok(res, { salvo: true });
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          await comErroDoCardapio(() => apagarPromocao(venue.id, p[4]!));
+          return ok(res, { removido: true });
+        }
+      }
+
+      throw erro(404, "not_found", `Rota ${metodo} /v1/venues/${slug}/cardapio/${p.slice(3).join("/")} não existe.`);
     }
 
     // GET | POST /v1/venues/:slug/pesquisa/convites — mandar a pesquisa ao cliente
@@ -3703,6 +4000,70 @@ async function roteasApi(
     }
   }
 
+  // ---- Cardápio público (QR code da mesa) ----
+  //
+  // Sem chave de API, como a pesquisa: quem abre é o cliente sentado na mesa.
+  // Por aqui só se LÊ o cardápio, e se GRAVA o que é do cliente — curtida,
+  // comentário (que entra pendente) e o chamado do garçom. Cada gravação tem
+  // limite de ritmo por endereço; é o que separa "uma mesa" de "um script".
+  if (p[0] === "cardapio-publico" && p.length >= 2) {
+    const venue = await venueDaPesquisa(p[1]!);
+    if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    // A casa que não contratou (ou cancelou) o cardápio não o exibe: o QR
+    // impresso continuaria abrindo um cardápio de um módulo que não se paga.
+    if (!(await temModulo(venue.id, "cardapio-digital"))) {
+      throw erro(404, "not_found", "Cardápio não disponível.");
+    }
+
+    // GET /v1/cardapio-publico/:casa
+    if (metodo === "GET" && p.length === 2) {
+      const cardapio = await comErroDoCardapio(() => cardapioPublico(venue));
+      return ok(res, { ...cardapio, casa: { ...cardapio.casa, ...marcaDaCasa(venue) } });
+    }
+
+    // GET | POST /v1/cardapio-publico/:casa/itens/:id/comentarios
+    if (p[2] === "itens" && p[4] === "comentarios" && p.length === 5) {
+      if (metodo === "GET") {
+        return ok(res, await comErroDoCardapio(() => comentariosLiberados(venue.id, p[3]!)));
+      }
+      if (metodo === "POST") {
+        if (!LIMITES_DO_CARDAPIO.comentar.permitir(`${ipDe(req)}:${venue.id}`)) {
+          throw erro(429, "rate_limited", "Muitos comentários seguidos. Espere alguns minutos.");
+        }
+        const corpo = await lerJson(req);
+        const dados = await comErroDoCardapio(async () => validarComentario(corpo));
+        return ok(res, await comErroDoCardapio(() => comentarItem({ venueId: venue.id, itemId: p[3]!, ...dados })), 201);
+      }
+    }
+
+    // POST /v1/cardapio-publico/:casa/itens/:id/curtir  { desfazer?: true }
+    if (metodo === "POST" && p[2] === "itens" && p[4] === "curtir" && p.length === 5) {
+      if (!LIMITES_DO_CARDAPIO.curtir.permitir(`${ipDe(req)}:${venue.id}`)) {
+        throw erro(429, "rate_limited", "Calma — muitas curtidas seguidas.");
+      }
+      const corpo = await lerJson(req);
+      return ok(res, await comErroDoCardapio(() => curtirItem({ venueId: venue.id, itemId: p[3]!, desfazer: corpo.desfazer === true })));
+    }
+
+    // POST /v1/cardapio-publico/:casa/garcom  { mesa, pedido }
+    if (metodo === "POST" && p[2] === "garcom" && p.length === 3) {
+      if (!LIMITES_DO_CARDAPIO.garcom.permitir(`${ipDe(req)}:${venue.id}`)) {
+        throw erro(429, "rate_limited", "O garçom já foi chamado. Espere um pouco.");
+      }
+      const corpo = await lerJson(req);
+      return ok(
+        res,
+        await chamarGarcom({
+          venue,
+          mesa: textoOpcional(corpo, "mesa") ?? null,
+          pedido: textoOpcional(corpo, "pedido") ?? null,
+        }),
+      );
+    }
+
+    throw erro(404, "not_found", "Rota do cardápio não existe.");
+  }
+
   // ---- Pesquisa pública (QR code da mesa e link do WhatsApp) ----
   //
   // Sem chave de API: quem responde é o cliente da casa, no celular dele, sem
@@ -4031,7 +4392,11 @@ const PAGINAS_LIMPAS: Record<string, string> = {
 };
 
 async function servirEstatico(res: ServerResponse, caminho: string): Promise<void> {
-  const relativo = PAGINAS_LIMPAS[caminho] ?? caminho.slice(1);
+  // /cardapio/<casa> é a página do cardápio: a casa vai no caminho porque é
+  // o que fica bonito num QR code impresso, e a página lê o slug do endereço.
+  const relativo = caminho.startsWith("/cardapio/")
+    ? "cardapio.html"
+    : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
 
   // normalize resolve "..", e o prefixo é conferido depois — sem isso,
   // "/../.env" escaparia do diretório público.

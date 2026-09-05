@@ -2735,3 +2735,61 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+/* ============ Cardápio digital (painel) ============ */
+
+/* A foto pequena na lista de itens — o mesmo tamanho que o cliente vê. */
+.cardapio-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: linear-gradient(160deg, #ffc46b, #e8552e);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+}
+.cardapio-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Grade das fotos e vídeos do item. */
+.cardapio-midias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+}
+.cardapio-midia { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.cardapio-midia img,
+.cardapio-midia video {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  display: block;
+  background: #000;
+}
+
+/* Prévia do banner: a proporção do cardápio (2:1). */
+.cardapio-banner-previa {
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  display: block;
+  background: #000;
+}
+.cardapio-banner-previa.vazio-previa {
+  display: grid;
+  place-items: center;
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+}
+
+/* Contador de comentários dentro da aba. */
+.aba .nav-contador { margin-left: 6px; }

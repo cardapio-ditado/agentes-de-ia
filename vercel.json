@@ -24,6 +24,10 @@
       "destination": "/pesquisa.html"
     },
     {
+      "source": "/cardapio/:casa",
+      "destination": "/cardapio.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

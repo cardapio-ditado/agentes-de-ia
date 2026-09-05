@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fff6ea" />
+    <title>Cardápio</title>
+    <link rel="icon" type="image/png" href="/img/favicon-brasa-food.png" />
+    <link rel="apple-touch-icon" href="/img/favicon-brasa-food.png" />
+    <style>
+      /* O cardápio é lido de pé ou sentado à mesa, no celular, com pressa e
+         com fome. Base creme quente (cor de pão), a cor da CASA como tinta, e
+         a foto do prato como a cor mais forte da tela — vermelho, laranja e
+         amarelo abrem o apetite; fundo escuro e azul fecham. */
+      :root {
+        --brasa: #ff6b35;
+        --tinta: #c2401a;
+        --traco: #ff6b35;
+        --sobre-marca: #1a0f0a;
+        --fundo: #fff6ea;
+        --faixa: #ffe3d4;
+        --superficie: #ffffff;
+        --superficie-2: #fff0e2;
+        --borda: rgba(90, 40, 10, 0.12);
+        --sombra: 0 1px 3px rgba(120, 50, 10, 0.1);
+        --texto: #1f1c1a;
+        --apoio: #6f665f;
+        --apoio-2: #9a908a;
+        --fonte: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        --largura: 520px;
+      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html { scroll-behavior: smooth; }
+      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; transition: none !important; } }
+      body { margin: 0; background: var(--fundo); color: var(--texto); font: 14px/1.4 var(--fonte); -webkit-font-smoothing: antialiased; min-height: 100dvh; }
+      .app { max-width: var(--largura); margin: 0 auto; position: relative; padding-bottom: 92px; }
+      button { font-family: inherit; }
+      img, video { display: block; }
+
+      /* ---- cabeçalho: perfil ---- */
+      .topo { display: flex; align-items: center; gap: 14px; padding: 14px 16px 10px; }
+      .avatar { width: 64px; height: 64px; border-radius: 50%; padding: 3px; background: linear-gradient(135deg, var(--traco), var(--brasa)); flex: 0 0 auto; }
+      .avatar > div { width: 100%; height: 100%; border-radius: 50%; background: var(--superficie); border: 2px solid var(--fundo); display: grid; place-items: center; overflow: hidden; }
+      .avatar .inicial { width: 100%; height: 100%; display: grid; place-items: center; background: var(--brasa); color: var(--sobre-marca); font-weight: 800; font-size: 24px; }
+      .avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .casa { flex: 1; min-width: 0; }
+      .casa h1 { font-size: 17px; font-weight: 700; margin: 0; line-height: 1.2; }
+      .casa small { display: block; font-size: 12.5px; color: var(--apoio); margin-top: 2px; }
+      .mesa { border: 1px solid var(--borda); background: var(--superficie); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--apoio); white-space: nowrap; }
+      .mesa b { color: var(--texto); }
+
+      /* ---- banners: foto ou vídeo, carrossel ---- */
+      .banners { position: relative; margin: 4px 16px 0; border-radius: 12px; overflow: hidden; aspect-ratio: 2 / 1; background: var(--superficie-2); box-shadow: var(--sombra); }
+      .banners[hidden] { display: none; }
+      .banner { position: absolute; inset: 0; opacity: 0; transition: opacity 0.5s ease; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px 14px; cursor: pointer; }
+      .banner.ativo { opacity: 1; }
+      .banner .midia { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
+      .banner .texto { position: relative; z-index: 1; }
+      .banner .texto::before { content: ""; position: absolute; inset: -50px -14px -12px; background: linear-gradient(to top, rgba(0, 0, 0, 0.78), transparent); z-index: -1; }
+      .banner h2 { font-size: 17px; font-weight: 700; line-height: 1.15; margin: 0; color: #fff; }
+      .banner p { margin: 2px 0 0; font-size: 12.5px; color: #e6e6e6; }
+      .banner .cta { display: inline-block; margin-top: 8px; background: var(--brasa); color: var(--sobre-marca); font-weight: 700; font-size: 12px; padding: 6px 11px; border-radius: 6px; }
+      .selo-video { position: absolute; top: 10px; left: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 5px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 8px; border-radius: 4px; }
+      .selo-video i { width: 0; height: 0; border-left: 6px solid #fff; border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+      .pontos { position: absolute; right: 10px; top: 10px; z-index: 2; display: flex; gap: 4px; }
+      .pontos i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.4); }
+      .pontos i.ativo { background: #fff; width: 14px; border-radius: 3px; }
+
+      /* ---- Comer / Beber ---- */
+      .grupos { display: grid; grid-template-columns: 1fr 1fr; margin: 12px 16px 0; border-bottom: 1px solid var(--borda); }
+      .grupos[hidden] { display: none; }
+      .grupo { appearance: none; border: 0; background: transparent; color: var(--apoio); font-size: 14px; font-weight: 600; padding: 11px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+      .grupo[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--brasa); }
+
+      /* ---- trilho de categorias ---- */
+      .trilho-wrap { position: sticky; top: 0; z-index: 20; background: var(--fundo); padding: 8px 0; border-bottom: 1px solid var(--borda); }
+      .trilho { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; }
+      .trilho::-webkit-scrollbar { display: none; }
+      .cat { flex: 0 0 auto; appearance: none; border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+      .cat[aria-current="true"] { background: var(--brasa); color: var(--sobre-marca); border-color: var(--brasa); }
+      .cat small { font-weight: 500; opacity: 0.65; margin-left: 3px; font-size: 12px; }
+
+      /* ---- seções ---- */
+      .secao { padding: 14px 16px 4px; scroll-margin-top: 54px; }
+      .secao-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 -16px 10px; padding: 10px 16px 10px 13px; background: var(--faixa); border-left: 4px solid var(--brasa); }
+      .secao h2 { font-size: 15px; font-weight: 800; margin: 0; letter-spacing: 0.02em; text-transform: uppercase; color: var(--tinta); }
+      .secao h2 small { font-weight: 500; color: var(--apoio); text-transform: none; letter-spacing: 0; margin-left: 6px; font-size: 12px; }
+      .secao .nota { font-size: 12px; color: var(--apoio); white-space: nowrap; flex: 0 0 auto; }
+      .secao .desc-cat { margin: -4px 0 10px; font-size: 12.5px; color: var(--apoio); }
+
+      /* ---- curtir ---- */
+      .curtir { appearance: none; border: 0; background: transparent; color: var(--texto); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font: 600 12px/1 var(--fonte); padding: 4px; border-radius: 6px; }
+      .curtir svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; transition: transform 0.15s; }
+      .curtir[aria-pressed="true"] svg { fill: #ff3040; stroke: #ff3040; }
+      .curtir:active svg { transform: scale(1.25); }
+      .destaque .curtir { position: absolute; top: 6px; right: 6px; z-index: 1; background: rgba(0, 0, 0, 0.45); color: #fff; border-radius: 999px; padding: 5px; }
+      .destaque .curtir svg { width: 18px; height: 18px; }
+      .item .direita { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+      .item .curtir { color: var(--apoio); }
+      .item .curtir svg { width: 16px; height: 16px; }
+
+      /* destaques: cartão grande com foto */
+      .destaques { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 6px; }
+      .destaque { position: relative; border-radius: 10px; overflow: hidden; background: var(--superficie); aspect-ratio: 1; cursor: pointer; box-shadow: var(--sombra); }
+      .destaque .foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .destaque .info { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 10px; background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0)); }
+      .destaque .nome { font-weight: 600; font-size: 13.5px; line-height: 1.2; color: #fff; }
+      .destaque .preco { font-weight: 700; color: var(--traco); font-size: 14px; margin-top: 1px; font-variant-numeric: tabular-nums; }
+      .destaque .preco s { color: rgba(255, 255, 255, 0.6); font-size: 11px; font-weight: 500; margin-right: 6px; }
+      .destaque .tag { position: absolute; top: 8px; left: 8px; background: var(--brasa); color: var(--sobre-marca); font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; z-index: 1; }
+
+      /* lista: foto pequena do lado */
+      .itens { display: flex; flex-direction: column; }
+      .item { display: grid; grid-template-columns: 64px 1fr auto; column-gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--borda); cursor: pointer; }
+      .item:last-child { border-bottom: 0; }
+      .item .thumb { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--superficie-2); box-shadow: var(--sombra); }
+      .item .thumb .foto { width: 100%; height: 100%; object-fit: cover; }
+      .item .texto { min-width: 0; }
+      .item .nome { font-weight: 600; font-size: 14.5px; line-height: 1.25; }
+      .item .desc { font-size: 12.5px; color: var(--apoio); line-height: 1.35; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .item .preco { font-weight: 700; color: var(--tinta); font-size: 14px; font-variant-numeric: tabular-nums; text-align: right; line-height: 1.2; }
+      .item .preco s { display: block; color: var(--apoio-2); font-size: 11.5px; font-weight: 500; }
+      .selos { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+      .selo { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--faixa); color: var(--tinta); }
+      .selo.hoje { background: var(--brasa); color: var(--sobre-marca); }
+
+      /* sem foto: a inicial do prato num fundo quente da categoria */
+      .arte { width: 100%; height: 100%; display: grid; place-items: center; font-weight: 800; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); font-size: 22px; }
+      .destaque .arte { position: absolute; inset: 0; font-size: 44px; }
+      .arte.comer { background: linear-gradient(160deg, #ffc46b, #e8552e); }
+      .arte.beber { background: linear-gradient(160deg, #ffe08a, #f2a11c); }
+
+      /* ---- barra de baixo ---- */
+      .fab { position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; display: flex; justify-content: center; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--fundo); border-top: 1px solid var(--borda); }
+      .fab button { appearance: none; border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); font-size: 14px; font-weight: 600; padding: 11px 16px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex: 1; max-width: 244px; }
+      .fab button.principal { background: var(--brasa); color: var(--sobre-marca); border-color: var(--brasa); }
+      .fab button:disabled { opacity: 0.7; cursor: default; }
+      .fab svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* ---- busca ---- */
+      .busca { position: fixed; inset: 0; z-index: 40; background: var(--fundo); display: none; flex-direction: column; padding: 14px 16px; max-width: var(--largura); margin: 0 auto; }
+      .busca.aberta { display: flex; }
+      .busca .linha { display: flex; gap: 8px; align-items: center; }
+      .busca input { flex: 1; font: 500 15px/1.2 var(--fonte); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); outline: none; }
+      .busca input:focus { border-color: var(--brasa); }
+      .busca .fechar { background: none; border: 0; color: var(--texto); font: 600 14px var(--fonte); cursor: pointer; padding: 8px 4px; }
+      .busca .resultados { overflow-y: auto; margin-top: 4px; }
+      .busca .vazio { color: var(--apoio); text-align: center; padding: 40px 0; }
+
+      /* ---- folha do item ---- */
+      .veu { position: fixed; inset: 0; background: rgba(60, 20, 0, 0.45); z-index: 50; display: none; }
+      .veu.aberta { display: block; }
+      .folha { position: fixed; left: 50%; transform: translate(-50%, 100%); bottom: 0; width: 100%; max-width: var(--largura); max-height: 92dvh; background: var(--fundo); border-radius: 16px 16px 0 0; z-index: 60; overflow-y: auto; transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+      .folha.aberta { transform: translate(-50%, 0); }
+      .folha .alca { width: 36px; height: 4px; border-radius: 2px; background: var(--borda); margin: 10px auto 0; }
+      .galeria { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-top: 10px; }
+      .galeria::-webkit-scrollbar { display: none; }
+      .galeria .quadro { flex: 0 0 100%; position: relative; scroll-snap-align: start; aspect-ratio: 1; background: var(--superficie-2); }
+      .galeria .quadro .foto, .galeria .quadro video { width: 100%; height: 100%; object-fit: cover; }
+      .galeria .quadro .arte { font-size: 72px; }
+      .galeria .selo-video { top: 12px; left: 16px; }
+      .folha .corpo { padding: 14px 16px 20px; }
+      .folha .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+      .folha h3 { font-size: 20px; font-weight: 700; margin: 0; line-height: 1.2; }
+      .folha .preco-grande { font-weight: 700; font-size: 20px; color: var(--tinta); margin-top: 2px; font-variant-numeric: tabular-nums; }
+      .folha .preco-grande s { color: var(--apoio-2); font-size: 14px; font-weight: 500; margin-right: 8px; }
+      .folha .desc { color: var(--apoio); margin: 8px 0 0; font-size: 14px; white-space: pre-line; }
+      .folha .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+      .folha .meta span { font-size: 12px; color: var(--apoio); border: 1px solid var(--borda); padding: 4px 8px; border-radius: 6px; }
+      .folha .meta span.alerg { border-color: var(--tinta); color: var(--tinta); }
+      .grupo-var { margin-top: 18px; }
+      .grupo-var h4 { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--apoio); margin: 0 0 8px; }
+      .grupo-var h4 small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--apoio-2); margin-left: 6px; }
+      .opcoes { display: flex; flex-direction: column; gap: 6px; }
+      .opcao { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--borda); background: var(--superficie); cursor: pointer; }
+      .opcao input { accent-color: var(--brasa); width: 18px; height: 18px; }
+      .opcao label { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; font-weight: 500; }
+      .opcao .mais { color: var(--tinta); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
+      .folha .rodape { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--fundo) 30%); padding: 16px 0 0; margin-top: 16px; display: flex; gap: 8px; align-items: center; }
+      .folha .total { flex: 1; font-weight: 700; font-size: 18px; color: var(--tinta); font-variant-numeric: tabular-nums; }
+      .folha .total small { display: block; font-weight: 500; font-size: 11.5px; color: var(--apoio); }
+      .botao { appearance: none; border: 0; background: var(--brasa); color: var(--sobre-marca); font-size: 14px; font-weight: 700; padding: 13px 18px; border-radius: 8px; cursor: pointer; }
+      .botao:disabled { opacity: 0.7; cursor: default; }
+      .botao.quieto { background: var(--superficie); color: var(--texto); border: 1px solid var(--borda); }
+
+      /* ---- comentários ---- */
+      .comentarios { margin-top: 22px; border-top: 1px solid var(--borda); padding-top: 14px; }
+      .comentarios h4 { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--apoio); margin: 0 0 10px; display: flex; justify-content: space-between; }
+      .comentarios h4 small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--apoio-2); }
+      .comentario { display: grid; grid-template-columns: 32px 1fr; gap: 10px; padding: 8px 0; }
+      .comentario .bola { width: 32px; height: 32px; border-radius: 50%; background: var(--superficie-2); display: grid; place-items: center; font-weight: 700; font-size: 13px; color: var(--apoio); }
+      .comentario .quem { font-weight: 600; font-size: 13px; }
+      .comentario .quem small { font-weight: 400; color: var(--apoio-2); margin-left: 6px; }
+      .comentario .estrelas { color: var(--tinta); font-size: 12px; letter-spacing: 1px; }
+      .comentario p { margin: 2px 0 0; font-size: 13.5px; color: var(--texto); white-space: pre-line; }
+      .comentario.pendente { opacity: 0.7; }
+      .comentario.pendente .aviso { display: inline-block; margin-top: 4px; font-size: 11px; color: var(--apoio); border: 1px dashed var(--borda); padding: 2px 6px; border-radius: 4px; }
+      .escrever { margin-top: 10px; display: grid; gap: 8px; }
+      .escrever input, .escrever textarea { width: 100%; font: 14px/1.4 var(--fonte); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); outline: none; resize: vertical; }
+      .escrever input:focus, .escrever textarea:focus { border-color: var(--brasa); }
+      .escrever .nota-estrelas { display: flex; gap: 2px; }
+      .escrever .nota-estrelas button { appearance: none; border: 0; background: transparent; color: var(--apoio-2); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px; }
+      .escrever .nota-estrelas button.acesa { color: var(--tinta); }
+      .escrever .linha { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+      .escrever .linha small { color: var(--apoio-2); font-size: 11.5px; }
+      .escrever .botao { padding: 10px 14px; font-size: 13px; }
+
+      /* ---- avisos e estados ---- */
+      .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--texto); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 70; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); max-width: calc(100% - 32px); text-align: center; }
+      .toast.erro { background: #b3261e; }
+      .estado { padding: 60px 24px; text-align: center; color: var(--apoio); }
+      .estado h2 { color: var(--texto); font-size: 18px; margin: 0 0 6px; }
+      .rodape-brasa { text-align: center; color: var(--apoio-2); font-size: 11px; padding: 24px 16px 0; }
+      .rodape-brasa a { color: inherit; }
+      :focus-visible { outline: 2px solid var(--brasa); outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topo" hidden id="topo">
+        <div class="avatar"><div id="avatar"></div></div>
+        <div class="casa">
+          <h1 id="nome-casa"></h1>
+          <small id="sub-casa"></small>
+        </div>
+        <div class="mesa" id="mesa" hidden></div>
+      </header>
+
+      <section class="banners" id="banners" aria-label="Destaques da casa" hidden></section>
+      <div class="grupos" role="tablist" id="grupos" hidden></div>
+      <div class="trilho-wrap" id="trilho-wrap" hidden><nav class="trilho" id="trilho" aria-label="Categorias"></nav></div>
+      <main id="cardapio"><div class="estado" id="carregando">Carregando o cardápio…</div></main>
+      <p class="rodape-brasa" id="rodape" hidden>cardápio digital por <a href="https://brasafood.app" rel="noopener">Brasa Food</a></p>
+    </div>
+
+    <div class="fab" id="fab" hidden>
+      <button type="button" id="abrir-busca"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>Buscar</button>
+      <button type="button" class="principal" id="chamar">Chamar o garçom</button>
+    </div>
+
+    <div class="busca" id="busca" role="dialog" aria-label="Buscar no cardápio">
+      <div class="linha">
+        <input type="search" id="campo-busca" placeholder="Picanha, chopp, sem glúten…" autocomplete="off" />
+        <button type="button" class="fechar" id="fechar-busca">Cancelar</button>
+      </div>
+      <div class="resultados" id="resultados"></div>
+    </div>
+
+    <div class="veu" id="veu"></div>
+    <div class="folha" id="folha" role="dialog" aria-modal="true"></div>
+
+    <script>
+      /* ================= a marca da casa veste a página ================= */
+      // A mesma conta de src/marca.ts, feita aqui para a base CLARA: a cor da
+      // casa escurece até ler sobre o creme (texto, preço) e clareia até ler
+      // sobre a foto escura (preço no cartão).
+      function luminancia(hex) {
+        const canal = (i) => { const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+        return 0.2126 * canal(0) + 0.7152 * canal(1) + 0.0722 * canal(2);
+      }
+      const textoSobre = (hex) => (luminancia(hex) > 0.179 ? "#1a1a1a" : "#ffffff");
+      function tingir(base, hex, quanto) {
+        const m = (i) => Math.round(parseInt(base.slice(1 + i * 2, 3 + i * 2), 16) * (1 - quanto) + parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) * quanto).toString(16).padStart(2, "0");
+        return `#${m(0)}${m(1)}${m(2)}`;
+      }
+      const contrasteEntre = (a, b) => { const la = luminancia(a), lb = luminancia(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+      function corLegivelSobre(hex, fundo, minimo, alvo) {
+        let atual = hex;
+        for (let p = 0; p < 20; p += 1) { if (contrasteEntre(atual, fundo) >= minimo) return atual; atual = tingir(atual, alvo, 0.08); }
+        return atual;
+      }
+      function vestirDaCasa(cor) {
+        if (!/^#[0-9a-f]{6}$/i.test(cor || "")) return;
+        const r = document.documentElement.style;
+        const CREME = "#fff6ea";
+        const fundo = tingir(CREME, cor, 0.06);
+        r.setProperty("--brasa", cor);
+        r.setProperty("--sobre-marca", textoSobre(cor));
+        r.setProperty("--fundo", fundo);
+        r.setProperty("--faixa", tingir(CREME, cor, 0.18));
+        r.setProperty("--superficie-2", tingir("#ffffff", cor, 0.08));
+        r.setProperty("--tinta", corLegivelSobre(cor, fundo, 4.5, "#000000"));
+        r.setProperty("--traco", corLegivelSobre(cor, "#1a1a1a", 3, "#ffffff"));
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", fundo);
+      }
+
+      /* ================= estado ================= */
+      const BRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      const CASA = decodeURIComponent(location.pathname.split("/")[2] || "");
+      const MESA = new URLSearchParams(location.search).get("mesa");
+      const API = `/v1/cardapio-publico/${encodeURIComponent(CASA)}`;
+      const GUARDA_CURTIDAS = `cardapio.curtidas.${CASA}`;
+      const GUARDA_PENDENTES = `cardapio.comentarios.${CASA}`;
+
+      let DADOS = null;
+      let ITENS = [];
+      let CATEGORIAS = [];
+      let grupoAtual = "comer";
+      const catDe = (id) => CATEGORIAS.find((c) => c.id === id);
+      const grupoDoItem = (i) => catDe(i.categoria_id)?.grupo || "comer";
+      const precoHoje = (i) => (i.promocao ? i.promocao.preco : i.preco);
+      const inicialDe = (nome) => (String(nome).trim()[0] || "•").toUpperCase();
+
+      const $ = (id) => document.getElementById(id);
+      const escapar = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+      function toast(texto, erro = false) {
+        const t = document.createElement("div");
+        t.className = "toast" + (erro ? " erro" : "");
+        t.textContent = texto;
+        document.body.append(t);
+        setTimeout(() => t.remove(), 3200);
+      }
+
+      async function api(caminho, opcoes = {}) {
+        const r = await fetch(`${API}${caminho}`, {
+          ...opcoes,
+          headers: { ...(opcoes.body ? { "content-type": "application/json" } : {}), ...(opcoes.headers || {}) },
+        });
+        let corpo = null;
+        try { corpo = await r.json(); } catch { /* sem corpo */ }
+        if (!r.ok || corpo?.success === false) {
+          const e = new Error(corpo?.error?.message || `Falha (${r.status}).`);
+          e.status = r.status; e.code = corpo?.error?.code;
+          throw e;
+        }
+        return corpo.data;
+      }
+
+      /* ================= curtidas ================= */
+      let minhasCurtidas = new Set();
+      try { minhasCurtidas = new Set(JSON.parse(localStorage.getItem(GUARDA_CURTIDAS) || "[]")); } catch { /* sem memória */ }
+      const CORACAO = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 7.8 3.6 4 7.3 4c2 0 3.5 1 4.7 2.6C13.2 5 14.7 4 16.7 4c3.7 0 6.3 3.8 4.8 7.8C19.5 16.4 12 21 12 21z"/></svg>';
+      const botaoCurtir = (i, comNumero = true) =>
+        `<button type="button" class="curtir" data-curtir="${i.id}" aria-pressed="${minhasCurtidas.has(i.id)}" aria-label="Curtir">${CORACAO}${comNumero ? `<span>${i.curtidas}</span>` : ""}</button>`;
+
+      function pintarCurtida(i) {
+        document.querySelectorAll(`[data-curtir="${i.id}"]`).forEach((b) => {
+          b.setAttribute("aria-pressed", String(minhasCurtidas.has(i.id)));
+          const n = b.querySelector("span"); if (n) n.textContent = i.curtidas;
+        });
+      }
+
+      async function alternarCurtida(id) {
+        const i = ITENS.find((x) => x.id === id);
+        if (!i) return;
+        const desfazer = minhasCurtidas.has(id);
+        // A tela responde na hora; o servidor confirma depois.
+        if (desfazer) { minhasCurtidas.delete(id); i.curtidas = Math.max(0, i.curtidas - 1); }
+        else { minhasCurtidas.add(id); i.curtidas += 1; }
+        try { localStorage.setItem(GUARDA_CURTIDAS, JSON.stringify([...minhasCurtidas])); } catch { /* sem memória */ }
+        pintarCurtida(i);
+        try {
+          const r = await api(`/itens/${id}/curtir`, { method: "POST", body: JSON.stringify({ desfazer }) });
+          i.curtidas = r.curtidas;
+          pintarCurtida(i);
+        } catch (e) {
+          // Volta atrás: a curtida não valeu.
+          if (desfazer) { minhasCurtidas.add(id); i.curtidas += 1; } else { minhasCurtidas.delete(id); i.curtidas = Math.max(0, i.curtidas - 1); }
+          try { localStorage.setItem(GUARDA_CURTIDAS, JSON.stringify([...minhasCurtidas])); } catch { /* sem memória */ }
+          pintarCurtida(i);
+          toast(e.message, true);
+        }
+      }
+
+      function ligarCliques(raiz, aoAbrir) {
+        raiz.querySelectorAll("[data-curtir]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); alternarCurtida(b.dataset.curtir); }));
+        raiz.querySelectorAll("[data-id]").forEach((el) => {
+          el.addEventListener("click", () => aoAbrir(el.dataset.id));
+          el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); aoAbrir(el.dataset.id); } });
+        });
+      }
+
+      /* ================= desenho ================= */
+      const foto = (i, classe = "foto") =>
+        i.capa
+          ? `<img class="${classe}" src="${escapar(i.capa)}" alt="" loading="lazy" decoding="async">`
+          : `<div class="arte ${grupoDoItem(i)}">${escapar(inicialDe(i.nome))}</div>`;
+
+      function selosDe(i) {
+        const s = [];
+        if (i.promocao) s.push(`<span class="selo hoje">${escapar(i.promocao.nome || "hoje")}</span>`);
+        for (const t of i.etiquetas.slice(0, 2)) s.push(`<span class="selo">${escapar(t)}</span>`);
+        return s.length ? `<span class="selos">${s.join("")}</span>` : "";
+      }
+      const precoHtml = (i) => (i.promocao ? `<s>${BRL(i.preco)}</s>${BRL(i.promocao.preco)}` : BRL(i.preco));
+      const linhaItem = (i, seloExtra = "") => `
+        <div class="item" role="button" tabindex="0" data-id="${i.id}">
+          <div class="thumb">${foto(i)}</div>
+          <div class="texto"><div class="nome">${escapar(i.nome)}${seloExtra || selosDe(i)}</div><div class="desc">${escapar(i.descricao)}</div></div>
+          <div class="direita"><div class="preco">${precoHtml(i)}</div>${botaoCurtir(i)}</div>
+        </div>`;
+
+      function desenharCasa() {
+        const casa = DADOS.casa;
+        document.title = `Cardápio · ${casa.nome}`;
+        $("nome-casa").textContent = casa.nome;
+        const partes = [casa.cidade, casa.horario_hoje ? `hoje ${casa.horario_hoje}` : null].filter(Boolean);
+        $("sub-casa").textContent = partes.join(" · ");
+        const avatar = $("avatar");
+        avatar.innerHTML = "";
+        if (casa.logo_url) {
+          const img = document.createElement("img");
+          img.src = casa.logo_url; img.alt = casa.nome;
+          img.onerror = () => { avatar.innerHTML = `<div class="inicial">${escapar(inicialDe(casa.nome))}</div>`; };
+          avatar.append(img);
+        } else {
+          avatar.innerHTML = `<div class="inicial">${escapar(inicialDe(casa.nome))}</div>`;
+        }
+        if (MESA) { $("mesa").innerHTML = `mesa <b>${escapar(MESA)}</b>`; $("mesa").hidden = false; }
+        $("topo").hidden = false;
+      }
+
+      /* ---- banners ---- */
+      let bannerAtual = 0;
+      let bannerTimer = null;
+      function desenharBanners() {
+        const caixa = $("banners");
+        caixa.innerHTML = "";
+        const lista = DADOS.banners;
+        if (!lista.length) { caixa.hidden = true; return; }
+        lista.forEach((b, n) => {
+          const el = document.createElement("article");
+          el.className = "banner" + (n === 0 ? " ativo" : "");
+          const midia = b.video
+            ? `<video class="midia" src="${escapar(b.video)}" ${b.imagem ? `poster="${escapar(b.imagem)}"` : ""} muted autoplay loop playsinline preload="metadata"></video><span class="selo-video"><i></i>vídeo</span>`
+            : `<img class="midia" src="${escapar(b.imagem)}" alt="" loading="${n === 0 ? "eager" : "lazy"}">`;
+          el.innerHTML = `${midia}<div class="texto">${b.titulo ? `<h2>${escapar(b.titulo)}</h2>` : ""}${b.subtitulo ? `<p>${escapar(b.subtitulo)}</p>` : ""}${b.chamada ? `<span class="cta">${escapar(b.chamada)}</span>` : ""}</div>`;
+          el.addEventListener("click", () => seguirBanner(b));
+          caixa.append(el);
+        });
+        if (lista.length > 1) {
+          const pontos = document.createElement("div");
+          pontos.className = "pontos";
+          lista.forEach((_, n) => { const i = document.createElement("i"); if (n === 0) i.className = "ativo"; pontos.append(i); });
+          caixa.append(pontos);
+          clearInterval(bannerTimer);
+          bannerTimer = setInterval(() => mostrarBanner(bannerAtual + 1), 5500);
+        }
+        caixa.hidden = false;
+      }
+      function mostrarBanner(n) {
+        const lista = DADOS.banners;
+        bannerAtual = (n + lista.length) % lista.length;
+        $("banners").querySelectorAll(".banner").forEach((el, k) => el.classList.toggle("ativo", k === bannerAtual));
+        $("banners").querySelectorAll(".pontos i").forEach((el, k) => el.classList.toggle("ativo", k === bannerAtual));
+      }
+      let toqueX = null;
+      $("banners").addEventListener("touchstart", (e) => { toqueX = e.touches[0].clientX; }, { passive: true });
+      $("banners").addEventListener("touchend", (e) => {
+        if (toqueX === null) return;
+        const dx = e.changedTouches[0].clientX - toqueX;
+        if (Math.abs(dx) > 40 && DADOS.banners.length > 1) { clearInterval(bannerTimer); mostrarBanner(bannerAtual + (dx < 0 ? 1 : -1)); }
+        toqueX = null;
+      });
+      function seguirBanner(b) {
+        if (b.link_tipo === "item") { const i = ITENS.find((x) => x.id === b.link_valor); if (i) abrirItem(i.id); }
+        else if (b.link_tipo === "category") irPara(b.link_valor);
+        else if (b.link_tipo === "external" && /^https:\/\//.test(b.link_valor)) window.open(b.link_valor, "_blank", "noopener");
+      }
+
+      /* ---- grupos, trilho e seções ---- */
+      function desenharGrupos() {
+        const grupos = $("grupos");
+        grupos.innerHTML = "";
+        const temBeber = CATEGORIAS.some((c) => c.grupo === "beber");
+        const temComer = CATEGORIAS.some((c) => c.grupo === "comer");
+        if (!(temBeber && temComer)) { grupos.hidden = true; grupoAtual = temBeber ? "beber" : "comer"; return; }
+        for (const [id, rotulo] of [["comer", "Comer"], ["beber", "Beber"]]) {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "grupo"; b.setAttribute("role", "tab"); b.textContent = rotulo;
+          b.setAttribute("aria-selected", String(id === grupoAtual));
+          b.addEventListener("click", () => { grupoAtual = id; desenhar(); window.scrollTo({ top: grupos.offsetTop - 8 }); });
+          grupos.append(b);
+        }
+        grupos.hidden = false;
+      }
+
+      function desenhar() {
+        $("grupos").querySelectorAll(".grupo").forEach((b, n) => b.setAttribute("aria-selected", String(["comer", "beber"][n] === grupoAtual)));
+        const cats = CATEGORIAS.filter((c) => c.grupo === grupoAtual && ITENS.some((i) => i.categoria_id === c.id));
+        const soltos = ITENS.filter((i) => !catDe(i.categoria_id));
+        const trilho = $("trilho");
+        const cardapio = $("cardapio");
+
+        trilho.innerHTML = "";
+        for (const c of cats) {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "cat"; b.dataset.cat = c.id;
+          b.innerHTML = `${escapar(c.nome)}<small>${ITENS.filter((i) => i.categoria_id === c.id).length}</small>`;
+          b.addEventListener("click", () => irPara(c.id));
+          trilho.append(b);
+        }
+        $("trilho-wrap").hidden = cats.length < 2;
+
+        cardapio.innerHTML = "";
+        const secoes = cats.map((c) => ({ c, itens: ITENS.filter((i) => i.categoria_id === c.id) }));
+        if (grupoAtual === "comer" && soltos.length) secoes.push({ c: { id: "outros", nome: "Outros", descricao: "" }, itens: soltos });
+        if (!secoes.length) {
+          cardapio.innerHTML = '<div class="estado"><h2>Cardápio em montagem</h2>Volte daqui a pouco.</div>';
+          return;
+        }
+        for (const { c, itens } of secoes) {
+          const destaques = itens.filter((i) => i.destaque);
+          const resto = itens.filter((i) => !i.destaque);
+          const sec = document.createElement("section");
+          sec.className = "secao"; sec.id = "cat-" + c.id;
+          sec.innerHTML = `
+            <div class="secao-cab"><h2>${escapar(c.nome)}<small>${itens.length} ${itens.length === 1 ? "item" : "itens"}</small></h2></div>
+            ${c.descricao ? `<p class="desc-cat">${escapar(c.descricao)}</p>` : ""}
+            ${destaques.length ? `<div class="destaques">${destaques.map((i) => `
+              <div class="destaque" role="button" tabindex="0" data-id="${i.id}">
+                ${foto(i)}
+                ${i.promocao ? `<span class="tag">${escapar(i.promocao.nome || "hoje")}</span>` : ""}
+                ${botaoCurtir(i, false)}
+                <div class="info"><div class="nome">${escapar(i.nome)}</div><div class="preco">${precoHtml(i)}</div></div>
+              </div>`).join("")}</div>` : ""}
+            <div class="itens">${resto.map((i) => linhaItem(i)).join("")}</div>`;
+          cardapio.append(sec);
+        }
+        ligarCliques(cardapio, abrirItem);
+        observarSecoes();
+      }
+
+      function irPara(catId) {
+        const c = catDe(catId);
+        if (c && c.grupo !== grupoAtual) { grupoAtual = c.grupo; desenhar(); }
+        const alvo = document.getElementById("cat-" + catId);
+        if (alvo) alvo.scrollIntoView({ block: "start" });
+      }
+
+      let observador = null;
+      function observarSecoes() {
+        if (observador) observador.disconnect();
+        observador = new IntersectionObserver((entradas) => {
+          const visivel = entradas.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          if (!visivel) return;
+          const id = visivel.target.id.replace("cat-", "");
+          $("trilho").querySelectorAll(".cat").forEach((b) => {
+            const atual = b.dataset.cat === id;
+            b.setAttribute("aria-current", String(atual));
+            if (atual) b.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+          });
+        }, { rootMargin: "-60px 0px -60% 0px", threshold: 0 });
+        $("cardapio").querySelectorAll(".secao").forEach((s) => observador.observe(s));
+      }
+
+      /* ---- busca ---- */
+      const semAcento = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      $("abrir-busca").addEventListener("click", () => { $("busca").classList.add("aberta"); $("campo-busca").value = ""; $("resultados").innerHTML = ""; setTimeout(() => $("campo-busca").focus(), 50); });
+      $("fechar-busca").addEventListener("click", () => $("busca").classList.remove("aberta"));
+      $("campo-busca").addEventListener("input", () => {
+        const q = semAcento($("campo-busca").value.trim());
+        const resultados = $("resultados");
+        resultados.innerHTML = "";
+        if (q.length < 2) return;
+        const achados = ITENS.filter((i) => semAcento(`${i.nome} ${i.descricao} ${i.etiquetas.join(" ")} ${catDe(i.categoria_id)?.nome || ""}`).includes(q));
+        if (!achados.length) { resultados.innerHTML = '<p class="vazio">Nada com esse nome.</p>'; return; }
+        const lista = document.createElement("div"); lista.className = "itens";
+        lista.innerHTML = achados.map((i) => linhaItem(i, `<span class="selos"><span class="selo">${escapar(catDe(i.categoria_id)?.nome || "")}</span></span>`)).join("");
+        ligarCliques(lista, (id) => { $("busca").classList.remove("aberta"); abrirItem(id); });
+        resultados.append(lista);
+      });
+
+      /* ---- chamar o garçom ---- */
+      async function chamarGarcom(pedido = null, botao = $("chamar")) {
+        const original = botao.textContent;
+        botao.disabled = true;
+        try {
+          const r = await api("/garcom", { method: "POST", body: JSON.stringify({ mesa: MESA, pedido }) });
+          botao.textContent = "Chamado ✓";
+          toast(r.avisado ? "A equipe foi avisada. Já já alguém vem." : "Chamado registrado. Se demorar, acene para a equipe.");
+        } catch (e) {
+          toast(e.message, true);
+          botao.textContent = original;
+          botao.disabled = false;
+          return;
+        }
+        setTimeout(() => { botao.textContent = original; botao.disabled = false; }, 20_000);
+      }
+      $("chamar").addEventListener("click", () => chamarGarcom());
+
+      /* ---- folha do item ---- */
+      const veu = $("veu");
+      const folha = $("folha");
+      function fecharFolha() {
+        folha.classList.remove("aberta"); veu.classList.remove("aberta");
+        folha.querySelectorAll("video").forEach((v) => v.pause());
+      }
+      veu.addEventListener("click", fecharFolha);
+
+      function abrirItem(id) {
+        const i = ITENS.find((x) => x.id === id);
+        if (!i) return;
+        const c = catDe(i.categoria_id);
+        const quadros = i.midias.length
+          ? i.midias.map((m) => m.tipo === "video"
+              ? `<div class="quadro"><video src="${escapar(m.url)}" muted autoplay loop playsinline preload="metadata"></video><span class="selo-video"><i></i>vídeo</span></div>`
+              : `<div class="quadro"><img class="foto" src="${escapar(m.url)}" alt="" loading="lazy"></div>`)
+          : [`<div class="quadro">${foto(i)}</div>`];
+        folha.innerHTML = `
+          <div class="alca"></div>
+          <div class="galeria">${quadros.join("")}</div>
+          <div class="corpo">
+            <div class="cab">
+              <div><h3>${escapar(i.nome)}</h3><div class="preco-grande">${i.promocao ? `<s>${BRL(i.preco)}</s>` : ""}<span>${BRL(precoHoje(i))}</span></div></div>
+              ${botaoCurtir(i)}
+            </div>
+            ${i.descricao ? `<p class="desc">${escapar(i.descricao)}</p>` : ""}
+            <div class="meta">
+              ${c ? `<span>${escapar(c.nome)}</span>` : ""}
+              ${i.serve ? `<span>serve ${i.serve}</span>` : ""}
+              ${i.etiquetas.map((t) => `<span>${escapar(t)}</span>`).join("")}
+              ${i.alergenicos.map((a) => `<span class="alerg">contém ${escapar(a)}</span>`).join("")}
+            </div>
+            ${i.variacoes.map((g, gi) => `
+              <div class="grupo-var">
+                <h4>${escapar(g.nome)}<small>${g.obrigatorio ? "escolha 1" : "opcional"}</small></h4>
+                <div class="opcoes">${g.opcoes.map((o, oi) => `
+                  <div class="opcao">
+                    <label><input type="${g.obrigatorio ? "radio" : "checkbox"}" name="g${gi}" value="${o.adicional}" data-nome="${escapar(o.nome)}" ${g.obrigatorio && oi === 0 ? "checked" : ""}>${escapar(o.nome)}</label>
+                    ${o.adicional ? `<span class="mais">${o.adicional > 0 ? "+ " : "− "}${BRL(Math.abs(o.adicional))}</span>` : ""}
+                  </div>`).join("")}</div>
+              </div>`).join("")}
+            <div class="comentarios" id="comentarios"><p class="muted" style="color:var(--apoio);font-size:13px">Carregando comentários…</p></div>
+            <div class="rodape">
+              <div class="total"><small>total</small><span id="total-vivo">${BRL(precoHoje(i))}</span></div>
+              <button type="button" class="botao quieto" id="fechar-folha">Voltar</button>
+              <button type="button" class="botao" id="pedir">Pedir ao garçom</button>
+            </div>
+          </div>`;
+        const escolhas = () => [...folha.querySelectorAll(".opcao input:checked")].map((el) => el.dataset.nome);
+        const recalc = () => {
+          let total = precoHoje(i);
+          folha.querySelectorAll(".opcao input:checked").forEach((el) => { total += Number(el.value); });
+          $("total-vivo").textContent = BRL(total);
+        };
+        folha.querySelectorAll(".opcao input").forEach((el) => el.addEventListener("change", recalc));
+        $("fechar-folha").addEventListener("click", fecharFolha);
+        $("pedir").addEventListener("click", () => {
+          const detalhe = escolhas();
+          chamarGarcom(`${i.nome}${detalhe.length ? ` (${detalhe.join(", ")})` : ""}`, $("pedir"));
+        });
+        folha.querySelectorAll("[data-curtir]").forEach((b) => b.addEventListener("click", () => alternarCurtida(b.dataset.curtir)));
+        veu.classList.add("aberta");
+        folha.scrollTop = 0;
+        requestAnimationFrame(() => folha.classList.add("aberta"));
+        carregarComentarios(i);
+      }
+
+      /* ---- comentários ---- */
+      let meusPendentes = {};
+      try { meusPendentes = JSON.parse(localStorage.getItem(GUARDA_PENDENTES) || "{}"); } catch { /* sem memória */ }
+      const estrelas = (n) => (n ? "★".repeat(n) + "☆".repeat(5 - n) : "");
+      function quando(iso) {
+        const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+        if (dias <= 0) return "hoje";
+        if (dias === 1) return "ontem";
+        if (dias < 7) return `há ${dias} dias`;
+        if (dias < 30) return `há ${Math.floor(dias / 7)} sem.`;
+        return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+      }
+
+      async function carregarComentarios(i) {
+        let liberados = [];
+        try { liberados = await api(`/itens/${i.id}/comentarios`); } catch { /* fica só o formulário */ }
+        desenharComentarios(i, liberados);
+      }
+
+      function desenharComentarios(i, liberados) {
+        const caixa = $("comentarios");
+        if (!caixa) return;
+        const pendentes = meusPendentes[i.id] || [];
+        const bloco = (c, pendente) => `
+          <div class="comentario${pendente ? " pendente" : ""}">
+            <div class="bola">${escapar(inicialDe(c.autor))}</div>
+            <div>
+              <div class="quem">${escapar(c.autor)}<small>${escapar(pendente ? "agora" : quando(c.criado_em))}</small></div>
+              <div class="estrelas">${estrelas(c.nota)}</div>
+              <p>${escapar(c.texto)}</p>
+              ${pendente ? '<span class="aviso">aguardando a casa liberar · só você vê</span>' : ""}
+            </div>
+          </div>`;
+        caixa.innerHTML = `
+          <h4><span>Comentários</span><small>${liberados.length ? `${liberados.length} liberado${liberados.length > 1 ? "s" : ""}` : "seja o primeiro"}</small></h4>
+          ${pendentes.map((c) => bloco(c, true)).join("")}
+          ${liberados.map((c) => bloco(c, false)).join("")}
+          <form class="escrever" id="escrever">
+            <div class="nota-estrelas" id="nota-estrelas">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-n="${n}" aria-label="${n} estrelas">★</button>`).join("")}</div>
+            <input type="text" id="c-nome" placeholder="Seu nome" maxlength="40" required>
+            <textarea id="c-texto" rows="2" placeholder="O que achou?" maxlength="280" required></textarea>
+            <div class="linha"><small>A casa lê antes de publicar.</small><button type="submit" class="botao">Enviar comentário</button></div>
+          </form>`;
+        let nota = 5;
+        const acender = () => caixa.querySelectorAll("#nota-estrelas button").forEach((b) => b.classList.toggle("acesa", Number(b.dataset.n) <= nota));
+        acender();
+        caixa.querySelectorAll("#nota-estrelas button").forEach((b) => b.addEventListener("click", () => { nota = Number(b.dataset.n); acender(); }));
+        caixa.querySelector("#escrever").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const autor = caixa.querySelector("#c-nome").value.trim();
+          const texto = caixa.querySelector("#c-texto").value.trim();
+          const botao = caixa.querySelector("button[type=submit]");
+          botao.disabled = true;
+          try {
+            await api(`/itens/${i.id}/comentarios`, { method: "POST", body: JSON.stringify({ nome: autor, nota, texto }) });
+            meusPendentes[i.id] = [{ autor, nota, texto }, ...(meusPendentes[i.id] || [])].slice(0, 5);
+            try { localStorage.setItem(GUARDA_PENDENTES, JSON.stringify(meusPendentes)); } catch { /* sem memória */ }
+            toast("Recebido! A casa libera antes de aparecer.");
+            desenharComentarios(i, liberados);
+            $("comentarios").scrollIntoView({ block: "start", behavior: "smooth" });
+          } catch (err) {
+            toast(err.message, true);
+            botao.disabled = false;
+          }
+        });
+      }
+
+      /* ================= carga ================= */
+      async function iniciar() {
+        try {
+          DADOS = await api("");
+        } catch (e) {
+          $("cardapio").innerHTML = `<div class="estado"><h2>${e.status === 404 ? "Cardápio não encontrado" : "Não deu para abrir o cardápio"}</h2>${escapar(e.status === 404 ? "Confira o QR code com a equipe da casa." : e.message)}</div>`;
+          return;
+        }
+        vestirDaCasa(DADOS.casa.cor_marca);
+        ITENS = DADOS.itens;
+        CATEGORIAS = DADOS.categorias;
+        $("carregando")?.remove();
+        desenharCasa();
+        desenharBanners();
+        desenharGrupos();
+        desenhar();
+        $("fab").hidden = false;
+        $("rodape").hidden = false;
+      }
+      iniciar();
+    </script>
+  </body>
+</html>

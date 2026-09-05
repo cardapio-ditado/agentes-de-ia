@@ -217,34 +217,13 @@ export async function clientes(raiz, ctx) {
     }
     caixa.append(chips);
 
-    // O cardápio é um deploy separado, com domínio por cliente. Sem o endereço
-    // aqui, o favo acende e não leva a lugar nenhum.
-    if (atual.get("cardapio-digital")?.ativo) {
-      const campo = el("input", {
-        placeholder: "https://cardapio.seucliente.com.br",
-        value: atual.get("cardapio-digital")?.url ?? "",
-      });
+    // O cardápio mora dentro do Brasa agora (/cardapio/<casa>): não há mais
+    // endereço externo para cadastrar. O link antigo em venue_modulos.url,
+    // quando existe, aparece só para a equipe saber que ele ainda está no ar.
+    const linkAntigo = atual.get("cardapio-digital")?.url;
+    if (atual.get("cardapio-digital")?.ativo && linkAntigo) {
       caixa.append(
-        el("div", { style: "display:flex;gap:6px;margin-top:6px" }, [
-          campo,
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: "Salvar endereço",
-            onclick: async () => {
-              try {
-                await put(`/v1/admin/venues/${c.venue_id}/modulos`, {
-                  modulo: "cardapio-digital",
-                  ativo: true,
-                  url: campo.value.trim(),
-                });
-                avisar("Endereço do cardápio salvo.", "ok");
-              } catch (e) {
-                avisar(e.message, "erro");
-              }
-            },
-          }),
-        ]),
+        el("p", { classe: "muted", style: "margin-top:6px", texto: `Cardápio antigo (deploy separado): ${linkAntigo}` }),
       );
     }
 
