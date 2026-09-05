@@ -143,3 +143,32 @@ test("layouts diferentes têm impressões diferentes", () => {
   const b = "Descricao;Quantidade;Total\nIsca;12;480,00";
   assert.notEqual(impressaoDaEstrutura(a), impressaoDaEstrutura(b));
 });
+
+/* ---------- "não baixa estoque", aprendido ---------- */
+
+import { test as prova } from "node:test";
+import assertIgnorar from "node:assert/strict";
+import { casarVenda as casarV, entraSozinho as sozinho } from "./casarVenda.js";
+
+prova("apelido ensinado como 'não baixa estoque' devolve ignorar, sem alvo", () => {
+  // O chopp do patrocinador vende no PDV e não sai do barril. Ensinado uma
+  // vez, o relatório da semana seguinte já entra com a linha ignorada — em
+  // vez de pendente, esperando alguém ignorá-la de novo.
+  const c = casarV("CHOPP SPATEN", null, [], [], [
+    { apelidoNormalizado: "chopp spaten", fichaId: null, insumoId: null, ignorar: true },
+  ]);
+  assertIgnorar.equal(c.ignorar, true);
+  assertIgnorar.equal(c.fichaId, null);
+  assertIgnorar.equal(c.insumoId, null);
+  assertIgnorar.equal(c.como, "apelido");
+  // Não "entra sozinho" como mapeado: ignorado é outro estado.
+  assertIgnorar.equal(sozinho(c), false);
+});
+
+prova("apelido comum continua sem a marca", () => {
+  const c = casarV("ISCA DE TILAPIA", null, [{ id: "f1", nome: "Isca de tilápia", confirmada: true }], [], [
+    { apelidoNormalizado: "isca de tilapia", fichaId: "f1", insumoId: null },
+  ]);
+  assertIgnorar.equal(c.ignorar, undefined);
+  assertIgnorar.equal(c.fichaId, "f1");
+});

@@ -330,6 +330,11 @@ export async function estoque(raiz, ctx) {
                 if (!insumo) return avisar("Escolha o item.", "erro");
                 if (!(Number(qtd.value) > 0)) return avisar("Informe a quantidade.", "erro");
                 ev.target.disabled = true;
+                // A chave da AÇÃO: nasce quando o botão é apertado pela primeira
+                // vez e só troca depois que deu certo. Clique duplo, 4G que
+                // caiu no meio, "tentar de novo" — o servidor vê a mesma chave
+                // e não move duas vezes.
+                ev.target._chave ??= crypto.randomUUID();
                 try {
                   if (modo === "transferir") {
                     await post(`/v1/venues/${ctx.venue}/estoque/transferir`, {
@@ -337,6 +342,7 @@ export async function estoque(raiz, ctx) {
                       de_local: deLocal.value,
                       para_local: paraLocal.value,
                       quantidade: Number(qtd.value),
+                      chave: ev.target._chave,
                     });
                     avisar("Transferido.", "ok");
                   } else {
@@ -345,9 +351,11 @@ export async function estoque(raiz, ctx) {
                       local_id: deLocal.value,
                       quantidade: Number(qtd.value),
                       motivo: motivo.value,
+                      chave: ev.target._chave,
                     });
                     avisar("Perda registrada.", "ok");
                   }
+                  ev.target._chave = null;
                   desenhar();
                 } catch (e) {
                   avisar(e.message, "erro");

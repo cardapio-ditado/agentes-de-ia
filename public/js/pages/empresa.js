@@ -57,6 +57,19 @@ export async function empresa(raiz, ctx) {
         el("option", { value: valor, texto: rotulo, selected: dados.timezone === valor }),
       ),
     ),
+    // A venda de 1h30 da madrugada de sábado é da sexta. É aqui que a casa
+    // diz isso — e o CMV, a previsão de compra e a baixa de vendas obedecem.
+    virada_do_dia: el(
+      "select",
+      { classe: "select" },
+      Array.from({ length: 12 }, (_, h) =>
+        el("option", {
+          value: String(h),
+          texto: h === 0 ? "Meia-noite (padrão)" : `${h}h da manhã`,
+          selected: Number(dados.virada_do_dia ?? 0) === h,
+        }),
+      ),
+    ),
   };
 
   // Fuso fora da lista (cadastro antigo ou casa fora do Brasil): preserva em
@@ -95,6 +108,15 @@ export async function empresa(raiz, ctx) {
                 "É o relógio da casa: define a hora em que o checklist dispara, quando a promoção do cardápio vale e em que dia o consumo entra no CMV.",
             }),
           ]),
+          el("div", { classe: "campo campo-largo" }, [
+            el("label", { texto: "O dia da casa vira às" }),
+            campos.virada_do_dia,
+            el("small", {
+              classe: "muted",
+              texto:
+                "Bar que fecha de madrugada: a venda de 1h30 de sábado é da sexta. Com 5h, o CMV, a previsão de compra e a baixa de vendas contam assim.",
+            }),
+          ]),
         ]),
         el("div", { style: "margin-top:14px" }, [btnSalvar]),
       ]),
@@ -121,6 +143,7 @@ export async function empresa(raiz, ctx) {
           whatsapp: campos.whatsapp.value.trim() || null,
           email: campos.email.value.trim() || null,
           timezone: campos.timezone.value,
+          virada_do_dia: Number(campos.virada_do_dia.value),
         }),
       });
       avisar("Dados da casa salvos.", "ok");

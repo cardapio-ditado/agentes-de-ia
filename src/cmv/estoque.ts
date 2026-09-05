@@ -1,4 +1,4 @@
-import { db } from "../supabase.js";
+import { db, ehMigracaoPendente } from "../supabase.js";
 import { avisarDivergenciaDaContagem } from "./avisos.js";
 import { casarPorTexto, normalizar, type Apelido, type InsumoConhecido } from "./casarInsumo.js";
 import type { LinhaDaNota } from "./lerNota.js";
@@ -895,22 +895,50 @@ export async function salvarFornecedor(params: {
 
 /* ---------- movimentos avulsos ---------- */
 
+/**
+ * Chama uma função do banco que ganhou o parâmetro `p_chave` (idempotência).
+ *
+ * O CÓDIGO SOBE ANTES DO SQL RODAR. Enquanto a migração não roda, a função no
+ * banco ainda tem a assinatura antiga, e o PostgREST recusa a chamada com o
+ * parâmetro a mais ("função não encontrada"). Aqui a chamada é refeita sem a
+ * chave — a ação acontece, só sem a proteção contra repetição, que é o que
+ * havia até ontem. Depois da migração, a primeira tentativa passa.
+ */
+async function rpcComChave<T>(
+  nome: string,
+  args: Record<string, unknown>,
+  chave: string | null | undefined,
+): Promise<T> {
+  if (chave) {
+    const r = await cliente().rpc(nome, { ...args, p_chave: chave });
+    if (!r.error) return r.data as T;
+    const m = String(r.error.message ?? "");
+    const assinaturaAntiga = /PGRST202|could not find the function|does not exist/i.test(m) && /p_chave|\(.*\)/.test(m);
+    if (!assinaturaAntiga) throw traduzir(r.error);
+    console.warn(`[cmv] ${nome} ainda sem p_chave no banco — chamando sem idempotência. Rode a migração pendente.`);
+  }
+  const r = await cliente().rpc(nome, args);
+  if (r.error) throw traduzir(r.error);
+  return r.data as T;
+}
+
 export async function transferir(params: {
   venueId: string;
   insumoId: string;
   deLocal: string;
   paraLocal: string;
   quantidade: number;
+  /** Chave da ação: a mesma chave duas vezes move uma vez só. */
+  chave?: string | null;
 }): Promise<void> {
-  const { error } = await cliente().rpc("cmv_transferir", {
+  await rpcComChave("cmv_transferir", {
     p_venue_id: params.venueId,
     p_insumo_id: params.insumoId,
     p_de_local: params.deLocal,
     p_para_local: params.paraLocal,
     p_quantidade: params.quantidade,
     p_usuario: null,
-  });
-  if (error) throw traduzir(error);
+  }, params.chave);
 }
 
 export async function registrarPerda(params: {
@@ -919,16 +947,67 @@ export async function registrarPerda(params: {
   localId: string;
   quantidade: number;
   motivo: string;
+  chave?: string | null;
 }): Promise<void> {
-  const { error } = await cliente().rpc("cmv_registrar_perda", {
+  await rpcComChave("cmv_registrar_perda", {
     p_venue_id: params.venueId,
     p_insumo_id: params.insumoId,
     p_local_id: params.localId,
     p_quantidade: params.quantidade,
     p_motivo: params.motivo,
     p_usuario: null,
+  }, params.chave);
+}
+
+/* ---------- conciliação do cache de saldo ---------- */
+
+export interface SaldoDivergente {
+  insumo_id: string;
+  insumo: string;
+  unidade: string;
+  local_id: string;
+  local: string;
+  saldo_cache: number;
+  saldo_historico: number;
+  diferenca: number;
+}
+
+/**
+ * Onde o saldo mostrado não bate com o razão. Meta: lista vazia.
+ *
+ * O cache existe para a tela ser rápida; o razão é a verdade. Se um trigger
+ * falhou ou alguém rodou SQL na mão, os dois se separam — em silêncio, até a
+ * contagem não bater e ninguém saber por quê. Foi assim no Gorjeta: 73% dos
+ * saldos discordavam antes de existir esta lista.
+ */
+export async function conciliacaoDeSaldos(venueId: string): Promise<SaldoDivergente[]> {
+  const { data, error } = await cliente()
+    .from("cmv_saldos_divergentes")
+    .select("insumo_id, insumo, unidade, local_id, local, saldo_cache, saldo_historico, diferenca")
+    .eq("venue_id", venueId)
+    .order("diferenca", { ascending: true });
+  if (error) {
+    // Visão ainda não existe (migração pendente): sem divergência a mostrar,
+    // e não uma tela quebrada.
+    if (ehMigracaoPendente(error.message)) return [];
+    throw traduzir(error);
+  }
+  return (data ?? []).map((l: any) => ({
+    ...l,
+    saldo_cache: Number(l.saldo_cache),
+    saldo_historico: Number(l.saldo_historico),
+    diferenca: Number(l.diferenca),
+  }));
+}
+
+/** Reescreve o cache a partir do razão e devolve quantos pares estavam tortos. */
+export async function ressincronizarSaldos(venueId: string): Promise<number> {
+  const { data, error } = await cliente().rpc("cmv_ressincronizar_saldos", {
+    p_venue_id: venueId,
+    p_usuario: null,
   });
   if (error) throw traduzir(error);
+  return Number(data ?? 0);
 }
 
 export async function extratoInsumo(insumoId: string, localId?: string | null): Promise<unknown[]> {
@@ -1368,15 +1447,15 @@ export async function registrarProducao(params: {
   fichaId: string;
   localId: string;
   lotes: number;
+  chave?: string | null;
 }): Promise<void> {
-  const { error } = await cliente().rpc("cmv_registrar_producao", {
+  await rpcComChave("cmv_registrar_producao", {
     p_venue_id: params.venueId,
     p_ficha_id: params.fichaId,
     p_local_id: params.localId,
     p_lotes: params.lotes,
     p_usuario: null,
-  });
-  if (error) throw traduzir(error);
+  }, params.chave);
 }
 
 /* ---------- erros ---------- */

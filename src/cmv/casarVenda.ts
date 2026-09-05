@@ -37,6 +37,8 @@ export interface ApelidoDeVenda {
   apelidoNormalizado: string;
   fichaId: string | null;
   insumoId: string | null;
+  /** A casa ensinou: este item vende no PDV e não baixa estoque. */
+  ignorar?: boolean;
 }
 
 export type ComoCasouVenda = "codigo" | "apelido" | "nome_exato" | "nome_parecido" | "nenhum";
@@ -48,6 +50,12 @@ export interface CasamentoDeVenda {
   confianca: number;
   /** Por que não pode baixar, quando o alvo existe mas está impedido. */
   impedimento: string | null;
+  /**
+   * "Não baixa estoque", aprendido: o chopp do patrocinador, a cortesia da
+   * casa. A linha entra como ignorada de saída, em vez de ficar pendente
+   * esperando alguém ignorá-la de novo a cada relatório.
+   */
+  ignorar?: boolean;
 }
 
 const NADA: CasamentoDeVenda = {
@@ -79,6 +87,9 @@ export function casarVenda(
   // 2. Apelido aprendido — alguém já disse, uma vez, o que este nome é.
   const apelido = apelidos.find((a) => a.apelidoNormalizado === alvo);
   if (apelido) {
+    if (apelido.ignorar) {
+      return { ...NADA, como: "apelido", confianca: 1, ignorar: true };
+    }
     if (apelido.fichaId) {
       const ficha = fichas.find((f) => f.id === apelido.fichaId);
       return {

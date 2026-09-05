@@ -103,12 +103,17 @@ export async function producao(raiz, ctx) {
             if (!ficha) return avisar("Escolha a ficha.", "erro");
             if (!(Number(lotes.value) > 0)) return avisar("Informe quantas vezes a receita foi feita.", "erro");
             ev.target.disabled = true;
+            // Chave da ação (ver estoque.js): a mesma produção mandada duas
+            // vezes baixa o estoque uma vez só.
+            ev.target._chave ??= crypto.randomUUID();
             try {
               await post(`/v1/venues/${ctx.venue}/producoes`, {
                 ficha_id: ficha.id,
                 local_id: seletorLocal.value,
                 lotes: Number(lotes.value),
+                chave: ev.target._chave,
               });
+              ev.target._chave = null;
               avisar(`Produção registrada — insumos baixados do estoque.`, "ok");
               ficha = null;
               escolhida.hidden = true;

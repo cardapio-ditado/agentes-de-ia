@@ -20,6 +20,9 @@ export async function cmvPainel(raiz, ctx) {
   const cartaoAvisos = el("div");
   raiz.append(cartaoAvisos);
   void desenharAvisos(ctx, cartaoAvisos);
+  const cartaoConciliacao = el("div");
+  raiz.append(cartaoConciliacao);
+  void desenharConciliacao(ctx, cartaoConciliacao);
 
   const hoje = new Date();
   const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -306,4 +309,70 @@ async function desenharAvisos(ctx, raiz) {
     ]),
   );
   raiz.append(detalhes);
+}
+
+
+/**
+ * O cache de saldo bate com o razão?
+ *
+ * Só aparece quando NÃO bate. Um saldo divergente é a tela mentindo em
+ * silêncio: a contagem não fecha e ninguém sabe por quê. Aqui ele vira uma
+ * lista com nome, e um botão que reescreve o cache a partir do histórico.
+ */
+async function desenharConciliacao(ctx, raiz) {
+  let divergentes = [];
+  try {
+    divergentes = await get(`/v1/venues/${ctx.venue}/cmv/conciliacao`);
+  } catch {
+    return; // bônus: se falhar, o painel segue inteiro
+  }
+  limpar(raiz);
+  if (!divergentes.length) return;
+
+  const botao = el("button", {
+    classe: "btn btn-primario",
+    type: "button",
+    texto: `Ressincronizar ${divergentes.length} saldo(s)`,
+    onclick: async () => {
+      botao.disabled = true;
+      try {
+        const r = await post(`/v1/venues/${ctx.venue}/cmv/conciliacao/ressincronizar`, {});
+        avisar(`${r.divergentes_corrigidos} saldo(s) reescritos a partir do histórico.`, "ok");
+        await desenharConciliacao(ctx, raiz);
+      } catch (e) {
+        avisar(e.message, "erro");
+        botao.disabled = false;
+      }
+    },
+  });
+
+  raiz.append(
+    el("section", { classe: "cartao alerta", style: "margin-top:14px" }, [
+      el("h3", { texto: "Saldo na tela diferente do histórico" }),
+      el("p", {
+        classe: "muted",
+        texto:
+          "O saldo mostrado é um atalho; a verdade é o razão de movimentos. Os dois se separaram nestes itens — " +
+          "a contagem não vai bater até ressincronizar.",
+      }),
+      el("div", { classe: "rolagem-x" }, [
+        el("table", { classe: "planilha" }, [
+          el("thead", {}, [el("tr", {}, [
+            el("th", { texto: "Item" }), el("th", { texto: "Local" }),
+            el("th", { texto: "Na tela" }), el("th", { texto: "No histórico" }), el("th", { texto: "Diferença" }),
+          ])]),
+          el("tbody", {}, divergentes.slice(0, 30).map((d) =>
+            el("tr", {}, [
+              el("td", { texto: d.insumo }),
+              el("td", { texto: d.local }),
+              el("td", { texto: `${d.saldo_cache} ${d.unidade}` }),
+              el("td", { texto: `${d.saldo_historico} ${d.unidade}` }),
+              el("td", { texto: `${d.diferenca > 0 ? "+" : ""}${d.diferenca}` }),
+            ]),
+          )),
+        ]),
+      ]),
+      el("div", { style: "margin-top:10px" }, [botao]),
+    ]),
+  );
 }

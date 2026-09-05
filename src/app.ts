@@ -176,6 +176,8 @@ import {
   receberCompra,
   registrarContagem,
   registrarPerda,
+  conciliacaoDeSaldos,
+  ressincronizarSaldos,
   registrarProducao,
   salvarFicha,
   salvarFornecedor,
@@ -1515,6 +1517,7 @@ async function roteasApi(
           deLocal: texto(corpo, "de_local"),
           paraLocal: texto(corpo, "para_local"),
           quantidade: numeroOuNulo(corpo.quantidade) ?? 0,
+          chave: textoOpcional(corpo, "chave") ?? null,
         }),
       );
       return ok(res, { transferido: true });
@@ -1532,6 +1535,7 @@ async function roteasApi(
           localId: texto(corpo, "local_id"),
           quantidade: numeroOuNulo(corpo.quantidade) ?? 0,
           motivo: texto(corpo, "motivo"),
+          chave: textoOpcional(corpo, "chave") ?? null,
         }),
       );
       return ok(res, { registrada: true });
@@ -1596,6 +1600,22 @@ async function roteasApi(
       }
     }
 
+    // GET /v1/venues/:slug/cmv/conciliacao — o cache de saldo bate com o razão?
+    // POST /v1/venues/:slug/cmv/conciliacao/ressincronizar — reescreve o cache
+    if (recurso === "cmv" && p[3] === "conciliacao") {
+      if (metodo === "GET" && p.length === 4) {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDeEstoque(() => conciliacaoDeSaldos(venue.id)));
+      }
+      if (metodo === "POST" && p[4] === "ressincronizar" && p.length === 5) {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const divergentes = await comErroDeEstoque(() => ressincronizarSaldos(venue.id));
+        return ok(res, { divergentes_corrigidos: divergentes });
+      }
+    }
+
     if (metodo === "GET" && recurso === "cmv" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
@@ -1631,6 +1651,7 @@ async function roteasApi(
           fichaId: texto(corpo, "ficha_id"),
           localId: texto(corpo, "local_id"),
           lotes: numeroOuNulo(corpo.lotes) ?? 0,
+          chave: textoOpcional(corpo, "chave") ?? null,
         }),
       );
       return ok(res, { registrada: true }, 201);

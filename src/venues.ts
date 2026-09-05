@@ -417,6 +417,12 @@ export interface DadosVenue {
   reserva_lembrete_minutos?: number;
   /** Cor da casa em hexadecimal. A logo sobe pela rota própria. */
   cor_marca?: string | null;
+  /**
+   * A que horas o dia da casa vira (0 a 11). A venda de 1h30 da madrugada
+   * de sábado é da sexta; com 5, o CMV, a previsão de compra e a baixa de
+   * vendas contam assim. 0 é meia-noite, como sempre foi.
+   */
+  virada_do_dia?: number;
 }
 
 /** Link do Maps guardado em settings, validado ao salvar. */
@@ -503,6 +509,14 @@ export async function updateVenue(
   if (dados.whatsapp !== undefined) mudancas.whatsapp = dados.whatsapp?.trim() || null;
   if (dados.email !== undefined) mudancas.email = dados.email?.trim() || null;
   if (dados.timezone !== undefined) mudancas.timezone = dados.timezone;
+  if (dados.virada_do_dia !== undefined) {
+    const v = Number(dados.virada_do_dia);
+    if (!Number.isInteger(v) || v < 0 || v > 11) {
+      throw new Error("A virada do dia precisa ser uma hora entre 0 e 11.");
+    }
+    // Coluna nova: os tipos gerados ainda não a conhecem.
+    (mudancas as Record<string, unknown>).virada_do_dia = v;
+  }
   if (dados.capacity !== undefined) {
     if (dados.capacity !== null && (!Number.isInteger(dados.capacity) || dados.capacity <= 0)) {
       throw new Error("Capacidade precisa ser um número inteiro positivo.");

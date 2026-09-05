@@ -118,7 +118,9 @@ export async function importarVendas(params: {
       insumo_id: c.insumoId,
       confianca: c.confianca,
       como: c.como,
-      status: automatico ? "mapeado" : "pendente",
+      // Apelido ensinado como "não baixa estoque" já entra ignorado — a
+      // pessoa não precisa ignorar o chopp do patrocinador toda semana.
+      status: c.ignorar ? "ignorado" : automatico ? "mapeado" : "pendente",
     };
   });
 
@@ -141,7 +143,7 @@ async function vocabulario(venueId: string) {
     cliente().from("insumos").select("id, nome, codigo").eq("venue_id", venueId).eq("ativo", true),
     cliente()
       .from("venda_apelidos")
-      .select("apelido_normalizado, ficha_id, insumo_id")
+      .select("apelido_normalizado, ficha_id, insumo_id, ignorar")
       .eq("venue_id", venueId),
   ]);
   if (f.error) throw traduzir(f.error);
@@ -160,6 +162,7 @@ async function vocabulario(venueId: string) {
         apelidoNormalizado: x.apelido_normalizado,
         fichaId: x.ficha_id,
         insumoId: x.insumo_id,
+        ignorar: x.ignorar === true,
       }),
     ),
   };
@@ -247,6 +250,25 @@ export async function corrigirItem(params: {
       .update({ status: "ignorado", ficha_id: null, insumo_id: null })
       .eq("id", params.itemId);
     if (error) throw traduzir(error);
+
+    // Ignorar também se aprende: o item que não baixa hoje não baixa na
+    // semana que vem. E as outras linhas iguais deste relatório vão junto.
+    if (params.aprender !== false) {
+      await aprenderApelidoDeVenda({
+        venueId: params.venueId,
+        apelido: item.data.produto_externo,
+        fichaId: null,
+        insumoId: null,
+        ignorar: true,
+      });
+      const { error: erroLote } = await cliente()
+        .from("venda_itens")
+        .update({ status: "ignorado", ficha_id: null, insumo_id: null, como: "apelido", confianca: 1 })
+        .eq("importacao_id", item.data.importacao_id)
+        .eq("produto_normalizado", item.data.produto_normalizado)
+        .eq("status", "pendente");
+      if (erroLote) throw traduzir(erroLote);
+    }
     return;
   }
 
@@ -312,9 +334,12 @@ export async function aprenderApelidoDeVenda(params: {
   apelido: string;
   fichaId: string | null;
   insumoId: string | null;
+  /** "Não baixa estoque": sem ficha, sem insumo, e o item nunca mais fica pendente. */
+  ignorar?: boolean;
 }): Promise<void> {
   const alvo = normalizar(params.apelido);
   if (!alvo) return;
+  const ignorar = params.ignorar === true;
 
   const existente = await cliente()
     .from("venda_apelidos")
@@ -328,24 +353,40 @@ export async function aprenderApelidoDeVenda(params: {
     // Reaponta: a casa mudou o cardápio e o mesmo nome agora é outra coisa.
     const { error } = await cliente()
       .from("venda_apelidos")
-      .update({
-        ficha_id: params.fichaId,
-        insumo_id: params.insumoId,
+      .update(semColunaSeFaltar({
+        ficha_id: ignorar ? null : params.fichaId,
+        insumo_id: ignorar ? null : params.insumoId,
+        ignorar,
         usos: (existente.data.usos ?? 1) + 1,
         ultimo_uso: new Date().toISOString(),
-      })
+      }, ignorar))
       .eq("id", existente.data.id);
     if (error) throw traduzir(error);
     return;
   }
 
-  const { error } = await cliente().from("venda_apelidos").insert({
+  const { error } = await cliente().from("venda_apelidos").insert(semColunaSeFaltar({
     venue_id: params.venueId,
     apelido: params.apelido.trim(),
-    ficha_id: params.fichaId,
-    insumo_id: params.insumoId,
-  });
+    ficha_id: ignorar ? null : params.fichaId,
+    insumo_id: ignorar ? null : params.insumoId,
+    ignorar,
+  }, ignorar));
   if (error) throw traduzir(error);
+}
+
+/**
+ * O CÓDIGO SOBE ANTES DO SQL RODAR: enquanto `venda_apelidos.ignorar` não
+ * existe, gravar a coluna quebraria TODO aprendizado de apelido — inclusive
+ * o de ficha, que sempre funcionou. Sem a marca ligada, a coluna nem vai.
+ * Com a marca ligada e a coluna ausente, o insert falha (a constraint
+ * antiga exige um alvo) e a mensagem diz para rodar a migração.
+ */
+function semColunaSeFaltar<T extends { ignorar: boolean }>(linha: T, precisa: boolean): Omit<T, "ignorar"> | T {
+  if (precisa) return linha;
+  const resto: Record<string, unknown> = { ...linha };
+  delete resto.ignorar;
+  return resto as Omit<T, "ignorar">;
 }
 
 /** Aplica o aprendizado às outras linhas iguais da mesma importação. */
