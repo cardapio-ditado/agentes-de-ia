@@ -452,8 +452,13 @@ language sql stable as $$
     where i.venue_id = p_venue_id and i.ativo
   ),
   demanda as (
+    -- `cross join hoje h`, e não `from base b, hoje h`: a vírgula tem
+    -- precedência MENOR que JOIN, então ela parte o FROM em duas árvores e
+    -- `b` deixa de existir para o `on` do left join. Foi o erro 42P01 que
+    -- derrubou esta migração na primeira tentativa.
     select b.b_item as d_item, sum(coalesce(md.media, 0)) as prevista
-    from base b, hoje h
+    from base b
+    cross join hoje h
     cross join lateral generate_series(0, b.b_k - 1) g
     left join media_por_dow md
       on md.md_item = b.b_item
