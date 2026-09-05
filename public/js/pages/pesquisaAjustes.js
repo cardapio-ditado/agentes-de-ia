@@ -459,6 +459,10 @@ function editorDeItens(itens, categorias) {
       const ate = el("input", { type: "date", classe: "campo-celula", value: r.ate, title: "Termina em", onchange: (e) => (r.ate = e.target.value) });
       painelQuando.append(
         el("div", { classe: "linha-campos", style: "align-items:center;gap:6px;flex-wrap:wrap" }, [
+          el("span", { style: "display:inline-flex;gap:2px" }, [
+            el("button", { classe: "btn-icone", type: "button", texto: "▲", title: `Mover "${nome}" para antes do assunto anterior`, onclick: () => moverAssunto(nome, -1) }),
+            el("button", { classe: "btn-icone", type: "button", texto: "▼", title: `Mover "${nome}" para depois do próximo assunto`, onclick: () => moverAssunto(nome, 1) }),
+          ]),
           el("strong", { texto: nome, style: "min-width:140px" }),
           ...chips,
           el("span", { classe: "muted", texto: "de" }),
@@ -472,11 +476,61 @@ function editorDeItens(itens, categorias) {
   // Assunto renomeado, linha nova, linha removida: o painel acompanha.
   corpo.addEventListener("change", desenharQuando);
 
+  /* ---- Ordem: arrastar pela alça, ou setas ----
+   *
+   * A ordem das linhas É a ordem em que o cliente vê as perguntas — e a
+   * ordem dos assuntos é a ordem em que os grupos aparecem pela primeira
+   * vez. Não existe campo "posição": reordenar aqui e salvar já basta.
+   *
+   * Só a alça é arrastável, e não a linha inteira: uma linha `draggable`
+   * atrapalha selecionar texto nos campos dela. As setas existem porque
+   * arrastar no celular é loteria.
+   */
+  let arrastando = null;
+  corpo.addEventListener("dragover", (e) => {
+    if (!arrastando) return;
+    e.preventDefault();
+    const alvo = e.target.closest("tr");
+    if (!alvo || alvo === arrastando) return;
+    const caixa = alvo.getBoundingClientRect();
+    const depois = e.clientY > caixa.top + caixa.height / 2;
+    corpo.insertBefore(arrastando, depois ? alvo.nextSibling : alvo);
+  });
+  corpo.addEventListener("drop", (e) => e.preventDefault());
+
+  /** Move uma linha um passo para cima ou para baixo. */
+  function moverLinha(tr, passo) {
+    const vizinha = passo < 0 ? tr.previousElementSibling : tr.nextElementSibling;
+    if (!vizinha) return;
+    corpo.insertBefore(passo < 0 ? tr : vizinha, passo < 0 ? vizinha : tr);
+    desenharQuando();
+  }
+
+  /**
+   * Move um ASSUNTO inteiro: todas as linhas dele, em bloco, para antes do
+   * assunto anterior ou depois do próximo. É o que muda a ordem das telas
+   * que o cliente vê — "Comida" antes de "Atendimento", ou o contrário.
+   */
+  function moverAssunto(nome, passo) {
+    const linhas = [...corpo.children];
+    const assuntoDe = (tr) => tr._campos.categoria.value.trim() || "Geral";
+    const ordem = [...new Set(linhas.map(assuntoDe))];
+    const i = ordem.indexOf(nome);
+    const j = i + passo;
+    if (i < 0 || j < 0 || j >= ordem.length) return;
+    const minhas = linhas.filter((tr) => assuntoDe(tr) === nome);
+    const delas = linhas.filter((tr) => assuntoDe(tr) === ordem[j]);
+    if (passo < 0) for (const tr of minhas) corpo.insertBefore(tr, delas[0]);
+    else for (const tr of minhas.reverse()) corpo.insertBefore(tr, delas[delas.length - 1].nextSibling);
+    desenharQuando();
+  }
+
   const elemento = el("div", { classe: "pilha", style: "margin-top:12px;gap:8px" }, [
     el("div", { classe: "rolagem-x" }, [
       el("table", { classe: "planilha" }, [
         el("thead", {}, [
           el("tr", {}, [
+            el("th", { texto: "", title: "Arraste pela alça, ou use as setas, para mudar a ordem em que o cliente vê as perguntas" }),
             el("th", { texto: "Assunto" }),
             el("th", { texto: "Pergunta" }),
             el("th", { texto: "Como responde" }),
@@ -543,7 +597,18 @@ function editorDeItens(itens, categorias) {
     // aceitando "Estacionamento" ou "Palco", que só existem em algumas casas.
     const sugestoes = el("datalist", { id: lista }, categorias.map((c) => el("option", { value: c })));
 
+    const alca = el("span", {
+      classe: "alca-arrastar",
+      texto: "⋮⋮",
+      title: "Arraste para mudar a ordem",
+      style: "cursor:grab;user-select:none;color:var(--texto-fraco,#888);padding:0 4px",
+    });
     const tr = el("tr", {}, [
+      el("td", { style: "white-space:nowrap" }, [
+        alca,
+        el("button", { classe: "btn-icone", type: "button", texto: "▲", title: "Subir", onclick: () => moverLinha(tr, -1) }),
+        el("button", { classe: "btn-icone", type: "button", texto: "▼", title: "Descer", onclick: () => moverLinha(tr, 1) }),
+      ]),
       el("td", {}, [campos.categoria, sugestoes]),
       el("td", {}, [campos.pergunta]),
       el("td", {}, [campos.tipo]),
@@ -564,6 +629,26 @@ function editorDeItens(itens, categorias) {
       ]),
     ]);
     tr._campos = campos;
+    // O id sobrevive ao salvar: sem ele o servidor sorteia outro a cada
+    // salvamento, e a resposta de ontem deixa de apontar para a pergunta de hoje.
+    tr._id = typeof item.id === "string" && item.id ? item.id : undefined;
+
+    // Só a alça arrasta (ver comentário em `arrastando`).
+    alca.addEventListener("mousedown", () => tr.setAttribute("draggable", "true"));
+    alca.addEventListener("mouseup", () => tr.removeAttribute("draggable"));
+    tr.addEventListener("dragstart", (e) => {
+      arrastando = tr;
+      tr.style.opacity = "0.5";
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox só inicia o arrasto com algum dado.
+      e.dataTransfer.setData("text/plain", "");
+    });
+    tr.addEventListener("dragend", () => {
+      tr.style.opacity = "";
+      tr.removeAttribute("draggable");
+      arrastando = null;
+      desenharQuando();
+    });
     return tr;
   }
 
@@ -575,7 +660,7 @@ function editorDeItens(itens, categorias) {
           const categoria = tr._campos.categoria.value.trim() || "Geral";
           const r = regraDe(categoria);
           return {
-            id: undefined,
+            id: tr._id,
             categoria,
             pergunta: tr._campos.pergunta.value.trim(),
             tipo: tr._campos.tipo.value,
