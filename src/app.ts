@@ -1990,6 +1990,12 @@ async function roteasApi(
               premio_validade_dias: numeroOuNulo(corpo.premio_validade_dias) ?? undefined,
               perguntar_atendente:
                 corpo.perguntar_atendente === undefined ? undefined : Boolean(corpo.perguntar_atendente),
+              atendente_posicao:
+                corpo.atendente_posicao === undefined
+                  ? undefined
+                  : corpo.atendente_posicao === "apos_nps"
+                    ? "apos_nps"
+                    : "fim",
               perguntar_comentario:
                 corpo.perguntar_comentario === undefined ? undefined : Boolean(corpo.perguntar_comentario),
               // `textoOpcional` não serve aqui: ele devolve undefined para "",
@@ -3731,6 +3737,7 @@ async function roteasApi(
         perguntas: itensDoDia(modelo?.itens ?? [], diaDaVisita),
         dia_visita: diaDaVisita,
         perguntar_atendente: config.perguntar_atendente,
+        atendente_posicao: config.atendente_posicao,
         perguntar_comentario: config.perguntar_comentario,
         premio: config.premio_ativo
           ? { titulo: config.premio_titulo, regras: config.premio_regras }

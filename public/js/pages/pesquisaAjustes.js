@@ -940,6 +940,10 @@ async function telaPremio(ctx, recarregar) {
     ativa: caixaDeMarcar("Pesquisa ligada", config.ativa),
     premio_ativo: caixaDeMarcar("Dar prêmio a quem responde", config.premio_ativo),
     perguntar_atendente: caixaDeMarcar("Perguntar quem atendeu", config.perguntar_atendente),
+    atendente_posicao: el("select", { classe: "select" }, [
+      el("option", { value: "fim", texto: "No fim da pesquisa", selected: config.atendente_posicao !== "apos_nps" }),
+      el("option", { value: "apos_nps", texto: "Logo depois da nota de recomendação", selected: config.atendente_posicao === "apos_nps" }),
+    ]),
     perguntar_comentario: caixaDeMarcar("Pedir um comentário escrito", config.perguntar_comentario),
     saudacao: el("input", { value: config.saudacao ?? "", placeholder: "Como foi sua visita?" }),
     premio_titulo: el("input", { value: config.premio_titulo, required: true }),
@@ -969,6 +973,7 @@ async function telaPremio(ctx, recarregar) {
           ativa: campos.ativa.querySelector("input").checked,
           premio_ativo: campos.premio_ativo.querySelector("input").checked,
           perguntar_atendente: campos.perguntar_atendente.querySelector("input").checked,
+          atendente_posicao: campos.atendente_posicao.value,
           perguntar_comentario: campos.perguntar_comentario.querySelector("input").checked,
           saudacao: campos.saudacao.value.trim(),
           agradecimento: campos.agradecimento.value.trim(),
@@ -995,6 +1000,7 @@ async function telaPremio(ctx, recarregar) {
       campos.perguntar_comentario,
     ]),
     el("div", { classe: "grade", style: "margin-top:14px" }, [
+      campo("Onde perguntar quem atendeu", campos.atendente_posicao),
       campo("Pergunta de abertura", campos.saudacao),
       campo("Mensagem de agradecimento", campos.agradecimento),
       campo("Qual é o prêmio", campos.premio_titulo),

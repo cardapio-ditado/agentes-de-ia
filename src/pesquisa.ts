@@ -8,7 +8,7 @@ import { instanteNaCasa } from "./fuso.js";
 import { avisarDetrator, mereceAviso } from "./pesquisaAlerta.js";
 import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
 import { registrarClienteSeDer } from "./clientes.js";
-import { inserirAvisos } from "./notifications.js";
+import { colunaFaltante, inserirAvisos } from "./notifications.js";
 
 /**
  * Pesquisa de satisfação: a opinião do cliente enquanto ele ainda está na mesa.
@@ -69,6 +69,15 @@ export interface ConfigDaPesquisa {
   premio_regras: string | null;
   premio_validade_dias: number;
   perguntar_atendente: boolean;
+  /**
+   * Onde a pergunta "quem te atendeu?" entra: no fim, como sempre foi, ou
+   * logo depois da nota de recomendação.
+   *
+   * Existe porque o nome do garçom é mais fresco no começo: quem responde
+   * três telas de nota e só então é perguntado "quem te atendeu?" já está
+   * com o dedo no "pular". Perguntado logo depois do NPS, ainda lembra.
+   */
+  atendente_posicao: "fim" | "apos_nps";
   perguntar_comentario: boolean;
   /** WhatsApp avisado na hora quando entra nota baixa. Vazio = ninguém. */
   detrator_avisar_whatsapp: string | null;
@@ -85,6 +94,7 @@ const CONFIG_PADRAO: ConfigDaPesquisa = {
   premio_regras: null,
   premio_validade_dias: 30,
   perguntar_atendente: true,
+  atendente_posicao: "fim",
   perguntar_comentario: true,
   // Desligado até a casa escrever um número: aviso é mensagem no celular de
   // alguém, e ligar isso sozinho seria decidir pelo dono que ele quer ser
@@ -119,6 +129,9 @@ export async function configDaPesquisa(venueId: string): Promise<ConfigDaPesquis
     premio_regras: (linha.premio_regras as string) || null,
     premio_validade_dias: Number(linha.premio_validade_dias) || CONFIG_PADRAO.premio_validade_dias,
     perguntar_atendente: Boolean(linha.perguntar_atendente),
+    // Coluna ausente (migração ainda não rodou) ou valor estranho: no fim,
+    // que é como sempre foi.
+    atendente_posicao: linha.atendente_posicao === "apos_nps" ? "apos_nps" : "fim",
     perguntar_comentario: Boolean(linha.perguntar_comentario),
     detrator_avisar_whatsapp: (linha.detrator_avisar_whatsapp as string) || null,
     detrator_nota_maxima:
@@ -164,14 +177,25 @@ export async function salvarConfig(
   // parecer preenchida em toda consulta que só testa se há valor.
   nova.detrator_avisar_whatsapp = nova.detrator_avisar_whatsapp?.trim() || null;
 
-  const { error } = await cliente()
-    .from("pesquisa_config")
-    .upsert(
-      { venue_id: venueId, ...nova, updated_at: new Date().toISOString() } as never,
-      { onConflict: "venue_id" },
-    );
-  if (error) throw new ErroDePesquisa(500, `Falha ao salvar os ajustes: ${error.message}`);
-  return nova;
+  const linha: Record<string, unknown> = { venue_id: venueId, ...nova, updated_at: new Date().toISOString() };
+
+  // O CÓDIGO SOBE ANTES DO SQL RODAR. Coluna que o banco ainda não tem é
+  // retirada e os outros ajustes são salvos mesmo assim — o dono não pode
+  // perder o resto do formulário porque uma opção nova ainda não existe no
+  // banco. A opção nova volta ao padrão até a migração rodar.
+  for (let volta = 0; volta < 3; volta++) {
+    const { error } = await cliente()
+      .from("pesquisa_config")
+      .upsert(linha as never, { onConflict: "venue_id" });
+    if (!error) return nova;
+    const faltando = colunaFaltante(error.message);
+    if (!faltando || !(faltando in linha)) {
+      throw new ErroDePesquisa(500, `Falha ao salvar os ajustes: ${error.message}`);
+    }
+    console.warn(`[pesquisa] a coluna "${faltando}" ainda não existe em pesquisa_config — salvando sem ela. Rode a migração pendente.`);
+    delete linha[faltando];
+  }
+  throw new ErroDePesquisa(500, "Colunas demais faltando em pesquisa_config.");
 }
 
 // ============================================================

@@ -418,7 +418,18 @@
         // Com as duas coisas, o cliente marcaria "Comida" numa tela e daria
         // nota para a comida na seguinte — a mesma pergunta, duas vezes.
         if ((dados.perguntas ?? []).length === 0) lista.push("etiquetas");
-        if (dados.perguntar_atendente && dados.atendentes.length > 0) lista.push("atendente");
+        if (dados.perguntar_atendente && dados.atendentes.length > 0) {
+          // "Quem te atendeu?" logo depois da nota de recomendação, quando a
+          // casa pediu assim: o nome do garçom é mais fresco no começo. A nota
+          // de recomendação é o passo embutido ("nota") ou a tela do assunto
+          // que contém a pergunta marcada como NPS.
+          const nps = perguntaDoNps();
+          const depoisDoNps = dados.atendente_posicao === "apos_nps";
+          const passoDoNps = nps ? `cat:${nps.categoria}` : "nota";
+          const onde = depoisDoNps ? lista.indexOf(passoDoNps) : -1;
+          if (onde >= 0) lista.splice(onde + 1, 0, "atendente");
+          else lista.push("atendente");
+        }
         if (dados.perguntar_comentario) lista.push("comentario");
         lista.push("premio");
         return lista;
