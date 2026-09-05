@@ -205,6 +205,44 @@
       .escrever .linha small { color: var(--apoio-2); font-size: 11.5px; }
       .escrever .botao { padding: 10px 14px; font-size: 13px; }
 
+      /* ---- chat com a casa ---- */
+      .bolha { position: fixed; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 35; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--brasa); color: var(--sobre-marca); box-shadow: 0 8px 24px rgba(120, 50, 10, 0.35); cursor: pointer; display: grid; place-items: center; }
+      .bolha[hidden] { display: none; }
+      .bolha svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .bolha .pulso { position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--brasa); opacity: 0; animation: pulso 2.4s ease-out infinite; }
+      @keyframes pulso { 0% { transform: scale(0.9); opacity: 0.7; } 100% { transform: scale(1.35); opacity: 0; } }
+      .chat { position: fixed; inset: 0; z-index: 65; background: var(--fundo); display: none; flex-direction: column; max-width: var(--largura); margin: 0 auto; }
+      .chat.aberto { display: flex; }
+      .chat .cab { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--borda); background: var(--superficie); }
+      .chat .cab .avatar { width: 40px; height: 40px; padding: 2px; }
+      .chat .cab .avatar .inicial { font-size: 16px; }
+      .chat .cab strong { display: block; font-size: 15px; }
+      .chat .cab small { color: var(--apoio); font-size: 12px; }
+      .chat .cab .fechar { margin-left: auto; background: none; border: 0; color: var(--texto); font: 600 14px var(--fonte); cursor: pointer; padding: 8px; }
+      .chat .mensagens { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+      .balao { max-width: 82%; padding: 10px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+      .balao.eu { align-self: flex-end; background: var(--brasa); color: var(--sobre-marca); border-bottom-right-radius: 4px; }
+      .balao.deles { align-self: flex-start; background: var(--superficie); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
+      .balao.sistema { align-self: center; background: transparent; color: var(--apoio); font-size: 12px; text-align: center; }
+      .balao.digitando { color: var(--apoio); font-style: italic; }
+      .chat .sugestoes { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px 8px; scrollbar-width: none; }
+      .chat .sugestoes button { flex: 0 0 auto; border: 1px solid var(--borda); background: var(--superficie); color: var(--tinta); font: 600 12.5px var(--fonte); padding: 7px 11px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+      .chat form { display: flex; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--borda); background: var(--superficie); }
+      .chat input { flex: 1; font: 15px var(--fonte); padding: 11px 14px; border-radius: 999px; border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); outline: none; }
+      .chat input:focus { border-color: var(--brasa); }
+      .chat form button { border: 0; background: var(--brasa); color: var(--sobre-marca); width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+      .chat form button:disabled { opacity: 0.6; }
+      .chat form svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* ---- boas-vindas na mesa ---- */
+      .boas-vindas .corpo { padding: 14px 16px 24px; }
+      .boas-vindas h3 { font-size: 20px; font-weight: 700; margin: 0; }
+      .boas-vindas p { color: var(--apoio); margin: 6px 0 14px; font-size: 14px; }
+      .boas-vindas input { width: 100%; font: 15px var(--fonte); padding: 12px 14px; border-radius: 10px; border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); outline: none; margin-bottom: 8px; }
+      .boas-vindas input:focus { border-color: var(--brasa); }
+      .boas-vindas .acoes { display: flex; gap: 8px; margin-top: 8px; }
+      .boas-vindas .acoes .botao { flex: 1; }
+
       /* ---- avisos e estados ---- */
       .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--texto); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 70; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); max-width: calc(100% - 32px); text-align: center; }
       .toast.erro { background: #b3261e; }
@@ -244,6 +282,24 @@
         <button type="button" class="fechar" id="fechar-busca">Cancelar</button>
       </div>
       <div class="resultados" id="resultados"></div>
+    </div>
+
+    <button type="button" class="bolha" id="bolha" hidden aria-label="Falar com a casa">
+      <span class="pulso"></span>
+      <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-4.6A8 8 0 1 1 21 12z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></svg>
+    </button>
+    <div class="chat" id="chat" role="dialog" aria-label="Chat com a casa">
+      <div class="cab">
+        <div class="avatar"><div id="chat-avatar"></div></div>
+        <div><strong id="chat-nome"></strong><small>responde na hora · pedidos, pelo garçom</small></div>
+        <button type="button" class="fechar" id="fechar-chat">Fechar</button>
+      </div>
+      <div class="mensagens" id="mensagens"></div>
+      <div class="sugestoes" id="sugestoes"></div>
+      <form id="form-chat">
+        <input type="text" id="campo-chat" placeholder="Pergunte sobre o cardápio…" autocomplete="off" maxlength="1000" />
+        <button type="submit" id="enviar-chat" aria-label="Enviar"><svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg></button>
+      </form>
     </div>
 
     <div class="veu" id="veu"></div>
@@ -291,6 +347,8 @@
       const API = `/v1/cardapio-publico/${encodeURIComponent(CASA)}`;
       const GUARDA_CURTIDAS = `cardapio.curtidas.${CASA}`;
       const GUARDA_PENDENTES = `cardapio.comentarios.${CASA}`;
+      const GUARDA_SESSAO = `cardapio.sessao.${CASA}.${MESA || "sem-mesa"}`;
+      const GUARDA_EU = `cardapio.eu.${CASA}`;
 
       let DADOS = null;
       let ITENS = [];
@@ -327,6 +385,159 @@
         return corpo.data;
       }
 
+      /* ================= a sessão da mesa e o que a pessoa olha ================= */
+      // A sessão é o que amarra os eventos, o chat e o chamado do garçom a
+      // esta pessoa, nesta mesa. Dura 4 horas no aparelho: quem volta amanhã
+      // abre outra, e o painel "ao vivo" não mostra um cliente de ontem.
+      let SESSAO = null;
+      let GARCOM = null;
+      let EU = { nome: null };
+      try { EU = JSON.parse(localStorage.getItem(GUARDA_EU) || "{}") || {}; } catch { /* sem memória */ }
+
+      async function garantirSessao() {
+        try {
+          const guardada = JSON.parse(localStorage.getItem(GUARDA_SESSAO) || "null");
+          if (guardada && Date.now() - guardada.em < 4 * 3600_000) {
+            SESSAO = guardada.sessao; GARCOM = guardada.garcom ?? null;
+            return;
+          }
+        } catch { /* sem memória */ }
+        await abrirSessao({ nome: EU.nome ?? null, whatsapp: null });
+      }
+
+      async function abrirSessao({ nome, whatsapp }) {
+        try {
+          const r = await api("/sessao", { method: "POST", body: JSON.stringify({ mesa: MESA, nome, whatsapp }) });
+          SESSAO = r.sessao; GARCOM = r.garcom ?? null;
+          try { localStorage.setItem(GUARDA_SESSAO, JSON.stringify({ sessao: SESSAO, garcom: GARCOM, em: Date.now() })); } catch { /* sem memória */ }
+        } catch { /* sem sessão: o cardápio funciona igual, só não monitora */ }
+        desenharMesa();
+      }
+
+      function desenharMesa() {
+        const mesa = $("mesa");
+        if (!MESA) { mesa.hidden = true; return; }
+        mesa.innerHTML = `mesa <b>${escapar(MESA)}</b>${GARCOM ? `<br><span style="font-weight:500">garçom: ${escapar(GARCOM)}</span>` : ""}`;
+        mesa.hidden = false;
+      }
+
+      // Eventos saem em lote, a cada poucos segundos, e o que sobrar vai pelo
+      // sendBeacon quando a pessoa fecha a página — sem prender a saída.
+      const filaDeEventos = [];
+      let timerDeEventos = null;
+      function anotar(tipo, item = null, categoria = null, segundos = 0) {
+        if (!SESSAO) return;
+        filaDeEventos.push({ tipo, item, categoria, segundos });
+        clearTimeout(timerDeEventos);
+        timerDeEventos = setTimeout(despachar, 2500);
+      }
+      async function despachar(aoSair = false) {
+        if (!SESSAO || !filaDeEventos.length) return;
+        const lote = filaDeEventos.splice(0, 20);
+        const corpo = JSON.stringify({ sessao: SESSAO, eventos: lote });
+        if (aoSair && navigator.sendBeacon) {
+          navigator.sendBeacon(`${API}/eventos`, new Blob([corpo], { type: "application/json" }));
+          return;
+        }
+        try { await api("/eventos", { method: "POST", body: corpo }); } catch { /* monitoramento é acessório */ }
+        if (filaDeEventos.length) despachar(aoSair);
+      }
+      addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { fecharVisualizacao(); despachar(true); } });
+      addEventListener("pagehide", () => { fecharVisualizacao(); despachar(true); });
+
+      // Quanto tempo a ficha de um item ficou aberta.
+      let vendo = null;
+      function abrirVisualizacao(i) {
+        fecharVisualizacao();
+        vendo = { item: i, desde: Date.now() };
+      }
+      function fecharVisualizacao() {
+        if (!vendo) return;
+        const segundos = Math.round((Date.now() - vendo.desde) / 1000);
+        anotar("visualizacao", vendo.item.nome, catDe(vendo.item.categoria_id)?.nome || null, segundos);
+        vendo = null;
+      }
+
+      /* ---- boas-vindas: nome (opcional) na primeira vez na mesa ---- */
+      function pedirNome() {
+        return new Promise((resolve) => {
+          const nome = document.createElement("input");
+          nome.placeholder = "Seu nome (opcional)"; nome.maxLength = 40; nome.autocomplete = "given-name";
+          const zap = document.createElement("input");
+          zap.placeholder = "WhatsApp, para novidades da casa (opcional)"; zap.type = "tel"; zap.inputMode = "tel";
+          folha.className = "folha boas-vindas";
+          folha.innerHTML = `<div class="alca"></div><div class="corpo"><h3>Bem-vindo à ${escapar(DADOS.casa.nome)}!</h3><p>${MESA ? `Você está na mesa ${escapar(MESA)}. ` : ""}Como quer ser chamado? Ajuda a equipe a te atender pelo nome.</p><div id="bv-campos"></div><div class="acoes"><button type="button" class="botao quieto" id="bv-pular">Pular</button><button type="button" class="botao" id="bv-entrar">Entrar</button></div></div>`;
+          $("bv-campos").append(nome, zap);
+          const terminar = (dados) => { fecharFolha(); folha.className = "folha"; resolve(dados); };
+          $("bv-pular").addEventListener("click", () => terminar(null));
+          $("bv-entrar").addEventListener("click", () => terminar({ nome: nome.value.trim() || null, whatsapp: zap.value.trim() || null }));
+          veu.classList.add("aberta");
+          requestAnimationFrame(() => folha.classList.add("aberta"));
+        });
+      }
+
+      /* ================= chat com a casa ================= */
+      const chat = $("chat");
+      const mensagens = $("mensagens");
+      let chatAberto = false;
+      let historico = [];
+      function balao(texto, quem) {
+        const b = document.createElement("div");
+        b.className = `balao ${quem}`;
+        b.textContent = texto;
+        mensagens.append(b);
+        mensagens.scrollTop = mensagens.scrollHeight;
+        return b;
+      }
+      function abrirChat(itemEmFoco = null) {
+        chat.classList.add("aberto");
+        chatAberto = true;
+        chat.dataset.item = itemEmFoco ? itemEmFoco.nome : "";
+        if (!historico.length) {
+          balao(`Oi${EU.nome ? `, ${EU.nome}` : ""}! Sou o atendimento da ${DADOS.casa.nome}. Pergunte sobre pratos, ingredientes, horários ou reservas. Para pedir, é pelo garçom.`, "deles");
+          historico.push("abertura");
+        }
+        const sugestoes = $("sugestoes");
+        sugestoes.innerHTML = "";
+        const ideias = itemEmFoco
+          ? [`O que vem no ${itemEmFoco.nome}?`, "Serve quantas pessoas?", "Tem opção sem glúten?"]
+          : ["O que é o mais pedido?", "Tem algo vegano?", "Que horas fecha hoje?", "Como faço uma reserva?"];
+        for (const t of ideias) {
+          const b = document.createElement("button"); b.type = "button"; b.textContent = t;
+          b.addEventListener("click", () => enviarMensagem(t));
+          sugestoes.append(b);
+        }
+        setTimeout(() => $("campo-chat").focus(), 80);
+      }
+      function fecharChat() { chat.classList.remove("aberto"); chatAberto = false; }
+      $("bolha").addEventListener("click", () => abrirChat());
+      $("fechar-chat").addEventListener("click", fecharChat);
+      $("form-chat").addEventListener("submit", (e) => { e.preventDefault(); enviarMensagem($("campo-chat").value); });
+
+      let enviando = false;
+      async function enviarMensagem(texto) {
+        const mensagem = String(texto || "").trim();
+        if (!mensagem || enviando) return;
+        enviando = true;
+        $("campo-chat").value = "";
+        $("enviar-chat").disabled = true;
+        balao(mensagem, "eu");
+        historico.push(mensagem);
+        const digitando = balao("digitando…", "deles digitando");
+        try {
+          const r = await api("/chat", { method: "POST", body: JSON.stringify({ sessao: SESSAO, mensagem, item: chat.dataset.item || null, mesa: MESA, nome: EU.nome }) });
+          digitando.remove();
+          if (r.humano) balao("Uma pessoa da equipe assumiu esta conversa e vai até a sua mesa.", "sistema");
+          else balao(r.texto || "…", "deles");
+        } catch (e) {
+          digitando.remove();
+          balao(e.status === 429 ? "Calma, muitas mensagens seguidas. Espere um minuto." : "Não consegui responder agora. Toque em “Chamar o garçom”.", "sistema");
+        } finally {
+          enviando = false;
+          $("enviar-chat").disabled = false;
+        }
+      }
+
       /* ================= curtidas ================= */
       let minhasCurtidas = new Set();
       try { minhasCurtidas = new Set(JSON.parse(localStorage.getItem(GUARDA_CURTIDAS) || "[]")); } catch { /* sem memória */ }
@@ -350,6 +561,7 @@
         else { minhasCurtidas.add(id); i.curtidas += 1; }
         try { localStorage.setItem(GUARDA_CURTIDAS, JSON.stringify([...minhasCurtidas])); } catch { /* sem memória */ }
         pintarCurtida(i);
+        if (!desfazer) anotar("curtida", i.nome, catDe(i.categoria_id)?.nome || null);
         try {
           const r = await api(`/itens/${id}/curtir`, { method: "POST", body: JSON.stringify({ desfazer }) });
           i.curtidas = r.curtidas;
@@ -407,8 +619,10 @@
         } else {
           avatar.innerHTML = `<div class="inicial">${escapar(inicialDe(casa.nome))}</div>`;
         }
-        if (MESA) { $("mesa").innerHTML = `mesa <b>${escapar(MESA)}</b>`; $("mesa").hidden = false; }
+        desenharMesa();
         $("topo").hidden = false;
+        $("chat-nome").textContent = casa.nome;
+        $("chat-avatar").innerHTML = casa.logo_url ? `<img src="${escapar(casa.logo_url)}" alt="">` : `<div class="inicial">${escapar(inicialDe(casa.nome))}</div>`;
       }
 
       /* ---- banners ---- */
@@ -547,6 +761,7 @@
 
       /* ---- busca ---- */
       const semAcento = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      let buscaTimer = null;
       $("abrir-busca").addEventListener("click", () => { $("busca").classList.add("aberta"); $("campo-busca").value = ""; $("resultados").innerHTML = ""; setTimeout(() => $("campo-busca").focus(), 50); });
       $("fechar-busca").addEventListener("click", () => $("busca").classList.remove("aberta"));
       $("campo-busca").addEventListener("input", () => {
@@ -554,6 +769,8 @@
         const resultados = $("resultados");
         resultados.innerHTML = "";
         if (q.length < 2) return;
+        clearTimeout(buscaTimer);
+        buscaTimer = setTimeout(() => anotar("busca", $("campo-busca").value.trim()), 1200);
         const achados = ITENS.filter((i) => semAcento(`${i.nome} ${i.descricao} ${i.etiquetas.join(" ")} ${catDe(i.categoria_id)?.nome || ""}`).includes(q));
         if (!achados.length) { resultados.innerHTML = '<p class="vazio">Nada com esse nome.</p>'; return; }
         const lista = document.createElement("div"); lista.className = "itens";
@@ -567,9 +784,10 @@
         const original = botao.textContent;
         botao.disabled = true;
         try {
-          const r = await api("/garcom", { method: "POST", body: JSON.stringify({ mesa: MESA, pedido }) });
+          const r = await api("/garcom", { method: "POST", body: JSON.stringify({ mesa: MESA, pedido, sessao: SESSAO }) });
           botao.textContent = "Chamado ✓";
-          toast(r.avisado ? "A equipe foi avisada. Já já alguém vem." : "Chamado registrado. Se demorar, acene para a equipe.");
+          const quem = r.garcom ? `${r.garcom} foi avisado` : "A equipe foi avisada";
+          toast(r.avisado ? `${quem}. Já já alguém vem.` : "Chamado registrado. Se demorar, acene para a equipe.");
         } catch (e) {
           toast(e.message, true);
           botao.textContent = original;
@@ -586,12 +804,14 @@
       function fecharFolha() {
         folha.classList.remove("aberta"); veu.classList.remove("aberta");
         folha.querySelectorAll("video").forEach((v) => v.pause());
+        fecharVisualizacao();
       }
-      veu.addEventListener("click", fecharFolha);
+      veu.addEventListener("click", () => { if (!folha.classList.contains("boas-vindas")) fecharFolha(); });
 
       function abrirItem(id) {
         const i = ITENS.find((x) => x.id === id);
         if (!i) return;
+        abrirVisualizacao(i);
         const c = catDe(i.categoria_id);
         const quadros = i.midias.length
           ? i.midias.map((m) => m.tipo === "video"
@@ -626,9 +846,11 @@
             <div class="rodape">
               <div class="total"><small>total</small><span id="total-vivo">${BRL(precoHoje(i))}</span></div>
               <button type="button" class="botao quieto" id="fechar-folha">Voltar</button>
+              ${DADOS.chat ? '<button type="button" class="botao quieto" id="perguntar" title="Perguntar sobre este item">?</button>' : ""}
               <button type="button" class="botao" id="pedir">Pedir ao garçom</button>
             </div>
           </div>`;
+        if (DADOS.chat) $("perguntar").addEventListener("click", () => { fecharFolha(); abrirChat(i); });
         const escolhas = () => [...folha.querySelectorAll(".opcao input:checked")].map((el) => el.dataset.nome);
         const recalc = () => {
           let total = precoHoje(i);
@@ -639,6 +861,7 @@
         $("fechar-folha").addEventListener("click", fecharFolha);
         $("pedir").addEventListener("click", () => {
           const detalhe = escolhas();
+          fecharVisualizacao();
           chamarGarcom(`${i.nome}${detalhe.length ? ` (${detalhe.join(", ")})` : ""}`, $("pedir"));
         });
         folha.querySelectorAll("[data-curtir]").forEach((b) => b.addEventListener("click", () => alternarCurtida(b.dataset.curtir)));
@@ -733,6 +956,22 @@
         desenhar();
         $("fab").hidden = false;
         $("rodape").hidden = false;
+        $("bolha").hidden = !DADOS.chat;
+
+        // A sessão da mesa. Na primeira vez neste aparelho, pergunta o nome
+        // (dá para pular); nas próximas, abre em silêncio.
+        let guardada = null;
+        try { guardada = JSON.parse(localStorage.getItem(GUARDA_SESSAO) || "null"); } catch { /* sem memória */ }
+        if (guardada && Date.now() - guardada.em < 4 * 3600_000) {
+          await garantirSessao();
+        } else if (MESA && !EU.perguntado) {
+          const resposta = await pedirNome();
+          EU = { nome: resposta?.nome ?? null, perguntado: true };
+          try { localStorage.setItem(GUARDA_EU, JSON.stringify(EU)); } catch { /* sem memória */ }
+          await abrirSessao({ nome: EU.nome, whatsapp: resposta?.whatsapp ?? null });
+        } else {
+          await abrirSessao({ nome: EU.nome ?? null, whatsapp: null });
+        }
       }
       iniciar();
     </script>

@@ -1,7 +1,9 @@
+import { randomBytes } from "node:crypto";
 import { db, ehMigracaoPendente } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
 import { promocaoVigente } from "./cardapio.js";
 import { hojeNaCasa } from "./fuso.js";
+import { registrarClienteSeDer } from "./clientes.js";
 import type { Venue } from "./venues.js";
 
 /**
@@ -92,6 +94,9 @@ export const LIMITES = {
   curtir: new LimiteDeRitmo(60, 60_000),
   comentar: new LimiteDeRitmo(5, 10 * 60_000),
   garcom: new LimiteDeRitmo(6, 5 * 60_000),
+  sessao: new LimiteDeRitmo(10, 10 * 60_000),
+  eventos: new LimiteDeRitmo(120, 60_000),
+  chat: new LimiteDeRitmo(20, 10 * 60_000),
 };
 
 // ============================================================
@@ -519,15 +524,25 @@ export async function chamarGarcom(params: {
   venue: Venue;
   mesa: string | null;
   pedido: string | null;
-}): Promise<{ registrado: boolean; avisado: boolean }> {
-  const numeroDaMesa = Number.parseInt(String(params.mesa ?? "").replace(/\D/g, ""), 10);
-  const mesa = Number.isFinite(numeroDaMesa) ? numeroDaMesa : 0;
+  /** A sessão do celular, quando há: dá o nome do cliente ao aviso. */
+  sessao?: string | null;
+}): Promise<{ registrado: boolean; avisado: boolean; garcom: string | null }> {
+  const mesa = numeroDaMesa(params.mesa);
+
+  let clienteNome: string | null = null;
+  if (params.sessao) {
+    const s = await cliente().from("mesa_sessoes").select("cliente_nome").eq("venue_id", params.venue.id).eq("sessao_id", params.sessao).maybeSingle();
+    clienteNome = (s.data?.cliente_nome as string) || null;
+  }
+  const garcom = await garcomDaMesa(params.venue, mesa);
 
   let registrado = false;
   const evento = await cliente().from("mesa_eventos").insert({
     venue_id: params.venue.id,
     mesa_numero: mesa,
-    tipo: "chamou_garcom",
+    sessao_id: params.sessao ?? null,
+    cliente_nome: clienteNome,
+    tipo: params.pedido ? "pedido" : "chamou_garcom",
     item_nome: params.pedido ? params.pedido.slice(0, 200) : null,
   });
   if (evento.error) {
@@ -541,11 +556,11 @@ export async function chamarGarcom(params: {
   // O aviso vai para o WhatsApp de quem cuida da casa — o mesmo número que
   // recebe reserva nova. Sem número cadastrado, fica só o registro.
   const destino = (params.venue.reservas_avisar_whatsapp ?? "").trim();
-  if (!destino) return { registrado, avisado: false };
+  if (!destino) return { registrado, avisado: false, garcom };
 
-  const linhas = [
-    `🛎️ ${mesa ? `Mesa ${mesa}` : "Uma mesa"} chamou o garçom — ${params.venue.name}.`,
-  ];
+  const quem = [mesa ? `Mesa ${mesa}` : "Uma mesa", clienteNome ? `(${clienteNome})` : null].filter(Boolean).join(" ");
+  const linhas = [`🛎️ ${quem} chamou o garçom — ${params.venue.name}.`];
+  if (garcom) linhas.push(`Garçom da mesa hoje: ${garcom}.`);
   if (params.pedido) linhas.push(``, `Quer pedir: ${params.pedido.slice(0, 200)}`);
 
   const { error } = await inserirAvisos({
@@ -558,9 +573,9 @@ export async function chamarGarcom(params: {
   });
   if (error) {
     console.error(`[cardapio] aviso de chamado não entrou: ${error.message}`);
-    return { registrado, avisado: false };
+    return { registrado, avisado: false, garcom };
   }
-  return { registrado, avisado: true };
+  return { registrado, avisado: true, garcom };
 }
 
 // ============================================================
@@ -1353,4 +1368,357 @@ export async function chamadosRecentes(venueId: string, horas = 12): Promise<Arr
     pedido: e.item_nome ?? null,
     em: e.criado_em,
   }));
+}
+
+// ============================================================
+// Mesas
+// ============================================================
+
+export interface Mesa {
+  id: string;
+  numero: number;
+  nome: string;
+  ativa: boolean;
+}
+
+export async function listarMesas(venueId: string): Promise<Mesa[]> {
+  const { data, error } = await cliente()
+    .from("mesas")
+    .select("id, numero, nome, ativa")
+    .eq("venue_id", venueId)
+    .order("numero", { ascending: true });
+  if (error) {
+    if (ehMigracaoPendente(error.message)) return [];
+    falhar(500, "Falha ao listar as mesas", error.message);
+  }
+  return (data ?? []).map((m: Record<string, unknown>) => ({
+    id: String(m.id),
+    numero: Number(m.numero),
+    nome: String(m.nome ?? ""),
+    ativa: m.ativa !== false,
+  }));
+}
+
+/**
+ * Cria as mesas de `de` a `ate` de uma vez. As que já existem ficam como
+ * estão: cadastrar "1 a 40" numa casa que já tem a 12 não pode apagar o
+ * nome que a 12 recebeu.
+ */
+export async function criarMesas(venueId: string, de: unknown, ate: unknown): Promise<{ criadas: number }> {
+  const inicio = Number(de);
+  const fim = Number(ate ?? de);
+  if (!Number.isInteger(inicio) || !Number.isInteger(fim) || inicio < 1 || fim < inicio || fim > 999) {
+    throw new ErroDoCardapio(400, "Informe os números das mesas, de 1 a 999 (ex.: de 1 até 40).");
+  }
+  if (fim - inicio > 300) throw new ErroDoCardapio(400, "No máximo 300 mesas por vez.");
+  const existentes = new Set((await listarMesas(venueId)).map((m) => m.numero));
+  const novas = [];
+  for (let n = inicio; n <= fim; n += 1) if (!existentes.has(n)) novas.push({ venue_id: venueId, numero: n, ativa: true });
+  if (novas.length === 0) return { criadas: 0 };
+  const { error } = await cliente().from("mesas").insert(novas);
+  if (error) falhar(500, "Falha ao criar as mesas", error.message);
+  return { criadas: novas.length };
+}
+
+export async function atualizarMesa(venueId: string, id: string, dados: { nome?: string; ativa?: boolean }): Promise<void> {
+  const mudancas: Record<string, unknown> = {};
+  if (dados.nome !== undefined) mudancas.nome = textoCurto(dados.nome, "O nome da mesa", 40);
+  if (dados.ativa !== undefined) mudancas.ativa = Boolean(dados.ativa);
+  if (Object.keys(mudancas).length === 0) return;
+  const { data, error } = await cliente().from("mesas").update(mudancas).eq("id", id).eq("venue_id", venueId).select("id").maybeSingle();
+  if (error) falhar(500, "Falha ao salvar a mesa", error.message);
+  if (!data) throw new ErroDoCardapio(404, "Mesa não encontrada.");
+}
+
+export async function apagarMesa(venueId: string, id: string): Promise<void> {
+  const { error } = await cliente().from("mesas").delete().eq("id", id).eq("venue_id", venueId);
+  if (error) falhar(500, "Falha ao apagar a mesa", error.message);
+}
+
+// ============================================================
+// Garçom por mesa, por dia
+// ============================================================
+
+export interface TurnoDaMesa {
+  mesa: number;
+  garcom: string;
+}
+
+/** Quem está em cada mesa no dia (o dia do calendário da casa). */
+export async function turnoDoDia(venueId: string, dia: string): Promise<TurnoDaMesa[]> {
+  const { data, error } = await cliente()
+    .from("turno_mesas")
+    .select("mesa_numero, garcom_nome")
+    .eq("venue_id", venueId)
+    .eq("turno_data", dia)
+    .order("mesa_numero", { ascending: true });
+  if (error) {
+    if (ehMigracaoPendente(error.message)) return [];
+    falhar(500, "Falha ao ler o turno", error.message);
+  }
+  return (data ?? [])
+    .filter((t: Record<string, unknown>) => String(t.garcom_nome ?? "").trim())
+    .map((t: Record<string, unknown>) => ({ mesa: Number(t.mesa_numero), garcom: String(t.garcom_nome) }));
+}
+
+/** Define (ou tira, com nome vazio) o garçom de uma mesa no dia. */
+export async function definirGarcom(params: { venueId: string; dia: string; mesa: unknown; garcom: unknown }): Promise<void> {
+  const mesa = Number(params.mesa);
+  if (!Number.isInteger(mesa) || mesa < 0) throw new ErroDoCardapio(400, "Mesa inválida.");
+  const garcom = textoCurto(params.garcom, "O nome do garçom", 60);
+  if (!garcom) {
+    const { error } = await cliente().from("turno_mesas").delete().eq("venue_id", params.venueId).eq("turno_data", params.dia).eq("mesa_numero", mesa);
+    if (error) falhar(500, "Falha ao limpar a mesa", error.message);
+    return;
+  }
+  const { error } = await cliente()
+    .from("turno_mesas")
+    .upsert({ venue_id: params.venueId, turno_data: params.dia, mesa_numero: mesa, garcom_nome: garcom }, { onConflict: "venue_id,turno_data,mesa_numero" });
+  if (error) falhar(500, "Falha ao definir o garçom", error.message);
+}
+
+/** Os nomes já usados nos últimos 60 dias: viram sugestão no painel. */
+export async function garconsRecentes(venueId: string): Promise<string[]> {
+  const desde = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
+  const { data, error } = await cliente()
+    .from("turno_mesas")
+    .select("garcom_nome")
+    .eq("venue_id", venueId)
+    .gte("turno_data", desde)
+    .limit(2000);
+  if (error) return [];
+  const contagem = new Map<string, number>();
+  for (const t of data ?? []) {
+    const nome = String(t.garcom_nome ?? "").trim();
+    if (nome) contagem.set(nome, (contagem.get(nome) ?? 0) + 1);
+  }
+  return [...contagem.entries()].sort((a, b) => b[1] - a[1]).map(([nome]) => nome);
+}
+
+async function garcomDaMesa(venue: Venue, mesa: number): Promise<string | null> {
+  if (!mesa) return null;
+  const turno = await turnoDoDia(venue.id, hojeNaCasa(venue.timezone));
+  return turno.find((t) => t.mesa === mesa)?.garcom ?? null;
+}
+
+// ============================================================
+// A sessão do cliente na mesa e o que ele está olhando
+// ============================================================
+
+export function numeroDaMesa(bruto: unknown): number {
+  const n = Number.parseInt(String(bruto ?? "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Abre a sessão do celular que acabou de escanear o QR. */
+export async function abrirSessao(params: {
+  venue: Venue;
+  mesa: unknown;
+  nome?: string | null;
+  whatsapp?: string | null;
+}): Promise<{ sessao: string; mesa: number; garcom: string | null }> {
+  const mesa = numeroDaMesa(params.mesa);
+  const nome = textoCurto(params.nome, "O nome", 60) || null;
+  const whatsapp = String(params.whatsapp ?? "").replace(/\D/g, "") || null;
+  const sessao = randomBytes(18).toString("base64url");
+
+  const { error } = await cliente().from("mesa_sessoes").insert({
+    venue_id: params.venue.id,
+    mesa_numero: mesa,
+    sessao_id: sessao,
+    cliente_nome: nome,
+    cliente_whatsapp: whatsapp,
+    ativa: true,
+  });
+  if (error) falhar(500, "Falha ao abrir a mesa", error.message);
+
+  // Quem deixou o WhatsApp entra na base da casa — é o mesmo cliente que
+  // amanhã recebe o parabéns. Acessório: não derruba a abertura da mesa.
+  if (whatsapp && whatsapp.length >= 10) {
+    await registrarClienteSeDer(params.venue.id, "cardapio", {
+      telefone: whatsapp,
+      nome,
+      visita: { dia: hojeNaCasa(params.venue.timezone), origem: "cardapio" },
+    });
+  }
+
+  return { sessao, mesa, garcom: await garcomDaMesa(params.venue, mesa) };
+}
+
+const TIPOS_DE_EVENTO = new Set(["visualizacao", "curtida", "busca", "pedido", "chamou_garcom", "chat"]);
+
+export interface EventoDaMesa {
+  tipo: string;
+  item: string | null;
+  categoria: string | null;
+  segundos: number;
+}
+
+/** Limpa o lote que o celular mandou: tipo conhecido, textos curtos, no máximo 20. */
+export function validarEventos(bruto: unknown): EventoDaMesa[] {
+  if (!Array.isArray(bruto)) throw new ErroDoCardapio(400, "Mande a lista de eventos.");
+  return bruto.slice(0, 20).flatMap((e: Record<string, unknown>) => {
+    const tipo = String(e?.tipo ?? "");
+    if (!TIPOS_DE_EVENTO.has(tipo)) return [];
+    const segundos = Number(e.segundos ?? 0);
+    return [{
+      tipo,
+      item: String(e.item ?? "").trim().slice(0, 120) || null,
+      categoria: String(e.categoria ?? "").trim().slice(0, 60) || null,
+      segundos: Number.isFinite(segundos) ? Math.max(0, Math.min(3600, Math.round(segundos))) : 0,
+    }];
+  });
+}
+
+export async function registrarEventos(params: {
+  venueId: string;
+  sessao: string;
+  eventos: EventoDaMesa[];
+}): Promise<{ gravados: number }> {
+  if (params.eventos.length === 0) return { gravados: 0 };
+  const s = await cliente()
+    .from("mesa_sessoes")
+    .select("id, mesa_numero, cliente_nome, eventos")
+    .eq("venue_id", params.venueId)
+    .eq("sessao_id", params.sessao)
+    .maybeSingle();
+  if (s.error) falhar(500, "Falha ao localizar a mesa", s.error.message);
+  if (!s.data) throw new ErroDoCardapio(404, "Sessão da mesa não encontrada. Escaneie o QR de novo.");
+
+  const { error } = await cliente().from("mesa_eventos").insert(
+    params.eventos.map((e) => ({
+      venue_id: params.venueId,
+      mesa_numero: s.data.mesa_numero,
+      sessao_id: params.sessao,
+      cliente_nome: s.data.cliente_nome,
+      item_nome: e.item,
+      item_categoria: e.categoria,
+      tipo: e.tipo,
+      segundos_visualizado: e.segundos,
+    })),
+  );
+  if (error) falhar(500, "Falha ao gravar os eventos", error.message);
+
+  const ultimoComItem = [...params.eventos].reverse().find((e) => e.item);
+  await cliente()
+    .from("mesa_sessoes")
+    .update({
+      ultimo_evento_em: new Date().toISOString(),
+      eventos: Number(s.data.eventos ?? 0) + params.eventos.length,
+      ...(ultimoComItem ? { ultimo_item: ultimoComItem.item } : {}),
+    })
+    .eq("id", s.data.id);
+  return { gravados: params.eventos.length };
+}
+
+/** O que está acontecendo no salão agora, para a tela "Ao vivo". */
+export interface AoVivo {
+  mesas: Array<{
+    mesa: number;
+    garcom: string | null;
+    cliente: string | null;
+    desde: string;
+    ultimo_evento: string | null;
+    olhando: string | null;
+    eventos: number;
+  }>;
+  ultimos: Array<{ em: string; mesa: number; cliente: string | null; tipo: string; item: string | null; segundos: number }>;
+  mais_vistos_hoje: Array<{ item: string; vezes: number; segundos: number }>;
+  chamados_abertos: number;
+}
+
+export async function aoVivo(venue: Venue, agora = new Date()): Promise<AoVivo> {
+  const desdeSessoes = new Date(agora.getTime() - 3 * 3600_000).toISOString();
+  const inicioDoDia = `${hojeNaCasa(venue.timezone, agora)}T00:00:00`;
+  const [sessoes, eventos, turno] = await Promise.all([
+    cliente()
+      .from("mesa_sessoes")
+      .select("mesa_numero, cliente_nome, iniciada_em, ultimo_evento_em, ultimo_item, eventos")
+      .eq("venue_id", venue.id)
+      .eq("ativa", true)
+      .or(`ultimo_evento_em.gte.${desdeSessoes},iniciada_em.gte.${desdeSessoes}`)
+      .order("ultimo_evento_em", { ascending: false, nullsFirst: false })
+      .limit(200),
+    cliente()
+      .from("mesa_eventos")
+      .select("mesa_numero, cliente_nome, tipo, item_nome, segundos_visualizado, criado_em")
+      .eq("venue_id", venue.id)
+      .gte("criado_em", new Date(new Date(inicioDoDia).getTime() - 12 * 3600_000).toISOString())
+      .order("criado_em", { ascending: false })
+      .limit(2000),
+    turnoDoDia(venue.id, hojeNaCasa(venue.timezone, agora)),
+  ]);
+  for (const r of [sessoes, eventos]) {
+    if (r.error) {
+      if (ehMigracaoPendente(r.error.message)) return { mesas: [], ultimos: [], mais_vistos_hoje: [], chamados_abertos: 0 };
+      falhar(500, "Falha ao ler o salão", r.error.message);
+    }
+  }
+  const garcomDe = new Map(turno.map((t) => [t.mesa, t.garcom]));
+
+  // Uma linha por mesa: a sessão mais recente de cada uma.
+  const porMesa = new Map<number, Record<string, unknown>>();
+  for (const s of sessoes.data ?? []) {
+    const n = Number(s.mesa_numero);
+    if (!porMesa.has(n)) porMesa.set(n, s);
+  }
+
+  return resumirAoVivo({
+    sessoes: [...porMesa.values()],
+    eventos: eventos.data ?? [],
+    garcomDe,
+    agora,
+  });
+}
+
+/** A conta do "ao vivo", separada para ter teste sem banco. */
+export function resumirAoVivo(params: {
+  sessoes: Array<Record<string, unknown>>;
+  eventos: Array<Record<string, unknown>>;
+  garcomDe: Map<number, string>;
+  agora: Date;
+}): AoVivo {
+  const mesas = params.sessoes
+    .map((s) => ({
+      mesa: Number(s.mesa_numero),
+      garcom: params.garcomDe.get(Number(s.mesa_numero)) ?? null,
+      cliente: (s.cliente_nome as string) || null,
+      desde: String(s.iniciada_em),
+      ultimo_evento: (s.ultimo_evento_em as string) || null,
+      olhando: (s.ultimo_item as string) || null,
+      eventos: Number(s.eventos ?? 0),
+    }))
+    .sort((a, b) => a.mesa - b.mesa);
+
+  const vistos = new Map<string, { vezes: number; segundos: number }>();
+  let chamadosAbertos = 0;
+  const meiaHora = params.agora.getTime() - 30 * 60_000;
+  for (const e of params.eventos) {
+    if (e.tipo === "visualizacao" && e.item_nome) {
+      const atual = vistos.get(String(e.item_nome)) ?? { vezes: 0, segundos: 0 };
+      atual.vezes += 1;
+      atual.segundos += Number(e.segundos_visualizado ?? 0);
+      vistos.set(String(e.item_nome), atual);
+    }
+    if ((e.tipo === "chamou_garcom" || e.tipo === "pedido") && new Date(String(e.criado_em)).getTime() >= meiaHora) {
+      chamadosAbertos += 1;
+    }
+  }
+
+  return {
+    mesas,
+    ultimos: params.eventos.slice(0, 60).map((e) => ({
+      em: String(e.criado_em),
+      mesa: Number(e.mesa_numero),
+      cliente: (e.cliente_nome as string) || null,
+      tipo: String(e.tipo),
+      item: (e.item_nome as string) || null,
+      segundos: Number(e.segundos_visualizado ?? 0),
+    })),
+    mais_vistos_hoje: [...vistos.entries()]
+      .map(([item, v]) => ({ item, ...v }))
+      .sort((a, b) => b.vezes - a.vezes || b.segundos - a.segundos)
+      .slice(0, 15),
+    chamados_abertos: chamadosAbertos,
+  };
 }

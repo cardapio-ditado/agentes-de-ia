@@ -25,6 +25,7 @@ const NOME_DA_ORIGEM = {
   agente: "falou no WhatsApp",
   pesquisa: "respondeu a pesquisa",
   planilha: "veio de planilha",
+  cardapio: "abriu o cardápio na mesa",
 };
 
 

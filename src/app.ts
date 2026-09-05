@@ -20,11 +20,22 @@ import {
   ErroDoCardapio,
   LIMITES as LIMITES_DO_CARDAPIO,
   LIMITE_MIDIA_BYTES,
+  abrirSessao,
   adicionarMidiaAoItem,
+  aoVivo,
   apagarBanner,
   apagarCategoria,
   apagarItem,
+  apagarMesa,
   apagarPromocao,
+  atualizarMesa,
+  criarMesas,
+  definirGarcom,
+  garconsRecentes,
+  listarMesas,
+  registrarEventos,
+  turnoDoDia,
+  validarEventos,
   atualizarBanner,
   atualizarCategoria,
   atualizarItem,
@@ -768,6 +779,25 @@ async function enderecoDoCardapio(
 ): Promise<string> {
   const caminho = `${enderecoBase()}/cardapio/${encodeURIComponent(await identificadorPublico(venue))}`;
   return mesa?.trim() ? `${caminho}?mesa=${encodeURIComponent(mesa.trim())}` : caminho;
+}
+
+/**
+ * O agente que atende o chat da mesa, se a casa tiver um.
+ *
+ * O cardápio não DEPENDE do módulo de agentes: sem ele, a bolinha de chat
+ * simplesmente não aparece. Com ele, a conversa da mesa entra na mesma
+ * inbox do WhatsApp — com "assumir atendimento", histórico e cobrança por
+ * pontos —, como a migração de agosto já previa para o chat da mesa.
+ */
+async function agenteDaMesa(venue: Venue): Promise<string | null> {
+  if (!venue.org_id) return null;
+  if (!(await temModulo(venue.id, "agentes-ia"))) return null;
+  try {
+    const agentes = await listAgentsInOrg(venue.org_id);
+    return agentes[0]?.slug ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -2283,9 +2313,53 @@ async function roteasApi(
         );
       }
 
+      // GET /v1/venues/:slug/cardapio/mesas — as mesas, o garçom de cada uma hoje
+      if (metodo === "GET" && acao === "mesas" && p.length === 4) {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const dia = url.searchParams.get("dia") || hojeNaCasa(venue.timezone);
+        const [mesas, turno, garcons] = await comErroDoCardapio(() =>
+          Promise.all([listarMesas(venue.id), turnoDoDia(venue.id, dia), garconsRecentes(venue.id)]),
+        );
+        return ok(res, { dia, mesas, turno, garcons });
+      }
+
+      // GET /v1/venues/:slug/cardapio/ao-vivo — o salão agora
+      if (metodo === "GET" && acao === "ao-vivo" && p.length === 4) {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDoCardapio(() => aoVivo(venue)));
+      }
+
       // Daqui para baixo é escrita.
       const chave = await exigirChave(req, "reservations:write");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+
+      // ---- mesas e turno ----
+      if (acao === "mesas") {
+        // POST { de, ate } — cria de uma vez
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = await lerJson(req);
+          return ok(res, await comErroDoCardapio(() => criarMesas(venue.id, corpo.de, corpo.ate)), 201);
+        }
+        if (metodo === "PATCH" && p.length === 5) {
+          const corpo = await lerJson(req);
+          await comErroDoCardapio(() => atualizarMesa(venue.id, p[4]!, corpo as { nome?: string; ativa?: boolean }));
+          return ok(res, { salvo: true });
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          await comErroDoCardapio(() => apagarMesa(venue.id, p[4]!));
+          return ok(res, { removido: true });
+        }
+      }
+      // PUT /v1/venues/:slug/cardapio/turno  { mesa, garcom, dia? }
+      if (metodo === "PUT" && acao === "turno" && p.length === 4) {
+        const corpo = await lerJson(req);
+        const dia = textoOpcional(corpo, "dia") ?? hojeNaCasa(venue.timezone);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) throw erro(400, "invalid_request", "Dia no formato AAAA-MM-DD.");
+        await comErroDoCardapio(() => definirGarcom({ venueId: venue.id, dia, mesa: corpo.mesa, garcom: corpo.garcom ?? "" }));
+        return ok(res, { salvo: true });
+      }
 
       // PUT /v1/venues/:slug/cardapio/{categorias|itens|banners}/ordem  { ids }
       if (metodo === "PUT" && p[4] === "ordem" && p.length === 5) {
@@ -4017,8 +4091,92 @@ async function roteasApi(
 
     // GET /v1/cardapio-publico/:casa
     if (metodo === "GET" && p.length === 2) {
-      const cardapio = await comErroDoCardapio(() => cardapioPublico(venue));
-      return ok(res, { ...cardapio, casa: { ...cardapio.casa, ...marcaDaCasa(venue) } });
+      const [cardapio, agente] = await Promise.all([comErroDoCardapio(() => cardapioPublico(venue)), agenteDaMesa(venue)]);
+      return ok(res, {
+        ...cardapio,
+        casa: { ...cardapio.casa, ...marcaDaCasa(venue) },
+        chat: agente !== null,
+      });
+    }
+
+    // POST /v1/cardapio-publico/:casa/sessao  { mesa, nome?, whatsapp? }
+    // O celular que acabou de escanear o QR abre a "sessão" da mesa: é o que
+    // amarra os eventos, o chat e o chamado do garçom a uma pessoa.
+    if (metodo === "POST" && p[2] === "sessao" && p.length === 3) {
+      if (!LIMITES_DO_CARDAPIO.sessao.permitir(`${ipDe(req)}:${venue.id}`)) {
+        throw erro(429, "rate_limited", "Muitas aberturas seguidas. Espere um pouco.");
+      }
+      const corpo = await lerJson(req);
+      return ok(
+        res,
+        await comErroDoCardapio(() =>
+          abrirSessao({
+            venue,
+            mesa: corpo.mesa,
+            nome: textoOpcional(corpo, "nome") ?? null,
+            whatsapp: textoOpcional(corpo, "whatsapp") ?? null,
+          }),
+        ),
+        201,
+      );
+    }
+
+    // POST /v1/cardapio-publico/:casa/eventos  { sessao, eventos: [...] }
+    // O que a pessoa olhou, por quanto tempo, o que curtiu e buscou. Chega
+    // em lote, também pelo sendBeacon ao fechar a página.
+    if (metodo === "POST" && p[2] === "eventos" && p.length === 3) {
+      if (!LIMITES_DO_CARDAPIO.eventos.permitir(`${ipDe(req)}:${venue.id}`)) {
+        throw erro(429, "rate_limited", "Muitos eventos seguidos.");
+      }
+      const corpo = await lerJson(req, 100_000);
+      const sessao = textoOpcional(corpo, "sessao");
+      if (!sessao) throw erro(400, "invalid_request", "Sem sessão da mesa.");
+      const eventos = await comErroDoCardapio(async () => validarEventos(corpo.eventos));
+      return ok(res, await comErroDoCardapio(() => registrarEventos({ venueId: venue.id, sessao, eventos })));
+    }
+
+    // POST /v1/cardapio-publico/:casa/chat  { sessao, mensagem, item? }
+    if (metodo === "POST" && p[2] === "chat" && p.length === 3) {
+      if (!LIMITES_DO_CARDAPIO.chat.permitir(`${ipDe(req)}:${venue.id}`)) {
+        throw erro(429, "rate_limited", "Muitas mensagens seguidas. Espere um minuto.");
+      }
+      const agentSlug = await agenteDaMesa(venue);
+      if (!agentSlug) throw erro(404, "not_found", "Esta casa não tem atendimento por chat.");
+      const corpo = await lerJson(req);
+      const sessao = textoOpcional(corpo, "sessao");
+      const mensagem = textoOpcional(corpo, "mensagem");
+      if (!sessao) throw erro(400, "invalid_request", "Sem sessão da mesa.");
+      if (!mensagem) throw erro(400, "invalid_request", "Escreva a mensagem.");
+      if (mensagem.length > 1000) throw erro(400, "invalid_request", "Mensagem longa demais (máximo 1000 caracteres).");
+      const item = textoOpcional(corpo, "item");
+      const mesa = textoOpcional(corpo, "mesa");
+      const nome = textoOpcional(corpo, "nome");
+
+      // O item que a pessoa está olhando vai junto, entre parênteses: é o
+      // contexto que o agente precisa para "esse aqui é apimentado?".
+      const userMessage = item ? `(sobre "${item.slice(0, 120)}") ${mensagem}` : mensagem;
+      // Registro do evento é acessório: nunca segura a resposta.
+      void registrarEventos({ venueId: venue.id, sessao, eventos: [{ tipo: "chat", item: item ?? null, categoria: null, segundos: 0 }] }).catch(() => {});
+
+      try {
+        const resultado = await runAgent({
+          agentSlug,
+          userMessage,
+          channel: "cardapio",
+          externalId: sessao,
+          venueSlug: venue.slug,
+          contato: { nome: [mesa ? `Mesa ${mesa}` : "Mesa", nome].filter(Boolean).join(" · ") },
+        });
+        if (!resultado.respondeu) {
+          return ok(res, { texto: null, humano: true });
+        }
+        return ok(res, { texto: resultado.text, humano: false });
+      } catch (e) {
+        if (e instanceof PlanoBloqueadoError) {
+          return ok(res, { texto: "Nosso atendimento por chat está pausado agora. Toque em “Chamar o garçom” que a equipe vem até você.", humano: false });
+        }
+        throw e;
+      }
     }
 
     // GET | POST /v1/cardapio-publico/:casa/itens/:id/comentarios
@@ -4057,6 +4215,7 @@ async function roteasApi(
           venue,
           mesa: textoOpcional(corpo, "mesa") ?? null,
           pedido: textoOpcional(corpo, "pedido") ?? null,
+          sessao: textoOpcional(corpo, "sessao") ?? null,
         }),
       );
     }

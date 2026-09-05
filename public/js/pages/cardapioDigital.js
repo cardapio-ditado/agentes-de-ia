@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dataHora, desde, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * O cardápio digital, como a casa o mexe.
@@ -14,13 +14,24 @@ import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.j
  */
 
 const ABAS = [
+  ["aovivo", "Ao vivo"],
   ["itens", "Itens"],
   ["categorias", "Categorias"],
   ["banners", "Banners"],
   ["promocoes", "Promoções"],
   ["comentarios", "Comentários"],
+  ["mesas", "Mesas e garçons"],
   ["qrcode", "QR code"],
 ];
+
+const NOME_DO_EVENTO = {
+  visualizacao: "abriu",
+  curtida: "curtiu",
+  busca: "buscou",
+  pedido: "pediu ao garçom",
+  chamou_garcom: "chamou o garçom",
+  chat: "perguntou no chat sobre",
+};
 
 const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
@@ -107,14 +118,224 @@ export async function cardapioDigital(raiz, ctx) {
     );
   }
 
+  let pararAoVivo = null;
   function desenharAba() {
     limpar(corpo);
-    if (abaAtiva === "itens") abaItens();
+    if (pararAoVivo) { pararAoVivo(); pararAoVivo = null; }
+    if (abaAtiva === "aovivo") abaAoVivo();
+    else if (abaAtiva === "itens") abaItens();
     else if (abaAtiva === "categorias") abaCategorias();
     else if (abaAtiva === "banners") abaBanners();
     else if (abaAtiva === "promocoes") abaPromocoes();
     else if (abaAtiva === "comentarios") abaComentarios();
+    else if (abaAtiva === "mesas") abaMesas();
     else abaQrcode();
+  }
+
+  /* ================= Ao vivo: o salão agora ================= */
+
+  function abaAoVivo() {
+    const resumo = el("div", { classe: "grade grade-2" });
+    const mesasCaixa = el("div", { classe: "tabela" });
+    const feed = el("div", { classe: "tabela" });
+    const maisVistos = el("div", { classe: "tabela" });
+    const atualizadoEm = el("span", { classe: "muted", texto: "" });
+
+    corpo.append(
+      el("div", { classe: "cabecalho-secao" }, [
+        el("div", {}, [
+          el("h2", { texto: "Salão agora" }),
+          el("p", { classe: "muted", texto: "Quem está em cada mesa, o que está olhando e quem chamou. Atualiza sozinho a cada 10 segundos." }),
+        ]),
+        atualizadoEm,
+      ]),
+      resumo,
+      el("h3", { style: "margin:8px 0 6px", texto: "Mesas com gente" }),
+      mesasCaixa,
+      el("div", { classe: "grade grade-2", style: "margin-top:12px" }, [
+        el("div", {}, [el("h3", { style: "margin:0 0 6px", texto: "Últimos acontecimentos" }), feed]),
+        el("div", {}, [el("h3", { style: "margin:0 0 6px", texto: "Mais abertos hoje" }), maisVistos]),
+      ]),
+    );
+
+    async function atualizar() {
+      let vivo;
+      try {
+        vivo = await get(`/v1/venues/${ctx.venue}/cardapio/ao-vivo`);
+      } catch (e) {
+        limpar(mesasCaixa).append(el("p", { classe: "muted", style: "padding:12px", texto: e.message }));
+        return;
+      }
+      atualizadoEm.textContent = `atualizado ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+
+      limpar(resumo).append(
+        el("div", { classe: `cartao${vivo.chamados_abertos ? " linha-atencao" : ""}` }, [
+          el("strong", { style: "font-size:1.6rem", texto: String(vivo.chamados_abertos) }),
+          el("p", { classe: "muted", style: "margin:0", texto: "chamados de garçom na última meia hora" }),
+        ]),
+        el("div", { classe: "cartao" }, [
+          el("strong", { style: "font-size:1.6rem", texto: String(vivo.mesas.length) }),
+          el("p", { classe: "muted", style: "margin:0", texto: "mesas com o cardápio aberto nas últimas 3 horas" }),
+        ]),
+      );
+
+      limpar(mesasCaixa);
+      if (!vivo.mesas.length) mesasCaixa.append(vazio("Nenhuma mesa aberta", "Assim que alguém escanear o QR, aparece aqui."));
+      for (const m of vivo.mesas) {
+        mesasCaixa.append(
+          el("div", { classe: "linha-tabela" }, [
+            el("div", { classe: "linha-principal" }, [
+              el("strong", { texto: `${m.mesa ? `Mesa ${m.mesa}` : "Sem mesa"}${m.cliente ? ` · ${m.cliente}` : ""}${m.garcom ? ` · garçom ${m.garcom}` : ""}` }),
+              el("span", { classe: "muted", texto: m.olhando ? `olhando: ${m.olhando}` : "ainda não abriu nenhum item" }),
+            ]),
+            el("div", { classe: "linha-detalhes" }, [
+              el("span", { classe: "muted", texto: `${m.eventos} ações · há ${desde(m.ultimo_evento || m.desde)}` }),
+            ]),
+          ]),
+        );
+      }
+
+      limpar(feed);
+      if (!vivo.ultimos.length) feed.append(vazio("Nada ainda hoje"));
+      for (const e of vivo.ultimos.slice(0, 30)) {
+        const quem = `${e.mesa ? `Mesa ${e.mesa}` : "Sem mesa"}${e.cliente ? ` (${e.cliente})` : ""}`;
+        const oque = `${NOME_DO_EVENTO[e.tipo] ?? e.tipo}${e.item ? ` ${e.item}` : ""}${e.tipo === "visualizacao" && e.segundos ? ` por ${e.segundos}s` : ""}`;
+        feed.append(
+          el("div", { classe: `linha-tabela${e.tipo === "pedido" || e.tipo === "chamou_garcom" ? " linha-atencao" : ""}` }, [
+            el("div", { classe: "linha-principal" }, [el("strong", { texto: quem }), el("span", { classe: "muted", texto: oque })]),
+            el("span", { classe: "muted", texto: `há ${desde(e.em)}` }),
+          ]),
+        );
+      }
+
+      limpar(maisVistos);
+      if (!vivo.mais_vistos_hoje.length) maisVistos.append(vazio("Nenhum item aberto hoje"));
+      for (const v of vivo.mais_vistos_hoje) {
+        maisVistos.append(
+          el("div", { classe: "linha-tabela" }, [
+            el("div", { classe: "linha-principal" }, [el("strong", { texto: v.item })]),
+            el("span", { classe: "muted", texto: `${v.vezes}× · ${Math.round(v.segundos / 60)} min no total` }),
+          ]),
+        );
+      }
+    }
+
+    atualizar();
+    const timer = setInterval(atualizar, 10_000);
+    pararAoVivo = () => clearInterval(timer);
+    ctx.aoSair(() => clearInterval(timer));
+  }
+
+  /* ================= Mesas e garçons ================= */
+
+  function abaMesas() {
+    const lista = el("div", { classe: "tabela" });
+    const de = el("input", { placeholder: "de", inputmode: "numeric", style: "width:80px" });
+    const ate = el("input", { placeholder: "até", inputmode: "numeric", style: "width:80px" });
+    const criar = el("button", {
+      classe: "btn btn-primario btn-peq",
+      type: "button",
+      texto: "Criar mesas",
+      onclick: async () => {
+        criar.disabled = true;
+        try {
+          const r = await post(`/v1/venues/${ctx.venue}/cardapio/mesas`, { de: de.value.trim(), ate: ate.value.trim() || de.value.trim() });
+          avisar(r.criadas ? `${r.criadas} mesa${r.criadas > 1 ? "s" : ""} criada${r.criadas > 1 ? "s" : ""}.` : "Essas mesas já existiam.", "ok");
+          de.value = ""; ate.value = "";
+          await carregar();
+        } catch (e) {
+          avisar(e.message, "erro");
+        } finally {
+          criar.disabled = false;
+        }
+      },
+    });
+    const dia = el("input", { type: "date" });
+    const sugestoes = el("datalist", { id: "garcons-sugeridos" });
+
+    corpo.append(
+      el("div", { classe: "cabecalho-secao" }, [
+        el("div", {}, [
+          el("h2", { texto: "Mesas e quem atende cada uma" }),
+          el("p", { classe: "muted", texto: "Cadastre as mesas uma vez. A cada dia, escreva o garçom de cada mesa: o chamado do cliente sai com o nome dele, e o cliente vê quem o atende." }),
+        ]),
+      ]),
+      el("div", { classe: "cartao" }, [
+        el("div", { classe: "linha-campos", style: "align-items:center;flex-wrap:wrap" }, [
+          el("span", { texto: "Criar mesas de" }), de, el("span", { texto: "até" }), ate, criar,
+          el("span", { style: "flex:1" }),
+          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Turno do dia" }), dia]),
+        ]),
+      ]),
+      sugestoes,
+      lista,
+    );
+
+    async function carregar() {
+      limpar(lista).append(el("p", { classe: "muted", style: "padding:12px", texto: "Carregando…" }));
+      let r;
+      try {
+        r = await get(`/v1/venues/${ctx.venue}/cardapio/mesas${dia.value ? `?dia=${dia.value}` : ""}`);
+      } catch (e) {
+        limpar(lista).append(el("p", { classe: "muted", style: "padding:12px", texto: e.message }));
+        return;
+      }
+      if (!dia.value) dia.value = r.dia;
+      limpar(sugestoes).append(...r.garcons.map((g) => el("option", { value: g })));
+      const garcomDe = new Map(r.turno.map((t) => [t.mesa, t.garcom]));
+      limpar(lista);
+      if (!r.mesas.length) {
+        lista.append(vazio("Nenhuma mesa", "Crie as mesas acima (ex.: de 1 até 40)."));
+        return;
+      }
+      for (const m of r.mesas) lista.append(linhaDaMesa(m, garcomDe.get(m.numero) ?? "", r.dia));
+    }
+
+    function linhaDaMesa(m, garcom, diaDoTurno) {
+      const nome = el("input", { value: m.nome, placeholder: "apelido (opcional)", style: "flex:1" });
+      nome.addEventListener("change", async () => {
+        try { await patch(`/v1/venues/${ctx.venue}/cardapio/mesas/${m.id}`, { nome: nome.value.trim() }); } catch (e) { avisar(e.message, "erro"); }
+      });
+      const campoGarcom = el("input", { value: garcom, placeholder: "garçom hoje", list: "garcons-sugeridos", style: "flex:1" });
+      campoGarcom.addEventListener("change", async () => {
+        try {
+          await put(`/v1/venues/${ctx.venue}/cardapio/turno`, { mesa: m.numero, garcom: campoGarcom.value.trim(), dia: dia.value || diaDoTurno });
+          avisar(campoGarcom.value.trim() ? `Mesa ${m.numero}: ${campoGarcom.value.trim()}.` : `Mesa ${m.numero} sem garçom.`, "ok");
+        } catch (e) {
+          avisar(e.message, "erro");
+        }
+      });
+      const ativa = el("input", { type: "checkbox", checked: m.ativa });
+      ativa.addEventListener("change", async () => {
+        try { await patch(`/v1/venues/${ctx.venue}/cardapio/mesas/${m.id}`, { ativa: ativa.checked }); } catch (e) { avisar(e.message, "erro"); }
+      });
+      return el("div", { classe: "linha-tabela" }, [
+        el("strong", { style: "width:72px", texto: `Mesa ${m.numero}` }),
+        nome,
+        campoGarcom,
+        el("label", { classe: "campo-caixa", style: "align-items:center;white-space:nowrap" }, [ativa, el("span", { texto: "em uso" })]),
+        el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: "QR",
+          title: "Gerar o QR code desta mesa",
+          onclick: () => { sessionStorage.setItem("brasa.cardapio.mesa-qr", String(m.numero)); trocarAba("qrcode"); },
+        }),
+        el("button", {
+          classe: "btn-icone",
+          type: "button",
+          texto: "🗑️",
+          title: "Apagar mesa",
+          onclick: async () => {
+            if (!confirm(`Apagar a mesa ${m.numero}?`)) return;
+            try { await del(`/v1/venues/${ctx.venue}/cardapio/mesas/${m.id}`); await carregar(); } catch (e) { avisar(e.message, "erro"); }
+          },
+        }),
+      ]);
+    }
+
+    dia.addEventListener("change", carregar);
+    carregar();
   }
 
   const nomeDaCategoria = (id) => dados.categorias.find((c) => c.id === id)?.nome ?? "Sem categoria";
@@ -1028,7 +1249,8 @@ export async function cardapioDigital(raiz, ctx) {
   /* ================= QR code ================= */
 
   function abaQrcode() {
-    const mesa = el("input", { placeholder: "Ex.: 7 (deixe vazio para um QR geral)" });
+    const mesa = el("input", { placeholder: "Ex.: 7 (deixe vazio para um QR geral)", value: sessionStorage.getItem("brasa.cardapio.mesa-qr") ?? "" });
+    sessionStorage.removeItem("brasa.cardapio.mesa-qr");
     const area = el("div");
 
     async function gerar() {
