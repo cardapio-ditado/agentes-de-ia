@@ -41,6 +41,10 @@ const LADO_MAXIMO = 1400;
 export async function cardapioDigital(raiz, ctx) {
   let abaAtiva = sessionStorage.getItem("brasa.cardapio.aba") || "itens";
   let dados = null;
+  // Desliga o relógio da aba "Ao vivo" ao trocar de aba. Declarado AQUI, antes
+  // do primeiro `recarregar()`: uma `let` declarada depois não existe ainda
+  // quando a tela desenha pela primeira vez.
+  let pararAoVivo = null;
   const corpo = el("div", {});
   const contadorComentarios = el("span", { classe: "nav-contador", hidden: true, texto: "0" });
 
@@ -118,7 +122,6 @@ export async function cardapioDigital(raiz, ctx) {
     );
   }
 
-  let pararAoVivo = null;
   function desenharAba() {
     limpar(corpo);
     if (pararAoVivo) { pararAoVivo(); pararAoVivo = null; }
