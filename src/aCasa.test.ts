@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AREAS,
   SETORES,
   arrumarFatos,
   comoFazTempo,
@@ -28,19 +29,40 @@ const fato = (id: string, setor: string, quando: string, extra: Partial<Fato> = 
 
 const TODOS = ["agentes-ia", "cmv", "rh", "cardapio-digital", "checklist", "clientes"];
 
-test("a casa tem o salão na frente e a retaguarda no fundo", () => {
+test("a casa tem as quatro áreas, e toda baia mora em uma delas", () => {
   const ids = SETORES.map((s) => s.id);
-  assert.equal(new Set(ids).size, ids.length, "setor repetido apareceria duas vezes na tela");
+  assert.equal(new Set(ids).size, ids.length, "baia repetida apareceria duas vezes na planta");
 
-  // A portaria é do salão: é lá que o cliente entra.
-  const noSalao = SETORES.filter((s) => s.area === "salao").map((s) => s.id);
-  assert.deepEqual(noSalao.sort(), ["porta", "salao"]);
+  assert.deepEqual(AREAS.map((a) => a.id), ["recepcao", "salao", "doca", "administrativo"]);
 
-  // E todo o resto é retaguarda, nenhum setor fica sem lugar.
+  const areas = new Set(AREAS.map((a) => a.id));
   for (const s of SETORES) {
-    assert.ok(s.area === "salao" || s.area === "retaguarda", `${s.id} não tem lugar na casa`);
+    assert.ok(areas.has(s.area), `${s.id} aponta para uma área que não existe`);
     assert.ok(s.nome.length > 0 && s.legenda.length > 0, `${s.id} sem nome ou sem legenda`);
   }
+
+  // Nenhuma área fica vazia: área sem baia seria um chão desenhado à toa.
+  for (const a of AREAS) {
+    assert.ok(SETORES.some((s) => s.area === a.id), `a área ${a.id} não tem baia nenhuma`);
+  }
+
+  // O administrativo é o que o dono pediu: RH, financeiro e atendimento.
+  const admin = SETORES.filter((s) => s.area === "administrativo").map((s) => s.id);
+  for (const esperado of ["rh", "financeiro", "atendimento"]) {
+    assert.ok(admin.includes(esperado), `falta ${esperado} no administrativo`);
+  }
+});
+
+test("o financeiro aparece como EM BREVE, e não como não contratado", () => {
+  // A diferença importa: "não contratado" é convite de venda; "em breve" é
+  // promessa. Dizer a coisa errada queima uma das duas.
+  const financeiro = SETORES.find((s) => s.id === "financeiro")!;
+  assert.equal(financeiro.em_breve, true);
+  assert.equal(financeiro.area, "administrativo");
+
+  // E ninguém contrata um módulo que não existe: ele nunca acende sozinho.
+  const setores = montarSetores({ fatos: [], contratados: TODOS, agora: "2026-09-13T10:00:00.000Z" });
+  assert.equal(setores.find((s) => s.id === "financeiro")!.contratado, false);
 });
 
 test("cada função vai para a sala onde ela trabalha, com o cadastro torto que existe", () => {
@@ -50,15 +72,16 @@ test("cada função vai para a sala onde ela trabalha, com o cadastro torto que 
   assert.equal(setorDaFuncao("Garçonete"), "salao");
   assert.equal(setorDaFuncao("Auxiliar de Cozinha"), "cozinha");
   assert.equal(setorDaFuncao("CHAPEIRO"), "cozinha");
-  assert.equal(setorDaFuncao("Estoquista"), "doca");
-  assert.equal(setorDaFuncao("subgerente"), "escritorio");
-  assert.equal(setorDaFuncao("Segurança"), "porta");
+  assert.equal(setorDaFuncao("Estoquista"), "recebimento");
+  assert.equal(setorDaFuncao("subgerente"), "rh");
+  assert.equal(setorDaFuncao("Caixa"), "financeiro");
+  assert.equal(setorDaFuncao("Segurança"), "recepcao");
   assert.equal(setorDaFuncao("Barman"), "salao", "quem não se encaixa fica no salão");
   assert.equal(setorDaFuncao(null), "salao");
 
   // Toda sala apontada existe de verdade na planta.
   const ids = new Set(SETORES.map((s) => s.id));
-  for (const f of ["GARCOM", "Cozinha", "Estoquista", "gerente", "Portaria", "Limpeza", null] as Array<string | null>) {
+  for (const f of ["GARCOM", "Cozinha", "Estoquista", "gerente", "Portaria", "Limpeza", "Caixa", null] as Array<string | null>) {
     assert.ok(ids.has(setorDaFuncao(f)), `${f} foi para uma sala que não existe`);
   }
 });
@@ -67,54 +90,53 @@ test("fato repetido não entra duas vezes", () => {
   // A tela pergunta de novo a cada quinze segundos, e a borda da janela
   // devolve o mesmo fato. Sem o corte pelo id, o bonequinho andaria de novo.
   const r = arrumarFatos([
-    fato("a", "porta", "2026-09-12T10:00:00.000Z"),
-    fato("a", "porta", "2026-09-12T10:00:00.000Z"),
-    fato("b", "doca", "2026-09-12T11:00:00.000Z"),
+    fato("a", "recepcao", "2026-09-12T10:00:00.000Z"),
+    fato("a", "recepcao", "2026-09-12T10:00:00.000Z"),
+    fato("b", "recebimento", "2026-09-12T11:00:00.000Z"),
   ]);
   assert.deepEqual(r.map((f) => f.id), ["b", "a"], "o mais novo primeiro, e sem repetir");
 });
 
 test("o limite corta os mais velhos, nunca os mais novos", () => {
   const muitos = Array.from({ length: 30 }, (_, i) =>
-    fato(`f${i}`, "porta", `2026-09-12T${String(i % 24).padStart(2, "0")}:00:00.000Z`));
+    fato(`f${i}`, "recepcao", `2026-09-12T${String(i % 24).padStart(2, "0")}:00:00.000Z`));
   const r = arrumarFatos(muitos, 5);
   assert.equal(r.length, 5);
   assert.equal(r[0]!.quando > r[4]!.quando, true);
 });
 
-test("setor sem contrato fica apagado e não conta nada", () => {
-  const fatos = [fato("a", "doca", "2026-09-12T10:00:00.000Z")];
+test("baia sem contrato fica apagada e não conta nada", () => {
+  const fatos = [fato("a", "recebimento", "2026-09-12T10:00:00.000Z")];
   const setores = montarSetores({ fatos, contratados: ["agentes-ia"], agora: "2026-09-12T10:30:00.000Z" });
 
-  const doca = setores.find((s) => s.id === "doca")!;
+  const doca = setores.find((s) => s.id === "recebimento")!;
   assert.equal(doca.contratado, false);
   assert.equal(doca.quantos, 0);
   assert.equal(doca.ultimo, null);
   assert.equal(doca.minutos_parado, null, "cobrar 'parado há 30 min' de quem não comprou é mentira");
 
-  const porta = setores.find((s) => s.id === "porta")!;
-  assert.equal(porta.contratado, true);
+  assert.equal(setores.find((s) => s.id === "recepcao")!.contratado, true);
 });
 
 test("o setor guarda o fato mais recente e há quanto tempo foi", () => {
   const setores = montarSetores({
     fatos: arrumarFatos([
-      fato("velho", "doca", "2026-09-12T08:00:00.000Z", { titulo: "Contagem aberta" }),
-      fato("novo", "doca", "2026-09-12T10:00:00.000Z", { titulo: "Mercadoria recebida" }),
+      fato("velho", "recebimento", "2026-09-12T08:00:00.000Z", { titulo: "Contagem aberta" }),
+      fato("novo", "recebimento", "2026-09-12T10:00:00.000Z", { titulo: "Mercadoria recebida" }),
     ]),
     contratados: TODOS,
     agora: "2026-09-12T10:45:00.000Z",
   });
 
-  const doca = setores.find((s) => s.id === "doca")!;
+  const doca = setores.find((s) => s.id === "recebimento")!;
   assert.equal(doca.quantos, 2);
   assert.equal(doca.ultimo!.titulo, "Mercadoria recebida");
   assert.equal(doca.minutos_parado, 45);
 });
 
-test("setor contratado e sem movimento aparece como quieto, não como erro", () => {
+test("baia contratada e sem movimento aparece como quieta, não como erro", () => {
   const setores = montarSetores({ fatos: [], contratados: TODOS, agora: "2026-09-12T10:00:00.000Z" });
-  for (const s of setores) {
+  for (const s of setores.filter((x) => !x.em_breve)) {
     assert.equal(s.contratado, true);
     assert.equal(s.quantos, 0);
     assert.equal(s.minutos_parado, null);
@@ -148,7 +170,7 @@ test("o bonequinho leva só o primeiro nome", () => {
 
 test("o que precisa de atenção continua marcado depois de arrumado", () => {
   const r = arrumarFatos([
-    fato("a", "porta", "2026-09-12T10:00:00.000Z", { atencao: true, titulo: "Reserva esperando" }),
+    fato("a", "recepcao", "2026-09-12T10:00:00.000Z", { atencao: true, titulo: "Reserva esperando" }),
     fato("b", "salao", "2026-09-12T11:00:00.000Z"),
   ]);
   assert.equal(r.filter((f) => f.atencao).length, 1);
@@ -217,7 +239,7 @@ test("quem está em pausa não é ocioso: está em pausa", () => {
 
 test("o agente que já sabe o que faz não tem isso sobrescrito", () => {
   const r = oQueCadaUmFaz({
-    trabalhadores: [trabalhador("Atendente", "porta", { tipo: "agente", fazendo: "Respondendo Renata" })],
+    trabalhadores: [trabalhador("Atendente", "atendimento", { tipo: "agente", fazendo: "Respondendo Renata" })],
     fatos: [],
     agora: "2026-09-12T21:00:00.000Z",
   });
@@ -235,8 +257,8 @@ test("fato de outra pessoa não vira trabalho de quem tem nome parecido", () => 
   assert.equal(r.find((t) => t.nome === "Ana Paula")!.fazendo, "Mesa 3");
 
   const semParentesco = oQueCadaUmFaz({
-    trabalhadores: [trabalhador("Marcos", "porta")],
-    fatos: [fato("a", "porta", "2026-09-12T20:55:00.000Z", { quem: "Marcelo", titulo: "Bateu entrada" })],
+    trabalhadores: [trabalhador("Marcos", "recepcao")],
+    fatos: [fato("a", "recepcao", "2026-09-12T20:55:00.000Z", { quem: "Marcelo", titulo: "Bateu entrada" })],
     agora: "2026-09-12T21:00:00.000Z",
   });
   assert.equal(semParentesco[0]!.fazendo, null, "Marcelo não é Marcos");

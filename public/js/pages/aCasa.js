@@ -1,76 +1,151 @@
 import { get } from "../api.js";
-import { el, icone, limpar, vazio } from "../ui.js";
+import { el, limpar, vazio } from "../ui.js";
 
 /**
- * A CASA AGORA — o salão do bar visto de cima, como um tabuleiro.
+ * A CASA AGORA — o bar visto de cima, em isométrico.
  *
- * O SALÃO é o lugar grande: as mesas da casa desenhadas em grade, a porta no
- * canto por onde o cliente entra, e os garçons andando entre elas. A mesa
- * ACENDE no instante em que alguém lê o QR code dela, e PISCA quando aquela
- * mesa chama o garçom — que é a coisa mais urgente que um salão tem.
+ * Quatro áreas, como quem atravessa a casa: a RECEPÇÃO por onde o cliente
+ * chega, o SALÃO com as mesas, a DOCA no fundo (recebimento e cozinha) e o
+ * ADMINISTRATIVO (RH, financeiro, atendimento ao cliente e rotinas).
  *
- * A RETAGUARDA é a faixa de cima: cozinha, doca, escritório, rotinas e
- * opinião. Importam, mas não é lá que o dinheiro aparece.
+ * Dentro de cada área ficam as BAIAS — uma mesa de trabalho por assunto — e
+ * os BONECOS de quem está na casa: as pessoas com o ponto aberto e os agentes
+ * de software. Cada boneco carrega uma plaquinha acima da cabeça com o que
+ * está fazendo, ou "ocioso" e há quanto tempo.
  *
- * Os bonecos são de quem está na casa: as pessoas com o ponto aberto e os
- * agentes de software. Cada um anda pelo lugar dele e carrega na cabeça o que
- * está fazendo — ou "ocioso", e há quanto tempo.
+ * No salão, cada mesa da casa é desenhada no chão e ACENDE no instante em que
+ * alguém lê o QR code dela; PISCA em vermelho quando aquela mesa chama o
+ * garçom.
  *
- * "Ocioso" aqui é informação de verdade, não enfeite. Agente ocioso é o
- * normal: ninguém escreveu. Cozinheiro ocioso às três da tarde também. O que
- * esta tela entrega é o CONTRASTE — três garçons ociosos às nove da noite de
- * sexta salta aos olhos de qualquer um, e não há relatório que faça isso tão
- * rápido.
+ * COMO O ISOMÉTRICO É FEITO
  *
- * Cuidados que a tela toma:
- *   · com a aba escondida ela para de perguntar;
- *   · quem pediu menos animação no aparelho vê os bonecos parados nos
- *     lugares, sem caminhada;
- *   · no celular as salas viram cartões empilhados com os bonecos em fila —
- *     sete salas lado a lado em 400px não se leem.
+ * Duas camadas sobre o mesmo sistema de coordenadas em ladrilhos:
+ *
+ *   · o CHÃO é uma camada com `rotateX(60deg) rotateZ(45deg)`. Áreas, baias e
+ *     mesas são retângulos comuns dentro dela, e o navegador faz a projeção.
+ *   · as PLACAS (números, nomes, plaquinhas, bonecos) ficam numa camada reta,
+ *     posicionadas pela mesma projeção feita à mão. Assim o texto sai sempre
+ *     na horizontal e legível — texto dentro da camada girada fica torto.
+ *
+ * A conta da projeção tem de casar com a do CSS, e casa: `rotateX(60deg)`
+ * achata a vertical pela metade (cos 60° = 0,5) e `rotateZ(45deg)` gira,
+ * o que dá exatamente o losango de 2 para 1 do isométrico clássico.
  */
 
 const QUANTO_ESPERA_MS = 15_000;
-/** Depois disto, a sala deixa de ser "viva" e vira "quieta". */
+/** Depois disto, a baia deixa de ser "viva" e vira "quieta". */
 const MINUTOS_ATE_ESFRIAR = 45;
 /** De quanto em quanto tempo um boneco escolhe um novo lugar. */
 const PASSO_TRABALHANDO = [2600, 4200];
 const PASSO_OCIOSO = [7000, 12_000];
-/** Quantas mesas por fileira no salão, do monitor ao celular. */
-const MESAS_POR_FILEIRA = 10;
 
-const ICONE_DO_SETOR = {
-  doca: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10",
-  cozinha: "M5 11h14v6a3 3 0 01-3 3H8a3 3 0 01-3-3v-6zM3 11h18M8 8c0-2 1-2.5 1-4M12 8c0-2 1-2.5 1-4M16 8c0-2 1-2.5 1-4",
-  escritorio: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z",
-  salao: "M3 9h18l-2 3H5L3 9zM3 9l2-4h14l2 4M8 12v8M16 12v8M8 20h8",
-  porta: "M4 21h16M6 3h9v18H6zM11.5 12h.01M15 7h4v14h-4",
-  operacao: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
-  opiniao: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z",
+/** O lado do ladrilho na camada do chão, antes de ela ser girada. */
+const LADRILHO = 20;
+/** O que a rotação faz com o ladrilho: 2 de largura para 1 de altura. */
+const PASSO_X = LADRILHO * Math.SQRT1_2;
+const PASSO_Y = PASSO_X / 2;
+
+/**
+ * A planta da casa, em ladrilhos.
+ *
+ * O salão ocupa o quarteirão maior, porque é onde o bar acontece. A recepção
+ * e a doca ficam do lado dele — a porta de um lado, o fundo do outro — e o
+ * administrativo é a faixa que atravessa a frente da casa inteira.
+ *
+ * As quatro se encostam de propósito: a casa tem de parecer uma casa só,
+ * vista de cima, e não quatro quadros soltos.
+ */
+const MAPA = { largura: 36, altura: 30 };
+const AREAS_NA_PLANTA = {
+  salao: { x: 0, y: 0, w: 20, h: 20, nome: "Salão" },
+  recepcao: { x: 21, y: 0, w: 15, h: 9, nome: "Recepção" },
+  doca: { x: 21, y: 10, w: 15, h: 10, nome: "Doca" },
+  administrativo: { x: 0, y: 21, w: 36, h: 9, nome: "Administrativo" },
 };
+
+/** Quantos ladrilhos do fundo do salão ficam sem mesa, para a equipe andar. */
+const CORREDOR = 4;
+/** No máximo esta gente por fila no corredor; o resto forma outra fila atrás. */
+const POR_FILA = 5;
+
+/**
+ * Onde cada baia fica dentro da área dela, em ladrilhos.
+ *
+ * Duas baias da mesma área ficam LADO A LADO no eixo x, nunca empilhadas no
+ * eixo y. O motivo é da projeção: empilhar no y afasta duas placas em uns
+ * poucos pixels de tela, e a placa de uma cai em cima do boneco da outra —
+ * caiu, enquanto a doca tinha recebimento e cozinha uma embaixo da outra.
+ * Lado a lado, cada ladrilho de distância vale o dobro em pixels.
+ *
+ * Cada baia tem folga à frente: é ali que ficam os bonecos de quem trabalha
+ * nela, e é por isso que a área é maior que a mesa de trabalho.
+ */
+const BAIAS_NA_PLANTA = {
+  recepcao: { x: 25.5, y: 3, w: 6, h: 1.6 },
+  recebimento: { x: 22, y: 13, w: 6, h: 1.6 },
+  cozinha: { x: 29, y: 13, w: 6, h: 1.6 },
+  rh: { x: 1.5, y: 22.5, w: 6.5, h: 1.6 },
+  financeiro: { x: 10.5, y: 22.5, w: 6.5, h: 1.6 },
+  atendimento: { x: 19.5, y: 22.5, w: 6.5, h: 1.6 },
+  rotinas: { x: 28.5, y: 22.5, w: 6.5, h: 1.6 },
+};
+/**
+ * Onde a equipe de uma baia se junta, em ladrilhos a partir do meio da mesa.
+ *
+ * Andar os MESMOS ladrilhos nos dois eixos é descer reto na tela: 3,4 de
+ * cada lado dá uns cinquenta pixels para baixo, que é o tanto que o boneco
+ * precisa para a cabeça dele passar longe da placa da própria baia.
+ */
+const ENCONTRO = 3.4;
+/** O afastamento entre dois colegas da mesma baia, na anti-diagonal. */
+const ABERTURA = 1.5;
 
 const menosAnimacao = () =>
   typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const sorteio = (de, ate) => de + Math.random() * (ate - de);
 
+/** A folga acima da quina de cima, onde cabe o nome da primeira área. */
+const TOPO = 34;
+
+/** De ladrilho para pixel na tela — a mesma conta que o CSS do chão faz. */
+function projetar(tx, ty) {
+  return {
+    x: (tx - ty) * PASSO_X + MAPA.altura * PASSO_X,
+    y: (tx + ty) * PASSO_Y + TOPO,
+  };
+}
+
+const LARGURA_DA_PLANTA = (MAPA.largura + MAPA.altura) * PASSO_X;
+const ALTURA_DA_PLANTA = (MAPA.largura + MAPA.altura) * PASSO_Y + TOPO;
+
 export async function aCasa(raiz, ctx) {
   let dados = null;
   const vistos = new Set();
   let pausado = false;
   let relogio = null;
-  /** Um passeio por boneco: `setTimeout` que se reagenda sozinho. */
   const passeios = new Set();
 
-  const planta = el("div", { classe: "planta" });
-  planta.classList.add("planta-jogo");
+  const chao = el("div", { classe: "iso-chao" });
+  const placas = el("div", { classe: "iso-placas" });
+  const tabuleiro = el("div", { classe: "iso-tabuleiro" }, [chao, placas]);
+  const planta = el("div", { classe: "rolagem-x" }, [
+    el("div", { classe: "iso-moldura" }, [tabuleiro]),
+  ]);
   const lista = el("div", {});
   const cabecalho = el("div", { classe: "cartao" });
 
+  tabuleiro.style.width = `${LARGURA_DA_PLANTA}px`;
+  tabuleiro.style.height = `${ALTURA_DA_PLANTA + 10}px`;
+  // O chão nasce com o canto do mapa no zero, e o mapa girado avança para a
+  // esquerda do zero. Este recuo é o MESMO que `projetar` soma no eixo x —
+  // sem ele as placas ficam certas e o piso fica deslocado, que foi o
+  // primeiro defeito desta tela.
+  chao.style.setProperty("--recuo", `${MAPA.altura * PASSO_X}px`);
+  chao.style.setProperty("--topo", `${TOPO}px`);
+
   limpar(raiz).append(el("div", { classe: "pilha" }, [cabecalho, planta, lista]));
 
-  // A tela morre quando o usuário sai dela: sem isto o relógio continua
-  // batendo em segundo plano e a casa inteira é buscada para ninguém.
   ctx.aoSair(() => {
     clearInterval(relogio);
     pararPasseios();
@@ -84,8 +159,6 @@ export async function aCasa(raiz, ctx) {
   }, QUANTO_ESPERA_MS);
 
   function aoTrocarDeAba() {
-    // Ao voltar para a aba, pergunta na hora: quem volta quer ver o agora,
-    // não esperar mais quinze segundos.
     if (!document.hidden && !pausado) void buscar({ primeira: false });
   }
 
@@ -113,20 +186,19 @@ export async function aCasa(raiz, ctx) {
       ? novo
       : {
         ...novo,
-        // A janela incremental só traz o que é novo; o resto continua valendo.
         fatos: [...novidades, ...dados.fatos].slice(0, 60),
         setores: juntarSetores(dados.setores, novo.setores),
       };
 
     desenhar();
-    for (const f of novidades) avisarNaSala(f.setor);
+    for (const f of novidades) avisarNaBaia(f.setor);
   }
 
   /**
-   * A sala nova manda no que ela sabe, mas não apaga o que já havia.
+   * A baia nova manda no que ela sabe, mas não apaga o que já havia.
    *
    * A busca incremental só olha os últimos quinze segundos: se ela mandasse
-   * sozinha, toda sala viraria "sem movimento" a cada volta do relógio.
+   * sozinha, toda baia viraria "sem movimento" a cada volta do relógio.
    */
   function juntarSetores(antigos, novos) {
     return novos.map((n) => {
@@ -149,6 +221,7 @@ export async function aCasa(raiz, ctx) {
     const gente = dados.trabalhadores ?? [];
     const ociosos = gente.filter((t) => !t.fazendo && !t.em_pausa).length;
     const ocupadas = (dados.mesas ?? []).filter((m) => m.estado !== "livre").length;
+    const chamando = (dados.mesas ?? []).filter((m) => m.estado === "chamando").length;
 
     limpar(cabecalho).append(
       el("div", { classe: "cabecalho-secao" }, [
@@ -165,6 +238,7 @@ export async function aCasa(raiz, ctx) {
           }),
         ]),
         el("div", { classe: "reserva-acoes" }, [
+          chamando ? el("span", { classe: "iso-chamando", texto: `${chamando} chamando o garçom` }) : null,
           el("span", { classe: `casa-pulso ${pausado ? "casa-pulso-parado" : ""}`.trim() }),
           el("span", { classe: "muted", texto: pausado ? "parado" : "ao vivo" }),
           el("button", {
@@ -184,162 +258,237 @@ export async function aCasa(raiz, ctx) {
 
   function desenharPlanta() {
     pararPasseios();
-    limpar(planta);
+    limpar(chao);
+    limpar(placas);
 
-    const daArea = (area) => dados.setores.filter((s) => s.area === area);
-    const moradoresDe = (id) => (dados.trabalhadores ?? []).filter((t) => t.setor === id);
+    const baiaDe = (id) => dados.setores.find((s) => s.id === id);
 
-    planta.append(
-      el("div", { classe: "retaguarda" }, [
-        el("span", { classe: "retaguarda-titulo", texto: "Retaguarda" }),
-        el("div", { classe: "retaguarda-salas" },
-          daArea("retaguarda").map((setor) => sala(setor, moradoresDe(setor.id), "compacta"))),
-      ]),
-      desenharSalao(daArea("salao"), moradoresDe),
-    );
+    for (const [id, area] of Object.entries(AREAS_NA_PLANTA)) {
+      chao.append(pisoDaArea(id, area));
+      placas.append(placaDaArea(area));
+    }
+
+    desenharMesas();
+
+    for (const [id, lugar] of Object.entries(BAIAS_NA_PLANTA)) {
+      const setor = baiaDe(id);
+      if (!setor) continue;
+      chao.append(tampoDaBaia(setor, lugar));
+      placas.append(placaDaBaia(setor, lugar));
+    }
+
+    desenharBonecos();
 
     if (!menosAnimacao()) {
-      for (const node of planta.querySelectorAll(".boneco:not(.boneco-na-fila)")) passear(node);
+      for (const node of placas.querySelectorAll(".boneco")) passear(node);
     }
   }
 
-  /**
-   * O salão: as mesas em grade e, por cima delas, os garçons andando.
-   *
-   * As mesas ficam no fluxo normal (uma grade), e os bonecos flutuam por
-   * cima em posição absoluta. Assim o salão cresce sozinho conforme o número
-   * de mesas da casa — setenta mesas e três mesas desenham igual.
-   */
-  function desenharSalao(setores, moradoresDe) {
-    const salao = setores.find((s) => s.id === "salao");
-    const portaria = setores.find((s) => s.id === "porta");
+  /* ---- O chão ---- */
+
+  /** Um retângulo na camada girada vira o piso da área, em losango. */
+  function pisoDaArea(id, area) {
+    const setoresDaArea = dados.setores.filter((s) => s.area === id);
+    const viva = setoresDaArea.some((s) => s.contratado && s.minutos_parado !== null && s.minutos_parado <= MINUTOS_ATE_ESFRIAR);
+    const nenhumContratado = setoresDaArea.length > 0 && setoresDaArea.every((s) => !s.contratado);
+
+    return el("div", {
+      classe: `iso-piso ${viva ? "iso-piso-vivo" : ""} ${nenhumContratado ? "iso-piso-apagado" : ""}`.trim(),
+      style: `left:${area.x * LADRILHO}px;top:${area.y * LADRILHO}px;`
+        + `width:${area.w * LADRILHO}px;height:${area.h * LADRILHO}px`,
+    });
+  }
+
+  /** O tampo da mesa de trabalho, no chão. */
+  function tampoDaBaia(setor, lugar) {
+    const estado = !setor.contratado
+      ? (setor.em_breve ? "iso-baia-embreve" : "iso-baia-apagada")
+      : setor.ultimo?.atencao
+        ? "iso-baia-atencao"
+        : setor.minutos_parado !== null && setor.minutos_parado <= MINUTOS_ATE_ESFRIAR
+          ? "iso-baia-viva"
+          : "";
+
+    return el("div", {
+      classe: `iso-baia ${estado}`.trim(),
+      style: `left:${lugar.x * LADRILHO}px;top:${lugar.y * LADRILHO}px;`
+        + `width:${lugar.w * LADRILHO}px;height:${lugar.h * LADRILHO}px`,
+    });
+  }
+
+  /* ---- As mesas do salão ---- */
+
+  function desenharMesas() {
     const mesas = dados.mesas ?? [];
-    const ocupadas = mesas.filter((m) => m.estado !== "livre").length;
-    const chamando = mesas.filter((m) => m.estado === "chamando").length;
+    const salao = dados.setores.find((s) => s.id === "salao");
+    const area = AREAS_NA_PLANTA.salao;
 
-    const gente = [...moradoresDe("salao"), ...moradoresDe("porta")];
+    if (mesas.length === 0) {
+      placas.append(recado(
+        area,
+        salao?.contratado ? "Cadastre as mesas no Cardápio" : "Cardápio digital não contratado",
+      ));
+      return;
+    }
 
-    return el("div", {
-      classe: `salao ${salao && !salao.contratado ? "salao-apagado" : ""}`.trim(),
-      "data-setor": "salao",
-    }, [
-      el("div", { classe: "salao-placa" }, [
-        icone(ICONE_DO_SETOR.salao, 16),
-        el("strong", { texto: "Salão" }),
-        el("span", {
-          classe: "muted",
-          texto: !salao?.contratado
-            ? "cardápio digital não contratado"
-            : mesas.length === 0
-              ? "nenhuma mesa cadastrada"
-              : `${mesas.length} mesas · ${ocupadas} com cliente`,
-        }),
-        chamando ? el("span", { classe: "salao-chamando", texto: `${chamando} chamando o garçom` }) : null,
-      ]),
+    // A grade das mesas se ajusta ao número delas: três mesas e setenta
+    // mesas desenham o mesmo salão, só com espaçamento diferente. O corredor
+    // do fundo fica de fora — é por onde a equipe anda.
+    const util = area.h - 2 - CORREDOR;
+    const colunas = Math.max(3, Math.round(Math.sqrt(mesas.length * (area.w / util))));
+    const linhas = Math.ceil(mesas.length / colunas);
+    const passoX = (area.w - 2) / colunas;
+    const passoY = util / linhas;
+    const lado = Math.min(passoX, passoY) * 0.62;
 
-      el("div", { classe: "salao-piso" }, [
-        mesas.length === 0
-          ? el("span", { classe: "sala-vazia", texto: salao?.contratado ? "Cadastre as mesas no Cardápio para o salão aparecer" : "não contratado" })
-          : el("div", { classe: "mesas", style: `--por-fileira:${Math.min(MESAS_POR_FILEIRA, Math.max(4, Math.ceil(Math.sqrt(mesas.length * 1.6))))}` },
-            mesas.map((m) => mesa(m))),
+    mesas.forEach((m, i) => {
+      const tx = area.x + 1 + (i % colunas) * passoX + passoX / 2;
+      const ty = area.y + 1 + Math.floor(i / colunas) * passoY + passoY / 2;
 
-        // O corredor: a faixa por onde a equipe circula, na frente da porta.
-        // Os bonecos moram AQUI, e não por cima das mesas — em cima do
-        // tabuleiro eles cobriam justamente o número da mesa e o estado dela,
-        // que é o que a tela existe para mostrar.
-        el("div", { classe: "salao-corredor" }, [
-          portaria ? porta(portaria) : null,
-          el("div", { classe: "salao-gente" },
-            gente.map((t, i) => boneco(t, lugarNaSala(i, Math.max(1, gente.length))))),
-        ]),
-      ]),
-    ]);
+      chao.append(el("div", {
+        classe: `iso-mesa iso-mesa-${m.estado}`,
+        style: `left:${(tx - lado / 2) * LADRILHO}px;top:${(ty - lado / 2) * LADRILHO}px;`
+          + `width:${lado * LADRILHO}px;height:${lado * LADRILHO}px`,
+      }));
+
+      const onde = projetar(tx, ty);
+      const detalhe = [
+        m.cliente,
+        m.olhando ? `olhando ${m.olhando}` : null,
+        m.garcom ? `garçom ${m.garcom}` : null,
+        m.minutos !== null ? `há ${m.minutos} min` : null,
+      ].filter(Boolean).join(" · ");
+
+      placas.append(el("div", {
+        classe: `iso-mesa-placa iso-mesa-placa-${m.estado}`,
+        style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((tx + ty) * 10)}`,
+        title: `Mesa ${m.numero}${detalhe ? ` — ${detalhe}` : " — livre"}`,
+        texto: String(m.numero),
+      }));
+    });
   }
 
-  /** Uma mesa: acesa quando leram o QR, piscando quando chamaram o garçom. */
-  function mesa(m) {
-    const detalhe = [
-      m.cliente,
-      m.olhando ? `olhando ${m.olhando}` : null,
-      m.garcom ? `garçom ${m.garcom}` : null,
-      m.minutos !== null ? `há ${m.minutos} min` : null,
-    ].filter(Boolean).join(" · ");
+  /* ---- As placas retas ---- */
 
+  /** O nome da área vai no canto de cima do losango dela. */
+  function placaDaArea(area) {
+    const onde = projetar(area.x + 0.5, area.y + 0.5);
+    // Bem acima da quina: encostado nela, o nome da área some atrás da
+    // placa da primeira baia — sumiu, com "DOCA" atrás de "Recebimento".
     return el("div", {
-      classe: `mesa mesa-${m.estado}`,
-      title: `Mesa ${m.numero}${detalhe ? ` — ${detalhe}` : " — livre"}`,
-    }, [
-      el("span", { classe: "mesa-numero", texto: String(m.numero) }),
-      m.garcom ? el("span", { classe: "mesa-garcom", texto: iniciais(m.garcom) }) : null,
-    ]);
+      classe: "iso-area-nome",
+      style: `left:${onde.x}px;top:${onde.y - 32}px`,
+      texto: area.nome,
+    });
   }
 
-  /** A porta da rua, com o que a portaria tem para contar. */
-  function porta(setor) {
-    return el("div", {
-      classe: `porta ${setor.ultimo?.atencao ? "porta-atencao" : ""}`.trim(),
-      "data-setor": "porta",
-      title: setor.contratado ? setor.legenda : `${setor.legenda} — não contratado`,
-    }, [
-      icone(ICONE_DO_SETOR.porta, 16),
-      el("span", { classe: "porta-nome", texto: "Entrada" }),
-      el("span", {
-        classe: "porta-recado",
-        texto: !setor.contratado ? "não contratado" : setor.ultimo ? setor.ultimo.titulo : "sem movimento",
-      }),
-    ]);
-  }
-
-  function sala(setor, moradores) {
-    const vivo = setor.minutos_parado !== null && setor.minutos_parado <= MINUTOS_ATE_ESFRIAR;
-    const precisa = setor.ultimo?.atencao === true;
-    const estado = !setor.contratado ? "sala-apagada" : precisa ? "sala-atencao" : vivo ? "sala-viva" : "";
+  function placaDaBaia(setor, lugar) {
+    const onde = projetar(lugar.x + lugar.w / 2, lugar.y + lugar.h / 2);
+    const recado = !setor.contratado
+      ? (setor.em_breve ? "em breve" : "não contratado")
+      : setor.ultimo
+        ? setor.ultimo.titulo
+        : "sem movimento";
 
     return el("div", {
-      classe: `sala ${estado}`.trim(),
+      classe: `iso-baia-placa ${setor.contratado ? "" : "iso-baia-placa-apagada"}`.trim(),
+      style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((lugar.x + lugar.y) * 10) + 1}`,
       "data-setor": setor.id,
-      title: setor.contratado ? setor.legenda : `${setor.legenda} — a casa não contratou este módulo`,
+      title: setor.legenda,
     }, [
-      el("div", { classe: "sala-placa" }, [
-        icone(ICONE_DO_SETOR[setor.id] ?? ICONE_DO_SETOR.salao, 15),
-        el("strong", { texto: setor.nome }),
-        setor.contratado && setor.quantos > 0
-          ? el("span", { classe: "sala-conta", texto: String(setor.quantos) })
-          : null,
-      ]),
-      el("div", { classe: "sala-piso sala-piso-fila" },
-        !setor.contratado
-          ? [el("span", { classe: "sala-vazia", texto: "não contratado" })]
-          : moradores.length === 0
-            ? [el("span", { classe: "sala-vazia", texto: "ninguém aqui" })]
-            : moradores.map((t) => boneco(t, null))),
-      setor.contratado
-        ? el("span", { classe: "sala-rodape", texto: setor.ultimo ? setor.ultimo.titulo : "sem movimento" })
+      el("strong", { texto: setor.nome }),
+      el("span", { classe: "iso-baia-recado", texto: recado }),
+      setor.contratado && setor.quantos > 0
+        ? el("span", { classe: "iso-baia-conta", texto: String(setor.quantos) })
         : null,
     ]);
   }
 
-  /**
-   * Onde o i-ésimo de n colegas fica na sala.
-   *
-   * Repartido, e não sorteado: com posição aleatória dois bonecos nasciam
-   * colados e as etiquetas de cabeça se cobriam — que é justamente o texto
-   * que a tela existe para mostrar. A altura alterna entre duas faixas para
-   * as etiquetas de vizinhos também não baterem.
-   */
-  function lugarNaSala(i, n) {
-    const x = n === 1 ? 50 : 8 + ((i + 0.5) / n) * 84;
-    // Duas faixas de altura, alternadas: assim a etiqueta de um não bate na
-    // do vizinho, que foi o primeiro defeito que esta tela teve.
-    const y = n === 1 ? 60 : i % 2 === 0 ? 46 : 74;
-    return { x, y };
+  function recado(area, texto) {
+    const onde = projetar(area.x + area.w / 2, area.y + area.h / 2);
+    return el("div", { classe: "iso-recado", style: `left:${onde.x}px;top:${onde.y}px`, texto });
+  }
+
+  /* ---- Os bonecos ---- */
+
+  function desenharBonecos() {
+    const porBaia = new Map();
+    for (const t of dados.trabalhadores ?? []) {
+      const lista = porBaia.get(t.setor) ?? [];
+      lista.push(t);
+      porBaia.set(t.setor, lista);
+    }
+
+    for (const [setor, gente] of porBaia) {
+      const area = areaDoSetor(setor);
+      const lugares = lugaresDaEquipe(setor, area, gente.length);
+      gente.forEach((t, i) => placas.append(boneco(t, lugares[i], area)));
+    }
+  }
+
+  /** A área onde este setor fica — o administrativo, se ele for desconhecido. */
+  function areaDoSetor(setor) {
+    const id = dados.setores.find((s) => s.id === setor)?.area;
+    return AREAS_NA_PLANTA[id] ?? AREAS_NA_PLANTA.administrativo;
   }
 
   /**
-   * O boneco: cabeça com as iniciais, tronco, e a etiqueta em cima dizendo o
-   * que ele está fazendo.
+   * Onde fica cada um dos `n` colegas de um setor.
+   *
+   * Quem tem baia se junta À FRENTE da mesa de trabalho — nunca em cima
+   * dela, onde o boneco cobriria o nome e o recado, que é o texto que a
+   * planta existe para mostrar. Quem é do salão anda no corredor do fundo,
+   * que a grade de mesas já deixa livre.
+   *
+   * Colegas se afastam pela ANTI-DIAGONAL (um sobe em `tx` o mesmo que desce
+   * em `ty`), porque é assim que se anda na horizontal num mapa isométrico —
+   * e é na horizontal que duas plaquinhas param de se cobrir. Como a
+   * anti-diagonal estoura retângulo curto, todo lugar passa pelo aparador
+   * `dentroDaArea`: já tive boneco parado fora do piso.
    */
-  function boneco(t, lugar) {
+  function lugaresDaEquipe(setor, area, n) {
+    const baia = BAIAS_NA_PLANTA[setor];
+    const lugares = [];
+
+    if (!baia) {
+      const fundo = area.y + area.h - CORREDOR / 2;
+      for (let i = 0; i < n; i++) {
+        const fila = Math.floor(i / POR_FILA);
+        const quantos = Math.min(POR_FILA, n - fila * POR_FILA);
+        const dentro = i % POR_FILA;
+        const passo = quantos === 1 ? 0.5 : dentro / (quantos - 1);
+        lugares.push(dentroDaArea(area, {
+          tx: area.x + 2 + (area.w - 4) * passo,
+          ty: fundo - fila * 1.8,
+        }));
+      }
+      return lugares;
+    }
+
+    const cx = baia.x + baia.w / 2 + ENCONTRO;
+    const cy = baia.y + baia.h / 2 + ENCONTRO;
+    for (let i = 0; i < n; i++) {
+      const fila = Math.floor(i / 3);
+      const quantos = Math.min(3, n - fila * 3);
+      const dentro = i % 3;
+      const desvio = (quantos === 1 ? 0 : (dentro / (quantos - 1) - 0.5) * 2) * ABERTURA;
+      lugares.push(dentroDaArea(area, {
+        tx: cx + desvio + fila * 1.3,
+        ty: cy - desvio + fila * 1.3,
+      }));
+    }
+    return lugares;
+  }
+
+  /** O ponto trazido para dentro do piso, com uma folga de um ladrilho. */
+  function dentroDaArea(area, ponto) {
+    return {
+      tx: Math.min(Math.max(ponto.tx, area.x + 1), area.x + area.w - 1),
+      ty: Math.min(Math.max(ponto.ty, area.y + 1), area.y + area.h - 1),
+    };
+  }
+
+  function boneco(t, lugar, area) {
     const ocioso = !t.fazendo && !t.em_pausa;
     const classe = [
       "boneco",
@@ -353,11 +502,10 @@ export async function aCasa(raiz, ctx) {
         ? t.fazendo
         : `ocioso ${comoFazTempo(t.minutos_parado)}`.trim();
 
+    const onde = projetar(lugar.tx, lugar.ty);
     const node = el("div", {
-      // Sem lugar marcado, o boneco entra na fila da sala — é a retaguarda,
-      // onde o espaço é pouco e a posição não diz nada.
-      classe: lugar ? classe : `${classe} boneco-na-fila`,
-      style: lugar ? `left:${lugar.x.toFixed(1)}%;top:${lugar.y.toFixed(1)}%` : null,
+      classe,
+      style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((lugar.tx + lugar.ty) * 10) + 2}`,
       title: [t.nome, t.papel, dizer].filter(Boolean).join(" · "),
     }, [
       el("span", { classe: "boneco-etiqueta", texto: dizer }),
@@ -367,9 +515,11 @@ export async function aCasa(raiz, ctx) {
       ]),
       el("span", { classe: "boneco-nome", texto: primeiroNome(t.nome) }),
     ]);
-    // O lugar de origem fica guardado: o passeio é um vaivém em torno dele,
-    // e não uma corrida pelo salão inteiro que embaralharia todo mundo.
-    if (lugar) node.dataset.casa = `${lugar.x},${lugar.y}`;
+
+    // O lugar de origem e o piso da área ficam guardados: o passeio é um
+    // vaivém em torno de casa, e não uma corrida pela casa inteira que
+    // embaralharia todo mundo — ou botaria gente andando fora do chão.
+    node.dataset.casa = [lugar.tx, lugar.ty, area.x, area.y, area.w, area.h].join(",");
     return node;
   }
 
@@ -377,27 +527,35 @@ export async function aCasa(raiz, ctx) {
   function passear(node) {
     const parado = node.classList.contains("boneco-ocioso") || node.classList.contains("boneco-pausa");
     const [de, ate] = parado ? PASSO_OCIOSO : PASSO_TRABALHANDO;
-    const [casaX, casaY] = String(node.dataset.casa ?? "50,52").split(",").map(Number);
-    // O passo é curto: ninguém atravessa a sala de uma vez, e ninguém pisa
-    // no lugar do colega.
-    const raio = parado ? 5 : 9;
+    const [casaX, casaY, x, y, w, h] = String(node.dataset.casa ?? "0,0,0,0,0,0").split(",").map(Number);
+    const raio = parado ? 0.8 : 1.8;
 
     const t = setTimeout(() => {
       passeios.delete(t);
-      node.style.left = `${Math.min(86, Math.max(14, casaX + sorteio(-raio, raio))).toFixed(1)}%`;
-      node.style.top = `${Math.min(74, Math.max(30, casaY + sorteio(-raio / 2, raio / 2))).toFixed(1)}%`;
+      // Um passo de lado é `tx` para cima e `ty` para baixo na mesma medida:
+      // é assim que se anda na horizontal num mapa isométrico.
+      const lado = sorteio(-raio, raio);
+      const frente = sorteio(-raio / 3, raio / 3);
+      const onde = projetar(
+        Math.min(Math.max(casaX + lado + frente, x + 1), x + w - 1),
+        Math.min(Math.max(casaY - lado + frente, y + 1), y + h - 1),
+      );
+      node.style.left = `${onde.x}px`;
+      node.style.top = `${onde.y}px`;
       passear(node);
     }, sorteio(de, ate));
     passeios.add(t);
   }
 
-  /** Chegou fato novo numa sala: ela pisca, para o olho perceber de longe. */
-  function avisarNaSala(setor) {
-    const node = planta.querySelector(`[data-setor="${setor}"]`);
+  /** Chegou fato novo numa baia: ela pisca, para o olho perceber de longe. */
+  function avisarNaBaia(setor) {
+    const node = placas.querySelector(`[data-setor="${setor}"]`);
     if (!node) return;
-    node.classList.add("sala-piscou");
-    setTimeout(() => node.classList.remove("sala-piscou"), 1200);
+    node.classList.add("iso-baia-piscou");
+    setTimeout(() => node.classList.remove("iso-baia-piscou"), 1200);
   }
+
+  /* ---- A lista ---- */
 
   function desenharLista() {
     limpar(lista);
@@ -411,9 +569,6 @@ export async function aCasa(raiz, ctx) {
         el("div", { classe: "tabela", style: "margin-top:10px" },
           dados.fatos.slice(0, 25).map((f) => {
             const setor = dados.setores.find((s) => s.id === f.setor);
-            // A hora entra na linha de baixo, e não numa coluna própria: no
-            // celular a coluna fixa deixava a lista rígida demais e empurrava
-            // a página inteira para fora da tela.
             return el("div", { classe: `linha-tabela ${f.atencao ? "linha-atencao" : ""}`.trim() }, [
               el("div", { classe: "linha-principal" }, [
                 el("strong", { texto: f.titulo }),

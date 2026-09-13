@@ -36,15 +36,15 @@ export interface Setor {
   /** O módulo que alimenta o setor. `null` = todo cliente tem. */
   modulo: string | null;
   /**
-   * Onde este setor mora na tela.
+   * A área da casa onde esta baia fica.
    *
-   * `salao` é o tabuleiro: o lugar grande, com as mesas e a portaria dentro.
-   * `retaguarda` é o fundo da casa — cozinha, doca, escritório —, uma faixa
-   * de salas menores. A GEOMETRIA em si é da tela, não daqui: o domínio diz
-   * o que a coisa é, e a tela decide quantos pixels isso ocupa.
+   * A GEOMETRIA em si é da tela, não daqui: o domínio diz o que a coisa é e
+   * onde ela pertence; a tela decide quantos pixels isso ocupa.
    */
-  area: "salao" | "retaguarda";
+  area: AreaDaCasa;
   contratado: boolean;
+  /** Módulo que ainda não existe: aparece na planta como "em breve". */
+  em_breve?: boolean;
   /** Fatos deste setor na janela lida. */
   quantos: number;
   /** O fato mais recente, para o cartão dizer algo sem ninguém clicar. */
@@ -91,21 +91,33 @@ export interface Trabalhador {
   em_pausa: boolean;
 }
 
+export type AreaDaCasa = "recepcao" | "salao" | "doca" | "administrativo";
+
+/** As quatro áreas da casa, na ordem em que se atravessa o bar. */
+export const AREAS: Array<{ id: AreaDaCasa; nome: string; legenda: string }> = [
+  { id: "recepcao", nome: "Recepção", legenda: "Por onde o cliente chega" },
+  { id: "salao", nome: "Salão", legenda: "As mesas e quem atende" },
+  { id: "doca", nome: "Doca", legenda: "O que entra e o que se produz" },
+  { id: "administrativo", nome: "Administrativo", legenda: "O escritório da casa" },
+];
+
 /**
- * A casa: o salão na frente, a retaguarda no fundo.
+ * As baias da casa — uma mesa de trabalho por assunto.
  *
- * O salão é onde o bar acontece — as mesas, os garçons, e a portaria, que
- * fica DENTRO dele porque é ali que o cliente entra. Cozinha, doca e
- * escritório são retaguarda: importam, mas não é lá que o dinheiro aparece.
+ * Cada baia pertence a uma área e a um módulo. Baia sem módulo contratado
+ * aparece apagada, e não some: o dono vê o que existe e pode querer. O
+ * Financeiro é o caso especial — não é que a casa não comprou, é que ele
+ * ainda não foi construído, e a planta diz isso com todas as letras.
  */
 export const SETORES: Array<Omit<Setor, "contratado" | "quantos" | "ultimo" | "minutos_parado">> = [
+  { id: "recepcao", nome: "Recepção", legenda: "Reservas e quem chega na porta", modulo: "agentes-ia", area: "recepcao" },
   { id: "salao", nome: "Salão", legenda: "Mesas, garçons e cardápio", modulo: "cardapio-digital", area: "salao" },
-  { id: "porta", nome: "Portaria", legenda: "Reservas e o agente no WhatsApp", modulo: "agentes-ia", area: "salao" },
-  { id: "cozinha", nome: "Cozinha", legenda: "Produção das fichas técnicas", modulo: "cmv", area: "retaguarda" },
-  { id: "doca", nome: "Doca", legenda: "Mercadoria entrando e contagem", modulo: "cmv", area: "retaguarda" },
-  { id: "escritorio", nome: "Escritório", legenda: "Ponto, escala, gorjeta e avisos", modulo: "rh", area: "retaguarda" },
-  { id: "operacao", nome: "Rotinas", legenda: "Checklists do turno", modulo: "checklist", area: "retaguarda" },
-  { id: "opiniao", nome: "Opinião", legenda: "Pesquisa e avaliações", modulo: "clientes", area: "retaguarda" },
+  { id: "recebimento", nome: "Recebimento", legenda: "Mercadoria entrando e contagem", modulo: "cmv", area: "doca" },
+  { id: "cozinha", nome: "Cozinha", legenda: "Produção das fichas técnicas", modulo: "cmv", area: "doca" },
+  { id: "rh", nome: "RH", legenda: "Ponto, escala, férias e gorjeta", modulo: "rh", area: "administrativo" },
+  { id: "financeiro", nome: "Financeiro", legenda: "Contas a pagar e a receber", modulo: "financeiro", area: "administrativo", em_breve: true },
+  { id: "atendimento", nome: "Atendimento ao cliente", legenda: "O agente no WhatsApp, pesquisa e avaliações", modulo: "clientes", area: "administrativo" },
+  { id: "rotinas", nome: "Rotinas", legenda: "Checklists do turno", modulo: "checklist", area: "administrativo" },
 ];
 
 /**
@@ -120,23 +132,24 @@ const FUNCAO_NO_SETOR: Array<[string, string]> = [
   ["chapeir", "cozinha"],
   ["pizzaiol", "cozinha"],
   ["confeit", "cozinha"],
-  ["estoqu", "doca"],
-  ["almox", "doca"],
-  ["compr", "doca"],
-  ["receb", "doca"],
-  ["gerent", "escritorio"],
-  ["administrat", "escritorio"],
-  ["financ", "escritorio"],
-  ["caixa", "escritorio"],
-  ["rh", "escritorio"],
-  ["seguran", "porta"],
-  ["portari", "porta"],
-  ["recep", "porta"],
-  ["hostes", "porta"],
-  ["host", "porta"],
-  ["manobr", "porta"],
-  ["limpez", "operacao"],
-  ["manuten", "operacao"],
+  ["estoqu", "recebimento"],
+  ["almox", "recebimento"],
+  ["compr", "recebimento"],
+  ["receb", "recebimento"],
+  ["financ", "financeiro"],
+  ["caixa", "financeiro"],
+  ["tesour", "financeiro"],
+  ["gerent", "rh"],
+  ["administrat", "rh"],
+  ["rh", "rh"],
+  ["seguran", "recepcao"],
+  ["portari", "recepcao"],
+  ["recep", "recepcao"],
+  ["hostes", "recepcao"],
+  ["host", "recepcao"],
+  ["manobr", "recepcao"],
+  ["limpez", "rotinas"],
+  ["manuten", "rotinas"],
 ];
 
 /** Sem acento e em minúscula, para o cadastro torto não atrapalhar. */
@@ -307,7 +320,7 @@ async function reservas(j: Janela): Promise<Fato[]> {
   return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
     id: `reserva:${r.id}`,
     quando: String(r.created_at),
-    setor: "porta",
+    setor: "recepcao",
     tipo: "reserva",
     titulo: `Reserva para ${Number(r.party_size) || 1} pessoa(s)`,
     // Sem o nome aqui: ele já vai em `quem`, e a tela junta os dois na mesma
@@ -352,7 +365,8 @@ async function agenteNoWhatsapp(j: Janela): Promise<Fato[]> {
     return {
       id: `msg:${m.id}`,
       quando: String(m.created_at),
-      setor: "porta",
+      // O agente atende CLIENTE: a baia dele é o atendimento, não a porta.
+      setor: "atendimento",
       tipo: doAgente ? "agente-respondeu" : "cliente-falou",
       titulo: doAgente ? "O agente respondeu" : "Cliente falou no WhatsApp",
       detalhe: resumir(texto(m.content)),
@@ -383,7 +397,7 @@ async function docaRecebendo(j: Janela): Promise<Fato[]> {
   const deCompra = ((compras ?? []) as Array<Record<string, unknown>>).map((c) => ({
     id: `compra:${c.id}`,
     quando: String(c.recebida_em ?? c.created_at),
-    setor: "doca",
+    setor: "recebimento",
     tipo: c.recebida_em ? "recebimento" : "pedido",
     titulo: c.recebida_em ? "Mercadoria recebida" : "Pedido de compra lançado",
     detalhe: [texto(c.fornecedor), c.valor_total ? dinheiro(Number(c.valor_total)) : null]
@@ -397,7 +411,7 @@ async function docaRecebendo(j: Janela): Promise<Fato[]> {
   const deContagem = ((contagens ?? []) as Array<Record<string, unknown>>).map((c) => ({
     id: `contagem:${c.id}`,
     quando: String(c.processada_em ?? c.created_at),
-    setor: "doca",
+    setor: "recebimento",
     tipo: "contagem",
     titulo: c.processada_em ? "Contagem de estoque fechada" : "Contagem aberta",
     detalhe: null,
@@ -471,7 +485,7 @@ async function escritorioDoRh(j: Janela): Promise<Fato[]> {
   const deBatida = ((pontos ?? []) as Array<Record<string, unknown>>).map((p) => ({
     id: `ponto:${p.id}`,
     quando: String(p.momento),
-    setor: "escritorio",
+    setor: "rh",
     tipo: "ponto",
     titulo: NOME_DA_BATIDA[String(p.tipo)] ?? "Bateu ponto",
     detalhe: p.origem === "gestor" ? "lançado pelo gestor" : null,
@@ -482,7 +496,7 @@ async function escritorioDoRh(j: Janela): Promise<Fato[]> {
   const deFerias = ((ferias ?? []) as Array<Record<string, unknown>>).map((f) => ({
     id: `ferias:${f.id}`,
     quando: String(f.criado_em),
-    setor: "escritorio",
+    setor: "rh",
     tipo: "ferias",
     titulo: f.situacao === "aprovado" ? "Férias registradas" : "Férias pedidas",
     detalhe: `${Number(f.dias)} dia(s) a partir de ${quando(String(f.inicio))}`,
@@ -538,7 +552,7 @@ async function rotinasDoTurno(j: Janela): Promise<Fato[]> {
     return {
       id: `checklist:${r.id}`,
       quando: String(r.completed_at ?? r.created_at),
-      setor: "operacao",
+      setor: "rotinas",
       tipo: "checklist",
       titulo: r.completed_at ? "Checklist concluído" : "Checklist aberto",
       detalhe: alertas > 0 ? `${alertas} ponto(s) de atenção` : null,
@@ -569,7 +583,7 @@ async function opiniaoDoCliente(j: Janela): Promise<Fato[]> {
   const daPesquisa = ((respostas ?? []) as Array<Record<string, unknown>>).map((r) => ({
     id: `resposta:${r.id}`,
     quando: String(r.created_at),
-    setor: "opiniao",
+    setor: "atendimento",
     tipo: "pesquisa",
     titulo: `Respondeu a pesquisa: nota ${r.nota}`,
     detalhe: resumir(texto(r.comentario)),
@@ -581,7 +595,7 @@ async function opiniaoDoCliente(j: Janela): Promise<Fato[]> {
   const doGoogle = ((avaliacoes ?? []) as Array<Record<string, unknown>>).map((a) => ({
     id: `google:${a.id}`,
     quando: String(a.created_at),
-    setor: "opiniao",
+    setor: "atendimento",
     tipo: "google",
     titulo: `Avaliação no Google: ${a.nota} estrela(s)`,
     detalhe: resumir(texto(a.comentario)),
@@ -806,7 +820,7 @@ async function atendenteDoWhatsapp(venueId: string): Promise<Trabalhador> {
     nome: "Atendente",
     tipo: "agente",
     papel: "Responde o WhatsApp",
-    setor: "porta",
+    setor: "atendimento",
     fazendo: null,
     desde: null,
     minutos_parado: null,
@@ -853,7 +867,7 @@ async function carteiroDosAvisos(venueId: string): Promise<Trabalhador> {
     nome: "Carteiro",
     tipo: "agente",
     papel: "Manda os avisos no WhatsApp",
-    setor: "escritorio",
+    setor: "rh",
     fazendo: esperando > 0 ? `${esperando} aviso(s) para enviar` : falhas > 0 ? `${falhas} aviso(s) falharam` : null,
     desde: fila[0]?.created_at ?? null,
     minutos_parado: null,

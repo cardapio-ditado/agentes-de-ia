@@ -3057,296 +3057,242 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   white-space: nowrap;
 }
 
-/* ============ A casa agora: o salão do bar como tabuleiro ============
+/* ============ A casa agora: o bar em isométrico ============
 
-   O salão é o lugar grande — mesas em grade que acendem quando alguém lê o
-   QR code, a porta no canto e os garçons andando por cima. A retaguarda é a
-   faixa de cima, com as salas do fundo da casa.
+   Duas camadas sobre o mesmo sistema de ladrilhos:
 
-   Cara de jogo: piso com textura, mesas com cadeira, brilho quando acende e
-   pulso quando alguém chama. Nada disso é enfeite gratuito — cada estado é
-   um dado que o dono precisa ver do outro lado do balcão. */
+     .iso-chao    girada com rotateX(60deg) rotateZ(45deg). Áreas, baias e
+                  mesas são retângulos comuns dentro dela, e o navegador faz
+                  a projeção — piso em losango de graça.
+     .iso-placas  reta. Números, nomes, plaquinhas e bonecos ficam aqui,
+                  posicionados pela mesma conta feita no JavaScript. Texto
+                  dentro da camada girada sairia torto e ilegível.
 
-.planta-jogo {
-  min-width: 0;
-  display: grid;
-  gap: 12px;
-  padding: 12px;
+   O `rotateX(60deg)` achata a vertical pela metade (cos 60° = 0,5), e é isso
+   que dá o losango de 2 para 1 do isométrico clássico. */
+
+.iso-moldura {
+  padding: 10px 14px 4px;
   border: 1px solid var(--borda-forte);
   border-radius: var(--raio-g);
-  background: var(--superficie-2);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--superficie) 0%, var(--superficie-2) 70%);
   box-shadow: var(--sombra);
+  width: max-content;
+}
+.iso-tabuleiro { position: relative; }
+
+.iso-chao {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  /* A ordem importa: primeiro deita o plano, depois gira. */
+  transform: translate(var(--recuo, 0px), var(--topo, 0px)) rotateX(60deg) rotateZ(45deg);
+  transform-style: preserve-3d;
+}
+.iso-placas { position: absolute; inset: 0; }
+.iso-placas > * { position: absolute; transform: translate(-50%, -50%); }
+
+/* ---- O piso de cada área ---- */
+
+.iso-piso {
+  position: absolute;
+  border: 2px solid var(--borda-forte);
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.03) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.03) 0 1px, transparent 1px 26px),
+    var(--superficie);
+}
+.iso-piso-vivo { border-color: var(--marca); }
+.iso-piso-apagado { border-style: dashed; background: transparent; opacity: 0.45; }
+
+/* ---- A baia: a mesa de trabalho ---- */
+
+.iso-baia {
+  position: absolute;
+  border-radius: 5px;
+  background: var(--borda-forte);
+  box-shadow: 0 0 0 2px var(--superficie) inset;
+}
+.iso-baia-viva { background: var(--marca); }
+.iso-baia-atencao { background: var(--ambar); }
+.iso-baia-embreve,
+.iso-baia-apagada { background: transparent; border: 2px dashed var(--borda-forte); opacity: 0.6; }
+
+/* ---- As mesas do salão ---- */
+
+.iso-mesa {
+  position: absolute;
+  border-radius: 6px;
+  background: var(--superficie-2);
+  border: 2px solid var(--borda-forte);
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+}
+.iso-mesa-ocupada {
+  background: var(--marca);
+  border-color: var(--marca);
+  box-shadow: 0 0 14px 3px rgba(255, 107, 53, 0.55);
+}
+.iso-mesa-chamando {
+  background: var(--perigo);
+  border-color: var(--perigo);
+  animation: iso-chama 1.2s ease-in-out infinite;
+}
+@keyframes iso-chama {
+  0%, 100% { box-shadow: 0 0 8px 1px rgba(193, 18, 31, 0.5); }
+  50% { box-shadow: 0 0 20px 7px rgba(193, 18, 31, 0.75); }
 }
 
-/* ---- A retaguarda: a faixa do fundo da casa ---- */
+/* O número da mesa, sempre reto — na camada das placas. */
+.iso-mesa-placa {
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: var(--texto-3);
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+  cursor: default;
+}
+.iso-mesa-placa-ocupada,
+.iso-mesa-placa-chamando {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
 
-.retaguarda { display: grid; gap: 6px; }
-.retaguarda-titulo {
-  font-size: 0.64rem;
+/* ---- Os nomes das áreas e das baias ---- */
+
+.iso-area-nome {
+  font-size: 0.66rem;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--texto-3);
-}
-.retaguarda-salas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 8px;
+  color: var(--texto-2);
+  white-space: nowrap;
+  /* As áreas se encostam, então o nome de uma cai sobre a quina da outra.
+     A pastilha opaca garante que ele continue legível ali. */
+  padding: 2px 10px;
+  border-radius: 99px;
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  box-shadow: 0 1px 4px rgba(34, 23, 20, 0.12);
+  z-index: 5;
 }
 
-.sala {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border: 2px solid var(--borda-forte);
-  border-radius: var(--raio);
+.iso-baia-placa {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 3px 9px;
+  border-radius: 7px;
   background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  box-shadow: 0 2px 6px rgba(34, 23, 20, 0.14);
+  /* Estreita de propósito: a planta tem mais de vinte textos ao mesmo
+     tempo, e placa larga encosta na do vizinho. O recado inteiro está na
+     lista de baixo e no título ao passar o mouse. */
+  max-width: 136px;
   overflow: hidden;
-  transition: border-color 0.25s, box-shadow 0.25s;
+  pointer-events: auto;
+  transition: box-shadow 0.25s, transform 0.25s;
+  /* A placa FLUTUA acima da mesa de trabalho, como a plaquinha de um balcão.
+     Centrada no tampo ela ficava embaixo do boneco de quem trabalha ali —
+     e o nome do setor é justamente o que a planta existe para mostrar. */
+  transform: translate(-50%, -165%);
 }
-.sala-placa {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--borda);
-  background: var(--superficie-2);
-  font-size: 0.78rem;
-  flex-shrink: 0;
+.iso-baia-placa::after {
+  /* O fiozinho que liga a placa ao tampo, para não parecer solta no ar. */
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 1px;
+  height: 22px;
+  background: var(--borda-forte);
 }
-.sala-placa svg { flex-shrink: 0; color: var(--texto-2); width: 15px; height: 15px; }
-.sala-placa strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sala-conta {
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 0 6px;
-  border-radius: 99px;
-  background: var(--marca-suave);
-  color: var(--marca-forte);
-  font-variant-numeric: tabular-nums;
-}
-.sala-piso { position: relative; flex: 1; min-height: 0; }
-/* Na retaguarda o espaço é pouco: os bonecos entram em fila. */
-.sala-piso-fila {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 12px;
-  padding: 10px 8px 6px;
-  min-height: 52px;
-}
-.sala-vazia { font-size: 0.7rem; color: var(--texto-3); }
-.sala-rodape {
-  flex-shrink: 0;
-  padding: 4px 8px;
-  border-top: 1px solid var(--borda);
-  font-size: 0.66rem;
-  color: var(--texto-3);
-  white-space: nowrap;
+.iso-baia-placa strong {
+  font-size: 0.64rem;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.sala-viva { border-color: var(--marca); box-shadow: 0 0 0 3px var(--marca-suave); }
-.sala-viva .sala-placa svg { color: var(--marca); }
-.sala-atencao { border-color: var(--ambar); box-shadow: 0 0 0 3px var(--alerta-suave); }
-.sala-atencao .sala-placa svg { color: var(--alerta); }
-.sala-apagada { border-style: dashed; background: transparent; opacity: 0.5; }
-.sala-apagada .sala-placa { background: transparent; }
-
-/* ---- O salão: o tabuleiro ---- */
-
-.salao {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border: 2px solid var(--borda-forte);
-  border-radius: var(--raio-g);
-  background: var(--superficie);
+.iso-baia-recado {
+  font-size: 0.58rem;
+  color: var(--texto-3);
+  max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.salao-apagado { border-style: dashed; opacity: 0.55; }
-.salao-placa {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--borda);
-  background: var(--superficie-2);
-  font-size: 0.86rem;
+.iso-baia-conta {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  min-width: 16px;
+  text-align: center;
+  padding: 1px 4px;
+  border-radius: 99px;
+  background: var(--marca);
+  color: var(--cta-texto);
+  font-variant-numeric: tabular-nums;
 }
-.salao-placa svg { color: var(--marca); width: 16px; height: 16px; flex-shrink: 0; }
-.salao-placa .muted { font-size: 0.74rem; }
-.salao-chamando {
-  margin-left: auto;
+.iso-baia-placa-apagada { opacity: 0.6; border-style: dashed; box-shadow: none; }
+.iso-baia-piscou {
+  transform: translate(-50%, -165%) scale(1.08);
+  box-shadow: 0 0 0 5px var(--marca-suave), 0 2px 6px rgba(34, 23, 20, 0.14);
+}
+
+.iso-recado {
+  font-size: 0.74rem;
+  color: var(--texto-3);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.iso-chamando {
   font-size: 0.7rem;
   font-weight: 700;
   padding: 2px 9px;
   border-radius: 99px;
   background: var(--perigo);
   color: #fff;
-  animation: chama-pulsa 1.4s ease-in-out infinite;
+  animation: iso-pisca-aviso 1.4s ease-in-out infinite;
 }
-
-/* O piso: a madeira do salão, com a grade bem de leve. */
-.salao-piso {
-  position: relative;
-  min-height: 220px;
-  padding: 16px 14px 14px;
-  background-image:
-    linear-gradient(var(--borda) 1px, transparent 1px),
-    linear-gradient(90deg, var(--borda) 1px, transparent 1px);
-  background-size: 26px 26px;
+@keyframes iso-pisca-aviso {
+  50% { opacity: 0.55; }
 }
-
-/* ---- As mesas ---- */
-
-.mesas {
-  display: grid;
-  grid-template-columns: repeat(var(--por-fileira, 10), 1fr);
-  gap: 10px;
-  max-width: 760px;
-  margin: 0 auto;
-}
-.mesa {
-  position: relative;
-  aspect-ratio: 1;
-  min-height: 34px;
-  display: grid;
-  place-items: center;
-  border: 2px solid var(--borda-forte);
-  border-radius: 7px;
-  background: var(--superficie-2);
-  font-variant-numeric: tabular-nums;
-  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s, transform 0.2s;
-}
-/* As quatro cadeiras, uma em cada lado. */
-.mesa::before,
-.mesa::after {
-  content: "";
-  position: absolute;
-  width: 10px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--borda-forte);
-}
-.mesa::before { top: -5px; }
-.mesa::after { bottom: -5px; }
-.mesa-numero { font-size: 0.62rem; font-weight: 700; color: var(--texto-3); }
-
-/* Alguém leu o QR: a mesa acende. */
-.mesa-ocupada {
-  border-color: var(--marca);
-  background: var(--marca);
-  box-shadow: 0 0 0 3px var(--marca-suave), 0 2px 10px rgba(255, 107, 53, 0.35);
-  transform: scale(1.04);
-}
-.mesa-ocupada .mesa-numero { color: var(--cta-texto); }
-.mesa-ocupada::before, .mesa-ocupada::after { background: var(--marca); }
-
-/* A mesa chamou o garçom: pisca até alguém ir lá. */
-.mesa-chamando {
-  border-color: var(--perigo);
-  background: var(--perigo);
-  animation: chama-pulsa 1.2s ease-in-out infinite;
-}
-.mesa-chamando .mesa-numero { color: #fff; }
-.mesa-chamando::before, .mesa-chamando::after { background: var(--perigo); }
-
-@keyframes chama-pulsa {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(193, 18, 31, 0.18), 0 2px 10px rgba(193, 18, 31, 0.3); }
-  50% { box-shadow: 0 0 0 8px rgba(193, 18, 31, 0), 0 2px 14px rgba(193, 18, 31, 0.5); }
-}
-
-/* O garçom da mesa, num selinho no canto. */
-.mesa-garcom {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  font-size: 0.48rem;
-  font-weight: 800;
-  line-height: 1;
-  padding: 2px 3px;
-  border-radius: 4px;
-  background: var(--vinho);
-  color: #fff;
-}
-
-/* O corredor: a faixa em que a equipe circula, na frente da porta. */
-.salao-corredor {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 92px;
-  margin-top: 14px;
-  padding: 8px 10px;
-  border-top: 2px dashed var(--borda);
-}
-
-/* ---- A porta, no corredor ---- */
-
-.porta {
-  position: relative;
-  z-index: 2;
-  flex-shrink: 0;
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  width: 118px;
-  padding: 7px 8px;
-  border: 2px solid var(--borda-forte);
-  border-radius: 7px 7px 3px 3px;
-  background: var(--superficie);
-  box-shadow: var(--sombra);
-}
-.porta svg { color: var(--texto-2); width: 16px; height: 16px; }
-.porta-nome { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.porta-recado {
-  font-size: 0.6rem;
-  color: var(--texto-3);
-  text-align: center;
-  line-height: 1.25;
-  max-height: 2.5em;
-  overflow: hidden;
-}
-.porta-atencao { border-color: var(--ambar); box-shadow: 0 0 0 3px var(--alerta-suave); }
 
 /* ---- Os bonecos ---- */
 
-/* Os bonecos andam dentro do corredor, e só dele. */
-.salao-gente { position: absolute; inset: 0 0 0 140px; pointer-events: none; }
-.salao-gente .boneco { pointer-events: auto; }
-
 .boneco {
   position: absolute;
-  transform: translate(-50%, -50%);
+  /* Os pés ficam no ponto do chão: o boneco sobe a partir dali. */
+  transform: translate(-50%, -88%);
   display: grid;
   justify-items: center;
   gap: 1px;
   width: 0;
-  /* Anda devagar: é uma pessoa atravessando o salão, não um cursor. */
   transition: left 2.2s cubic-bezier(0.45, 0, 0.3, 1), top 2.2s cubic-bezier(0.45, 0, 0.3, 1);
   z-index: 3;
 }
-.boneco:hover { z-index: 6; }
-/* Na retaguarda o boneco entra no fluxo, um ao lado do outro. */
-.boneco-na-fila { position: static; transform: none; width: auto; transition: none; }
+.boneco:hover { z-index: 999; }
 
 .boneco-corpo {
   display: grid;
   justify-items: center;
   gap: 1px;
-  filter: drop-shadow(0 1px 1px rgba(34, 23, 20, 0.28));
+  filter: drop-shadow(0 2px 2px rgba(34, 23, 20, 0.35));
 }
-/* A cabeça de Lego: quadrada com cantos suaves e o pino em cima. */
 .boneco-cabeca {
   position: relative;
-  width: 20px;
-  height: 17px;
+  width: 19px;
+  height: 16px;
   border-radius: 5px;
   display: grid;
   place-items: center;
-  font-size: 0.55rem;
+  font-size: 0.53rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--cta-texto);
@@ -3363,10 +3309,9 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   border-radius: 2px 2px 0 0;
   background: inherit;
 }
-/* O tronco, com os dois bracinhos. */
 .boneco-tronco {
   position: relative;
-  width: 22px;
+  width: 21px;
   height: 13px;
   border-radius: 3px 3px 5px 5px;
   background: var(--vinho);
@@ -3385,40 +3330,41 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 .boneco-tronco::after { left: 100%; margin-left: 1px; }
 
 .boneco-nome {
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   font-weight: 600;
   color: var(--texto-2);
   white-space: nowrap;
-  margin-top: 2px;
+  margin-top: 1px;
+  text-shadow: 0 1px 0 var(--superficie);
 }
 
-/* A etiqueta na cabeça: o que ele está fazendo. É o ponto da tela. */
+/* A plaquinha acima da cabeça: o que ele está fazendo. É o ponto da tela. */
 .boneco-etiqueta {
   max-width: 150px;
   padding: 2px 7px;
-  border-radius: 99px;
+  border-radius: 5px;
   background: var(--texto);
   color: var(--fundo);
-  font-size: 0.58rem;
-  font-weight: 600;
+  font-size: 0.56rem;
+  font-weight: 700;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 3px;
+  box-shadow: 0 2px 5px rgba(34, 23, 20, 0.3);
 }
 
-/* Trabalhando, ocioso, em pausa — a cor diz antes de a letra ser lida. */
 .boneco-ativo .boneco-etiqueta { background: var(--ok); color: #fff; }
 .boneco-ocioso .boneco-cabeca { background: var(--texto-3); }
 .boneco-ocioso .boneco-tronco { background: var(--borda-forte); }
-.boneco-ocioso .boneco-etiqueta { background: var(--superficie-2); color: var(--texto-3); }
-.boneco-ocioso .boneco-corpo { filter: none; opacity: 0.75; }
+.boneco-ocioso .boneco-etiqueta { background: var(--superficie); color: var(--texto-3); border: 1px solid var(--borda); }
+.boneco-ocioso .boneco-corpo { filter: none; opacity: 0.8; }
 .boneco-pausa .boneco-cabeca { background: var(--alerta); }
 .boneco-pausa .boneco-tronco { background: var(--ambar); }
-.boneco-pausa .boneco-etiqueta { background: var(--alerta-suave); color: var(--alerta); }
+.boneco-pausa .boneco-etiqueta { background: var(--alerta); color: #fff; }
 
-/* O agente de software: cabeça mais quadrada e uma anteninha. */
+/* O agente de software: cabeça quadrada e anteninha. */
 .boneco-agente .boneco-cabeca { border-radius: 3px; }
 .boneco-agente .boneco-cabeca::before { width: 2px; height: 6px; border-radius: 2px; }
 .boneco-agente.boneco-ativo .boneco-cabeca { background: var(--info); }
@@ -3439,46 +3385,16 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   100% { box-shadow: 0 0 0 0 rgba(26, 122, 74, 0); }
 }
 
-/* No celular o salão continua salão — só aperta. A porta sai do canto e vira
-   uma faixa, porque 108px em cima das mesas cobriria meia fileira. */
-@media (max-width: 760px) {
-  .planta-jogo { padding: 8px; }
-  .retaguarda-salas { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
-  .salao-piso { padding: 12px 8px; min-height: 0; }
-  .mesas { gap: 6px; }
-  .mesa { min-height: 26px; border-width: 1px; }
-  .mesa::before, .mesa::after { width: 7px; }
-  .salao-corredor { display: block; min-height: 0; margin-top: 10px; padding: 8px 0 0; }
-  .porta {
-    width: auto;
-    grid-auto-flow: column;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 8px;
-  }
-  .porta-recado { max-height: none; }
-  /* No celular a equipe entra em fila embaixo do salão. Escondê-la tiraria
-     justamente o "quem está ocioso agora", que é o que o dono abre o celular
-     para ver. */
-  .salao-gente {
-    position: static;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 10px 14px;
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px dashed var(--borda);
-  }
-  .salao-gente .boneco {
-    position: static;
-    transform: none;
-    width: auto;
-    transition: none;
-  }
-  .boneco-etiqueta { max-width: 128px; }
+/* A planta tem largura própria e rola dentro da moldura dela — como as
+   planilhas do resto do painel. Espremer o isométrico em 400px faria o
+   número da mesa virar um borrão, e aí a tela não serve para nada. */
+@media (max-width: 900px) {
+  .iso-moldura { padding: 8px 8px 2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boneco, .sala, .mesa, .casa-pulso, .salao-chamando, .mesa-chamando { transition: none; animation: none; }
+  .boneco, .iso-mesa, .iso-baia-placa, .casa-pulso, .iso-mesa-chamando, .iso-chamando {
+    transition: none;
+    animation: none;
+  }
 }

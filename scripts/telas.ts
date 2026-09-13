@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { mkdir, readFile, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -269,6 +270,25 @@ const PROCURAR_CULPADOS = `(() => {
   return achados.slice(0, 4).map((a) => a.texto);
 })()`;
 
+/**
+ * O Chromium que este computador tem.
+ *
+ * O playwright procura um navegador com o número de build da versão dele; um
+ * `npm install` que sobe a versão deixa o build antigo no disco e o harness
+ * para de abrir, dizendo que tem de baixar navegador. Quando há um Chromium
+ * instalado aqui do lado, usamos esse e seguimos a vida.
+ */
+function ondeEstaOChromium(): string | undefined {
+  const candidatos = [
+    process.env.CHROMIUM,
+    process.env.PLAYWRIGHT_BROWSERS_PATH ? join(process.env.PLAYWRIGHT_BROWSERS_PATH, "chromium") : null,
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+  ].filter(Boolean) as string[];
+  return candidatos.find((c) => existsSync(c));
+}
+
 async function abrirNoNavegador(nome: string, endereco: string, larguras: number[]): Promise<Achados[]> {
   // O playwright é opcional de propósito: quem só quer clicar na tela usa
   // --servir e não precisa baixar navegador nenhum.
@@ -283,7 +303,7 @@ async function abrirNoNavegador(nome: string, endereco: string, larguras: number
   }
 
   await mkdir(FOTOS, { recursive: true });
-  const navegador = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
+  const navegador = await chromium.launch({ executablePath: ondeEstaOChromium() });
   const achados: Achados[] = [];
 
   try {
