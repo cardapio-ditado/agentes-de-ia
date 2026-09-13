@@ -34,6 +34,7 @@
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "dotenv": "^17.4.0",
     "exceljs": "^4.4.0",
+    "link-preview-js": "^3.0.0",
     "mammoth": "^1.12.1",
     "qrcode": "1.5.4"
   },
