@@ -17,6 +17,7 @@
     "whatsapp": "tsx scripts/whatsapp.ts",
     "reenviar-notificacoes": "tsx scripts/reenviar-notificacoes.ts",
     "telas": "tsx scripts/telas.ts",
+    "clientes:historico": "tsx scripts/historico-clientes.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

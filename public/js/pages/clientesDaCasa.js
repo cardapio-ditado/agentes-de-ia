@@ -29,6 +29,33 @@ const NOME_DA_ORIGEM = {
 };
 
 
+/**
+ * Os selos, do mais urgente para o mais calmo.
+ *
+ * "Sumido" na frente de propósito: é o único que pede ação hoje. Os outros
+ * descrevem quem a pessoa é; este descreve o que está acontecendo com ela.
+ */
+const SELOS = [
+  ["sumido", "Sumido", "etiqueta-perigo", "Vinha e parou de vir"],
+  ["vip", "VIP", "etiqueta-marca", "Gasta muito por visita"],
+  ["fiel", "Fiel", "etiqueta-ok", "Vem sempre"],
+  ["novo", "Novo", "etiqueta-info", "Veio uma vez só"],
+  ["comum", "Comum", "", "Aparece de vez em quando"],
+];
+const SELO_POR_ID = Object.fromEntries(SELOS.map(([id, nome, classe, dica]) => [id, { nome, classe, dica }]));
+
+/** "há 3 dias", "há 2 meses" — como quem fala, não como quem conta dias. */
+function faltaHaQuantoTempo(dias) {
+  if (dias === null || dias === undefined) return "nunca veio";
+  if (dias === 0) return "veio hoje";
+  if (dias === 1) return "veio ontem";
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  if (meses < 12) return meses === 1 ? "há 1 mês" : `há ${meses} meses`;
+  const anos = Math.floor(meses / 12);
+  return anos === 1 ? "há 1 ano" : `há ${anos} anos`;
+}
+
 /** "25/12/1990" ou "25/12" — como uma pessoa escreve e lê uma data. */
 function nascimentoLegivel(c) {
   if (!c.nascimento_dia || !c.nascimento_mes) return "";
@@ -179,6 +206,9 @@ export async function clientesDaCasa(raiz, ctx) {
       ],
     );
     const lista = el("div", { classe: "tabela" });
+    const tiras = el("div", { classe: "crm-tiras" });
+    // Qual selo está filtrando agora. `null` = a base inteira.
+    let seloAtivo = null;
 
     /* ---- Importar planilha ----
      *
@@ -312,6 +342,7 @@ export async function clientesDaCasa(raiz, ctx) {
       const params = new URLSearchParams();
       if (busca.value.trim()) params.set("busca", busca.value.trim());
       if (filtroOrigem.value) params.set("origem", filtroOrigem.value);
+      if (seloAtivo) params.set("selo", seloAtivo);
       try {
         const achados = await get(`/v1/venues/${ctx.venue}/clientes?${params}`);
         desenharLinhas(achados);
@@ -326,14 +357,64 @@ export async function clientesDaCasa(raiz, ctx) {
     });
     filtroOrigem.addEventListener("change", recarregar);
 
+    /**
+     * O retrato da base, em tiras que também são o filtro.
+     *
+     * Dois trabalhos num componente só porque são a mesma pergunta: ninguém
+     * pergunta "quantos sumidos eu tenho?" sem querer, no segundo seguinte,
+     * ver quem são. Clicar de novo na tira acesa volta para a base inteira.
+     *
+     * O resumo vem de uma rota à parte e atravessa a base toda — a lista é
+     * uma página dela. Juntar os dois faria cada letra digitada na busca
+     * recontar a base inteira.
+     */
+    async function desenharTiras() {
+      let resumo;
+      try {
+        resumo = await get(`/v1/venues/${ctx.venue}/clientes/resumo`);
+      } catch {
+        // Sem resumo a lista continua de pé: é enfeite útil, não alicerce.
+        limpar(tiras);
+        return;
+      }
+
+      limpar(tiras);
+      tiras.append(
+        tira(null, "Todos", resumo.total, resumo.gasto_total_centavos
+          ? `${dinheiro(resumo.gasto_total_centavos / 100)} no total`
+          : "ninguém consumiu ainda"),
+        ...SELOS.filter(([id]) => id !== "comum").map(([id, nome, , dica]) =>
+          tira(id, nome, resumo.por_selo?.[id] ?? 0, dica)),
+      );
+    }
+
+    function tira(id, nome, quantos, dica) {
+      const ligada = seloAtivo === id;
+      return el("button", {
+        classe: `crm-tira ${ligada ? "crm-tira-ligada" : ""}`.trim(),
+        type: "button",
+        title: dica,
+        onclick: () => {
+          // Clicar na tira acesa apaga o filtro: é o gesto que todo mundo
+          // tenta quando quer voltar a ver tudo.
+          seloAtivo = ligada ? null : id;
+          void desenharTiras();
+          void recarregar();
+        },
+      }, [
+        el("span", { classe: "crm-tira-numero", texto: String(quantos) }),
+        el("span", { classe: "crm-tira-rotulo", texto: nome }),
+      ]);
+    }
+
     function desenharLinhas(achados) {
       limpar(lista);
       if (!achados.length) {
         lista.append(
           vazio(
             "Nenhum cliente aqui",
-            busca.value.trim() || filtroOrigem.value
-              ? "Tente outra busca, ou tire o filtro de origem."
+            busca.value.trim() || filtroOrigem.value || seloAtivo
+              ? "Tente outra busca, ou tire os filtros."
               : "A base enche sozinha: quem passa na Zig, quem escreve no WhatsApp e quem responde a pesquisa entram aqui. Você também pode cadastrar à mão.",
           ),
         );
@@ -342,26 +423,52 @@ export async function clientesDaCasa(raiz, ctx) {
       for (const c of achados) lista.append(linha(c));
     }
 
+    /**
+     * Uma pessoa na lista.
+     *
+     * Quatro números à direita, sempre nos mesmos lugares: consumo, visitas,
+     * ticket e quando veio pela última vez. Alinhados em coluna de propósito
+     * — é assim que o olho compara vinte linhas sem ler nenhuma.
+     *
+     * O ticket é o que está aqui e não estava antes, e é o que separa o
+     * freguês da quinta-feira da mesa que fecha o aniversário. Os dois podem
+     * ter o mesmo total acumulado e não são a mesma pessoa.
+     */
     function linha(c) {
       const nasc = nascimentoLegivel(c);
+      const selo = SELO_POR_ID[c.selo];
+      const sumiu = c.selo === "sumido";
+
       return el("button", { classe: "linha-tabela", type: "button", onclick: () => ficha(c) }, [
         el("span", { classe: "linha-principal" }, [
-          el("strong", { texto: c.nome || telefoneLegivel(c.telefone) }),
+          el("span", { style: "display:flex;align-items:center;gap:8px;flex-wrap:wrap" }, [
+            el("strong", { texto: c.nome || telefoneLegivel(c.telefone) }),
+            selo && c.selo !== "comum" ? etiqueta(selo.nome, selo.classe) : null,
+            c.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
+            selosDaNota(c.nps),
+          ].filter(Boolean)),
           el("small", {
             classe: "muted",
             texto: [
               c.nome ? telefoneLegivel(c.telefone) : null,
-              nasc ? `nasceu ${nasc}` : null,
+              nasc ? `🎂 ${nasc}` : null,
               (c.origens ?? []).map((o) => NOME_DA_ORIGEM[o] ?? o).join(" · "),
             ].filter(Boolean).join(" · "),
           }),
         ]),
-        el("span", { classe: "linha-detalhes" }, [
-          c.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
-          selosDaNota(c.nps),
-          c.visitas ? el("span", { classe: "muted", texto: `${c.visitas} visita${c.visitas > 1 ? "s" : ""}` }) : null,
-          c.gasto_total_centavos ? el("strong", { texto: dinheiro(c.gasto_total_centavos / 100) }) : null,
-        ].filter(Boolean)),
+        el("span", { classe: "crm-numeros" }, [
+          numero(c.gasto_centavos ? dinheiro(c.gasto_centavos / 100) : "—", "consumo"),
+          numero(String(c.visitas ?? 0), c.visitas === 1 ? "visita" : "visitas"),
+          numero(c.ticket_centavos !== null ? dinheiro(c.ticket_centavos / 100) : "—", "por visita"),
+          numero(faltaHaQuantoTempo(c.dias_sem_vir), "última vez", sumiu),
+        ]),
+      ]);
+    }
+
+    function numero(valor, rotulo, perigo = false) {
+      return el("span", { classe: `crm-numero ${perigo ? "crm-numero-perigo" : ""}`.trim() }, [
+        el("strong", { texto: valor }),
+        el("span", { texto: rotulo }),
       ]);
     }
 
@@ -395,11 +502,14 @@ export async function clientesDaCasa(raiz, ctx) {
           ]),
         ]),
         painelDaPlanilha,
+        tiras,
         el("div", { classe: "linha-campos" }, [busca, filtroOrigem]),
         lista,
       ]),
     );
-    await recarregar();
+    // Em paralelo: a lista e o resumo são duas perguntas independentes, e
+    // esperar uma para começar a outra dobraria o tempo de tela em branco.
+    await Promise.all([recarregar(), desenharTiras()]);
   }
 
   /**
@@ -636,6 +746,9 @@ export async function clientesDaCasa(raiz, ctx) {
         );
 
         const lista = el("div", { classe: "tabela" });
+    const tiras = el("div", { classe: "crm-tiras" });
+    // Qual selo está filtrando agora. `null` = a base inteira.
+    let seloAtivo = null;
         for (const v of visitas) {
           lista.append(
             el("div", { classe: "linha-tabela" }, [

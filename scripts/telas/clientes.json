@@ -1,0 +1,525 @@
+{
+  "rotulo": "Clientes — a base da casa",
+  "modulo": "/js/pages/clientesDaCasa.js",
+  "funcao": "clientesDaCasa",
+  "venue": "casa-de-teste",
+  "rotas": {
+    "GET /clientes": [
+      {
+        "id": "c1",
+        "nome": "Renata Prado",
+        "telefone": "5565981382139",
+        "visitas": 4,
+        "gasto_total_centavos": 184000,
+        "ultima_visita": "2026-09-11",
+        "nascimento_dia": 22,
+        "nascimento_mes": 9,
+        "nascimento_ano": 1988,
+        "origens": [
+          "zig",
+          "agente"
+        ],
+        "nps": 10,
+        "descadastrado_em": null,
+        "gasto_centavos": 184000,
+        "ticket_centavos": 46000,
+        "dias_sem_vir": 2,
+        "selo": "vip"
+      },
+      {
+        "id": "c2",
+        "nome": "Paulo Vieira",
+        "telefone": "5565999112233",
+        "visitas": 38,
+        "gasto_total_centavos": 190000,
+        "ultima_visita": "2026-09-12",
+        "nascimento_dia": 3,
+        "nascimento_mes": 10,
+        "origens": [
+          "zig"
+        ],
+        "nps": 9,
+        "nascimento_ano": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 190000,
+        "ticket_centavos": 5000,
+        "dias_sem_vir": 1,
+        "selo": "fiel"
+      },
+      {
+        "id": "c3",
+        "nome": "Bruno Camargo",
+        "telefone": "5565988774455",
+        "visitas": 11,
+        "gasto_total_centavos": 520000,
+        "ultima_visita": "2026-06-02",
+        "nascimento_dia": 14,
+        "nascimento_mes": 11,
+        "origens": [
+          "zig",
+          "pesquisa"
+        ],
+        "nps": 8,
+        "nascimento_ano": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 520000,
+        "ticket_centavos": 47273,
+        "dias_sem_vir": 103,
+        "selo": "sumido"
+      },
+      {
+        "id": "c4",
+        "nome": "Carla Menezes",
+        "telefone": "5565997001122",
+        "visitas": 9,
+        "gasto_total_centavos": 76500,
+        "ultima_visita": "2026-09-09",
+        "origens": [
+          "zig"
+        ],
+        "nps": null,
+        "nascimento_dia": null,
+        "nascimento_mes": null,
+        "nascimento_ano": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 76500,
+        "ticket_centavos": 8500,
+        "dias_sem_vir": 4,
+        "selo": "fiel"
+      },
+      {
+        "id": "c5",
+        "nome": "Diego Nunes",
+        "telefone": "5565996543210",
+        "visitas": 1,
+        "gasto_total_centavos": 8900,
+        "ultima_visita": "2026-09-12",
+        "origens": [
+          "cardapio"
+        ],
+        "nps": null,
+        "nascimento_dia": null,
+        "nascimento_mes": null,
+        "nascimento_ano": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 8900,
+        "ticket_centavos": 8900,
+        "dias_sem_vir": 1,
+        "selo": "novo"
+      },
+      {
+        "id": "c6",
+        "nome": "Elis Fontana",
+        "telefone": "5565994445566",
+        "visitas": 6,
+        "gasto_total_centavos": 61200,
+        "ultima_visita": "2026-09-06",
+        "nascimento_dia": 30,
+        "nascimento_mes": 9,
+        "origens": [
+          "zig",
+          "pesquisa"
+        ],
+        "nps": 6,
+        "nascimento_ano": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 61200,
+        "ticket_centavos": 10200,
+        "dias_sem_vir": 7,
+        "selo": "fiel"
+      },
+      {
+        "id": "c7",
+        "nome": "Fábio Rocha",
+        "telefone": "5565993332211",
+        "visitas": 3,
+        "gasto_total_centavos": 27400,
+        "ultima_visita": "2026-08-30",
+        "origens": [
+          "planilha"
+        ],
+        "descadastrado_em": "2026-09-01T12:00:00.000Z",
+        "nascimento_dia": null,
+        "nascimento_mes": null,
+        "nascimento_ano": null,
+        "nps": null,
+        "gasto_centavos": 27400,
+        "ticket_centavos": 9133,
+        "dias_sem_vir": 14,
+        "selo": "comum"
+      },
+      {
+        "id": "c8",
+        "nome": "Gabi Teixeira",
+        "telefone": "5565992221100",
+        "visitas": 0,
+        "gasto_total_centavos": 0,
+        "ultima_visita": null,
+        "nascimento_dia": 5,
+        "nascimento_mes": 12,
+        "origens": [
+          "manual"
+        ],
+        "nascimento_ano": null,
+        "nps": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 0,
+        "ticket_centavos": null,
+        "dias_sem_vir": null,
+        "selo": "novo"
+      },
+      {
+        "id": "c9",
+        "nome": null,
+        "telefone": "5565991110099",
+        "visitas": 2,
+        "gasto_total_centavos": 14300,
+        "ultima_visita": "2026-09-10",
+        "origens": [
+          "agente"
+        ],
+        "nascimento_dia": null,
+        "nascimento_mes": null,
+        "nascimento_ano": null,
+        "nps": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 14300,
+        "ticket_centavos": 7150,
+        "dias_sem_vir": 3,
+        "selo": "comum"
+      },
+      {
+        "id": "c10",
+        "nome": "Hugo Barreto",
+        "telefone": "5565990098877",
+        "visitas": 17,
+        "gasto_total_centavos": 143000,
+        "ultima_visita": "2026-05-18",
+        "origens": [
+          "zig"
+        ],
+        "nps": 7,
+        "nascimento_dia": null,
+        "nascimento_mes": null,
+        "nascimento_ano": null,
+        "descadastrado_em": null,
+        "gasto_centavos": 143000,
+        "ticket_centavos": 8412,
+        "dias_sem_vir": 118,
+        "selo": "sumido"
+      }
+    ],
+    "GET /clientes/resumo": {
+      "total": 10,
+      "por_selo": {
+        "vip": 1,
+        "fiel": 3,
+        "sumido": 2,
+        "novo": 2,
+        "comum": 2
+      },
+      "gasto_total_centavos": 1225300,
+      "ticket_medio_centavos": 13465
+    },
+    "GET /clientes/config": {
+      "parabens_ativo": true,
+      "parabens_hora": "10:00",
+      "parabens_dias_antes": 0,
+      "parabens_texto": "Parabéns, {nome}! Um brinde por conta da casa esperando você. 🍻"
+    },
+    "GET /aniversariantes": []
+  },
+  "variacoes": {
+    "so-os-sumidos": {
+      "rotulo": "filtrou quem vinha e parou de vir",
+      "cliques": [
+        ".crm-tira[title=\"Vinha e parou de vir\"]"
+      ],
+      "rotas": {
+        "GET /clientes": [
+          {
+            "id": "c3",
+            "nome": "Bruno Camargo",
+            "telefone": "5565988774455",
+            "visitas": 11,
+            "gasto_total_centavos": 520000,
+            "ultima_visita": "2026-06-02",
+            "nascimento_dia": 14,
+            "nascimento_mes": 11,
+            "origens": [
+              "zig",
+              "pesquisa"
+            ],
+            "nps": 8,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 520000,
+            "ticket_centavos": 47273,
+            "dias_sem_vir": 103,
+            "selo": "sumido"
+          },
+          {
+            "id": "c10",
+            "nome": "Hugo Barreto",
+            "telefone": "5565990098877",
+            "visitas": 17,
+            "gasto_total_centavos": 143000,
+            "ultima_visita": "2026-05-18",
+            "origens": [
+              "zig"
+            ],
+            "nps": 7,
+            "nascimento_dia": null,
+            "nascimento_mes": null,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 143000,
+            "ticket_centavos": 8412,
+            "dias_sem_vir": 118,
+            "selo": "sumido"
+          }
+        ]
+      }
+    },
+    "base-vazia": {
+      "rotulo": "casa que acabou de contratar o módulo",
+      "rotas": {
+        "GET /clientes": [],
+        "GET /clientes/resumo": {
+          "total": 0,
+          "por_selo": {
+            "vip": 0,
+            "fiel": 0,
+            "sumido": 0,
+            "novo": 0,
+            "comum": 0
+          },
+          "gasto_total_centavos": 0,
+          "ticket_medio_centavos": null
+        }
+      }
+    },
+    "sem-consumo": {
+      "rotulo": "base sem Zig: tem gente, não tem consumo",
+      "rotas": {
+        "GET /clientes": [
+          {
+            "id": "c1",
+            "nome": "Renata Prado",
+            "telefone": "5565981382139",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "nascimento_dia": 22,
+            "nascimento_mes": 9,
+            "nascimento_ano": 1988,
+            "origens": [
+              "zig",
+              "agente"
+            ],
+            "nps": 10,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c2",
+            "nome": "Paulo Vieira",
+            "telefone": "5565999112233",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "nascimento_dia": 3,
+            "nascimento_mes": 10,
+            "origens": [
+              "zig"
+            ],
+            "nps": 9,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c3",
+            "nome": "Bruno Camargo",
+            "telefone": "5565988774455",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "nascimento_dia": 14,
+            "nascimento_mes": 11,
+            "origens": [
+              "zig",
+              "pesquisa"
+            ],
+            "nps": 8,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c4",
+            "nome": "Carla Menezes",
+            "telefone": "5565997001122",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "origens": [
+              "zig"
+            ],
+            "nps": null,
+            "nascimento_dia": null,
+            "nascimento_mes": null,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c5",
+            "nome": "Diego Nunes",
+            "telefone": "5565996543210",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "origens": [
+              "cardapio"
+            ],
+            "nps": null,
+            "nascimento_dia": null,
+            "nascimento_mes": null,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c6",
+            "nome": "Elis Fontana",
+            "telefone": "5565994445566",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "nascimento_dia": 30,
+            "nascimento_mes": 9,
+            "origens": [
+              "zig",
+              "pesquisa"
+            ],
+            "nps": 6,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c7",
+            "nome": "Fábio Rocha",
+            "telefone": "5565993332211",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "origens": [
+              "planilha"
+            ],
+            "descadastrado_em": "2026-09-01T12:00:00.000Z",
+            "nascimento_dia": null,
+            "nascimento_mes": null,
+            "nascimento_ano": null,
+            "nps": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c8",
+            "nome": "Gabi Teixeira",
+            "telefone": "5565992221100",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "nascimento_dia": 5,
+            "nascimento_mes": 12,
+            "origens": [
+              "manual"
+            ],
+            "nascimento_ano": null,
+            "nps": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c9",
+            "nome": null,
+            "telefone": "5565991110099",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "origens": [
+              "agente"
+            ],
+            "nascimento_dia": null,
+            "nascimento_mes": null,
+            "nascimento_ano": null,
+            "nps": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          },
+          {
+            "id": "c10",
+            "nome": "Hugo Barreto",
+            "telefone": "5565990098877",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "origens": [
+              "zig"
+            ],
+            "nps": 7,
+            "nascimento_dia": null,
+            "nascimento_mes": null,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo"
+          }
+        ],
+        "GET /clientes/resumo": {
+          "total": 10,
+          "por_selo": {
+            "vip": 0,
+            "fiel": 0,
+            "sumido": 0,
+            "novo": 10,
+            "comum": 0
+          },
+          "gasto_total_centavos": 0,
+          "ticket_medio_centavos": null
+        }
+      }
+    }
+  }
+}

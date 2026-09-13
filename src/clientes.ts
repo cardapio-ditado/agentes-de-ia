@@ -1,4 +1,13 @@
 import { db, ehMigracaoPendente } from "./supabase.js";
+import {
+  DIAS_PARA_SUMIR,
+  resumoDaBase,
+  retratoDe,
+  type ClienteCru,
+  type Retrato,
+  type ResumoDaBase,
+  type Selo,
+} from "./crm.js";
 
 /**
  * A base de clientes da casa.
@@ -321,12 +330,30 @@ export interface FiltroDeClientes {
   comAniversario?: boolean;
   mes?: number;
   limite?: number;
+  /** VIP, fiel, sumido, novo — o retrato de quem é esta pessoa para a casa. */
+  selo?: Selo;
+  /** O dia de hoje no calendário da casa, para contar "sumido há quanto". */
+  hoje?: string;
 }
 
+/** O cliente com o retrato calculado — o que a lista desenha. */
+export type ClienteComRetrato = Cliente & Retrato;
+
+/**
+ * A lista, com o retrato de cada um.
+ *
+ * O SELO É FILTRADO NA MEMÓRIA, e o banco ajuda no que dá. "Sumido" e "novo"
+ * viram condição de SQL porque são comparação de coluna; "vip" e "fiel"
+ * dependem do ticket, que é uma divisão, e o PostgREST não compara coluna com
+ * coluna. Por isso, quando o filtro é por selo, o teto da busca sobe: filtrar
+ * um selo dentro das duzentas primeiras linhas devolveria "nenhum VIP" numa
+ * casa cheia de VIP, que é pior que demorar meio segundo a mais.
+ */
 export async function listarClientes(
   venueId: string,
   filtro: FiltroDeClientes = {},
-): Promise<Cliente[]> {
+): Promise<ClienteComRetrato[]> {
+  const hoje = filtro.hoje ?? new Date().toISOString().slice(0, 10);
   let busca = cliente().from("clientes").select("*").eq("venue_id", venueId);
 
   if (filtro.busca?.trim()) {
@@ -342,12 +369,48 @@ export async function listarClientes(
   if (filtro.comAniversario) busca = busca.not("nascimento_dia", "is", null);
   if (filtro.mes) busca = busca.eq("nascimento_mes", filtro.mes);
 
+  // O que o banco sabe responder sozinho, ele responde: é a diferença entre
+  // varrer a base inteira e pedir só a fatia que interessa.
+  if (filtro.selo === "sumido") {
+    busca = busca.lt("ultima_visita", diasAtras(hoje, DIAS_PARA_SUMIR)).gt("visitas", 1);
+  }
+  if (filtro.selo === "novo") busca = busca.lte("visitas", 1);
+  if (filtro.selo === "vip" || filtro.selo === "fiel") busca = busca.gt("visitas", 1);
+
+  const teto = filtro.selo ? Math.max(filtro.limite ?? 200, 1000) : (filtro.limite ?? 200);
   const { data, error } = await busca
     .order("ultima_visita", { ascending: false, nullsFirst: false })
     .order("criado_em", { ascending: false })
-    .limit(Math.min(filtro.limite ?? 200, 1000));
+    .limit(Math.min(teto, 2000));
   if (error) throw new ErroDeClientes(500, `Falha ao listar os clientes: ${error.message}`);
-  return (data ?? []) as Cliente[];
+
+  const comRetrato = ((data ?? []) as Cliente[]).map((c) => ({ ...c, ...retratoDe(c, hoje) }));
+  const sofridos = filtro.selo ? comRetrato.filter((c) => c.selo === filtro.selo) : comRetrato;
+  return sofridos.slice(0, filtro.limite ?? 200);
+}
+
+/** O mesmo dia, N dias atrás — para a condição de "sumido" no banco. */
+function diasAtras(diaISO: string, dias: number): string {
+  const d = new Date(`${diaISO}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * O retrato da base inteira, para o topo da tela.
+ *
+ * Lê só as três colunas da conta — não o cadastro inteiro — porque isto
+ * atravessa a base toda, e não a página que está na tela.
+ */
+export async function resumoDosClientes(venueId: string, hoje?: string): Promise<ResumoDaBase> {
+  const dia = hoje ?? new Date().toISOString().slice(0, 10);
+  const { data, error } = await cliente()
+    .from("clientes")
+    .select("visitas, gasto_total_centavos, ultima_visita")
+    .eq("venue_id", venueId)
+    .limit(50_000);
+  if (error) throw new ErroDeClientes(500, `Falha ao resumir a base: ${error.message}`);
+  return resumoDaBase(((data ?? []) as ClienteCru[]).map((c) => retratoDe(c, dia)));
 }
 
 export async function obterCliente(venueId: string, id: string): Promise<Cliente> {

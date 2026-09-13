@@ -1070,7 +1070,12 @@ textarea:focus {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  /* Quebra em vez de espremer. Sem isto, uma barra de quatro botões do lado
+     direito esmaga o título até ele sair uma palavra por linha, e ainda
+     assim empurra a página para o lado no celular. */
+  flex-wrap: wrap;
 }
+.cabecalho-secao > * { min-width: 0; }
 .grade {
   display: grid;
   gap: 12px;
@@ -1228,6 +1233,11 @@ textarea:focus {
   background: var(--info-suave);
   color: var(--info);
   border-color: color-mix(in srgb, var(--info) 25%, transparent);
+}
+.etiqueta-marca {
+  background: var(--marca-suave);
+  color: var(--marca);
+  border-color: color-mix(in srgb, var(--marca) 30%, transparent);
 }
 
 .alerta {
@@ -1918,7 +1928,16 @@ textarea:focus {
   display: flex;
   gap: 10px;
   margin: 10px 0;
+  /* Campo e botão descem para a linha de baixo antes de estourar a tela. */
+  flex-wrap: wrap;
 }
+.linha-campos > * { min-width: 0; }
+/* Barra de ações no cabeçalho: os botões não esticam para a altura da linha
+   quando um vizinho quebra, e um grupo aninhado (campo + botão) não quebra
+   por dentro — quebrar ali separa o botão do campo a que ele pertence. */
+.cabecalho-secao .linha-campos { align-items: center; margin: 0; }
+.cabecalho-secao .linha-campos > button { align-self: center; }
+.cabecalho-secao .linha-campos .linha-campos { flex-wrap: nowrap; }
 .linha-campos > label {
   flex: 1;
   display: flex;
@@ -3464,3 +3483,67 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 .iso-piso-clicavel:hover { border-color: var(--marca); }
 .iso-baia-placa:focus-visible,
 .boneco:focus-visible { outline: 2px solid var(--marca); outline-offset: 3px; }
+
+
+/* ---- A lista de clientes: o CRM da casa ---- */
+
+/* O resumo da base, em tiras clicáveis que também são o filtro por selo.
+   Dois trabalhos num componente só porque são a mesma pergunta: "quantos
+   sumidos eu tenho?" e "me mostra os sumidos" nunca vêm separadas. */
+.crm-tiras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+.crm-tira {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--raio-m);
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  /* Sem isto, a tira mais estreita força a grade a rolar de lado no celular. */
+  min-width: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.crm-tira:hover { border-color: var(--marca); }
+.crm-tira-ligada {
+  border-color: var(--marca);
+  box-shadow: 0 0 0 3px var(--marca-suave);
+}
+.crm-tira-numero {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.crm-tira-rotulo { font-size: 0.76rem; color: var(--texto-3); }
+
+/* A linha de um cliente: nome à esquerda, números à direita, alinhados em
+   coluna para o olho comparar de cima a baixo sem ler. */
+.crm-numeros {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.crm-numero {
+  display: grid;
+  gap: 1px;
+  text-align: right;
+  min-width: 62px;
+}
+.crm-numero strong { font-variant-numeric: tabular-nums; font-size: 0.95rem; }
+.crm-numero span { font-size: 0.68rem; color: var(--texto-3); }
+/* Quem sumiu há muito tempo: o número fica vermelho, e não só a etiqueta. */
+.crm-numero-perigo strong { color: var(--perigo); }
+
+@media (max-width: 640px) {
+  .crm-numeros { justify-content: flex-start; gap: 12px; }
+  .crm-numero { text-align: left; min-width: 54px; }
+}

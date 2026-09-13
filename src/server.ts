@@ -10,6 +10,7 @@ import { dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
+import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
 import { listAgentsInOrg } from "./repository.js";
@@ -231,6 +232,11 @@ setInterval(() => {
   // depender do módulo da pesquisa: a trava (cliente, dia) no banco absorve a
   // repetição, então rodar de hora em hora é resiliência.
   varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura:", e));
+  // E o histórico da base de clientes: enquanto há dia faltando na janela de
+  // um ano, ela carrega o passado; depois vira a rede de segurança do dia a
+  // dia. Antes disto, dia em que o servidor esteve fora do ar era perdido
+  // para sempre — a varredura diária só sabe pedir "ontem".
+  varrerHistorico().catch((e) => console.error("[historico-zig] varredura:", e));
   // E, no mesmo relógio, a fila de avisos olha para si mesma: o que não
   // chegou ao cliente vira mensagem para o dono. A casa já perdeu uma
   // confirmação de reserva que ficou trinta dias parada sem ninguém saber.
@@ -241,6 +247,7 @@ void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:"
 void varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));
 void varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura:", e));
 void varrerAvisosEncalhados().catch((e) => console.error("[encalhados] varredura:", e));
+void varrerHistorico().catch((e) => console.error("[historico-zig] varredura:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));

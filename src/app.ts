@@ -382,11 +382,13 @@ import {
   // `listarClientes` já é o nome do que lista as CASAS clientes da Brasa Food
   // (tenants). Aqui são os clientes DA casa — gente que bebe no bar.
   listarClientes as listarClientesDaCasa,
+  resumoDosClientes,
   registrarCliente,
   salvarConfigDeClientes,
   visitasDoCliente,
 } from "./clientes.js";
 import type { OrigemDeCliente } from "./clientes.js";
+import type { Selo } from "./crm.js";
 import { mandarParabens, proximosAniversariantes } from "./aniversarios.js";
 import { lerPlanilhaDeClientes } from "./planilhaDeClientes.js";
 import type { LinhaRecusada } from "./planilhaDeClientes.js";
@@ -3370,6 +3372,17 @@ async function roteasApi(
       );
     }
 
+    // GET /v1/venues/:slug/clientes/resumo — o retrato da base inteira.
+    //
+    // Rota à parte, e não um campo da lista: o resumo atravessa toda a base
+    // e a lista é uma página dela. Juntar os dois faria cada digitação na
+    // busca recontar trinta mil pessoas.
+    if (metodo === "GET" && recurso === "clientes" && p[3] === "resumo" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeClientes(() => resumoDosClientes(venue.id, hojeNaCasa(venue.timezone))));
+    }
+
     // GET | POST /v1/venues/:slug/clientes
     if (recurso === "clientes" && p.length === 3) {
       if (metodo === "GET") {
@@ -3383,6 +3396,8 @@ async function roteasApi(
             comAniversario: url.searchParams.get("aniversario") === "1",
             mes: Number(url.searchParams.get("mes")) || undefined,
             limite: Number(url.searchParams.get("limite")) || undefined,
+            selo: (url.searchParams.get("selo") as Selo | null) ?? undefined,
+            hoje: hojeNaCasa(venue.timezone),
           }),
         );
         // A nota que cada um deu, quando a casa tem a pesquisa. Numa consulta
