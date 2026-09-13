@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import { hojeNaCasa } from "./fuso.js";
 import { alimentarBasePelaZig, diaAnterior } from "./pesquisaZig.js";
 
@@ -19,8 +19,16 @@ import { alimentarBasePelaZig, diaAnterior } from "./pesquisaZig.js";
  * faltam". É a mesma pergunta que resolve carga histórica e autocura, e é
  * por isso que são uma função só.
  *
- * O DADO É O PRÓPRIO MARCADOR: dia com visita gravada é dia já buscado.
- * Nenhuma tabela de controle, nada para dessincronizar.
+ * O MARCADOR É O ATO DE BUSCAR, e não o resultado dele.
+ *
+ * A primeira versão usava o próprio dado — "dia com visita gravada é dia já
+ * buscado" —, o que é elegante e está errado: a segunda-feira em que o bar
+ * fechou não grava visita nenhuma e continua parecendo um buraco. Na carga
+ * do Ditado a coisa saiu de desperdício para paralisia, com o comando
+ * refazendo as mesmas dez datas em laço, sem nunca andar para trás.
+ *
+ * "Procurei em 12/08 e não havia ninguém" é uma resposta, e `clientes_dias_zig`
+ * é onde ela mora.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,16 +70,49 @@ export function buracos(janela: string[], jaTem: Set<string>): string[] {
   return janela.filter((d) => !jaTem.has(d));
 }
 
-/** Os dias que já têm visita gravada, dentro da janela. */
+/**
+ * Os dias já buscados na janela.
+ *
+ * Lê as DUAS fontes de propósito. O marcador é a resposta certa, mas os dias
+ * que entraram antes de ele existir só aparecem em `clientes_visitas` — e
+ * refazer meses de carga por causa de uma mudança de mecanismo seria trocar
+ * um desperdício por outro.
+ */
 async function diasJaBuscados(venueId: string, desde: string): Promise<Set<string>> {
-  const { data, error } = await cliente()
-    .from("clientes_visitas")
-    .select("dia")
-    .eq("venue_id", venueId)
-    .gte("dia", desde)
-    .limit(50_000);
-  if (error) throw new Error(`Falha ao ler os dias já buscados: ${error.message}`);
-  return new Set(((data ?? []) as Array<{ dia: string }>).map((v) => v.dia));
+  const [marcados, comVisita] = await Promise.all([
+    cliente().from("clientes_dias_zig").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(50_000),
+    cliente().from("clientes_visitas").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(50_000),
+  ]);
+
+  // Banco sem a migração ainda: o marcador simplesmente não conta, e a
+  // varredura volta a se guiar pelo dado. Degradar é melhor que parar.
+  if (marcados.error && !ehMigracaoPendente(marcados.error.message)) {
+    throw new Error(`Falha ao ler os dias buscados: ${marcados.error.message}`);
+  }
+  if (comVisita.error) throw new Error(`Falha ao ler as visitas: ${comVisita.error.message}`);
+
+  const dias = new Set<string>();
+  for (const linha of [...(marcados.data ?? []), ...(comVisita.data ?? [])] as Array<{ dia: string }>) {
+    dias.add(linha.dia);
+  }
+  return dias;
+}
+
+/**
+ * Anota que este dia foi buscado, com quantos vieram.
+ *
+ * Nunca estoura: se o marcador falhar, o pior que acontece é o dia ser
+ * buscado de novo mais tarde — perder a carga inteira por causa da anotação
+ * seria bem pior.
+ */
+async function anotarDiaBuscado(venueId: string, dia: string, visitantes: number): Promise<void> {
+  const { error } = await cliente()
+    .from("clientes_dias_zig")
+    .upsert({ venue_id: venueId, dia, visitantes, buscado_em: new Date().toISOString() },
+      { onConflict: "venue_id,dia" });
+  if (error && !ehMigracaoPendente(error.message)) {
+    console.error(`[historico-zig] não anotei ${dia}: ${error.message}`);
+  }
 }
 
 export interface ResultadoDoHistorico {
@@ -115,7 +156,11 @@ export async function preencherHistorico(
 
   for (const dia of faltando.slice(0, teto)) {
     try {
-      const r = await alimentarBasePelaZig(venue, { dia, agora });
+      // `forcar` porque a decisão de buscar já foi tomada aqui, olhando o
+      // marcador. Sem isto, a checagem interna por visita gravada mandaria
+      // pular justamente o dia vazio que viemos anotar.
+      const r = await alimentarBasePelaZig(venue, { dia, agora, forcar: true });
+      await anotarDiaBuscado(venue.id, dia, r.visitantes);
       resultado.buscados += 1;
       resultado.visitantes += r.visitantes;
       opcoes.aoAndar?.(dia, r.visitantes);

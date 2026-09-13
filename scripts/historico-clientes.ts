@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   for (const casa of casas) {
     console.log(`\n${casa.name} — procurando buracos nos últimos ${janela} dias…`);
     let jaContei = false;
+    let faltavamAntes = Infinity;
 
     // Em voltas, e não de uma vez: `preencherHistorico` só busca o teto dela
     // por chamada, e assim o progresso aparece na tela em vez de o comando
@@ -69,6 +70,22 @@ async function main(): Promise<void> {
         }
         break;
       }
+
+      // A TRAVA QUE FALTAVA.
+      //
+      // O comando já buscou as mesmas dez datas em laço, sem fim, porque os
+      // dias vinham vazios e nada os tirava da lista de buracos. A conta de
+      // "quantos faltam" tem de DIMINUIR a cada volta; se não diminuir, o
+      // marcador não está pegando e insistir é martelar a Zig à toa.
+      if (r.faltavam >= faltavamAntes) {
+        console.log(
+          `  parei: busquei ${r.buscados} dia(s) e a conta de faltantes não caiu ` +
+            `(${r.faltavam}). Alguma coisa não está anotando os dias buscados.`,
+        );
+        break;
+      }
+      faltavamAntes = r.faltavam;
+
       if (pausa > 0) await new Promise((ok) => setTimeout(ok, pausa));
     }
     console.log(`${casa.name}: histórico completo.`);
