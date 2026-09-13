@@ -855,6 +855,40 @@ export async function clientesDaCasa(raiz, ctx) {
 
   /* ================= Aniversariantes ================= */
 
+  /** Por que a agenda está vazia — com o número que explica. */
+  async function porQueVazio() {
+    let p;
+    try {
+      p = await get(`/v1/venues/${ctx.venue}/aniversariantes/panorama`);
+    } catch {
+      return vazio("Ninguém faz aniversário nos próximos 45 dias", "");
+    }
+
+    const casa = ctx.venue;
+
+    if (!p.na_base) {
+      return vazio(
+        `A base de ${casa} está vazia`,
+        "Nenhum cliente cadastrado nesta casa ainda. Se você esperava ver gente aqui, confira lá em cima se o painel está na casa certa.",
+      );
+    }
+    if (!p.com_data) {
+      return vazio(
+        `Nenhuma das ${p.na_base} pessoas de ${casa} tem data de nascimento`,
+        "A Zig traz a data de quem preencheu no cadastro dela — se esta casa não usa a Zig, ou se ninguém preencheu, a base vem sem aniversário. Você pode importar uma planilha com as datas ou digitar na ficha de cada um.",
+      );
+    }
+
+    // O caso que mais confundia: a base TEM datas, só nenhuma agora.
+    const quando = p.proximo
+      ? `O próximo é ${p.proximo.nome ? `de ${p.proximo.nome}, ` : ""}daqui a ${p.proximo.dias_ate} dias (${diaLegivel(p.proximo.proximo)}).`
+      : "";
+    return vazio(
+      "Ninguém faz aniversário nos próximos 45 dias",
+      `${p.com_data} das ${p.na_base} pessoas da base têm data cadastrada — não é falta de dado. ${quando}`.trim(),
+    );
+  }
+
   async function abaAniversarios() {
     limpar(corpo);
     corpo.append(el("p", { classe: "muted", texto: "Carregando a agenda…" }));
@@ -878,12 +912,13 @@ export async function clientesDaCasa(raiz, ctx) {
     let botaoEnviar = null;
     let contador = null;
     if (!pessoas.length) {
-      lista.append(
-        vazio(
-          "Ninguém faz aniversário nos próximos 45 dias",
-          "Ou a base ainda não tem datas de nascimento. A Zig traz a data de quem preencheu no cadastro dela; você também pode digitar na ficha do cliente.",
-        ),
-      );
+      // A TELA TEM DE DIZER O QUE ELA SABE.
+      //
+      // "Ninguém nos próximos 45 dias" cobria dois problemas opostos com a
+      // mesma frase: a casa com 1.865 datas cujo próximo aniversário é em
+      // novembro, e a casa sem data nenhuma cadastrada. Quem lia não tinha
+      // como distinguir — e o mais provável era achar que a tela quebrou.
+      lista.append(await porQueVazio());
     } else {
       // Uma caixa por pessoa, com a MENSAGEM à vista.
       //

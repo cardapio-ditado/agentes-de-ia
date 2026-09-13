@@ -223,6 +223,59 @@ export function diasAte(
 }
 
 /**
+ * O PANORAMA — por que a agenda está vazia.
+ *
+ * "Ninguém faz aniversário nos próximos 45 dias" é verdade e não ajuda: a
+ * mesma frase cobre dois problemas opostos. Numa casa com 1.865 datas
+ * cadastradas, significa "os próximos são em novembro, volte depois". Numa
+ * casa sem nenhuma data, significa "seu cadastro está vazio, comece por
+ * aqui". Quem lê não tem como distinguir, e a tela sabia a diferença o
+ * tempo todo.
+ *
+ * Custa uma consulta, e só é pedida quando a agenda volta vazia — que é
+ * exatamente quando alguém precisa entender o que está acontecendo.
+ */
+export interface PanoramaDeAniversarios {
+  /** Quanta gente a casa tem na base, com data ou sem. */
+  na_base: number;
+  /** Quantos têm dia e mês de nascimento. */
+  com_data: number;
+  /** O próximo aniversário da casa, ainda que esteja longe. */
+  proximo: { nome: string | null; dias_ate: number; proximo: string } | null;
+}
+
+export async function panoramaDeAniversarios(
+  venue: { id: string; timezone: string },
+  agora = new Date(),
+): Promise<PanoramaDeAniversarios> {
+  const hojeISO = hojeNaCasa(venue.timezone, agora);
+
+  const [{ count: naBase }, { data, error }] = await Promise.all([
+    cliente().from("clientes").select("id", { count: "exact", head: true }).eq("venue_id", venue.id),
+    cliente()
+      .from("clientes")
+      .select("nome, nascimento_dia, nascimento_mes")
+      .eq("venue_id", venue.id)
+      .not("nascimento_dia", "is", null)
+      .not("nascimento_mes", "is", null)
+      .limit(20_000),
+  ]);
+  if (error) throw new Error(`Falha ao ler o panorama de aniversários: ${error.message}`);
+
+  const comData = (data ?? []) as Array<{ nome: string | null; nascimento_dia: number; nascimento_mes: number }>;
+  const ordenados = comData
+    .map((c) => ({ nome: c.nome, ...diasAte(c.nascimento_dia, c.nascimento_mes, hojeISO) }))
+    .sort((a, b) => a.dias - b.dias);
+
+  const primeiro = ordenados[0];
+  return {
+    na_base: naBase ?? 0,
+    com_data: comData.length,
+    proximo: primeiro ? { nome: primeiro.nome, dias_ate: primeiro.dias, proximo: primeiro.proximo } : null,
+  };
+}
+
+/**
  * A agenda de aniversários da casa: quem faz nos próximos N dias.
  *
  * É a tela que o gerente abre na segunda-feira para saber quem ligar. Traz

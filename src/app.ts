@@ -389,7 +389,7 @@ import {
 } from "./clientes.js";
 import type { OrigemDeCliente } from "./clientes.js";
 import type { Selo } from "./crm.js";
-import { mandarParabens, proximosAniversariantes } from "./aniversarios.js";
+import { mandarParabens, panoramaDeAniversarios, proximosAniversariantes } from "./aniversarios.js";
 import { lerPlanilhaDeClientes } from "./planilhaDeClientes.js";
 import type { LinhaRecusada } from "./planilhaDeClientes.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
@@ -3517,6 +3517,15 @@ async function roteasApi(
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       const dias = Math.min(Math.max(Number(url.searchParams.get("dias")) || 30, 1), 366);
       return ok(res, await comErroDeClientes(() => proximosAniversariantes(venue, dias)));
+    }
+
+    // GET /v1/venues/:slug/aniversariantes/panorama — por que a agenda está
+    // vazia. Só é pedida quando ela volta vazia, que é quando a diferença
+    // entre "ainda não é a época" e "seu cadastro está vazio" importa.
+    if (metodo === "GET" && recurso === "aniversariantes" && p[3] === "panorama" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeClientes(() => panoramaDeAniversarios(venue)));
     }
 
     // POST /v1/venues/:slug/aniversariantes/enviar — o "Mandar agora" do

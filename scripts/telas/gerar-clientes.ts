@@ -90,6 +90,36 @@ const ficha = {
         "GET /clientes": TODOS.filter((p) => p.selo === "sumido"),
       },
     },
+    // As três situações que a frase antiga cobria com a MESMA palavra, e que
+    // são três problemas diferentes com três saídas diferentes.
+    "aniversarios-fora-de-epoca": {
+      rotulo: "agenda vazia porque ainda não é a época",
+      cliques: ['.aba[data-aba="aniversarios"]'],
+      rotas: {
+        "GET /aniversariantes": [],
+        "GET /aniversariantes/panorama": {
+          na_base: 3646,
+          com_data: 1865,
+          proximo: { nome: "Mel Thichayla", dias_ate: 71, proximo: "2026-11-23" },
+        },
+      },
+    },
+    "aniversarios-sem-data": {
+      rotulo: "agenda vazia porque a casa não tem data nenhuma",
+      cliques: ['.aba[data-aba="aniversarios"]'],
+      rotas: {
+        "GET /aniversariantes": [],
+        "GET /aniversariantes/panorama": { na_base: 69, com_data: 0, proximo: null },
+      },
+    },
+    "aniversarios-casa-errada": {
+      rotulo: "agenda vazia porque a casa não tem cliente nenhum",
+      cliques: ['.aba[data-aba="aniversarios"]'],
+      rotas: {
+        "GET /aniversariantes": [],
+        "GET /aniversariantes/panorama": { na_base: 0, com_data: 0, proximo: null },
+      },
+    },
     "base-vazia": {
       rotulo: "casa que acabou de contratar o módulo",
       rotas: {
