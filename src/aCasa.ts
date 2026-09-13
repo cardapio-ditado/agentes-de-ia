@@ -299,7 +299,11 @@ export function filaDoCarteiro(avisos: AvisoNaFila[]): DetalheDoTrabalhador[] {
       titulo: nomeDoAviso(a.template),
       detalhe: ruim
         ? [motivoDaFalha(a.error), para ? `para ${para}` : null].filter(Boolean).join(" · ")
-        : [para ? `para ${para}` : null, "na fila para enviar"].filter(Boolean).join(" · "),
+        // Aviso parado costuma estar só na fila. Quando ele traz um motivo —
+        // "esperando o conector" — é esse motivo que importa, e não a frase
+        // genérica que faria o dono achar que está tudo correndo.
+        : [para ? `para ${para}` : null, texto(a.error) || "na fila para enviar"]
+          .filter(Boolean).join(" · "),
       quando: a.created_at,
       ruim,
     };

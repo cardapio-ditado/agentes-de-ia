@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { normalizarTelefone, variacoesDoTelefone } from "./notifications.js";
+import { normalizarTelefone, soOConectorEntrega, variacoesDoTelefone } from "./notifications.js";
 
 describe("normalizarTelefone", () => {
   it("acrescenta o país quando falta e aceita o que já vem completo", () => {
@@ -33,5 +33,22 @@ describe("variacoesDoTelefone", () => {
       "5511933334444",
     ]);
     assert.deepEqual(variacoesDoTelefone("14155552671"), ["14155552671"]);
+  });
+});
+
+describe("soOConectorEntrega", () => {
+  it("reconhece o LID, que a Cloud API da Meta não sabe rotear", () => {
+    // O caso que custou uma confirmação de reserva à casa: o WhatsApp migrou
+    // a conta para LID, o aviso foi tentado pela Cloud API — que só roteia
+    // telefone — e morreu na fila depois de quatro tentativas inúteis.
+    assert.equal(soOConectorEntrega("189554237694113@lid"), true);
+    assert.equal(soOConectorEntrega("189554237694113"), true, "LID gravado sem o sufixo");
+  });
+
+  it("deixa passar o que é telefone de verdade", () => {
+    assert.equal(soOConectorEntrega("(65) 98138-2139"), false);
+    assert.equal(soOConectorEntrega("5565981382139"), false);
+    assert.equal(soOConectorEntrega("5565981382139@s.whatsapp.net"), false);
+    assert.equal(soOConectorEntrega(""), false);
   });
 });

@@ -370,6 +370,18 @@ test("a fila do carteiro põe o que falhou na frente, com o motivo", () => {
   assert.match(linhas[1]!.detalhe!, /na fila para enviar/);
 });
 
+test("aviso parado esperando o conector diz isso, e não 'na fila'", () => {
+  const [linha] = filaDoCarteiro([{
+    status: "pending",
+    template: "reserva_aprovada",
+    destination: "189554237694113@lid",
+    error: "Esperando o conector do WhatsApp: este contato só é alcançável por ele.",
+    created_at: "2026-09-12T23:00:00.000Z",
+  }]);
+  assert.equal(linha!.ruim, false, "não é falha: ninguém precisa correr");
+  assert.match(linha!.detalhe!, /Esperando o conector/);
+});
+
 test("aviso sem nome conhecido ainda aparece legível", () => {
   // Template novo entra no sistema antes de alguém traduzir o nome dele.
   assert.equal(nomeDoAviso("promo_quarta_feira"), "promo quarta feira");

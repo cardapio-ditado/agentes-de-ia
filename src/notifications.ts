@@ -63,6 +63,32 @@ export interface ResultadoEnvio {
   enviado: boolean;
   providerId?: string;
   erro?: string;
+  /**
+   * Não saiu, mas também não falhou: falta o conector, e só ele entrega.
+   *
+   * A diferença é prática. Falha gasta uma das quatro tentativas e, na
+   * quarta, o aviso morre na fila. Espera não gasta nenhuma: o aviso fica
+   * parado até o conector voltar, e aí sai.
+   */
+  aguardando?: boolean;
+}
+
+/**
+ * Endereço que só o conector (Baileys) sabe entregar.
+ *
+ * O WhatsApp migrou parte das contas para LID — um identificador interno no
+ * lugar do número. O conector conversa com LID numa boa; a Cloud API da Meta
+ * não, porque ela só roteia telefone. Mandar um LID para a Cloud API é falha
+ * garantida, e foi assim que a casa perdeu uma confirmação de reserva: quatro
+ * tentativas queimadas numa porta que nunca ia abrir, e o aviso morreu na
+ * fila com "Telefone inválido" — mensagem que não ajudava ninguém, porque o
+ * telefone não tinha nada de inválido, só não era um telefone.
+ */
+export function soOConectorEntrega(destino: string): boolean {
+  const bruto = String(destino ?? "").trim();
+  if (bruto.endsWith("@lid")) return true;
+  // LID gravado sem o sufixo, de conversa antiga: longo demais para telefone.
+  return !bruto.includes("@") && bruto.replace(/\D/g, "").length >= 14;
 }
 
 export type EnvioWhatsapp = (telefone: string, corpo: string) => Promise<ResultadoEnvio>;
@@ -121,6 +147,13 @@ async function enviarPorConsole(destino: string, corpo: string): Promise<Resulta
 async function enviarPorWhatsapp(destino: string, corpo: string): Promise<ResultadoEnvio> {
   const provedor = provedorWhatsappAtivo();
   if (provedor) return await provedor(destino, corpo);
+  if (soOConectorEntrega(destino)) {
+    return {
+      enviado: false,
+      aguardando: true,
+      erro: "Esperando o conector do WhatsApp: este contato só é alcançável por ele.",
+    };
+  }
   if (!temCloudApi()) {
     return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado." };
   }
@@ -396,8 +429,10 @@ export async function tentarEnviar(notificacao: Notification): Promise<Notificat
   const { data, error } = await db()
     .from("notifications")
     .update({
-      status: resultado.enviado ? "sent" : "failed",
-      attempts: notificacao.attempts + 1,
+      status: resultado.enviado ? "sent" : resultado.aguardando ? "pending" : "failed",
+      // Esperar pelo conector não gasta tentativa: gastar as quatro numa
+      // porta que não abre é o que matou a confirmação de reserva de agosto.
+      attempts: resultado.aguardando ? notificacao.attempts : notificacao.attempts + 1,
       error: resultado.erro ?? null,
       provider_id: resultado.providerId ?? null,
       sent_at: resultado.enviado ? new Date().toISOString() : null,
@@ -410,7 +445,7 @@ export async function tentarEnviar(notificacao: Notification): Promise<Notificat
     console.error(`[notifications] não atualizou o status: ${error.message}`);
     return notificacao;
   }
-  if (!resultado.enviado) {
+  if (!resultado.enviado && !resultado.aguardando) {
     console.error(`[notifications] ${notificacao.id} falhou: ${resultado.erro}`);
   }
   return data;
