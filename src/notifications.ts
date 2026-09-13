@@ -5,7 +5,7 @@ import type { PapelWhatsapp } from "./ponteWhatsapp.js";
 
 export type Notification = Tables<"notifications">;
 
-const MAX_TENTATIVAS = 4;
+export const MAX_TENTATIVAS = 4;
 
 // ============================================================
 // Mensagens
@@ -334,6 +334,114 @@ export async function jidConhecidoDoTelefone(
 // ============================================================
 // Fila
 // ============================================================
+
+/** O texto, ou null quando vazio — para a linha não virar " · · ". */
+function texto(v: unknown): string | null {
+  const limpo = String(v ?? "").trim();
+  return limpo || null;
+}
+
+/** Sem acento e em minúscula, para comparar texto de provedor. */
+function semAcento(txt: string): string {
+  return txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** Uma linha da fila de um agente, pronta para a tela. */
+export interface LinhaDaFila {
+  titulo: string;
+  detalhe: string | null;
+  quando: string | null;
+  /** Deu errado: a tela marca em vermelho. */
+  ruim: boolean;
+}
+
+/**
+ * Como cada aviso se chama para quem não escreveu o sistema.
+ *
+ * `reserva_aprovada` é nome de código; "Confirmação de reserva" é o que o
+ * dono do bar reconhece. O que não estiver na lista vira o próprio nome com
+ * os sublinhados trocados por espaço — errar para o lado de mostrar algo.
+ */
+const NOME_DO_AVISO: Record<string, string> = {
+  reserva_aprovada: "Confirmação de reserva",
+  reserva_lembrete: "Lembrete de reserva",
+  reserva_nova_gestor: "Aviso de reserva nova",
+  pesquisa_convite: "Convite da pesquisa",
+  pesquisa_detrator: "Alerta de nota baixa",
+  aniversario_2026: "Mensagem de aniversário",
+  checklist_link: "Link do checklist",
+  checklist_resumo: "Resumo do checklist",
+  cmv_lembrete_contagem: "Lembrete de contagem",
+  cardapio_chamou_garcom: "Mesa chamou o garçom",
+  mesa_chamando: "Mesa chamando",
+  conector_caiu: "Aviso de conexão caída",
+  resposta_humana: "Resposta de gente",
+};
+
+export function nomeDoAviso(template: string | null): string {
+  const chave = String(template ?? "").trim();
+  if (!chave) return "Aviso";
+  return NOME_DO_AVISO[chave] ?? chave.replace(/_/g, " ");
+}
+
+export interface AvisoNaFila {
+  status: string;
+  template: string | null;
+  destination: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+/**
+ * A fila do Carteiro aberta, um aviso por linha.
+ *
+ * O que falhou vem primeiro, e com o motivo junto: é o que alguém pode
+ * resolver. O que está só esperando vem depois, porque em um minuto ele
+ * sai sozinho e não é problema de ninguém.
+ */
+export function filaDoCarteiro(avisos: AvisoNaFila[]): LinhaDaFila[] {
+  const ordem = [...avisos].sort((a, b) => {
+    const falhou = Number(b.status === "failed") - Number(a.status === "failed");
+    return falhou !== 0 ? falhou : b.created_at.localeCompare(a.created_at);
+  });
+
+  return ordem.map((a) => {
+    const ruim = a.status === "failed";
+    const para = texto(a.destination);
+    return {
+      titulo: nomeDoAviso(a.template),
+      detalhe: ruim
+        ? [motivoDaFalha(a.error), para ? `para ${para}` : null].filter(Boolean).join(" · ")
+        // Aviso parado costuma estar só na fila. Quando ele traz um motivo —
+        // "esperando o conector" — é esse motivo que importa, e não a frase
+        // genérica que faria o dono achar que está tudo correndo.
+        : [para ? `para ${para}` : null, texto(a.error) || "na fila para enviar"]
+          .filter(Boolean).join(" · "),
+      quando: a.created_at,
+      ruim,
+    };
+  });
+}
+
+/**
+ * O motivo da falha em uma linha.
+ *
+ * O provedor devolve parágrafo, json e código de erro. Quem toca o bar
+ * precisa de uma frase — e a frase tem de dizer o que fazer, não o que o
+ * servidor achou.
+ */
+export function motivoDaFalha(erro: string | null): string {
+  const cru = String(erro ?? "").trim();
+  if (!cru) return "Não deu para enviar";
+  const baixo = semAcento(cru);
+  if (baixo.includes("telefone")) return "O telefone do cadastro não é um número de WhatsApp";
+  if (baixo.includes("24") && baixo.includes("hora")) return "Passou da janela de 24 h do WhatsApp";
+  if (baixo.includes("template")) return "O modelo da mensagem não está aprovado na Meta";
+  if (baixo.includes("token") || baixo.includes("auth")) return "A conexão com o WhatsApp caiu";
+  // Uma linha só, e curta: a gaveta tem de caber na tela do celular.
+  return cru.split("\n")[0]!.slice(0, 120);
+}
+
 
 /**
  * Prefere o endereço exato da conversa ao telefone que o cliente digitou.
