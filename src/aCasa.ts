@@ -89,6 +89,24 @@ export interface Trabalhador {
   minutos_parado: number | null;
   /** Saiu para a pausa: está na casa, mas não está trabalhando. */
   em_pausa: boolean;
+  /**
+   * A fila deste trabalhador, aberta — o que a tela mostra quando alguém
+   * clica nele.
+   *
+   * "1 aviso falhou" acima da cabeça do Carteiro é verdade, e é inútil
+   * sozinho: quem lê não tem como saber QUAL aviso nem POR QUÊ. Aqui vem o
+   * motivo em letra de gente ("Telefone inválido"), para o dono resolver em
+   * vez de só ficar sabendo que existe um problema.
+   */
+  detalhes?: DetalheDoTrabalhador[];
+}
+
+export interface DetalheDoTrabalhador {
+  titulo: string;
+  detalhe: string | null;
+  quando: string | null;
+  /** Deu errado: a tela marca em vermelho. */
+  ruim: boolean;
 }
 
 export type AreaDaCasa = "recepcao" | "salao" | "doca" | "administrativo";
@@ -222,6 +240,89 @@ export function montarSetores(params: {
       minutos_parado: ultimo ? minutosEntre(ultimo.quando, params.agora) : null,
     };
   });
+}
+
+/**
+ * Como cada aviso se chama para quem não escreveu o sistema.
+ *
+ * `reserva_aprovada` é nome de código; "Confirmação de reserva" é o que o
+ * dono do bar reconhece. O que não estiver na lista vira o próprio nome com
+ * os sublinhados trocados por espaço — errar para o lado de mostrar algo.
+ */
+const NOME_DO_AVISO: Record<string, string> = {
+  reserva_aprovada: "Confirmação de reserva",
+  reserva_lembrete: "Lembrete de reserva",
+  reserva_nova_gestor: "Aviso de reserva nova",
+  pesquisa_convite: "Convite da pesquisa",
+  pesquisa_detrator: "Alerta de nota baixa",
+  aniversario_2026: "Mensagem de aniversário",
+  checklist_link: "Link do checklist",
+  checklist_resumo: "Resumo do checklist",
+  cmv_lembrete_contagem: "Lembrete de contagem",
+  cardapio_chamou_garcom: "Mesa chamou o garçom",
+  mesa_chamando: "Mesa chamando",
+  conector_caiu: "Aviso de conexão caída",
+  resposta_humana: "Resposta de gente",
+};
+
+export function nomeDoAviso(template: string | null): string {
+  const chave = String(template ?? "").trim();
+  if (!chave) return "Aviso";
+  return NOME_DO_AVISO[chave] ?? chave.replace(/_/g, " ");
+}
+
+export interface AvisoNaFila {
+  status: string;
+  template: string | null;
+  destination: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+/**
+ * A fila do Carteiro aberta, um aviso por linha.
+ *
+ * O que falhou vem primeiro, e com o motivo junto: é o que alguém pode
+ * resolver. O que está só esperando vem depois, porque em um minuto ele
+ * sai sozinho e não é problema de ninguém.
+ */
+export function filaDoCarteiro(avisos: AvisoNaFila[]): DetalheDoTrabalhador[] {
+  const ordem = [...avisos].sort((a, b) => {
+    const falhou = Number(b.status === "failed") - Number(a.status === "failed");
+    return falhou !== 0 ? falhou : b.created_at.localeCompare(a.created_at);
+  });
+
+  return ordem.map((a) => {
+    const ruim = a.status === "failed";
+    const para = texto(a.destination);
+    return {
+      titulo: nomeDoAviso(a.template),
+      detalhe: ruim
+        ? [motivoDaFalha(a.error), para ? `para ${para}` : null].filter(Boolean).join(" · ")
+        : [para ? `para ${para}` : null, "na fila para enviar"].filter(Boolean).join(" · "),
+      quando: a.created_at,
+      ruim,
+    };
+  });
+}
+
+/**
+ * O motivo da falha em uma linha.
+ *
+ * O provedor devolve parágrafo, json e código de erro. Quem toca o bar
+ * precisa de uma frase — e a frase tem de dizer o que fazer, não o que o
+ * servidor achou.
+ */
+export function motivoDaFalha(erro: string | null): string {
+  const cru = String(erro ?? "").trim();
+  if (!cru) return "Não deu para enviar";
+  const baixo = simples(cru);
+  if (baixo.includes("telefone")) return "O telefone do cadastro não é um número de WhatsApp";
+  if (baixo.includes("24") && baixo.includes("hora")) return "Passou da janela de 24 h do WhatsApp";
+  if (baixo.includes("template")) return "O modelo da mensagem não está aprovado na Meta";
+  if (baixo.includes("token") || baixo.includes("auth")) return "A conexão com o WhatsApp caiu";
+  // Uma linha só, e curta: a gaveta tem de caber na tela do celular.
+  return cru.split("\n")[0]!.slice(0, 120);
 }
 
 /** "agora mesmo", "há 12 min", "há 3 h", "há 2 dias". */
@@ -827,18 +928,22 @@ async function atendenteDoWhatsapp(venueId: string): Promise<Trabalhador> {
     em_pausa: false,
   };
 
+  // Oito, e não uma: a de cima diz o que ele está fazendo agora, e as
+  // outras sete são o que a gaveta mostra quando alguém clica no agente.
   const { data: conversas } = await cliente()
     .from("conversations")
     .select("id, title, external_id, updated_at")
     .eq("venue_id", venueId)
     .order("updated_at", { ascending: false })
-    .limit(1);
+    .limit(8);
 
-  const conversa = ((conversas ?? []) as Array<Record<string, unknown>>)[0];
+  const fila = (conversas ?? []) as Array<Record<string, unknown>>;
+  const conversa = fila[0];
   if (!conversa) return base;
 
+  const agora = new Date().toISOString();
   const nome = texto(conversa.title) || texto(conversa.external_id);
-  const minutos = minutosEntre(String(conversa.updated_at), new Date().toISOString());
+  const minutos = minutosEntre(String(conversa.updated_at), agora);
   return {
     ...base,
     // Cinco minutos: uma conversa de WhatsApp respira nesse ritmo. Passou
@@ -846,19 +951,25 @@ async function atendenteDoWhatsapp(venueId: string): Promise<Trabalhador> {
     fazendo: minutos <= 5 ? `Respondendo ${primeiroNome(nome) ?? "um cliente"}` : null,
     desde: String(conversa.updated_at),
     minutos_parado: minutos,
+    detalhes: fila.map((c) => ({
+      titulo: texto(c.title) || texto(c.external_id) || "Alguém no WhatsApp",
+      detalhe: `última mensagem ${comoFazTempo(minutosEntre(String(c.updated_at), agora))}`,
+      quando: String(c.updated_at),
+      ruim: false,
+    })),
   };
 }
 
 async function carteiroDosAvisos(venueId: string): Promise<Trabalhador> {
   const { data } = await cliente()
     .from("notifications")
-    .select("id, status, created_at")
+    .select("id, status, template, destination, error, created_at")
     .eq("venue_id", venueId)
     .in("status", ["pending", "queued", "failed"])
     .order("created_at", { ascending: true })
     .limit(50);
 
-  const fila = (data ?? []) as Array<{ status: string; created_at: string }>;
+  const fila = (data ?? []) as AvisoNaFila[];
   const falhas = fila.filter((n) => n.status === "failed").length;
   const esperando = fila.length - falhas;
 
@@ -872,6 +983,7 @@ async function carteiroDosAvisos(venueId: string): Promise<Trabalhador> {
     desde: fila[0]?.created_at ?? null,
     minutos_parado: null,
     em_pausa: false,
+    detalhes: filaDoCarteiro(fila),
   };
 }
 

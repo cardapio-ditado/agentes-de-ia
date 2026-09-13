@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { montarMesas, montarSetores, type Fato, type Trabalhador } from "../../src/aCasa.js";
+import { filaDoCarteiro, montarMesas, montarSetores, type Fato, type Trabalhador } from "../../src/aCasa.js";
 
 const AGORA = "2026-09-12T23:40:00.000Z";
 const DESDE = "2026-09-11T23:40:00.000Z";
@@ -52,8 +52,37 @@ const EQUIPE: Trabalhador[] = [
   { id: "pessoa:7", nome: "Seu Nilton", tipo: "pessoa", papel: "Estoquista", setor: "recebimento", fazendo: null, desde: faz(150), minutos_parado: 150, em_pausa: false },
   { id: "pessoa:6", nome: "Val Prado", tipo: "pessoa", papel: "Subgerente", setor: "rh", fazendo: null, desde: faz(20), minutos_parado: 20, em_pausa: true },
   { id: "pessoa:8", nome: "Dona Zilda", tipo: "pessoa", papel: "Limpeza", setor: "rotinas", fazendo: "Checklist concluído", desde: faz(38), minutos_parado: 38, em_pausa: false },
-  { id: "agente:atendente", nome: "Atendente", tipo: "agente", papel: "Responde o WhatsApp", setor: "atendimento", fazendo: "Respondendo Renata", desde: faz(4), minutos_parado: 4, em_pausa: false },
-  { id: "agente:carteiro", nome: "Carteiro", tipo: "agente", papel: "Manda os avisos", setor: "rh", fazendo: null, desde: faz(180), minutos_parado: 180, em_pausa: false },
+  {
+    id: "agente:atendente", nome: "Atendente", tipo: "agente", papel: "Responde o WhatsApp",
+    setor: "atendimento", fazendo: "Respondendo Renata", desde: faz(4), minutos_parado: 4, em_pausa: false,
+    detalhes: [
+      { titulo: "Renata Prado", detalhe: "última mensagem há 4 min", quando: faz(4), ruim: false },
+      { titulo: "Paulo Vieira", detalhe: "última mensagem há 1 h", quando: faz(62), ruim: false },
+    ],
+  },
+  {
+    // O caso que existe na casa de verdade: um aviso de reserva que nunca
+    // saiu porque o telefone do cadastro era o id da Meta, não um celular.
+    // Era o boneco dizendo "1 aviso falhou" e ninguém podendo perguntar qual.
+    id: "agente:carteiro", nome: "Carteiro", tipo: "agente", papel: "Manda os avisos",
+    setor: "rh", fazendo: "1 aviso(s) falharam", desde: faz(180), minutos_parado: 180, em_pausa: false,
+    detalhes: filaDoCarteiro([
+      {
+        status: "failed",
+        template: "reserva_aprovada",
+        destination: "189554237694113",
+        error: 'Telefone inválido: "189554237694113".',
+        created_at: faz(2880),
+      },
+      {
+        status: "pending",
+        template: "pesquisa_convite",
+        destination: "65 99999-0000",
+        error: null,
+        created_at: faz(3),
+      },
+    ]),
+  },
 ];
 
 const CADASTRO_DE_MESAS = Array.from({ length: 34 }, (_, i) => i + 1);
@@ -147,6 +176,59 @@ const ficha = {
     },
     "poucos-modulos": {
       rotulo: "casa que só assina o RH: o resto fica apagado",
+      rotas: {
+        "GET /a-casa": situacao({
+          fatos: FATOS.filter((f) => f.setor === "rh"),
+          equipe: EQUIPE.filter((t) => t.setor === "rh"),
+          contratados: ["rh"],
+          sessoes: [],
+          chamados: [],
+          mesas: [],
+        }),
+      },
+    },
+    "gaveta-do-carteiro": {
+      rotulo: "clicou no agente que tem aviso falhado",
+      cliques: [".boneco-com-problema .boneco-corpo"],
+      rotas: {
+        "GET /a-casa": situacao({
+          fatos: FATOS,
+          equipe: EQUIPE,
+          contratados: TODOS_OS_MODULOS,
+          sessoes: MOVIMENTO_NORMAL,
+          chamados: [12, 31],
+        }),
+      },
+    },
+    "gaveta-da-mesa": {
+      rotulo: "clicou na mesa que está chamando o garçom",
+      cliques: [".iso-mesa-placa-chamando"],
+      rotas: {
+        "GET /a-casa": situacao({
+          fatos: FATOS,
+          equipe: EQUIPE,
+          contratados: TODOS_OS_MODULOS,
+          sessoes: MOVIMENTO_NORMAL,
+          chamados: [12, 31],
+        }),
+      },
+    },
+    "gaveta-da-baia": {
+      rotulo: "clicou na baia do atendimento ao cliente",
+      cliques: ['[data-setor="atendimento"]'],
+      rotas: {
+        "GET /a-casa": situacao({
+          fatos: FATOS,
+          equipe: EQUIPE,
+          contratados: TODOS_OS_MODULOS,
+          sessoes: MOVIMENTO_NORMAL,
+          chamados: [12, 31],
+        }),
+      },
+    },
+    "gaveta-do-nao-contratado": {
+      rotulo: "clicou numa baia que a casa não assina",
+      cliques: ['[data-setor="cozinha"]'],
       rotas: {
         "GET /a-casa": situacao({
           fatos: FATOS.filter((f) => f.setor === "rh"),

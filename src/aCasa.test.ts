@@ -5,9 +5,12 @@ import {
   SETORES,
   arrumarFatos,
   comoFazTempo,
+  filaDoCarteiro,
   minutosEntre,
   montarMesas,
   montarSetores,
+  motivoDaFalha,
+  nomeDoAviso,
   oQueCadaUmFaz,
   primeiroNome,
   setorDaFuncao,
@@ -348,4 +351,36 @@ test("mesa com movimento e sem cadastro aparece assim mesmo", () => {
   });
   assert.deepEqual(mesas.map((m) => m.numero), [1, 2, 99]);
   assert.equal(mesas.find((m) => m.numero === 99)!.estado, "ocupada");
+});
+
+// ============================================================
+// A fila do Carteiro — o que o clique no agente abre
+// ============================================================
+
+test("a fila do carteiro põe o que falhou na frente, com o motivo", () => {
+  const linhas = filaDoCarteiro([
+    { status: "pending", template: "pesquisa_convite", destination: "65 9999-0000", error: null, created_at: "2026-09-12T23:00:00.000Z" },
+    { status: "failed", template: "reserva_aprovada", destination: "189554237694113", error: 'Telefone inválido: "189554237694113".', created_at: "2026-08-14T01:41:31.000Z" },
+  ]);
+
+  assert.equal(linhas[0]!.titulo, "Confirmação de reserva", "o problema vem primeiro, ainda que seja o mais antigo");
+  assert.equal(linhas[0]!.ruim, true);
+  assert.match(linhas[0]!.detalhe!, /não é um número de WhatsApp/, "diz o que fazer, não o que o servidor achou");
+  assert.equal(linhas[1]!.ruim, false);
+  assert.match(linhas[1]!.detalhe!, /na fila para enviar/);
+});
+
+test("aviso sem nome conhecido ainda aparece legível", () => {
+  // Template novo entra no sistema antes de alguém traduzir o nome dele.
+  assert.equal(nomeDoAviso("promo_quarta_feira"), "promo quarta feira");
+  assert.equal(nomeDoAviso(null), "Aviso");
+});
+
+test("o motivo da falha cabe numa linha", () => {
+  assert.equal(motivoDaFalha(null), "Não deu para enviar");
+  assert.match(motivoDaFalha("Template not approved by Meta"), /não está aprovado/);
+  assert.match(motivoDaFalha("Expired token"), /conexão com o WhatsApp caiu/);
+  // O que não se reconhece passa cru, mas cortado: a gaveta tem de caber.
+  const comprido = motivoDaFalha("x".repeat(400));
+  assert.equal(comprido.length, 120);
 });

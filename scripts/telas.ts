@@ -62,13 +62,27 @@ interface Tela {
   /** "GET /rh/ferias": a resposta. O prefixo /v1/venues/<casa> é opcional. */
   rotas: Record<string, unknown>;
   /**
+   * O que clicar antes de tirar a foto, em seletores de CSS.
+   *
+   * Tela que só mostra a coisa depois de um clique — uma gaveta, uma aba,
+   * um menu — ficava fora do alcance desta ferramenta: a foto pegava sempre
+   * o estado fechado. Com isto, a situação "gaveta aberta" é uma linha no
+   * arquivo de dados.
+   */
+  cliques?: string[];
+  /**
    * Situações da mesma tela, cada uma com o seu nome.
    *
    * É o que faz esta ferramenta valer a pena: a tela vazia, a casa que ainda
    * não escolheu o método, a semana sem venda nenhuma. O que na produção
    * exige combinar dados reais, aqui é um objeto de cinco linhas.
    */
-  variacoes?: Record<string, { rotulo?: string; guarda?: Record<string, string>; rotas?: Record<string, unknown> }>;
+  variacoes?: Record<string, {
+    rotulo?: string;
+    guarda?: Record<string, string>;
+    rotas?: Record<string, unknown>;
+    cliques?: string[];
+  }>;
 }
 
 /** A tela com uma variação aplicada por cima. */
@@ -84,6 +98,7 @@ function comVariacao(tela: Tela, nome: string | null): Tela {
     rotulo: v.rotulo ? `${tela.rotulo} — ${v.rotulo}` : tela.rotulo,
     guarda: { ...(tela.guarda ?? {}), ...(v.guarda ?? {}) },
     rotas: { ...tela.rotas, ...(v.rotas ?? {}) },
+    cliques: v.cliques ?? tela.cliques,
   };
 }
 
@@ -289,7 +304,12 @@ function ondeEstaOChromium(): string | undefined {
   return candidatos.find((c) => existsSync(c));
 }
 
-async function abrirNoNavegador(nome: string, endereco: string, larguras: number[]): Promise<Achados[]> {
+async function abrirNoNavegador(
+  nome: string,
+  endereco: string,
+  larguras: number[],
+  cliques: string[] = [],
+): Promise<Achados[]> {
   // O playwright é opcional de propósito: quem só quer clicar na tela usa
   // --servir e não precisa baixar navegador nenhum.
   let chromium;
@@ -319,6 +339,18 @@ async function abrirNoNavegador(nome: string, endereco: string, larguras: number
       // Tempo de a tela buscar o que precisa e desenhar. Não é corrida: o
       // servidor é local e responde na hora.
       await pagina.waitForTimeout(900);
+
+      for (const seletor of cliques) {
+        const alvo = pagina.locator(seletor).first();
+        // Clique que não acha nada é defeito, e não silêncio: a situação
+        // prometia mostrar a gaveta aberta e mostrou a tela fechada.
+        if (await alvo.count() === 0) {
+          erros.push(`o clique de "${seletor}" não achou nada na tela`);
+          continue;
+        }
+        await alvo.click();
+        await pagina.waitForTimeout(250);
+      }
 
       const foto = join(FOTOS, `${nome}-${largura}.png`);
       await pagina.screenshot({ path: foto, fullPage: true });
@@ -491,7 +523,7 @@ async function rodarUm(pedido: Pedido, o: Opcoes): Promise<boolean> {
   }
 
   try {
-    const houveErro = relatar(await abrirNoNavegador(apelido, endereco, o.larguras));
+    const houveErro = relatar(await abrirNoNavegador(apelido, endereco, o.larguras, tela.cliques));
     relatarPendencias();
     return houveErro;
   } catch (e) {

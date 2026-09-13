@@ -2092,6 +2092,11 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   border-left: 4px solid var(--ambar);
   background: #fff6e0;
 }
+/* Deu errado de verdade — não é "olha isso", é "alguém tem de resolver". */
+.linha-perigo {
+  border-left: 4px solid var(--perigo);
+  background: #fdeff0;
+}
 
 /* Checkbox com explicação ao lado — o "entra no CMV". */
 .campo-caixa {
@@ -3090,7 +3095,14 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   transform: translate(var(--recuo, 0px), var(--topo, 0px)) rotateX(60deg) rotateZ(45deg);
   transform-style: preserve-3d;
 }
-.iso-placas { position: absolute; inset: 0; }
+.iso-placas {
+  position: absolute;
+  inset: 0;
+  /* A camada reta cobre o tabuleiro inteiro. Sem isto ela engole o clique
+     que era para o chão, e o salão — que não tem mesa de trabalho — fica
+     sem jeito nenhum de ser aberto. */
+  pointer-events: none;
+}
 .iso-placas > * { position: absolute; transform: translate(-50%, -50%); }
 
 /* ---- O piso de cada área ---- */
@@ -3398,3 +3410,57 @@ button.linha-tabela:hover { background: var(--marca-suave); }
     animation: none;
   }
 }
+
+
+/* ---- A gaveta da casa: o que está rolando em quem foi clicado ---- */
+
+.casa-gaveta {
+  border-color: var(--marca);
+  box-shadow: 0 0 0 3px var(--marca-suave), var(--sombra);
+}
+.casa-gaveta-titulo {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+.casa-gaveta-aviso {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--raio-m);
+  background: var(--superficie-2);
+  border: 1px dashed var(--borda-forte);
+  color: var(--texto-2);
+  font-size: 0.88rem;
+}
+
+/* O que está aberto na gaveta fica marcado na planta, para não se perder
+   de vista qual dos vinte quadradinhos foi clicado. */
+.iso-escolhido { outline: 2px solid var(--marca); outline-offset: 3px; border-radius: 8px; }
+
+/* Agente com pendência que falhou: um ponto vermelho na cabeça, como
+   notificação de aplicativo. Sem ele, "1 aviso falhou" some no meio da
+   planta e ninguém clica para ver qual. */
+.boneco-com-problema .boneco-cabeca::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--perigo);
+  box-shadow: 0 0 0 2px var(--superficie);
+  animation: iso-pisca-aviso 1.6s ease-in-out infinite;
+}
+
+.iso-baia-placa,
+.boneco { cursor: pointer; pointer-events: auto; }
+/* O boneco em si tem largura zero (os pés é que marcam o ponto no chão), e
+   quem recebe o clique é o corpo dele. */
+.boneco-corpo, .boneco-etiqueta, .boneco-nome { pointer-events: auto; }
+.iso-piso-clicavel { cursor: pointer; }
+.iso-piso-clicavel:hover { border-color: var(--marca); }
+.iso-baia-placa:focus-visible,
+.boneco:focus-visible { outline: 2px solid var(--marca); outline-offset: 3px; }

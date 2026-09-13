@@ -134,6 +134,11 @@ export async function aCasa(raiz, ctx) {
   ]);
   const lista = el("div", {});
   const cabecalho = el("div", { classe: "cartao" });
+  const gaveta = el("div", {});
+  // Quem está aberto na gaveta: `{ tipo: "setor" | "quem", id }`. Fica
+  // guardado, e não copiado: a cada volta do relógio a gaveta se redesenha
+  // com o dado novo, em vez de congelar no instante do clique.
+  let aberto = null;
 
   tabuleiro.style.width = `${LARGURA_DA_PLANTA}px`;
   tabuleiro.style.height = `${ALTURA_DA_PLANTA + 10}px`;
@@ -144,14 +149,20 @@ export async function aCasa(raiz, ctx) {
   chao.style.setProperty("--recuo", `${MAPA.altura * PASSO_X}px`);
   chao.style.setProperty("--topo", `${TOPO}px`);
 
-  limpar(raiz).append(el("div", { classe: "pilha" }, [cabecalho, planta, lista]));
+  limpar(raiz).append(el("div", { classe: "pilha" }, [cabecalho, planta, gaveta, lista]));
 
   ctx.aoSair(() => {
     clearInterval(relogio);
     pararPasseios();
     document.removeEventListener("visibilitychange", aoTrocarDeAba);
+    document.removeEventListener("keydown", aoTeclar);
   });
   document.addEventListener("visibilitychange", aoTrocarDeAba);
+  document.addEventListener("keydown", aoTeclar);
+
+  function aoTeclar(e) {
+    if (e.key === "Escape" && aberto) fechar();
+  }
 
   await buscar({ primeira: true });
   relogio = setInterval(() => {
@@ -213,7 +224,220 @@ export async function aCasa(raiz, ctx) {
   function desenhar() {
     desenharCabecalho();
     desenharPlanta();
+    desenharGaveta();
     desenharLista();
+  }
+
+  /* ================= A gaveta ================= */
+
+  function abrir(tipo, id) {
+    // Clicar de novo no mesmo fecha: é o gesto que todo mundo tenta.
+    aberto = aberto && aberto.tipo === tipo && aberto.id === id ? null : { tipo, id };
+    desenharPlanta();
+    desenharGaveta();
+    if (aberto) gaveta.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function fechar() {
+    aberto = null;
+    desenharPlanta();
+    desenharGaveta();
+  }
+
+  /**
+   * O que está rolando em quem foi clicado.
+   *
+   * A planta cabe num relance e por isso cada baia só mostra uma linha. O
+   * resto — todos os fatos do setor, quem está nele, a fila do agente com o
+   * motivo de cada falha — mora aqui, a um clique. "1 aviso falhou" acima da
+   * cabeça do Carteiro não servia para nada enquanto não desse para
+   * perguntar QUAL.
+   */
+  function desenharGaveta() {
+    limpar(gaveta);
+    if (!aberto) return;
+
+    const corpo = aberto.tipo === "setor"
+      ? gavetaDoSetor(aberto.id)
+      : aberto.tipo === "mesa"
+        ? gavetaDaMesa(aberto.id)
+        : gavetaDeQuem(aberto.id);
+    if (!corpo) {
+      aberto = null;
+      return;
+    }
+
+    gaveta.append(
+      el("section", { classe: "cartao casa-gaveta" }, [
+        el("div", { classe: "cabecalho-secao" }, [
+          el("div", {}, [
+            el("h3", { texto: corpo.titulo }),
+            el("p", { classe: "muted", texto: corpo.legenda }),
+          ]),
+          el("button", { classe: "btn btn-peq", type: "button", texto: "Fechar", onclick: fechar }),
+        ]),
+        ...corpo.blocos,
+      ]),
+    );
+  }
+
+  function gavetaDoSetor(id) {
+    const setor = dados.setores.find((s) => s.id === id);
+    if (!setor) return null;
+
+    const meus = dados.fatos.filter((f) => f.setor === id);
+    const gente = (dados.trabalhadores ?? []).filter((t) => t.setor === id);
+
+    return {
+      titulo: setor.nome,
+      legenda: setor.legenda,
+      blocos: [
+        !setor.contratado
+          ? aviso(setor.em_breve
+            ? "Este módulo ainda está sendo construído. Quando ficar pronto, ele acende aqui sozinho."
+            : "A casa não contratou este módulo. O setor aparece apagado para você saber que ele existe.")
+          : null,
+        gente.length
+          ? bloco("Quem está aqui", gente.map((t) => linha({
+            titulo: t.nome,
+            detalhe: [t.papel, oQueEstaFazendo(t)].filter(Boolean).join(" · "),
+            aoClicar: () => abrir("quem", t.id),
+          })))
+          : null,
+        setor.contratado
+          ? bloco(
+            meus.length ? `O que aconteceu aqui (${meus.length})` : "O que aconteceu aqui",
+            meus.length
+              ? meus.map((f) => linha({
+                titulo: f.titulo,
+                detalhe: [quandoFoi(f.quando, dados.agora), f.quem, f.detalhe].filter(Boolean).join(" · "),
+                ruim: f.atencao,
+              }))
+              : [el("p", { classe: "muted", texto: "Nada nas últimas 24 horas." })],
+          )
+          : null,
+      ].filter(Boolean),
+    };
+  }
+
+  /**
+   * Uma mesa aberta: quem está nela, o que olhou e há quanto tempo.
+   *
+   * A mesa acesa é o que o dono do bar mais olha nesta tela, e o número
+   * sozinho não diz nada. Clicar nela é o gesto óbvio — e ela cobre quase
+   * todo o chão do salão, então é por ela que o salão se abre.
+   */
+  function gavetaDaMesa(numero) {
+    const mesa = (dados.mesas ?? []).find((m) => m.numero === numero);
+    if (!mesa) return null;
+
+    const comoEsta = mesa.estado === "chamando"
+      ? "chamando o garçom"
+      : mesa.estado === "ocupada" ? "com cliente" : "livre";
+    const daMesa = dados.fatos.filter((f) =>
+      f.setor === "salao" && (f.quem === `Mesa ${numero}` || f.titulo.startsWith(`Mesa ${numero}:`)));
+
+    return {
+      titulo: `Mesa ${numero}`,
+      legenda: [
+        comoEsta,
+        mesa.cliente,
+        mesa.minutos !== null ? `aberta ${comoFazTempo(mesa.minutos)}` : null,
+        mesa.garcom ? `garçom ${mesa.garcom}` : "sem garçom no turno",
+      ].filter(Boolean).join(" · "),
+      blocos: [
+        mesa.estado === "chamando"
+          ? aviso("Esta mesa chamou o garçom e ainda não foi atendida.")
+          : mesa.estado === "livre"
+            ? aviso("Ninguém leu o QR code desta mesa nas últimas horas.")
+            : null,
+        mesa.olhando
+          ? bloco("O que estavam olhando no cardápio", [linha({ titulo: mesa.olhando, detalhe: null })])
+          : null,
+        bloco(
+          "O que esta mesa fez",
+          daMesa.length
+            ? daMesa.map((f) => linha({
+              titulo: f.titulo,
+              detalhe: [quandoFoi(f.quando, dados.agora), f.detalhe].filter(Boolean).join(" · "),
+              ruim: f.atencao,
+            }))
+            : [el("p", { classe: "muted", texto: "Nada nas últimas 24 horas." })],
+        ),
+        bloco("O salão inteiro", [linha({
+          titulo: "Abrir o salão",
+          detalhe: "todos os fatos e quem está atendendo",
+          aoClicar: () => abrir("setor", "salao"),
+        })]),
+      ].filter(Boolean),
+    };
+  }
+
+  function gavetaDeQuem(id) {
+    const quem = (dados.trabalhadores ?? []).find((t) => t.id === id);
+    if (!quem) return null;
+
+    const setor = dados.setores.find((s) => s.id === quem.setor);
+    const seus = dados.fatos.filter((f) => f.quem && primeiroNome(f.quem) === primeiroNome(quem.nome));
+    const fila = quem.detalhes ?? [];
+
+    return {
+      titulo: quem.nome,
+      legenda: [quem.papel, setor ? `no ${setor.nome}` : null, oQueEstaFazendo(quem)]
+        .filter(Boolean).join(" · "),
+      blocos: [
+        fila.length
+          ? bloco("Na fila dele agora", fila.map((d) => linha({
+            titulo: d.titulo,
+            detalhe: [d.quando ? quandoFoi(d.quando, dados.agora) : null, d.detalhe].filter(Boolean).join(" · "),
+            ruim: d.ruim,
+          })))
+          : null,
+        bloco(
+          "O que passou pelas mãos dele",
+          seus.length
+            ? seus.map((f) => linha({
+              titulo: f.titulo,
+              detalhe: [quandoFoi(f.quando, dados.agora), setorDoFato(f), f.detalhe].filter(Boolean).join(" · "),
+              ruim: f.atencao,
+            }))
+            : [el("p", { classe: "muted", texto: "Nada nas últimas 24 horas." })],
+        ),
+      ].filter(Boolean),
+    };
+  }
+
+  function setorDoFato(f) {
+    return dados.setores.find((s) => s.id === f.setor)?.nome ?? null;
+  }
+
+  function bloco(titulo, filhos) {
+    return el("div", { style: "margin-top:14px" }, [
+      el("h4", { classe: "casa-gaveta-titulo", texto: titulo }),
+      el("div", { classe: "tabela", style: "margin-top:6px" }, filhos),
+    ]);
+  }
+
+  function linha({ titulo, detalhe, ruim, aoClicar }) {
+    return el("div", {
+      classe: `linha-tabela ${ruim ? "linha-perigo" : ""} ${aoClicar ? "linha-clicavel" : ""}`.trim(),
+      ...(aoClicar ? { onclick: aoClicar, role: "button", tabindex: "0" } : {}),
+    }, [
+      el("div", { classe: "linha-principal" }, [
+        el("strong", { texto: titulo }),
+        detalhe ? el("span", { classe: "muted", texto: detalhe }) : null,
+      ]),
+    ]);
+  }
+
+  function aviso(texto) {
+    return el("p", { classe: "casa-gaveta-aviso", texto });
+  }
+
+  function oQueEstaFazendo(t) {
+    if (t.em_pausa) return "em pausa";
+    if (t.fazendo) return t.fazendo;
+    return `ocioso ${comoFazTempo(t.minutos_parado)}`.trim();
   }
 
   function desenharCabecalho() {
@@ -292,10 +516,21 @@ export async function aCasa(raiz, ctx) {
     const viva = setoresDaArea.some((s) => s.contratado && s.minutos_parado !== null && s.minutos_parado <= MINUTOS_ATE_ESFRIAR);
     const nenhumContratado = setoresDaArea.length > 0 && setoresDaArea.every((s) => !s.contratado);
 
+    // Área com um setor só — o salão, a recepção — não tem mesa de trabalho
+    // para clicar, então o chão dela é que abre a gaveta. Sem isto o salão,
+    // que é o setor mais importante da casa, era o único que não abria.
+    const sozinho = setoresDaArea.length === 1 ? setoresDaArea[0] : null;
+
     return el("div", {
-      classe: `iso-piso ${viva ? "iso-piso-vivo" : ""} ${nenhumContratado ? "iso-piso-apagado" : ""}`.trim(),
+      classe: [
+        "iso-piso",
+        viva ? "iso-piso-vivo" : "",
+        nenhumContratado ? "iso-piso-apagado" : "",
+        sozinho ? "iso-piso-clicavel" : "",
+      ].filter(Boolean).join(" "),
       style: `left:${area.x * LADRILHO}px;top:${area.y * LADRILHO}px;`
         + `width:${area.w * LADRILHO}px;height:${area.h * LADRILHO}px`,
+      ...(sozinho ? { onclick: () => abrir("setor", sozinho.id), title: `${sozinho.nome} — clique para ver` } : {}),
     });
   }
 
@@ -345,10 +580,12 @@ export async function aCasa(raiz, ctx) {
       const tx = area.x + 1 + (i % colunas) * passoX + passoX / 2;
       const ty = area.y + 1 + Math.floor(i / colunas) * passoY + passoY / 2;
 
+      const escolhida = aberto?.tipo === "mesa" && aberto.id === m.numero;
       chao.append(el("div", {
-        classe: `iso-mesa iso-mesa-${m.estado}`,
+        classe: `iso-mesa iso-mesa-${m.estado} ${escolhida ? "iso-escolhido" : ""}`.trim(),
         style: `left:${(tx - lado / 2) * LADRILHO}px;top:${(ty - lado / 2) * LADRILHO}px;`
           + `width:${lado * LADRILHO}px;height:${lado * LADRILHO}px`,
+        onclick: () => abrir("mesa", m.numero),
       }));
 
       const onde = projetar(tx, ty);
@@ -364,6 +601,7 @@ export async function aCasa(raiz, ctx) {
         style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((tx + ty) * 10)}`,
         title: `Mesa ${m.numero}${detalhe ? ` — ${detalhe}` : " — livre"}`,
         texto: String(m.numero),
+        onclick: () => abrir("mesa", m.numero),
       }));
     });
   }
@@ -390,11 +628,19 @@ export async function aCasa(raiz, ctx) {
         ? setor.ultimo.titulo
         : "sem movimento";
 
+    const escolhido = aberto?.tipo === "setor" && aberto.id === setor.id;
     return el("div", {
-      classe: `iso-baia-placa ${setor.contratado ? "" : "iso-baia-placa-apagada"}`.trim(),
+      classe: [
+        "iso-baia-placa",
+        setor.contratado ? "" : "iso-baia-placa-apagada",
+        escolhido ? "iso-escolhido" : "",
+      ].filter(Boolean).join(" "),
       style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((lugar.x + lugar.y) * 10) + 1}`,
       "data-setor": setor.id,
-      title: setor.legenda,
+      title: `${setor.legenda} — clique para ver o que está rolando`,
+      role: "button",
+      tabindex: "0",
+      onclick: () => abrir("setor", setor.id),
     }, [
       el("strong", { texto: setor.nome }),
       el("span", { classe: "iso-baia-recado", texto: recado }),
@@ -490,11 +736,14 @@ export async function aCasa(raiz, ctx) {
 
   function boneco(t, lugar, area) {
     const ocioso = !t.fazendo && !t.em_pausa;
+    const temProblema = (t.detalhes ?? []).some((d) => d.ruim);
     const classe = [
       "boneco",
       t.tipo === "agente" ? "boneco-agente" : "boneco-pessoa",
       t.em_pausa ? "boneco-pausa" : ocioso ? "boneco-ocioso" : "boneco-ativo",
-    ].join(" ");
+      temProblema ? "boneco-com-problema" : "",
+      aberto?.tipo === "quem" && aberto.id === t.id ? "iso-escolhido" : "",
+    ].filter(Boolean).join(" ");
 
     const dizer = t.em_pausa
       ? "em pausa"
@@ -506,7 +755,10 @@ export async function aCasa(raiz, ctx) {
     const node = el("div", {
       classe,
       style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((lugar.tx + lugar.ty) * 10) + 2}`,
-      title: [t.nome, t.papel, dizer].filter(Boolean).join(" · "),
+      title: `${[t.nome, t.papel, dizer].filter(Boolean).join(" · ")} — clique para ver`,
+      role: "button",
+      tabindex: "0",
+      onclick: () => abrir("quem", t.id),
     }, [
       el("span", { classe: "boneco-etiqueta", texto: dizer }),
       el("span", { classe: "boneco-corpo" }, [
