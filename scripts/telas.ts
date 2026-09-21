@@ -52,9 +52,17 @@ interface Tela {
   /** Uma frase dizendo o que esta tela mostra. */
   rotulo: string;
   /** Caminho do módulo dentro de public/, como o navegador vê. */
-  modulo: string;
+  modulo?: string;
   /** O nome da função que desenha a tela. */
-  funcao: string;
+  funcao?: string;
+  /**
+   * Uma PÁGINA PÚBLICA em vez de um módulo do painel: "/checklist.html?t=x".
+   *
+   * O checklist no celular, a pesquisa, o cardápio da mesa — não montam no
+   * painel, são páginas inteiras servidas de public/. Com isto elas ganham
+   * as mesmas situações e as mesmas fotos que as telas do painel.
+   */
+  pagina?: string;
   /** O slug da casa, se a tela usar. */
   venue?: string;
   /** O que semear no sessionStorage antes de desenhar (aba aberta, etc). */
@@ -71,6 +79,13 @@ interface Tela {
    */
   cliques?: string[];
   /**
+   * O que digitar antes dos cliques: seletor → texto.
+   *
+   * Um formulário que exige o nome de quem preenche não se conclui só com
+   * clique — e "concluiu o checklist" é a situação que mais vale fotografar.
+   */
+  digita?: Record<string, string>;
+  /**
    * Situações da mesma tela, cada uma com o seu nome.
    *
    * É o que faz esta ferramenta valer a pena: a tela vazia, a casa que ainda
@@ -82,6 +97,7 @@ interface Tela {
     guarda?: Record<string, string>;
     rotas?: Record<string, unknown>;
     cliques?: string[];
+    digita?: Record<string, string>;
   }>;
 }
 
@@ -99,6 +115,7 @@ function comVariacao(tela: Tela, nome: string | null): Tela {
     guarda: { ...(tela.guarda ?? {}), ...(v.guarda ?? {}) },
     rotas: { ...tela.rotas, ...(v.rotas ?? {}) },
     cliques: v.cliques ?? tela.cliques,
+    digita: v.digita ?? tela.digita,
   };
 }
 
@@ -226,11 +243,11 @@ function montarHtml(tela: Tela): string {
   }
 </script>
 <script type="module">
-  const modulo = await import(${JSON.stringify(tela.modulo)});
-  const desenhar = modulo[${JSON.stringify(tela.funcao)}] ?? modulo.default;
+  const modulo = await import(${JSON.stringify(tela.modulo ?? "")});
+  const desenhar = modulo[${JSON.stringify(tela.funcao ?? "default")}] ?? modulo.default;
   if (typeof desenhar !== "function") {
     document.getElementById("pagina").textContent =
-      'O módulo não exporta "${tela.funcao}". Confira o campo "funcao" no arquivo de dados.';
+      'O módulo não exporta "${tela.funcao ?? "default"}". Confira o campo "funcao" no arquivo de dados.';
   } else {
     const ctx = {
       venue: ${JSON.stringify(tela.venue ?? "casa-de-teste")},
@@ -309,6 +326,7 @@ async function abrirNoNavegador(
   endereco: string,
   larguras: number[],
   cliques: string[] = [],
+  digita: Record<string, string> = {},
 ): Promise<Achados[]> {
   // O playwright é opcional de propósito: quem só quer clicar na tela usa
   // --servir e não precisa baixar navegador nenhum.
@@ -332,13 +350,28 @@ async function abrirNoNavegador(
       const erros: string[] = [];
       pagina.on("pageerror", (e) => erros.push(e.message));
       pagina.on("console", (m) => {
-        if (m.type() === "error" && !m.text().includes("favicon")) erros.push(m.text());
+        if (m.type() !== "error" || m.text().includes("favicon")) return;
+        // Fonte do Google, script de terceiro: recurso de FORA que não
+        // carregou não é defeito da tela — é a rede do lugar onde o teste
+        // roda. O que é do próprio servidor de araque continua contando.
+        const origem = m.location()?.url ?? "";
+        if (m.text().startsWith("Failed to load resource") && origem && !origem.includes("localhost")) return;
+        erros.push(m.text());
       });
 
       await pagina.goto(endereco);
       // Tempo de a tela buscar o que precisa e desenhar. Não é corrida: o
       // servidor é local e responde na hora.
       await pagina.waitForTimeout(900);
+
+      for (const [seletor, texto] of Object.entries(digita)) {
+        const alvo = pagina.locator(seletor).first();
+        if (await alvo.count() === 0) {
+          erros.push(`o campo "${seletor}" para digitar não existe na tela`);
+          continue;
+        }
+        await alvo.fill(texto);
+      }
 
       for (const seletor of cliques) {
         const alvo = pagina.locator(seletor).first();
@@ -513,7 +546,12 @@ async function rodarUm(pedido: Pedido, o: Opcoes): Promise<boolean> {
   semArquivo.clear();
   escritas.length = 0;
 
-  const { servidor, endereco } = await servir(tela, o.porta);
+  const { servidor, endereco: raiz } = await servir(tela, o.porta);
+  // Página pública abre no caminho dela; tela do painel abre na raiz, que é
+  // onde o servidor de araque monta o módulo.
+  // Sem barra dobrada: "//checklist.html" o navegador lê como host
+  // "checklist.html" e caminho "/", e o servidor serve a casca do painel.
+  const endereco = tela.pagina ? `${raiz.replace(/\/$/, "")}${tela.pagina}` : raiz;
   console.log(`\n${apelido} — ${tela.rotulo}`);
 
   if (o.servir) {
@@ -523,7 +561,7 @@ async function rodarUm(pedido: Pedido, o: Opcoes): Promise<boolean> {
   }
 
   try {
-    const houveErro = relatar(await abrirNoNavegador(apelido, endereco, o.larguras, tela.cliques));
+    const houveErro = relatar(await abrirNoNavegador(apelido, endereco, o.larguras, tela.cliques, tela.digita));
     relatarPendencias();
     return houveErro;
   } catch (e) {

@@ -6,6 +6,20 @@ import { db } from "./supabase.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 import type { Venue } from "./venues.js";
 import { inserirAvisos } from "./notifications.js";
+import {
+  balancoDaNoite,
+  concluirRodada,
+  estadoDa,
+  janelaFechou,
+  marcarCutucadas,
+  minutosDe,
+  proximaRodada,
+  rodadaParaConcluir,
+  rodadasParaCutucar,
+  rodadasPrevistas,
+  INTERVALO_MINIMO,
+  type Rodada,
+} from "./rodadas.js";
 
 export type Checklist = Tables<"checklists">;
 export type ChecklistRun = Tables<"checklist_runs">;
@@ -49,6 +63,21 @@ export interface AgendaChecklist {
    * Vazio = ninguém.
    */
   avisar_telefone: string;
+  /**
+   * RODADAS: repetir o mesmo checklist a cada N minutos, de `hora` até `ate`.
+   *
+   * É o checklist de banheiro — as mesmas perguntas doze vezes por noite,
+   * num link só, numa execução só. Sem estes dois campos o checklist é o
+   * comum: uma vez por dia.
+   */
+  a_cada_minutos?: number;
+  /** Fim da janela, "HH:MM". Menor que `hora` significa que vira a noite. */
+  ate?: string;
+}
+
+/** Checklist de rodadas, ou o comum de uma vez por dia? */
+export function ehDeRodadas(agenda: AgendaChecklist): boolean {
+  return Boolean(agenda.a_cada_minutos && agenda.ate);
 }
 
 /**
@@ -138,6 +167,21 @@ export function validarAgenda(bruto: unknown): AgendaChecklist {
   if (dias.length > 0 && !agenda.responsavel_telefone) {
     throw new Error("Checklist agendado precisa do WhatsApp de quem vai executar.");
   }
+
+  // As rodadas só existem com os dois campos. Um sem o outro é engano de
+  // quem preencheu, e o erro tem de dizer qual falta.
+  const aCada = Number(o.a_cada_minutos);
+  const ate = typeof o.ate === "string" && /^\d{2}:\d{2}$/.test(o.ate) ? o.ate : "";
+  if (aCada > 0 || ate) {
+    if (!(aCada > 0)) throw new Error("Para repetir durante o turno, diga a cada quantos minutos.");
+    if (!ate) throw new Error("Para repetir durante o turno, diga até que horas.");
+    if (aCada < INTERVALO_MINIMO) {
+      throw new Error(`O intervalo mínimo entre rodadas é de ${INTERVALO_MINIMO} minutos.`);
+    }
+    if (aCada > 720) throw new Error("Intervalo maior que 12 horas não é rodada — é outro checklist.");
+    agenda.a_cada_minutos = Math.floor(aCada);
+    agenda.ate = ate;
+  }
   return agenda;
 }
 
@@ -158,6 +202,11 @@ function validarAgendaBranda(bruto: Json): AgendaChecklist {
       responsavel_telefone:
         typeof o.responsavel_telefone === "string" ? o.responsavel_telefone : "",
       avisar_telefone: typeof o.avisar_telefone === "string" ? o.avisar_telefone : "",
+      // As rodadas entram como estão: a execução de hoje já nasceu com elas
+      // e não pode virar checklist comum por causa de um campo torto.
+      ...(Number(o.a_cada_minutos) > 0 && typeof o.ate === "string"
+        ? { a_cada_minutos: Number(o.a_cada_minutos), ate: o.ate }
+        : {}),
     };
   }
 }
@@ -306,6 +355,15 @@ export async function dispararChecklist(
   dataLocal?: string,
 ): Promise<{ run: ChecklistRun; criadaAgora: boolean }> {
   const data = dataLocal ?? agoraLocal(new Date(), venue.timezone).data;
+  const agenda = agendaDe(checklist);
+
+  // Checklist de rodadas nasce com a noite inteira desenhada: cada rodada
+  // prevista, vazia, esperando a sua hora. É o que permite dizer "a das
+  // 20:15 ninguém fez" — uma rodada que só existisse depois de feita não
+  // teria como estar atrasada.
+  const rodadas = ehDeRodadas(agenda)
+    ? rodadasPrevistas(agenda.hora, agenda.ate!, agenda.a_cada_minutos!)
+    : [];
 
   const { data: criada, error } = await db()
     .from("checklist_runs")
@@ -314,6 +372,7 @@ export async function dispararChecklist(
       venue_id: checklist.venue_id,
       token: novoToken(),
       scheduled_for: data,
+      rodadas: rodadas as unknown as Json,
     })
     .select()
     .maybeSingle();
@@ -330,14 +389,21 @@ export async function dispararChecklist(
     return { run: existente, criadaAgora: false };
   }
 
-  const agenda = agendaDe(checklist);
   if (agenda.responsavel_telefone) {
     const nome = agenda.responsavel_nome ? `${agenda.responsavel_nome.split(/\s+/)[0]}, ` : "";
     const corpo = [
       `${nome}chegou a hora do checklist! 📋`,
       ``,
       `${checklist.name} — ${venue.name}`,
-      `Preencha por aqui (abre direto no navegador):`,
+      // Quem recebe o link de rodadas precisa saber que é UM link para a
+      // noite inteira — senão vai esperar doze mensagens, e a segunda
+      // rodada nunca acontece.
+      ...(rodadas.length > 0
+        ? [
+            `São ${rodadas.length} rodadas hoje: das ${agenda.hora} às ${agenda.ate}, a cada ${agenda.a_cada_minutos} min.`,
+            `O link é o mesmo a noite toda — abra, faça a rodada, e volte na próxima.`,
+          ]
+        : [`Preencha por aqui (abre direto no navegador):`]),
       linkDaExecucao(criada!.token),
     ].join("\n");
 
@@ -442,9 +508,12 @@ export async function salvarFotoDeItem(
   itemId: string,
   arquivo: Buffer,
   contentType: string,
+  rodada: number | null = null,
 ): Promise<string> {
   const extensao = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
-  const caminho = `${run.id}/${itemId}.${extensao}`;
+  // Cada rodada tem a sua pasta: o caminho era `execução/item`, e a foto do
+  // banheiro das 20:15 apagaria a das 19:30 — mesmo item, mesma execução.
+  const caminho = rodada ? `${run.id}/rodada-${rodada}/${itemId}.${extensao}` : `${run.id}/${itemId}.${extensao}`;
   const { error } = await db()
     .storage.from("checklists")
     .upload(caminho, arquivo, { contentType, upsert: true });
@@ -526,16 +595,7 @@ export async function concluirRun(params: {
   if (run.status === "concluida") throw new Error("Esta execução já foi concluída.");
 
   const itens = itensDe(checklist);
-  const porItem = new Map(respostas.map((r) => [r.item, r]));
-  for (const item of itens) {
-    const resposta = porItem.get(item.id);
-    if (!item.obrigatorio) continue;
-    const temValor =
-      item.tipo === "foto"
-        ? Boolean(resposta?.foto)
-        : Boolean(resposta?.valor && resposta.valor.trim());
-    if (!temValor) throw new Error(`Falta responder: "${item.pergunta}"`);
-  }
+  validarObrigatorios(itens, respostas);
 
   const analise = await analisarComIA(checklist, itens, respostas, executorNome).catch((e) => {
     console.error("[checklists] análise da IA falhou:", e);
@@ -598,6 +658,371 @@ export async function concluirRun(params: {
   }
 
   return { run: atualizada, resumo: analise?.resumo ?? null, alertas: analise?.alertas ?? [] };
+}
+
+/** Item obrigatório sem resposta é erro com o nome da pergunta. */
+function validarObrigatorios(itens: ItemChecklist[], respostas: RespostaItem[]): void {
+  const porItem = new Map(respostas.map((r) => [r.item, r]));
+  for (const item of itens) {
+    if (!item.obrigatorio) continue;
+    const resposta = porItem.get(item.id);
+    const temValor =
+      item.tipo === "foto"
+        ? Boolean(resposta?.foto)
+        : Boolean(resposta?.valor && resposta.valor.trim());
+    if (!temValor) throw new Error(`Falta responder: "${item.pergunta}"`);
+  }
+}
+
+// ============================================================
+// Rodadas — o mesmo checklist, várias vezes na noite
+// ============================================================
+
+export function rodadasDe(run: ChecklistRun): Rodada[] {
+  return Array.isArray(run.rodadas) ? (run.rodadas as unknown as Rodada[]) : [];
+}
+
+/**
+ * Quantos minutos se passaram desde o início da janela desta execução.
+ *
+ * A execução é do dia `scheduled_for`, a janela abre em `agenda.hora` — e
+ * pode virar a noite. Contar em minutos desde o início é o que faz "01:30"
+ * vir depois de "23:00": em texto, "01:30" vem antes.
+ *
+ * Negativo antes de abrir; a tela lida com isso.
+ */
+export function minutoNaJanela(
+  run: Pick<ChecklistRun, "scheduled_for">,
+  agenda: AgendaChecklist,
+  timezone: string,
+  agora = new Date(),
+): number {
+  const local = agoraLocal(agora, timezone);
+  const dias = Math.round(
+    (Date.parse(`${local.data}T00:00:00Z`) - Date.parse(`${run.scheduled_for}T00:00:00Z`)) / 86_400_000,
+  );
+  return dias * 1440 + minutosDe(local.hhmm) - minutosDe(agenda.hora);
+}
+
+/** O que a página pública mostra de cada rodada. */
+export interface RodadaNaTela {
+  numero: number;
+  prevista: string;
+  estado: "feita" | "atrasada" | "agora" | "futura";
+  concluida_em: string | null;
+  executor_nome: string | null;
+}
+
+export function rodadasParaTela(rodadas: Rodada[], agoraMinuto: number): RodadaNaTela[] {
+  return rodadas.map((r) => ({
+    numero: r.numero,
+    prevista: r.prevista,
+    estado: estadoDa(r, agoraMinuto),
+    concluida_em: r.concluida_em,
+    executor_nome: r.executor_nome,
+  }));
+}
+
+/** A noite fechada, rodada por rodada, com as fotos assinadas — para o link do gerente. */
+export async function rodadasRespondidas(
+  rodadas: Rodada[],
+  checklist: Checklist,
+): Promise<Array<Pick<Rodada, "numero" | "prevista" | "concluida_em" | "executor_nome"> & { respostas: ItemRespondido[] }>> {
+  const itens = itensDe(checklist);
+  return await Promise.all(
+    rodadas.map(async (r) => {
+      const porItem = new Map((r.respostas ?? []).map((x) => [x.item, x]));
+      return {
+        numero: r.numero,
+        prevista: r.prevista,
+        concluida_em: r.concluida_em,
+        executor_nome: r.executor_nome,
+        respostas: r.concluida_em
+          ? await Promise.all(
+              itens.map(async (item) => {
+                const x = porItem.get(item.id);
+                return {
+                  pergunta: item.pergunta,
+                  tipo: item.tipo,
+                  valor: x?.valor ?? null,
+                  observacao: x?.observacao ?? null,
+                  foto: x?.foto ? await urlAssinadaDaFoto(x.foto) : null,
+                };
+              }),
+            )
+          : [],
+      };
+    }),
+  );
+}
+
+export interface ResultadoDaRodada {
+  run: ChecklistRun;
+  rodada: Rodada;
+  proxima: Rodada | null;
+  /** Foi a última: a noite fechou e o gerente já recebeu o resumo. */
+  fechou: boolean;
+}
+
+/**
+ * Conclui UMA rodada da execução.
+ *
+ * Valida como o checklist comum, grava no lugar certo da lista e, se foi a
+ * última, fecha a noite na hora — quem fez a última não deveria ter de
+ * esperar o relógio do servidor para o gerente saber que acabou.
+ */
+export async function concluirRodadaDaRun(params: {
+  run: ChecklistRun;
+  checklist: Checklist;
+  venue: Pick<Venue, "id" | "name" | "timezone">;
+  executorNome: string;
+  respostas: RespostaItem[];
+  agora?: Date;
+}): Promise<ResultadoDaRodada> {
+  const { run, checklist, venue, executorNome, respostas } = params;
+  const agora = params.agora ?? new Date();
+  if (run.status === "concluida") throw new Error("A noite deste checklist já foi encerrada.");
+
+  const agenda = agendaDe(checklist);
+  validarObrigatorios(itensDe(checklist), respostas);
+
+  const rodadas = rodadasDe(run);
+  const agoraMinuto = minutoNaJanela(run, agenda, venue.timezone, agora);
+  const alvo = rodadaParaConcluir(rodadas, agoraMinuto);
+  if (!alvo) throw new Error("Todas as rodadas de hoje já foram feitas.");
+
+  const novas = concluirRodada(rodadas, alvo.numero, {
+    agoraIso: agora.toISOString(),
+    agoraMinuto,
+    executor: executorNome,
+    respostas,
+  });
+
+  const { data: atualizada, error } = await db()
+    .from("checklist_runs")
+    .update({
+      rodadas: novas as unknown as Json,
+      status: "em_andamento",
+      started_at: run.started_at ?? agora.toISOString(),
+      executor_nome: executorNome,
+      updated_at: agora.toISOString(),
+    })
+    .eq("id", run.id)
+    .select()
+    .single();
+  if (error) throw new Error(`Falha ao gravar a rodada: ${error.message}`);
+
+  const feita = novas.find((r) => r.numero === alvo.numero)!;
+  const proxima = proximaRodada(novas);
+  if (!proxima) {
+    const fechada = await fecharNoite(atualizada, checklist, venue, agora);
+    return { run: fechada, rodada: feita, proxima: null, fechou: true };
+  }
+  return { run: atualizada, rodada: feita, proxima, fechou: false };
+}
+
+/**
+ * Fecha a noite: resume as rodadas todas com a IA, marca a execução como
+ * concluída e manda UM resumo para quem gerencia.
+ *
+ * Um, e não um por rodada: doze mensagens por noite dizendo "banheiro ok"
+ * é o jeito mais rápido de o gerente silenciar o número da casa — e aí a
+ * mensagem que importa, a da rodada que apontou vazamento, some junto.
+ */
+export async function fecharNoite(
+  run: ChecklistRun,
+  checklist: Checklist,
+  venue: Pick<Venue, "id" | "name" | "timezone">,
+  agora = new Date(),
+): Promise<ChecklistRun> {
+  if (run.status === "concluida") return run;
+
+  const agenda = agendaDe(checklist);
+  const rodadas = rodadasDe(run);
+  const agoraMinuto = minutoNaJanela(run, agenda, venue.timezone, agora);
+  const balanco = balancoDaNoite(rodadas, agoraMinuto);
+
+  const analise = await analisarNoiteComIA(checklist, itensDe(checklist), rodadas, balanco).catch((e) => {
+    console.error("[checklists] análise da noite falhou:", e);
+    return null;
+  });
+
+  const { data: atualizada, error } = await db()
+    .from("checklist_runs")
+    .update({
+      status: "concluida",
+      completed_at: agora.toISOString(),
+      resumo_ia: analise?.resumo ?? null,
+      alertas_ia: (analise?.alertas ?? []) as unknown as Json,
+      updated_at: agora.toISOString(),
+    })
+    .eq("id", run.id)
+    .select()
+    .single();
+  if (error) throw new Error(`Falha ao fechar a noite: ${error.message}`);
+
+  const destinatarios = telefonesDeAviso(agenda.avisar_telefone);
+  if (destinatarios.length > 0) {
+    const alertas = analise?.alertas ?? [];
+    const puladas = rodadas.filter((r) => !r.concluida_em).map((r) => r.prevista);
+    const quemFez = [...new Set(rodadas.map((r) => r.executor_nome).filter(Boolean))].join(", ");
+    const [ano, mes, dia] = run.scheduled_for.split("-");
+
+    const linhas = [
+      alertas.length > 0 || puladas.length > 0
+        ? `⚠️ Checklist "${checklist.name}" — noite de ${dia}/${mes}/${ano}`
+        : `✅ Checklist "${checklist.name}" — noite de ${dia}/${mes}/${ano}`,
+      [
+        `${balanco.feitas} de ${balanco.previstas} rodadas feitas`,
+        puladas.length > 0 ? `${puladas.length} pulada(s): ${puladas.join(", ")}` : null,
+        balanco.com_atraso > 0 ? `${balanco.com_atraso} com atraso` : null,
+      ].filter(Boolean).join(" · "),
+      quemFez ? `Por: ${quemFez} — ${venue.name}` : venue.name,
+    ];
+    if (analise?.resumo) linhas.push(``, analise.resumo);
+    if (alertas.length > 0) linhas.push(``, ...alertas.map((a) => `• ${a}`));
+    const base = (process.env.PUBLIC_URL ?? "https://agentes-de-ia-alpha.vercel.app").replace(/\/$/, "");
+    linhas.push(``, `Ver rodada por rodada:`, `${base}/checklist?t=${run.token}`);
+
+    const { error: erroNotif } = await inserirAvisos(
+      destinatarios.map((destino) => ({
+        venue_id: venue.id,
+        channel: "whatsapp",
+        destination: destino,
+        template: "checklist_resumo",
+        papel: "administrativo",
+        body: linhas.join("\n"),
+      })),
+    );
+    if (erroNotif) console.error(`[checklists] não enfileirou o resumo da noite: ${erroNotif.message}`);
+  }
+
+  return atualizada;
+}
+
+/**
+ * O relógio das rodadas — chamado a cada minuto pelo servidor.
+ *
+ * Duas tarefas, uma por execução aberta: cutucar quem executa quando uma
+ * rodada passou da hora (uma cutucada por rodada, nunca em laço), e fechar
+ * a noite quando a janela acabou. Falha numa execução não cala as outras.
+ */
+export async function cuidarDasRodadas(agora = new Date()): Promise<{ cutucadas: number; fechadas: number }> {
+  // Só as execuções recentes: uma noite de rodadas vira a madrugada, então
+  // "ontem" ainda pode estar aberta; anteontem não.
+  const desde = new Date(agora.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);
+  const { data, error } = await db()
+    .from("checklist_runs")
+    .select("*, checklists:checklist_id(*), venues:venue_id(id, name, timezone)")
+    .neq("status", "concluida")
+    .gte("scheduled_for", desde);
+  if (error) throw new Error(`Falha ao varrer as rodadas: ${error.message}`);
+
+  const resultado = { cutucadas: 0, fechadas: 0 };
+  for (const linha of data ?? []) {
+    const { checklists: checklist, venues: venue, ...run } = linha as unknown as ChecklistRun & {
+      checklists: Checklist | null;
+      venues: Pick<Venue, "id" | "name" | "timezone"> | null;
+    };
+    if (!checklist || !venue) continue;
+    const rodadas = rodadasDe(run);
+    if (rodadas.length === 0) continue;
+
+    try {
+      const agenda = agendaDe(checklist);
+      const agoraMinuto = minutoNaJanela(run, agenda, venue.timezone, agora);
+
+      if (janelaFechou(rodadas, agoraMinuto)) {
+        await fecharNoite(run, checklist, venue, agora);
+        resultado.fechadas += 1;
+        continue;
+      }
+
+      const atrasadas = rodadasParaCutucar(rodadas, agoraMinuto);
+      if (atrasadas.length === 0 || !agenda.responsavel_telefone) continue;
+
+      const nome = agenda.responsavel_nome ? `${agenda.responsavel_nome.split(/\s+/)[0]}, ` : "";
+      const horas = atrasadas.map((r) => r.prevista).join(" e ");
+      const { error: erroNotif } = await inserirAvisos({
+        venue_id: venue.id,
+        channel: "whatsapp",
+        destination: agenda.responsavel_telefone,
+        template: "checklist_rodada_atrasada",
+        papel: "administrativo",
+        body: [
+          `${nome}a rodada das ${horas} do checklist "${checklist.name}" ainda não foi feita. ⏰`,
+          `Quando der, é o mesmo link de sempre:`,
+          linkDaExecucao(run.token),
+        ].join("\n"),
+      });
+      if (erroNotif) {
+        console.error(`[checklists] não enfileirei a cutucada: ${erroNotif.message}`);
+        continue;
+      }
+
+      // Marca DEPOIS de enfileirar, e relendo a execução: entre a leitura lá
+      // em cima e agora alguém pode ter concluído uma rodada, e gravar a
+      // lista velha por cima apagaria o trabalho dela.
+      const { data: fresca } = await db().from("checklist_runs").select("rodadas").eq("id", run.id).single();
+      const atuais = Array.isArray(fresca?.rodadas) ? (fresca!.rodadas as unknown as Rodada[]) : rodadas;
+      await db()
+        .from("checklist_runs")
+        .update({ rodadas: marcarCutucadas(atuais, atrasadas.map((r) => r.numero), agora.toISOString()) as unknown as Json })
+        .eq("id", run.id);
+      resultado.cutucadas += atrasadas.length;
+    } catch (e) {
+      console.error(`[checklists] rodadas de "${checklist.name}":`, e instanceof Error ? e.message : e);
+    }
+  }
+  return resultado;
+}
+
+/** A noite inteira, rodada por rodada, para a IA resumir de uma vez. */
+async function analisarNoiteComIA(
+  checklist: Checklist,
+  itens: ItemChecklist[],
+  rodadas: Rodada[],
+  balanco: ReturnType<typeof balancoDaNoite>,
+): Promise<{ resumo: string; alertas: string[] }> {
+  const blocos = rodadas.map((r) => {
+    if (!r.concluida_em) return `Rodada ${r.numero} (${r.prevista}): NÃO FOI FEITA`;
+    const porItem = new Map((r.respostas ?? []).map((x) => [x.item, x]));
+    const linhas = itens.map((item) => {
+      const x = porItem.get(item.id);
+      const valor =
+        item.tipo === "foto" ? (x?.foto ? "[foto enviada]" : "[sem foto]") : (x?.valor ?? "[sem resposta]");
+      const obs = x?.observacao ? ` — obs: ${x.observacao}` : "";
+      return `  - ${item.pergunta}: ${valor}${obs}`;
+    });
+    return `Rodada ${r.numero} (${r.prevista}, por ${r.executor_nome ?? "?"}):\n${linhas.join("\n")}`;
+  });
+
+  const resposta = await anthropic().messages.create({
+    model: MODELO_IA(),
+    max_tokens: 2000,
+    system:
+      "Você analisa checklists operacionais de bares e restaurantes que se repetem várias vezes na mesma noite (rodadas). " +
+      "Responda APENAS um JSON válido no formato " +
+      '{"resumo": "2-3 frases sobre a noite inteira", "alertas": ["problema acionável", ...]}. ' +
+      "Alertas são só o que precisa de ação de um gerente: respostas 'não' em itens críticos, " +
+      "observações que relatam defeito/falta/risco, rodadas puladas em sequência, um problema que se repete rodada após rodada. " +
+      "Noite sem problemas = alertas vazio. Escreva em português, direto, sem rodeios.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Checklist: ${checklist.name}\n` +
+          `${balanco.feitas} de ${balanco.previstas} rodadas feitas; ${balanco.puladas} pulada(s); ${balanco.com_atraso} com atraso.\n\n` +
+          blocos.join("\n\n"),
+      },
+    ],
+  });
+
+  const json = jsonDaResposta<{ resumo?: string; alertas?: string[] }>(resposta, "a noite");
+  return {
+    resumo: typeof json.resumo === "string" ? json.resumo : "",
+    alertas: Array.isArray(json.alertas) ? json.alertas.filter((a): a is string => typeof a === "string") : [],
+  };
 }
 
 // ============================================================

@@ -67,7 +67,15 @@ export async function execucoes(raiz, ctx) {
                   texto: `${dataCurta(r.scheduled_for)}${r.executor_nome ? ` · por ${r.executor_nome}` : ""}`,
                 }),
               ]),
-              el("div", { style: "display:flex;gap:6px" }, [
+              el("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, [
+                // Checklist de rodadas: "9 de 11" é o que se lê na linha, sem
+                // abrir — e é o número que diz se a noite foi bem cuidada.
+                r.rodadas_previstas
+                  ? etiqueta(
+                      `${r.rodadas_feitas} de ${r.rodadas_previstas} rodadas`,
+                      r.rodadas_feitas === r.rodadas_previstas ? "etiqueta-ok" : r.status === "concluida" ? "etiqueta-alerta" : "",
+                    )
+                  : null,
                 alertas > 0 ? etiqueta(`${alertas} alerta(s)`, "etiqueta-alerta") : null,
                 etiqueta(rotulo, variante),
               ]),
@@ -130,7 +138,9 @@ export async function execucoes(raiz, ctx) {
             ])
           : null,
 
-        r.status === "concluida"
+        Array.isArray(r.rodadas) && r.rodadas.length > 0
+          ? el("div", { classe: "pilha", style: "gap:10px;margin-top:10px" }, r.rodadas.map((rod) => blocoRodada(rod, itens)))
+          : r.status === "concluida"
           ? el(
               "div",
               { classe: "pilha", style: "gap:8px;margin-top:10px" },
@@ -146,6 +156,32 @@ export async function execucoes(raiz, ctx) {
       ]),
     );
     detalhe.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /**
+   * Uma rodada da noite: quando era, quando foi feita, por quem — e as
+   * respostas dobradas, porque onze rodadas abertas de uma vez é uma parede.
+   * A pulada fica em vermelho: é ela que o gestor abriu para achar.
+   */
+  function blocoRodada(rod, itens) {
+    const feita = Boolean(rod.concluida_em);
+    const respostas = new Map((rod.respostas ?? []).map((a) => [a.item, a]));
+    const cabecalho = el("div", { style: "display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap" }, [
+      el("strong", { texto: `Rodada ${rod.numero} · ${rod.prevista}` }),
+      feita
+        ? el("span", {
+            classe: "muted",
+            texto: `feita ${new Date(rod.concluida_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${rod.executor_nome ? ` por ${rod.executor_nome}` : ""}`,
+          })
+        : etiqueta("ninguém fez", "etiqueta-perigo"),
+    ]);
+    if (!feita) return el("div", { classe: "cartao linha-perigo", style: "padding:12px" }, [cabecalho]);
+
+    const detalhes = el("details", {}, [
+      el("summary", { classe: "muted", style: "cursor:pointer;margin-top:6px", texto: "ver respostas" }),
+      el("div", { classe: "pilha", style: "gap:6px;margin-top:8px" }, itens.map((item) => blocoResposta(item, respostas.get(item.id)))),
+    ]);
+    return el("div", { classe: "cartao", style: "padding:12px" }, [cabecalho, detalhes]);
   }
 
   function blocoResposta(item, resposta) {

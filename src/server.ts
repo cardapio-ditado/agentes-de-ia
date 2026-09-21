@@ -6,7 +6,7 @@ import {
   pararWhatsapp,
   temSessaoSalva,
 } from "./channels/whatsapp.js";
-import { dispararChecklistsAgendados } from "./checklists.js";
+import { cuidarDasRodadas, dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
@@ -200,6 +200,16 @@ async function cicloDosChecklists(): Promise<void> {
     await dispararChecklistsAgendados();
   } catch (e) {
     console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
+  }
+  // As rodadas têm o seu próprio relógio: cutucar quem atrasou e fechar a
+  // noite. Em falha separada, pelo mesmo motivo dos lembretes abaixo.
+  try {
+    const r = await cuidarDasRodadas();
+    if (r.cutucadas || r.fechadas) {
+      console.log(`[checklists] rodadas: ${r.cutucadas} cutucada(s), ${r.fechadas} noite(s) fechada(s).`);
+    }
+  } catch (e) {
+    console.error("[checklists] relógio das rodadas falhou:", e instanceof Error ? e.message : e);
   }
   // Fora do try do checklist de propósito: uma falha lá não pode impedir o
   // lembrete de reserva de sair, e vice-versa. São dois trabalhos que só

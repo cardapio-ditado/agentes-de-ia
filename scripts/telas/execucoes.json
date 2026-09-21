@@ -1,0 +1,547 @@
+{
+  "rotulo": "Execuções — o histórico dos checklists",
+  "modulo": "/js/pages/execucoes.js",
+  "funcao": "execucoes",
+  "venue": "casa-de-teste",
+  "rotas": {
+    "GET /checklist-runs": [
+      {
+        "id": "r1",
+        "checklist_id": "c1",
+        "checklist_nome": "Banheiro — a cada 45 min",
+        "scheduled_for": "2026-09-25",
+        "status": "concluida",
+        "executor_nome": "Marcos",
+        "alertas_ia": [
+          "Rodada das 20:15 pulada no horário de pico"
+        ],
+        "rodadas_previstas": 11,
+        "rodadas_feitas": 9
+      },
+      {
+        "id": "r2",
+        "checklist_id": "c1",
+        "checklist_nome": "Banheiro — a cada 45 min",
+        "scheduled_for": "2026-09-26",
+        "status": "em_andamento",
+        "executor_nome": "Zilda",
+        "alertas_ia": [],
+        "rodadas_previstas": 11,
+        "rodadas_feitas": 3
+      },
+      {
+        "id": "r3",
+        "checklist_id": "c2",
+        "checklist_nome": "Abertura do bar",
+        "scheduled_for": "2026-09-26",
+        "status": "concluida",
+        "executor_nome": "Marcos",
+        "alertas_ia": []
+      }
+    ],
+    "GET /v1/checklist-runs/r1": {
+      "id": "r1",
+      "checklist_id": "c1",
+      "scheduled_for": "2026-09-25",
+      "status": "concluida",
+      "executor_nome": "Marcos",
+      "completed_at": "2026-09-26T05:46:00.000Z",
+      "resumo_ia": "Noite tranquila nos banheiros: 9 de 11 rodadas feitas.",
+      "alertas_ia": [
+        "Rodada das 20:15 pulada no horário de pico — vale reforçar com a equipe."
+      ],
+      "answers": [],
+      "rodadas": [
+        {
+          "numero": 1,
+          "prevista": "18:00",
+          "minuto": 0,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 4,
+          "executor_nome": "Zilda",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 2,
+          "prevista": "18:45",
+          "minuto": 45,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 49,
+          "executor_nome": "Marcos",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 3,
+          "prevista": "19:30",
+          "minuto": 90,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 94,
+          "executor_nome": "Zilda",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 4,
+          "prevista": "20:15",
+          "minuto": 135,
+          "iniciada_em": null,
+          "concluida_em": null,
+          "minuto_feita": null,
+          "executor_nome": null,
+          "respostas": [],
+          "cutucada_em": null
+        },
+        {
+          "numero": 5,
+          "prevista": "21:00",
+          "minuto": 180,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 184,
+          "executor_nome": "Zilda",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 6,
+          "prevista": "21:45",
+          "minuto": 225,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 229,
+          "executor_nome": "Marcos",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 7,
+          "prevista": "22:30",
+          "minuto": 270,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 274,
+          "executor_nome": "Zilda",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 8,
+          "prevista": "23:15",
+          "minuto": 315,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 319,
+          "executor_nome": "Marcos",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "nao",
+              "foto": null,
+              "observacao": "Saco rasgou, troquei",
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 9,
+          "prevista": "00:00",
+          "minuto": 360,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 364,
+          "executor_nome": "Zilda",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        },
+        {
+          "numero": 10,
+          "prevista": "00:45",
+          "minuto": 405,
+          "iniciada_em": null,
+          "concluida_em": null,
+          "minuto_feita": null,
+          "executor_nome": null,
+          "respostas": [],
+          "cutucada_em": null
+        },
+        {
+          "numero": 11,
+          "prevista": "01:30",
+          "minuto": 450,
+          "iniciada_em": "2026-09-26T05:40:00.000Z",
+          "concluida_em": "2026-09-26T05:40:00.000Z",
+          "minuto_feita": 454,
+          "executor_nome": "Zilda",
+          "respostas": [
+            {
+              "item": "i1",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i2",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i3",
+              "valor": "sim",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i4",
+              "valor": null,
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            },
+            {
+              "item": "i5",
+              "valor": "",
+              "foto": null,
+              "observacao": null,
+              "foto_url": null
+            }
+          ],
+          "cutucada_em": null
+        }
+      ],
+      "checklist": {
+        "name": "Banheiro — a cada 45 min",
+        "items": [
+          {
+            "id": "i1",
+            "tipo": "sim_nao",
+            "pergunta": "Papel higiênico nos dois boxes?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i2",
+            "tipo": "sim_nao",
+            "pergunta": "Pia limpa e sem água parada?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i3",
+            "tipo": "sim_nao",
+            "pergunta": "Lixeira com saco e abaixo da metade?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i4",
+            "tipo": "foto",
+            "pergunta": "Foto do banheiro",
+            "obrigatorio": false
+          },
+          {
+            "id": "i5",
+            "tipo": "texto",
+            "pergunta": "Algum reparo para avisar?",
+            "obrigatorio": false
+          }
+        ]
+      }
+    }
+  },
+  "variacoes": {
+    "noite-aberta": {
+      "rotulo": "abriu a noite de rodadas no histórico",
+      "cliques": [
+        ".cartao-clicavel"
+      ],
+      "rotas": {}
+    }
+  }
+}

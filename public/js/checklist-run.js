@@ -21,6 +21,16 @@ const respostas = new Map();
 let itens = [];
 
 /**
+ * A noite, quando o checklist é de rodadas: a lista com o estado de cada
+ * uma, qual está na vez e a janela. Nulo no checklist comum.
+ *
+ * O mesmo link serve a noite inteira — quem abre às 20:15 e quem abre às
+ * 01:30 vê a mesma página, e o que muda é a rodada que está na vez.
+ */
+let noite = null;
+let rodadaAtual = null;
+
+/**
  * Rascunho no próprio aparelho.
  *
  * Checklist de limpeza não se responde de uma sentada: a pessoa recebe às
@@ -34,12 +44,14 @@ let itens = [];
  * Guardar aqui é de graça e resolve os três jeitos de perder: fechou a aba,
  * o sistema matou o navegador, acabou a bateria.
  */
-const RASCUNHO = `brasa.checklist.${token ?? ""}`;
+// A chave carrega a rodada: o rascunho da das 20:15 não pode ressuscitar
+// dentro da das 21:00 — seriam respostas de outra hora com a cara de agora.
+const chaveDoRascunho = () => `brasa.checklist.${token ?? ""}${rodadaAtual ? `.r${rodadaAtual}` : ""}`;
 
 function guardarRascunho() {
   try {
     localStorage.setItem(
-      RASCUNHO,
+      chaveDoRascunho(),
       JSON.stringify({
         executor: campoExecutor.value ?? "",
         respostas: [...respostas.entries()],
@@ -53,7 +65,7 @@ function guardarRascunho() {
 
 function lerRascunho() {
   try {
-    const bruto = localStorage.getItem(RASCUNHO);
+    const bruto = localStorage.getItem(chaveDoRascunho());
     if (!bruto) return null;
     const dados = JSON.parse(bruto);
     // Rascunho de mais de dois dias é de outro serviço: o token é da
@@ -67,7 +79,7 @@ function lerRascunho() {
 
 function apagarRascunho() {
   try {
-    localStorage.removeItem(RASCUNHO);
+    localStorage.removeItem(chaveDoRascunho());
   } catch {
     /* nada a fazer — e nada se perde por isso */
   }
@@ -218,7 +230,8 @@ function cartaoFoto(item) {
       const envio = await comprimirFoto(arquivo);
       btn.textContent = "Enviando foto…";
       const res = await fetch(
-        `/v1/checklist-publico/${encodeURIComponent(token)}/foto?item=${encodeURIComponent(item.id)}`,
+        `/v1/checklist-publico/${encodeURIComponent(token)}/foto?item=${encodeURIComponent(item.id)}` +
+          (rodadaAtual ? `&rodada=${rodadaAtual}` : ""),
         {
           method: "POST",
           headers: { "content-type": envio.type || "image/jpeg" },
@@ -307,9 +320,9 @@ async function concluir() {
   }
 
   btnEnviar.disabled = true;
-  btnEnviar.textContent = "Enviando… a IA está conferindo";
+  btnEnviar.textContent = noite ? "Enviando a rodada…" : "Enviando… a IA está conferindo";
   try {
-    const res = await fetch(`/v1/checklist-publico/${encodeURIComponent(token)}/concluir`, {
+    const res = await fetch(`/v1/checklist-publico/${encodeURIComponent(token)}/${noite ? "rodada" : "concluir"}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -322,13 +335,175 @@ async function concluir() {
       throw new Error(json?.error?.message ?? "Falha ao concluir.");
     }
     apagarRascunho();
-    telaFinal(json.data);
+    if (noite) telaRodadaFeita(json.data);
+    else telaFinal(json.data);
   } catch (e) {
     avisar(e.message);
     btnEnviar.disabled = false;
-    btnEnviar.textContent = "Concluir checklist";
+    btnEnviar.textContent = noite ? "Concluir rodada" : "Concluir checklist";
   }
 }
+
+/* ================= Rodadas ================= */
+
+/** A faixa das rodadas no topo: ✓ feita, ⚠ atrasada, ● na vez, ○ futura. */
+function faixaDasRodadas(rodadas, naVez) {
+  const faixa = document.createElement("div");
+  faixa.className = "faixa";
+  for (const r of rodadas) {
+    const chip = document.createElement("span");
+    chip.className = `rodada-chip ${r.estado}${r.numero === naVez ? " na-vez" : ""}`;
+    chip.textContent = r.prevista;
+    chip.title = r.estado === "feita"
+      ? `Rodada ${r.numero}: feita${r.executor_nome ? ` por ${r.executor_nome}` : ""}`
+      : r.estado === "atrasada"
+        ? `Rodada ${r.numero}: passou da hora e ninguém fez`
+        : `Rodada ${r.numero}`;
+    faixa.append(chip);
+  }
+  return faixa;
+}
+
+function subtituloDaNoite(dados) {
+  const [ano, mes, dia] = String(dados.data).split("-");
+  const feitas = noite.rodadas.filter((r) => r.estado === "feita").length;
+  const daVez = noite.rodadas.find((r) => r.numero === rodadaAtual);
+  return [
+    `${dados.venue} · ${dia}/${mes}/${ano}`,
+    daVez ? `rodada ${daVez.numero} de ${noite.rodadas.length} · prevista ${daVez.prevista}` : `${feitas} de ${noite.rodadas.length} feitas`,
+  ].join(" · ");
+}
+
+/** Desenha (ou redesenha) o formulário da rodada que está na vez. */
+function desenharRodada(dados) {
+  respostas.clear();
+  conteudo.innerHTML = "";
+  conteudo.append(faixaDasRodadas(noite.rodadas, rodadaAtual));
+  subtitulo.textContent = subtituloDaNoite(dados);
+  barra.style.width = "0%";
+
+  const rascunho = lerRascunho();
+  if (rascunho) for (const [id, r] of rascunho.respostas ?? []) respostas.set(id, r);
+
+  for (const [i, item] of itens.entries()) conteudo.append(cartaoDoItem(item, i));
+  rodape.hidden = false;
+  btnEnviar.disabled = false;
+  btnEnviar.textContent = "Concluir rodada";
+  if (rascunho && respostas.size > 0) atualizarProgresso();
+  scrollTo({ top: 0 });
+}
+
+/**
+ * Rodada feita: diz qual foi, quando é a próxima, e oferece começá-la.
+ *
+ * Quem faz o banheiro a cada 45 minutos não quer procurar o link de novo:
+ * a página fica aberta no celular, e o botão da próxima é o que ela vê ao
+ * voltar. Se foi a última, a noite fechou e o resumo aparece aqui mesmo.
+ */
+function telaRodadaFeita(r) {
+  noite.rodadas = r.rodadas ?? noite.rodadas;
+  rodape.hidden = true;
+  barra.style.width = "100%";
+
+  const feitaAs = r.rodada?.concluida_em
+    ? new Date(r.rodada.concluida_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : "";
+
+  if (r.fechou) {
+    const alertas = Array.isArray(r.alertas) ? r.alertas : [];
+    conteudo.innerHTML = `
+      <div class="final">
+        <div style="font-size:52px">🔥</div>
+        <h2>Noite encerrada!</h2>
+        <p>Rodada ${r.rodada?.numero ?? ""} feita${feitaAs ? ` às ${feitaAs}` : ""}. Era a última — o resumo já foi para o gerente.</p>
+        ${r.resumo ? `<p style="margin-top:10px">${seguro(r.resumo)}</p>` : ""}
+        ${alertas.length > 0 ? `<div class="alertas"><strong>A IA marcou para o gerente:</strong><ul style="margin:8px 0 0;padding-left:18px">${alertas.map((a) => `<li>${seguro(a)}</li>`).join("")}</ul></div>` : ""}
+      </div>`;
+    conteudo.prepend(faixaDasRodadas(noite.rodadas, null));
+    subtitulo.textContent = `${noite.rodadas.length} de ${noite.rodadas.length} rodadas feitas`;
+    scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  conteudo.innerHTML = `
+    <div class="final" style="padding-top:36px">
+      <div style="font-size:52px">✅</div>
+      <h2>Rodada ${r.rodada?.numero ?? ""} feita${feitaAs ? ` às ${feitaAs}` : ""}</h2>
+      <p>${r.proxima ? `A próxima é a das <strong>${r.proxima.prevista}</strong>. Pode deixar esta página aberta.` : "Não há mais rodadas hoje."}</p>
+      ${r.proxima ? `<button class="enviar" id="btn-proxima" type="button" style="margin-top:22px;width:100%;max-width:360px">Começar a rodada das ${r.proxima.prevista}</button>` : ""}
+    </div>`;
+  conteudo.prepend(faixaDasRodadas(noite.rodadas, r.proxima?.numero ?? null));
+  subtitulo.textContent = `${noite.rodadas.filter((x) => x.estado === "feita").length} de ${noite.rodadas.length} rodadas feitas`;
+
+  document.getElementById("btn-proxima")?.addEventListener("click", () => {
+    rodadaAtual = r.proxima.numero;
+    desenharRodada(dadosDaPagina);
+  });
+  scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/**
+ * A noite fechada, aberta por quem NÃO preencheu: o gerente, pelo link do
+ * resumo. Cada rodada com a hora, quem fez e as respostas — a pulada fica
+ * marcada, porque é ela que ele abriu o link para ver.
+ */
+function telaNoite(dados) {
+  rodape.hidden = true;
+  barra.style.width = "100%";
+  const alertas = Array.isArray(dados.alertas) ? dados.alertas : [];
+  const rodadas = Array.isArray(dados.rodadas_respondidas) ? dados.rodadas_respondidas : [];
+  const feitas = rodadas.filter((r) => r.concluida_em).length;
+  const puladas = rodadas.filter((r) => !r.concluida_em);
+
+  const cabecalho = `
+    <div class="final" style="padding:28px 20px 10px">
+      <div style="font-size:44px">${alertas.length > 0 || puladas.length > 0 ? "⚠️" : "✅"}</div>
+      <h2>${feitas} de ${rodadas.length} rodadas feitas</h2>
+      <p>${puladas.length > 0 ? `Pulada(s): ${puladas.map((r) => r.prevista).join(", ")}` : "Nenhuma rodada pulada"}</p>
+      ${dados.resumo ? `<p style="margin-top:10px">${seguro(dados.resumo)}</p>` : ""}
+      ${alertas.length > 0 ? `<div class="alertas"><strong>A IA marcou:</strong><ul style="margin:8px 0 0;padding-left:18px">${alertas.map((a) => `<li>${seguro(a)}</li>`).join("")}</ul></div>` : ""}
+    </div>`;
+
+  const blocos = rodadas.map((r) => {
+    const feitaAs = r.concluida_em
+      ? new Date(r.concluida_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      : null;
+    const titulo = `<p class="pergunta" style="margin-bottom:6px">Rodada ${r.numero} · ${r.prevista}${feitaAs ? ` · feita ${feitaAs}${r.executor_nome ? ` por ${seguro(r.executor_nome)}` : ""}` : ""}</p>`;
+    if (!r.concluida_em) {
+      return `<section class="cartao" style="border-color:rgba(226,86,95,.55)">${titulo}<p style="margin:0;color:#ff9aa1;font-weight:600">Ninguém fez</p></section>`;
+    }
+    return `<section class="cartao">${titulo}<details><summary style="color:var(--creme-2);cursor:pointer;font-size:12.5px">ver respostas</summary>${htmlDasRespostas(r.respostas)}</details></section>`;
+  });
+
+  conteudo.innerHTML = cabecalho + blocos.join("");
+  scrollTo({ top: 0 });
+}
+
+/** A resposta vira texto de gente: "sim"/"nao" no banco é bom para contar, ruim para ler. */
+function comoTexto(r) {
+  if (r.tipo === "foto") return r.foto ? "Foto enviada" : "Sem foto";
+  if (r.valor === "sim") return "Sim ✓";
+  if (r.valor === "nao") return "Não ✗";
+  return r.valor?.trim() ? seguro(r.valor) : "— não respondeu";
+}
+
+function htmlDasRespostas(respostas) {
+  return (Array.isArray(respostas) ? respostas : [])
+    .map((r, i) => {
+      const ruim = r.valor === "nao" || (r.tipo === "foto" && !r.foto);
+      return `
+        <div style="padding:10px 0;border-top:1px solid var(--borda)">
+          <p class="pergunta" style="margin-bottom:4px">${i + 1}. ${seguro(r.pergunta)}</p>
+          <p style="margin:0;font-weight:600;color:${ruim ? "#ff9aa1" : "var(--creme)"}">${comoTexto(r)}</p>
+          ${r.foto ? `<a href="${r.foto}" target="_blank" rel="noopener"><img src="${r.foto}" alt="Foto de ${seguro(r.pergunta)}" loading="lazy" style="width:100%;border-radius:12px;margin-top:8px;display:block"></a>` : ""}
+          ${r.observacao ? `<p style="margin:8px 0 0;color:var(--creme-2);font-size:14px">💬 ${seguro(r.observacao)}</p>` : ""}
+        </div>`;
+    })
+    .join("");
+}
+
+/** Os dados da página, guardados para redesenhar a rodada seguinte. */
+let dadosDaPagina = null;
 
 function telaFinal(resultado) {
   rodape.hidden = true;
@@ -446,14 +621,36 @@ async function iniciar() {
     return erroFatal(e.message);
   }
 
+  dadosDaPagina = dados;
   titulo.textContent = dados.checklist;
   const [ano, mes, dia] = String(dados.data).split("-");
   subtitulo.textContent = `${dados.venue} · ${dia}/${mes}/${ano}`;
 
-  if (dados.status === "concluida") return telaResultado(dados);
+  noite = Array.isArray(dados.rodadas) && dados.rodadas.length > 0
+    ? { rodadas: dados.rodadas, janela: dados.janela ?? null }
+    : null;
+
+  if (dados.status === "concluida") return noite ? telaNoite(dados) : telaResultado(dados);
 
   itens = dados.itens ?? [];
   if (itens.length === 0) return erroFatal("Este checklist está sem perguntas.");
+
+  if (noite) {
+    rodadaAtual = dados.na_vez ?? null;
+    if (!rodadaAtual) {
+      conteudo.innerHTML = `<div class="final"><div style="font-size:52px">✅</div><h2>Todas as rodadas de hoje já foram feitas</h2><p>Bom serviço!</p></div>`;
+      conteudo.prepend(faixaDasRodadas(noite.rodadas, null));
+      return;
+    }
+    campoExecutor.addEventListener("input", guardarRascunho);
+    btnEnviar.addEventListener("click", concluir);
+    // O nome de quem executa vale a noite toda: quem fez a das 20:15 é quem
+    // vai fazer a das 21:00, e digitar o nome doze vezes é pedir apelido.
+    const rascunho = lerRascunho();
+    if (rascunho?.executor) campoExecutor.value = rascunho.executor;
+    desenharRodada(dados);
+    return;
+  }
 
   // O rascunho ENTRA antes de desenhar: assim cada cartão já nasce com o que
   // a pessoa tinha respondido, em vez de piscar vazio e preencher depois.

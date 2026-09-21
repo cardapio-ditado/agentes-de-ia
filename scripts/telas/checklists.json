@@ -1,0 +1,110 @@
+{
+  "rotulo": "Checklists — os modelos e o editor",
+  "modulo": "/js/pages/checklists.js",
+  "funcao": "checklists",
+  "venue": "casa-de-teste",
+  "rotas": {
+    "GET /checklists": [
+      {
+        "id": "c1",
+        "name": "Banheiro — a cada 45 min",
+        "description": "Conferência dos banheiros durante o serviço",
+        "items": [
+          {
+            "id": "i1",
+            "tipo": "sim_nao",
+            "pergunta": "Papel higiênico nos dois boxes?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i2",
+            "tipo": "sim_nao",
+            "pergunta": "Pia limpa e sem água parada?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i3",
+            "tipo": "sim_nao",
+            "pergunta": "Lixeira com saco e abaixo da metade?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i4",
+            "tipo": "foto",
+            "pergunta": "Foto do banheiro",
+            "obrigatorio": false
+          },
+          {
+            "id": "i5",
+            "tipo": "texto",
+            "pergunta": "Algum reparo para avisar?",
+            "obrigatorio": false
+          }
+        ],
+        "schedule": {
+          "dias": [
+            "qui",
+            "sex",
+            "sab"
+          ],
+          "hora": "18:00",
+          "ate": "02:00",
+          "a_cada_minutos": 45,
+          "responsavel_nome": "Zilda",
+          "responsavel_telefone": "65999990000",
+          "avisar_telefone": "65988880000"
+        },
+        "active": true
+      },
+      {
+        "id": "c2",
+        "name": "Abertura do bar",
+        "description": "Limpeza, freezers e caixa",
+        "items": [
+          {
+            "id": "i1",
+            "tipo": "sim_nao",
+            "pergunta": "Papel higiênico nos dois boxes?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i2",
+            "tipo": "sim_nao",
+            "pergunta": "Pia limpa e sem água parada?",
+            "obrigatorio": true
+          },
+          {
+            "id": "i3",
+            "tipo": "sim_nao",
+            "pergunta": "Lixeira com saco e abaixo da metade?",
+            "obrigatorio": true
+          }
+        ],
+        "schedule": {
+          "dias": [
+            "seg",
+            "ter",
+            "qua",
+            "qui",
+            "sex",
+            "sab"
+          ],
+          "hora": "16:00",
+          "responsavel_nome": "Marcos",
+          "responsavel_telefone": "65999990000",
+          "avisar_telefone": ""
+        },
+        "active": true
+      }
+    ]
+  },
+  "variacoes": {
+    "editor-rodadas": {
+      "rotulo": "editando o checklist de rodadas",
+      "cliques": [
+        "button:has-text(\"Editar\")"
+      ],
+      "rotas": {}
+    }
+  }
+}

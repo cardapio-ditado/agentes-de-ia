@@ -390,6 +390,7 @@ export type Database = {
           id: string
           resumo_ia: string | null
           alertas_ia: Json
+          rodadas: Json
           scheduled_for: string
           started_at: string | null
           status: string
@@ -406,6 +407,7 @@ export type Database = {
           id?: string
           resumo_ia?: string | null
           alertas_ia?: Json
+          rodadas?: Json
           scheduled_for: string
           started_at?: string | null
           status?: string
@@ -422,6 +424,7 @@ export type Database = {
           id?: string
           resumo_ia?: string | null
           alertas_ia?: Json
+          rodadas?: Json
           scheduled_for?: string
           started_at?: string | null
           status?: string

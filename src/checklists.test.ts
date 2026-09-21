@@ -1,6 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { agoraLocal, estaNaHora, jsonDaResposta, telefonesDeAviso, validarItens, type AgendaChecklist } from "./checklists.js";
+import {
+  agoraLocal,
+  ehDeRodadas,
+  estaNaHora,
+  jsonDaResposta,
+  minutoNaJanela,
+  telefonesDeAviso,
+  validarAgenda,
+  validarItens,
+  type AgendaChecklist,
+} from "./checklists.js";
 
 const TZ = "America/Cuiaba"; // UTC-4, sem horário de verão
 
@@ -155,5 +165,57 @@ describe("jsonDaResposta", () => {
 
   it("JSON malformado não estoura com erro técnico", () => {
     assert.throws(() => jsonDaResposta(resposta('{"tipo": itens}'), "a rotina"), /formato inesperado/i);
+  });
+});
+
+// ============================================================
+// Rodadas — a agenda e o relógio da janela
+// ============================================================
+
+describe("validarAgenda com rodadas", () => {
+  const base = { dias: ["sex"], hora: "18:00", responsavel_telefone: "65999999999" };
+
+  it("aceita repetir a cada N minutos até uma hora", () => {
+    const a = validarAgenda({ ...base, a_cada_minutos: 45, ate: "02:00" });
+    assert.equal(a.a_cada_minutos, 45);
+    assert.equal(a.ate, "02:00");
+    assert.equal(ehDeRodadas(a), true);
+  });
+
+  it("sem os dois campos é o checklist comum, uma vez por dia", () => {
+    const a = validarAgenda(base);
+    assert.equal(ehDeRodadas(a), false);
+  });
+
+  it("um campo sem o outro é engano, e o erro diz qual falta", () => {
+    assert.throws(() => validarAgenda({ ...base, a_cada_minutos: 45 }), /até que horas/);
+    assert.throws(() => validarAgenda({ ...base, ate: "02:00" }), /quantos minutos/);
+  });
+
+  it("intervalo pequeno demais é recusado — rotina, não vigia", () => {
+    assert.throws(() => validarAgenda({ ...base, a_cada_minutos: 5, ate: "02:00" }), /mínimo/);
+  });
+});
+
+describe("minutoNaJanela", () => {
+  const agenda = validarAgenda({
+    dias: ["sex"], hora: "18:00", ate: "02:00", a_cada_minutos: 45, responsavel_telefone: "65999999999",
+  });
+  const run = { scheduled_for: "2026-09-25" };
+
+  it("conta desde a abertura, no relógio da casa", () => {
+    // 18:00 em Cuiabá (UTC-4) = 22:00 UTC.
+    assert.equal(minutoNaJanela(run, agenda, TZ, new Date("2026-09-25T22:00:00Z")), 0);
+    assert.equal(minutoNaJanela(run, agenda, TZ, new Date("2026-09-25T22:45:00Z")), 45);
+  });
+
+  it("a madrugada seguinte continua na mesma noite", () => {
+    // 01:30 de sábado em Cuiabá = 05:30 UTC de sábado — e é o minuto 450
+    // da sexta, não uma hora negativa de outro dia.
+    assert.equal(minutoNaJanela(run, agenda, TZ, new Date("2026-09-26T05:30:00Z")), 450);
+  });
+
+  it("antes de abrir é negativo", () => {
+    assert.equal(minutoNaJanela(run, agenda, TZ, new Date("2026-09-25T21:30:00Z")), -30);
   });
 });

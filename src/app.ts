@@ -219,9 +219,16 @@ import {
   urlAssinadaDaFoto,
   validarAgenda,
   validarItens,
+  agendaDe,
+  concluirRodadaDaRun,
+  minutoNaJanela,
+  rodadasDe,
+  rodadasParaTela,
+  rodadasRespondidas,
   type MensagemGeracao,
   type RespostaItem,
 } from "./checklists.js";
+import { rodadaParaConcluir } from "./rodadas.js";
 import {
   criarComandoPonte,
   lerEstadoPonte,
@@ -1078,6 +1085,20 @@ async function lerBinario(req: IncomingMessage, limite: number): Promise<Buffer>
     partes.push(parte as Buffer);
   }
   return Buffer.concat(partes);
+}
+
+/** As respostas de um checklist como chegam do navegador, saneadas. */
+function respostasDoCorpo(corpo: Record<string, unknown>): RespostaItem[] {
+  const brutas = Array.isArray(corpo.respostas) ? corpo.respostas : [];
+  return brutas.map((r) => {
+    const o = (r ?? {}) as Record<string, unknown>;
+    return {
+      item: typeof o.item === "string" ? o.item : "",
+      valor: typeof o.valor === "string" ? o.valor : null,
+      foto: typeof o.foto === "string" ? o.foto : null,
+      observacao: typeof o.observacao === "string" && o.observacao.trim() ? o.observacao.trim() : null,
+    };
+  });
 }
 
 function texto(corpo: Record<string, unknown>, campo: string): string {
@@ -4133,7 +4154,21 @@ async function roteasApi(
       const nomes = new Map(modelos.map((c) => [c.id, c.name]));
       return ok(
         res,
-        runs.map((r) => ({ ...r, checklist_nome: nomes.get(r.checklist_id) ?? "—", answers: undefined, token: undefined })),
+        runs.map((r) => {
+          // A lista não carrega as respostas — mas a conta das rodadas, sim:
+          // "9 de 11" é o que se lê na linha, sem abrir.
+          const rodadas = rodadasDe(r);
+          return {
+            ...r,
+            checklist_nome: nomes.get(r.checklist_id) ?? "—",
+            answers: undefined,
+            token: undefined,
+            rodadas: undefined,
+            ...(rodadas.length > 0
+              ? { rodadas_previstas: rodadas.length, rodadas_feitas: rodadas.filter((x) => x.concluida_em).length }
+              : {}),
+          };
+        }),
       );
     }
 
@@ -4727,10 +4762,21 @@ async function roteasApi(
         foto_url: r.foto ? await urlAssinadaDaFoto(r.foto) : null,
       })),
     );
+    // As rodadas, cada uma com as suas fotos assinadas — o painel mostra a
+    // noite inteira, rodada por rodada.
+    const rodadas = await Promise.all(
+      rodadasDe(run).map(async (rod) => ({
+        ...rod,
+        respostas: await Promise.all(
+          (rod.respostas ?? []).map(async (r) => ({ ...r, foto_url: r.foto ? await urlAssinadaDaFoto(r.foto) : null })),
+        ),
+      })),
+    );
     return ok(res, {
       ...run,
       token: undefined,
       answers: comFotos,
+      rodadas,
       checklist: checklist ? { name: checklist.name, items: itensDe(checklist) } : null,
     });
   }
@@ -4756,6 +4802,21 @@ async function roteasApi(
     if (metodo === "GET" && p.length === 2) {
       const concluida = run.status === "concluida";
       if (!concluida) await marcarEmAndamento(run);
+
+      // Checklist de rodadas: além das perguntas, a noite — cada rodada com
+      // o seu estado, a que está na vez e a próxima. É o que a página usa
+      // para dizer "rodada 4 de 11, prevista 20:15" em vez de só "preencha".
+      const rodadas = rodadasDe(run);
+      const agenda = agendaDe(checklist);
+      const agoraMinuto = rodadas.length > 0 ? minutoNaJanela(run, agenda, venueRow.timezone) : 0;
+      const daNoite = rodadas.length > 0
+        ? {
+            rodadas: rodadasParaTela(rodadas, agoraMinuto),
+            na_vez: rodadaParaConcluir(rodadas, agoraMinuto)?.numero ?? null,
+            janela: { de: agenda.hora, ate: agenda.ate, a_cada_minutos: agenda.a_cada_minutos },
+          }
+        : {};
+
       return ok(res, {
         checklist: checklist.name,
         descricao: checklist.description,
@@ -4764,15 +4825,48 @@ async function roteasApi(
         status: run.status,
         executor: run.executor_nome,
         itens: itensDe(checklist),
+        ...daNoite,
         ...(concluida
           ? {
               concluido_em: run.completed_at,
               resumo: run.resumo_ia,
               alertas: Array.isArray(run.alertas_ia) ? run.alertas_ia : [],
-              respostas: await respostasDaRun(run, checklist),
+              respostas: rodadas.length > 0 ? [] : await respostasDaRun(run, checklist),
+              // A noite fechada, rodada por rodada, com as fotos assinadas.
+              ...(rodadas.length > 0 ? { rodadas_respondidas: await rodadasRespondidas(rodadas, checklist) } : {}),
             }
           : {}),
       });
+    }
+
+    // POST /v1/checklist-publico/:token/rodada — conclui UMA rodada da noite
+    if (metodo === "POST" && p[2] === "rodada" && p.length === 3) {
+      if (rodadasDe(run).length === 0) {
+        throw erro(400, "invalid_request", "Este checklist não é de rodadas — use /concluir.");
+      }
+      const corpo = await lerJson(req);
+      const respostas = respostasDoCorpo(corpo);
+      try {
+        const r = await concluirRodadaDaRun({
+          run,
+          checklist,
+          venue: venueRow,
+          executorNome: texto(corpo, "executor"),
+          respostas,
+        });
+        const agenda = agendaDe(checklist);
+        const agoraMinuto = minutoNaJanela(r.run, agenda, venueRow.timezone);
+        return ok(res, {
+          rodada: { numero: r.rodada.numero, prevista: r.rodada.prevista, concluida_em: r.rodada.concluida_em },
+          proxima: r.proxima ? { numero: r.proxima.numero, prevista: r.proxima.prevista } : null,
+          fechou: r.fechou,
+          rodadas: rodadasParaTela(rodadasDe(r.run), agoraMinuto),
+          resumo: r.fechou ? r.run.resumo_ia : null,
+          alertas: r.fechou && Array.isArray(r.run.alertas_ia) ? r.run.alertas_ia : [],
+        });
+      } catch (e) {
+        throw erro(400, "invalid_request", e instanceof Error ? e.message : "Não deu para concluir a rodada.");
+      }
     }
 
     // POST /v1/checklist-publico/:token/foto?item=ID — corpo binário
@@ -4787,23 +4881,20 @@ async function roteasApi(
       const arquivo = await lerBinario(req, LIMITE_FOTO_BYTES);
       if (arquivo.length === 0) throw erro(400, "invalid_request", "Foto vazia.");
       const contentType = req.headers["content-type"] ?? "image/jpeg";
-      const caminho = await salvarFotoDeItem(run, itemId, arquivo, String(contentType));
+      // A rodada vai no caminho da foto: sem ela, a foto das 20:15 apagaria
+      // a das 19:30 — mesmo item, mesma execução.
+      const rodada = Number(url.searchParams.get("rodada")) || null;
+      const caminho = await salvarFotoDeItem(run, itemId, arquivo, String(contentType), rodada);
       return ok(res, { foto: caminho }, 201);
     }
 
     // POST /v1/checklist-publico/:token/concluir — respostas + análise da IA
     if (metodo === "POST" && p[2] === "concluir" && p.length === 3) {
+      if (rodadasDe(run).length > 0) {
+        throw erro(400, "invalid_request", "Este checklist é de rodadas — use /rodada.");
+      }
       const corpo = await lerJson(req);
-      const brutas = Array.isArray(corpo.respostas) ? corpo.respostas : [];
-      const respostas: RespostaItem[] = brutas.map((r) => {
-        const o = (r ?? {}) as Record<string, unknown>;
-        return {
-          item: typeof o.item === "string" ? o.item : "",
-          valor: typeof o.valor === "string" ? o.valor : null,
-          foto: typeof o.foto === "string" ? o.foto : null,
-          observacao: typeof o.observacao === "string" && o.observacao.trim() ? o.observacao.trim() : null,
-        };
-      });
+      const respostas = respostasDoCorpo(corpo);
       try {
         const resultado = await concluirRun({
           run,

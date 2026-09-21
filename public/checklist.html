@@ -126,6 +126,22 @@
         background: var(--superficie); border: 1px solid var(--borda);
         border-radius: 12px; padding: 14px;
       }
+      /* A faixa das rodadas: a noite inteira num relance — ✓ feita, ⚠
+         atrasada, ● na vez, ○ ainda por vir. */
+      .faixa { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 14px; }
+      .rodada-chip {
+        padding: 5px 10px; border-radius: 999px; border: 1.5px solid var(--borda);
+        font-size: 12.5px; font-weight: 700; color: var(--creme-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .rodada-chip.feita { border-color: var(--ok); color: var(--ok); }
+      .rodada-chip.feita::before { content: "✓ "; }
+      .rodada-chip.atrasada { border-color: var(--fogo); color: #ff9aa1; }
+      .rodada-chip.atrasada::before { content: "⚠ "; }
+      .rodada-chip.na-vez, .rodada-chip.agora.na-vez {
+        border-color: var(--brasa); color: var(--brasa);
+        background: rgba(255, 107, 53, 0.14);
+      }
       .aviso-erro {
         position: fixed; left: 14px; right: 14px; bottom: 90px; z-index: 10;
         background: #3a1116; border: 1px solid #c1121f; color: #ffd7d7;

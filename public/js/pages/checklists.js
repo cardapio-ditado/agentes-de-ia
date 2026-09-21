@@ -73,7 +73,12 @@ export async function checklists(raiz, ctx) {
       .join(", ");
     if (!dias) return "Sem agenda — só disparo manual";
     const quem = agenda.responsavel_nome ? ` → ${agenda.responsavel_nome}` : "";
-    return `${dias} · ${agenda.hora}${quem}`;
+    // Checklist de rodadas: a janela e o intervalo são a agenda, não só a
+    // hora do envio. "18:00–02:00 a cada 45 min" é o que o gestor confere.
+    const quando = agenda.a_cada_minutos && agenda.ate
+      ? `${agenda.hora}–${agenda.ate} a cada ${agenda.a_cada_minutos} min`
+      : agenda.hora;
+    return `${dias} · ${quando}${quem}`;
   }
 
   function cartao(c) {
@@ -180,6 +185,11 @@ export async function checklists(raiz, ctx) {
         value: existente?.description ?? "",
       }),
       hora: el("input", { type: "time", value: agenda.hora ?? "09:00" }),
+      // Rodadas: o mesmo checklist a cada N minutos até uma hora. É o
+      // banheiro — seis perguntas, doze vezes por noite, um link só.
+      repetir: el("input", { type: "checkbox" }),
+      aCada: el("input", { type: "number", min: "15", max: "720", step: "5", value: agenda.a_cada_minutos ?? 45, style: "max-width:110px" }),
+      ate: el("input", { type: "time", value: agenda.ate ?? "02:00" }),
       respNome: el("input", { placeholder: "Quem executa", value: agenda.responsavel_nome ?? "" }),
       respFone: el("input", { placeholder: "WhatsApp de quem executa", value: agenda.responsavel_telefone ?? "" }),
       // Mais de um número, separados por vírgula: quem cobra o checklist
@@ -190,6 +200,17 @@ export async function checklists(raiz, ctx) {
         value: agenda.avisar_telefone ?? "",
       }),
     };
+
+    campos.repetir.checked = Boolean(agenda.a_cada_minutos && agenda.ate);
+    // Os campos da repetição só aparecem com a caixa marcada: para quem faz
+    // o checklist comum, "a cada quantos minutos" é uma pergunta sem sentido.
+    const blocoRepetir = el("div", { classe: "grade", style: "margin-top:10px" }, [
+      campo("A cada quantos minutos", campos.aCada),
+      campo("Até que horas", campos.ate),
+    ]);
+    const mostrarRepetir = () => { blocoRepetir.hidden = !campos.repetir.checked; };
+    campos.repetir.addEventListener("change", mostrarRepetir);
+    mostrarRepetir();
 
     const checksDias = DIAS.map(([valor, rotulo]) => {
       const caixa = el("input", { type: "checkbox", value: valor });
@@ -418,6 +439,20 @@ export async function checklists(raiz, ctx) {
           campo("WhatsApp de quem executa", campos.respFone),
           campo("WhatsApp de quem recebe o resumo da IA", campos.avisarFone),
         ]),
+        el("label", { classe: "campo-caixa", style: "margin-top:14px" }, [
+          campos.repetir,
+          el("span", {}, [
+            el("strong", { texto: "Repetir durante o turno" }),
+            el("span", {
+              classe: "muted",
+              style: "display:block",
+              texto:
+                "Para rotinas como a do banheiro: o mesmo checklist a cada tantos minutos, num link só. " +
+                "Quem executa recebe um lembrete se uma rodada atrasar, e o gerente recebe um resumo da noite inteira no fim.",
+            }),
+          ]),
+        ]),
+        blocoRepetir,
       ]),
 
       el("div", { classe: "reserva-acoes" }, [
@@ -443,6 +478,9 @@ export async function checklists(raiz, ctx) {
           responsavel_nome: campos.respNome.value.trim(),
           responsavel_telefone: campos.respFone.value.trim(),
           avisar_telefone: campos.avisarFone.value.trim(),
+          ...(campos.repetir.checked
+            ? { a_cada_minutos: Number(campos.aCada.value) || 45, ate: campos.ate.value || "02:00" }
+            : {}),
         },
       };
       if (!corpo.name) {
