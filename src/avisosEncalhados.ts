@@ -1,4 +1,5 @@
 import { db } from "./supabase.js";
+import { reivindicar } from "./rotinas.js";
 import {
   MAX_TENTATIVAS,
   inserirAvisos,
@@ -137,6 +138,11 @@ export function montarAlerta(params: {
  * reserva e a pesquisa — e o remédio seria pior que a doença.
  */
 export async function varrerAvisosEncalhados(agora = new Date()): Promise<number> {
+  // Um processo por hora. O servidor roda em quatro; sem isto o dono
+  // receberia o mesmo alerta quatro vezes, e o cuidado 2 lá em cima não
+  // adiantaria nada — os quatro leriam "sem alerta ainda" no mesmo instante.
+  if (!(await reivindicar("avisos-encalhados", 50, agora))) return 0;
+
   const { data: casas } = await cliente()
     .from("venues")
     .select("id, name, reservas_avisar_whatsapp");

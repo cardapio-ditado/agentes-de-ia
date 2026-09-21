@@ -6,6 +6,7 @@ import { db } from "./supabase.js";
 import type { Json, Tables, TablesInsert } from "./database.types.js";
 import type { Venue } from "./venues.js";
 import { inserirAvisos } from "./notifications.js";
+import { reivindicar } from "./rotinas.js";
 import {
   balancoDaNoite,
   concluirRodada,
@@ -847,7 +848,10 @@ export async function fecharNoite(
     return null;
   });
 
-  const { data: atualizada, error } = await db()
+  // Só fecha quem ainda está aberta: se outro processo — ou a última rodada
+  // sendo concluída na página — fechou um segundo antes, esta gravação não
+  // pega linha nenhuma, e o resumo não sai duas vezes.
+  const { data: fechadas, error } = await db()
     .from("checklist_runs")
     .update({
       status: "concluida",
@@ -857,9 +861,11 @@ export async function fecharNoite(
       updated_at: agora.toISOString(),
     })
     .eq("id", run.id)
-    .select()
-    .single();
+    .neq("status", "concluida")
+    .select();
   if (error) throw new Error(`Falha ao fechar a noite: ${error.message}`);
+  const atualizada = (fechadas ?? [])[0];
+  if (!atualizada) return { ...run, status: "concluida" };
 
   const destinatarios = telefonesDeAviso(agenda.avisar_telefone);
   if (destinatarios.length > 0) {
@@ -908,6 +914,10 @@ export async function fecharNoite(
  * a noite quando a janela acabou. Falha numa execução não cala as outras.
  */
 export async function cuidarDasRodadas(agora = new Date()): Promise<{ cutucadas: number; fechadas: number }> {
+  // Um processo por minuto: o servidor roda em quatro, e quatro cutucadas
+  // iguais é o jeito mais rápido de ensinar alguém a ignorar o WhatsApp.
+  if (!(await reivindicar("rodadas", 1, agora))) return { cutucadas: 0, fechadas: 0 };
+
   // Só as execuções recentes: uma noite de rodadas vira a madrugada, então
   // "ontem" ainda pode estar aberta; anteontem não.
   const desde = new Date(agora.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);

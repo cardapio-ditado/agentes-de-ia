@@ -1,5 +1,6 @@
 import { db, ehMigracaoPendente } from "./supabase.js";
 import { hojeNaCasa } from "./fuso.js";
+import { reivindicar } from "./rotinas.js";
 import { alimentarBasePelaZig, diaAnterior } from "./pesquisaZig.js";
 
 /**
@@ -200,6 +201,9 @@ export async function casasComZig(): Promise<Array<{ id: string; name: string; t
  */
 export async function varrerHistorico(agora = new Date()): Promise<ResultadoDoHistorico> {
   const total: ResultadoDoHistorico = { faltavam: 0, buscados: 0, falharam: 0, visitantes: 0 };
+  // Um processo por hora: quatro buscando os mesmos oito dias na Zig é
+  // quatro vezes o custo pelo mesmo resultado.
+  if (!(await reivindicar("historico-zig", 50, agora))) return total;
 
   for (const casa of await casasComZig()) {
     try {
