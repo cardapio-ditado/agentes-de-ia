@@ -1635,6 +1635,75 @@ export async function clientesDaCasa(raiz, ctx) {
     campos.texto.addEventListener("input", atualizarPrevia);
     atualizarPrevia();
 
+    /**
+     * Criar o modelo do parabéns na Meta, daqui.
+     *
+     * O texto da casa já existe (é o do conector); o servidor o traduz para
+     * lacunas {{1}}, {{2}}… e o dono revisa e manda. Sem isto, ele teria de
+     * abrir o WhatsApp Manager, copiar o texto, trocar os marcadores na mão,
+     * inventar exemplos e depois voltar aqui para escolher o modelo — cinco
+     * telas para uma decisão.
+     */
+    function criadorDeModelo(modelos) {
+      const area = el("details", { classe: "detalhes-tecnicos" }, [
+        el("summary", { texto: modelos.some((m) => m.name.startsWith("parabens_")) ? "Criar outro modelo de parabéns na Meta" : "Não tem modelo de parabéns ainda? Crie um daqui" }),
+      ]);
+      let carregado = false;
+      area.addEventListener("toggle", async () => {
+        if (!area.open || carregado) return;
+        carregado = true;
+        let sugerido;
+        try {
+          sugerido = await get(`/v1/venues/${ctx.venue}/aniversariantes/modelo-sugerido`);
+        } catch (e) {
+          area.append(el("p", { classe: "muted", texto: e.message }));
+          return;
+        }
+        const nome = el("input", { value: sugerido.name });
+        const texto = el("textarea", { classe: "campo", rows: 12, texto: sugerido.corpo });
+        const botoes = el("input", { value: sugerido.botoes.join(" | "), placeholder: "Quero reservar | Vou pensar" });
+        const exemplos = el("input", { value: sugerido.exemplos.join(" | ") });
+        const enviar = el("button", {
+          classe: "btn btn-primario",
+          type: "button",
+          texto: "Mandar para a Meta aprovar",
+          onclick: async () => {
+            enviar.disabled = true;
+            try {
+              const r = await post(`/v1/venues/${ctx.venue}/whatsapp-oficial/modelos`, {
+                name: nome.value.trim(),
+                categoria: "MARKETING",
+                corpo: texto.value,
+                exemplos: exemplos.value.split("|").map((s) => s.trim()).filter(Boolean),
+                botoes: botoes.value.split("|").map((s) => s.trim()).filter(Boolean),
+              });
+              // Já deixa escolhido: quando a Meta aprovar, o parabéns sai por ele
+              // sem ninguém precisar voltar aqui.
+              await put(`/v1/venues/${ctx.venue}/clientes/config`, {
+                aniversario_modelo: nome.value.trim(),
+                aniversario_modelo_variaveis: sugerido.variaveis,
+              });
+              avisar(`Modelo enviado (${r.status === "APPROVED" ? "já aprovado" : "em análise pela Meta — costuma levar minutos"}). Ele já está escolhido como o modelo do parabéns.`, "ok");
+              abaParabens();
+            } catch (e) {
+              avisar(e.message, "erro");
+              enviar.disabled = false;
+            }
+          },
+        });
+        area.append(
+          el("div", { classe: "pilha-fina", style: "margin-top:8px" }, [
+            el("p", { classe: "muted", texto: "Este é o seu texto do parabéns, com os marcadores virando lacunas da Meta ({{1}} = primeiro nome, {{2}} = data, {{3}} = casa, na ordem em que aparecem). Revise, e mande para aprovação." }),
+            el("div", { classe: "grade" }, [campoDaTela("Nome do modelo (só letras minúsculas e _)", nome), campoDaTela("Botões (separe com |)", botoes)]),
+            campoDaTela("Texto do modelo", texto),
+            campoDaTela("Exemplos das lacunas, na ordem (separe com |)", exemplos),
+            el("div", { classe: "linha-campos" }, [enviar]),
+          ]),
+        );
+      });
+      return area;
+    }
+
     // Pelo número oficial, o parabéns só sai por modelo aprovado. O seletor
     // e as lacunas dele moram aqui, ao lado do texto do conector.
     const seletorModelo = seletorDeModelo(modelos, config.aniversario_modelo);
@@ -1683,6 +1752,7 @@ export async function clientesDaCasa(raiz, ctx) {
               }),
               linha("Modelo aprovado", seletorModelo, null),
               areaLacunas,
+              criadorDeModelo(modelos),
               el("details", { classe: "detalhes-tecnicos" }, [
                 el("summary", { texto: "Texto pelo conector (WhatsApp Web), quando o oficial não estiver conectado" }),
                 linha(
@@ -1758,6 +1828,7 @@ const TIPOS_DE_LACUNA = [
   ["primeiro_nome", "Primeiro nome do cliente"],
   ["nome", "Nome completo do cliente"],
   ["casa", "Nome da casa"],
+  ["data_aniversario", "Data do aniversário (“25 de dezembro”)"],
   ["fixo", "Um texto fixo…"],
 ];
 
@@ -1839,7 +1910,11 @@ function editorDeLacunas(area, modelo, valoresSalvos, aoMudar) {
 /** A prévia como uma pessoa leria — aproximada, com "Maria" e a casa de exemplo. */
 function renderizarPrevia(corpo, variaveis, casa = "sua casa") {
   const valores = (variaveis ?? []).map((v) =>
-    v.tipo === "primeiro_nome" ? "Maria" : v.tipo === "nome" ? "Maria Souza" : v.tipo === "casa" ? casa : (v.texto || "…"),
+    v.tipo === "primeiro_nome" ? "Maria"
+      : v.tipo === "nome" ? "Maria Souza"
+        : v.tipo === "casa" ? casa
+          : v.tipo === "data_aniversario" ? "25 de dezembro"
+            : (v.texto || "…"),
   );
   return (corpo ?? "").replace(/\{\{\s*(\d+)\s*\}\}/g, (tudo, n) => valores[Number(n) - 1] ?? tudo);
 }

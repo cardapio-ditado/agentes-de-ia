@@ -61,18 +61,28 @@ export type Variavel =
   | { tipo: "primeiro_nome" }
   | { tipo: "nome" }
   | { tipo: "casa" }
+  | { tipo: "data_aniversario" }
   | { tipo: "fixo"; texto: string };
 
 export const TIPOS_DE_VARIAVEL: Array<{ id: Variavel["tipo"]; nome: string }> = [
   { id: "primeiro_nome", nome: "Primeiro nome do cliente" },
   { id: "nome", nome: "Nome completo do cliente" },
   { id: "casa", nome: "Nome da casa" },
+  { id: "data_aniversario", nome: "Data do aniversário (\"25 de dezembro\")" },
   { id: "fixo", nome: "Um texto fixo" },
 ];
 
 function primeiroNome(nome: string | null | undefined): string | null {
   const limpo = (nome ?? "").trim();
   return limpo ? (limpo.split(/\s+/)[0] ?? null) : null;
+}
+
+const MESES_POR_EXTENSO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+export interface PessoaDaLacuna {
+  nome: string | null;
+  nascimento_dia?: number | null;
+  nascimento_mes?: number | null;
 }
 
 /**
@@ -82,11 +92,7 @@ function primeiroNome(nome: string | null | undefined): string | null {
  * não pode perder o disparo inteiro por causa de um cliente sem nome. Quem
  * não tem nome recebe "você" — "Oi, você!" é estranho, mas chega.
  */
-export function preencherVariaveis(
-  variaveis: Variavel[],
-  pessoa: { nome: string | null },
-  casa: string,
-): string[] {
+export function preencherVariaveis(variaveis: Variavel[], pessoa: PessoaDaLacuna, casa: string): string[] {
   return variaveis.map((v) => {
     switch (v.tipo) {
       case "primeiro_nome":
@@ -95,6 +101,10 @@ export function preencherVariaveis(
         return (pessoa.nome ?? "").trim() || "você";
       case "casa":
         return casa;
+      case "data_aniversario":
+        return pessoa.nascimento_dia && pessoa.nascimento_mes
+          ? `${pessoa.nascimento_dia} de ${MESES_POR_EXTENSO[pessoa.nascimento_mes - 1] ?? "?"}`
+          : "seu aniversário";
       case "fixo":
         return v.texto.trim() || "-";
     }
@@ -119,7 +129,7 @@ export function variaveisValidas(bruto: unknown): Variavel[] {
   const saida: Variavel[] = [];
   for (const v of bruto) {
     const tipo = (v as { tipo?: string })?.tipo;
-    if (tipo === "primeiro_nome" || tipo === "nome" || tipo === "casa") saida.push({ tipo });
+    if (tipo === "primeiro_nome" || tipo === "nome" || tipo === "casa" || tipo === "data_aniversario") saida.push({ tipo });
     else if (tipo === "fixo") saida.push({ tipo, texto: String((v as { texto?: unknown }).texto ?? "") });
   }
   return saida;
@@ -599,6 +609,17 @@ export async function enviarLote(
   let enviados = 0;
   let falharam = 0;
 
+  // A data de aniversário mora no cadastro, não na foto do público: só a
+  // busca quando o modelo pede.
+  const datas = new Map<string, { nascimento_dia: number | null; nascimento_mes: number | null }>();
+  if (disparo.variaveis.some((v) => v.tipo === "data_aniversario")) {
+    const ids = lote.map((e) => e.cliente_id).filter((id): id is string => Boolean(id));
+    if (ids.length) {
+      const { data: pessoas } = await cliente().from("clientes").select("id, nascimento_dia, nascimento_mes").in("id", ids);
+      for (const p of (pessoas ?? []) as Array<{ id: string; nascimento_dia: number | null; nascimento_mes: number | null }>) datas.set(p.id, p);
+    }
+  }
+
   for (const envio of lote) {
     // Reivindica a linha: só quem trocou "pendente" por "enviado" manda.
     // Dois processos no mesmo lote não mandam duas vezes.
@@ -612,7 +633,11 @@ export async function enviarLote(
 
     const r = await enviarModeloPelaCloudApi(
       envio.telefone,
-      { name: disparo.modelo, language: disparo.idioma, parametros: preencherVariaveis(disparo.variaveis, { nome: envio.nome }, venue.name) },
+      {
+        name: disparo.modelo,
+        language: disparo.idioma,
+        parametros: preencherVariaveis(disparo.variaveis, { nome: envio.nome, ...(envio.cliente_id ? datas.get(envio.cliente_id) : {}) }, venue.name),
+      },
       conexao,
     );
     if (r.enviado) {

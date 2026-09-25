@@ -330,12 +330,21 @@ export interface ResultadoDoTeste {
 
 type RespostaDaMeta<T> = T & { error?: { code?: number; message?: string; error_subcode?: number } };
 
-async function graph<T>(caminho: string, token: string, metodo: "GET" | "POST" = "GET"): Promise<RespostaDaMeta<T>> {
+async function graph<T>(
+  caminho: string,
+  token: string,
+  metodo: "GET" | "POST" = "GET",
+  corpo?: Record<string, unknown>,
+): Promise<RespostaDaMeta<T>> {
   const versao = process.env.WHATSAPP_API_VERSION ?? VERSAO_PADRAO;
   const resposta = await fetch(`https://graph.facebook.com/${versao}/${caminho}`, {
     method: metodo,
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(15_000),
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(corpo ? { "content-type": "application/json" } : {}),
+    },
+    body: corpo ? JSON.stringify(corpo) : undefined,
+    signal: AbortSignal.timeout(20_000),
   });
   return ((await resposta.json().catch(() => ({}))) ?? {}) as RespostaDaMeta<T>;
 }
@@ -501,4 +510,82 @@ export async function modelosDaConta(c: ConexaoOficial, opcoes: { semCache?: boo
   const lista = (r.data ?? []).map(resumirModelo).sort((a, b) => a.name.localeCompare(b.name));
   modelosEmCache.set(chave, { ate: Date.now() + 60_000, lista });
   return lista;
+}
+
+// ============================================================
+// Criar um modelo na Meta, daqui
+// ============================================================
+
+export interface NovoModelo {
+  name: string;
+  categoria: "MARKETING" | "UTILITY";
+  corpo: string;
+  /** Um exemplo por lacuna, na ordem. A Meta exige para revisar. */
+  exemplos: string[];
+  botoes: string[];
+  rodape?: string | null;
+}
+
+/** O que impede de mandar este modelo à Meta. Vazio = pode. Puro, testável. */
+export function porQueNaoCria(m: NovoModelo): string[] {
+  const motivos: string[] = [];
+  if (!/^[a-z0-9_]{1,512}$/.test(m.name)) motivos.push("o nome só pode ter letras minúsculas, números e _");
+  const corpo = m.corpo.trim();
+  if (!corpo) motivos.push("o texto está vazio");
+  if (corpo.length > 1024) motivos.push(`o texto tem ${corpo.length} caracteres; a Meta aceita até 1024`);
+  let lacunas = 0;
+  for (const x of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) lacunas = Math.max(lacunas, Number(x[1]));
+  for (let i = 1; i <= lacunas; i += 1) {
+    if (!corpo.includes(`{{${i}}}`)) motivos.push(`as lacunas têm de ser seguidas: falta {{${i}}}`);
+  }
+  if (m.exemplos.length < lacunas) motivos.push(`dê um exemplo para cada lacuna (${lacunas})`);
+  if (/^\s*\{\{\d+\}\}/.test(corpo) || /\{\{\d+\}\}\s*$/.test(corpo)) motivos.push("a Meta não aceita texto que começa ou termina com uma lacuna");
+  if (m.botoes.length > 10) motivos.push("no máximo 10 botões");
+  for (const b of m.botoes) {
+    if (!b.trim() || b.length > 25) motivos.push(`o botão "${b}" precisa ter de 1 a 25 caracteres`);
+  }
+  if (m.rodape && m.rodape.length > 60) motivos.push("o rodapé aceita até 60 caracteres");
+  return motivos;
+}
+
+/** O corpo da chamada à Meta, como ela espera. Puro, testável. */
+export function corpoParaAMeta(m: NovoModelo): Record<string, unknown> {
+  const corpo = m.corpo.trim();
+  const components: Array<Record<string, unknown>> = [
+    {
+      type: "BODY",
+      text: corpo,
+      ...(m.exemplos.length ? { example: { body_text: [m.exemplos] } } : {}),
+    },
+  ];
+  if (m.rodape?.trim()) components.push({ type: "FOOTER", text: m.rodape.trim() });
+  if (m.botoes.length) {
+    components.push({ type: "BUTTONS", buttons: m.botoes.map((text) => ({ type: "QUICK_REPLY", text: text.trim() })) });
+  }
+  return { name: m.name, language: "pt_BR", category: m.categoria, components };
+}
+
+/**
+ * Manda o modelo para a Meta revisar. Volta com o status ("PENDING", quase
+ * sempre) — a aprovação chega em minutos, às vezes horas, e o modelo
+ * aparece na lista quando vier.
+ */
+export async function criarModelo(c: ConexaoOficial, m: NovoModelo): Promise<{ id: string; status: string }> {
+  if (!c.token || !c.waba_id) {
+    throw new ErroDaConexao(400, "Conecte o WhatsApp oficial (token e ID da conta) para criar modelos.");
+  }
+  const motivos = porQueNaoCria(m);
+  if (motivos.length) throw new ErroDaConexao(400, `Ainda não dá para criar: ${motivos.join("; ")}.`);
+
+  const r = await graph<{ id?: string; status?: string }>(`${c.waba_id}/message_templates`, c.token, "POST", corpoParaAMeta(m));
+  if (r.error || !r.id) {
+    const msg = r.error?.message ?? "";
+    if (/already exists|name.*exist/i.test(msg)) {
+      throw new ErroDaConexao(409, `Já existe um modelo chamado "${m.name}" nesta conta. Escolha outro nome.`);
+    }
+    if (r.error?.code === 100 && msg) throw new ErroDaConexao(400, `A Meta recusou o modelo: ${msg}`);
+    throw new ErroDaConexao(400, explicarErroDaMeta(r.error, "conta"));
+  }
+  modelosEmCache.delete(c.waba_id);
+  return { id: r.id, status: r.status ?? "PENDING" };
 }

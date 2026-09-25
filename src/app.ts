@@ -384,6 +384,7 @@ import {
   ErroDaConexao,
   apagarConexao,
   conexaoDaCasa,
+  criarModelo,
   modelosDaConta,
   paraOPainel as conexaoParaOPainel,
   salvarConexao,
@@ -423,7 +424,7 @@ import {
 } from "./clientes.js";
 import type { OrigemDeCliente } from "./clientes.js";
 import type { Selo } from "./crm.js";
-import { mandarParabens, panoramaDeAniversarios, proximosAniversariantes } from "./aniversarios.js";
+import { mandarParabens, modeloSugeridoDeParabens, panoramaDeAniversarios, proximosAniversariantes } from "./aniversarios.js";
 import { lerPlanilhaDeClientes } from "./planilhaDeClientes.js";
 import type { LinhaRecusada } from "./planilhaDeClientes.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
@@ -3844,6 +3845,37 @@ async function roteasApi(
           modelosDaConta(await conexaoDaCasa(venue), { semCache: url.searchParams.get("atualizar") === "1" }),
         ),
       );
+    }
+
+    // POST /v1/venues/:slug/whatsapp-oficial/modelos — manda um modelo para
+    // a Meta revisar. Volta "PENDING"; ele entra na lista quando aprovar.
+    if (metodo === "POST" && recurso === "whatsapp-oficial" && p[3] === "modelos" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const textos = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x ?? "")) : []);
+      return ok(
+        res,
+        await comErroDaConexao(async () =>
+          criarModelo(await conexaoDaCasa(venue), {
+            name: String(corpo.name ?? "").trim(),
+            categoria: corpo.categoria === "UTILITY" ? "UTILITY" : "MARKETING",
+            corpo: String(corpo.corpo ?? ""),
+            exemplos: textos(corpo.exemplos),
+            botoes: textos(corpo.botoes).filter((b) => b.trim()),
+            rodape: typeof corpo.rodape === "string" ? corpo.rodape : null,
+          }),
+        ),
+        201,
+      );
+    }
+
+    // GET /v1/venues/:slug/aniversariantes/modelo-sugerido — o texto do
+    // parabéns da casa já traduzido para modelo da Meta, para revisar e criar.
+    if (metodo === "GET" && recurso === "aniversariantes" && p[3] === "modelo-sugerido" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, modeloSugeridoDeParabens(await comErroDeClientes(() => configDeClientes(venue.id)), venue));
     }
 
     // ---- Disparos pelo número oficial ----

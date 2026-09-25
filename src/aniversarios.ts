@@ -2,7 +2,7 @@ import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { comDdd, configDeClientes } from "./clientes.js";
-import { preencherVariaveis, variaveisValidas } from "./disparos.js";
+import { preencherVariaveis, variaveisValidas, type Variavel } from "./disparos.js";
 import type { Cliente, ConfigDeClientes } from "./clientes.js";
 
 /**
@@ -110,14 +110,63 @@ export function textoDeParabens(
 export function modeloDeParabens(
   config: Pick<ConfigDeClientes, "aniversario_modelo" | "aniversario_modelo_variaveis">,
   casa: string,
-  nome: string | null,
+  pessoa: { nome: string | null; nascimento_dia?: number | null; nascimento_mes?: number | null },
 ): { name: string; language: string; parametros: string[] } | null {
   const name = config.aniversario_modelo?.trim();
   if (!name) return null;
   return {
     name,
     language: "pt_BR",
-    parametros: preencherVariaveis(variaveisValidas(config.aniversario_modelo_variaveis), { nome }, casa),
+    parametros: preencherVariaveis(variaveisValidas(config.aniversario_modelo_variaveis), pessoa, casa),
+  };
+}
+
+export interface ModeloSugerido {
+  name: string;
+  categoria: "MARKETING";
+  corpo: string;
+  /** Um exemplo por lacuna, na ordem — a Meta exige para revisar. */
+  exemplos: string[];
+  botoes: string[];
+  variaveis: Variavel[];
+}
+
+/**
+ * O texto do parabéns da casa, traduzido para modelo da Meta.
+ *
+ * Os marcadores {nome}, {data} e {casa} viram lacunas {{1}}, {{2}}… na
+ * ordem em que aparecem; {quando} ("daqui a 7 dias") não tem lacuna
+ * porque a Meta não aceita texto que muda a cada envio sem ser variável —
+ * e virar variável seria uma conta que erra (ver `padraoDoParabens`).
+ * Sai como "em breve".
+ */
+export function modeloSugeridoDeParabens(
+  config: Pick<ConfigDeClientes, "aniversario_texto">,
+  casa: { name: string; slug: string },
+): ModeloSugerido {
+  const texto = (config.aniversario_texto?.trim() || padraoDoParabens("Maria", 7)).replaceAll("{quando}", "em breve");
+
+  const marcadores: Array<{ marcador: string; variavel: Variavel; exemplo: string }> = [
+    { marcador: "{nome}", variavel: { tipo: "primeiro_nome" }, exemplo: "Maria" },
+    { marcador: "{data}", variavel: { tipo: "data_aniversario" }, exemplo: "25 de dezembro" },
+    { marcador: "{casa}", variavel: { tipo: "casa" }, exemplo: casa.name },
+  ];
+  const ordem = marcadores
+    .filter((m) => texto.includes(m.marcador))
+    .sort((a, b) => texto.indexOf(a.marcador) - texto.indexOf(b.marcador));
+
+  let corpo = texto;
+  ordem.forEach((m, i) => {
+    corpo = corpo.replaceAll(m.marcador, `{{${i + 1}}}`);
+  });
+
+  return {
+    name: `parabens_${casa.slug.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`,
+    categoria: "MARKETING",
+    corpo,
+    exemplos: ordem.map((m) => m.exemplo),
+    botoes: ["Quero reservar", "Vou pensar"],
+    variaveis: ordem.map((m) => m.variavel),
   };
 }
 
@@ -567,7 +616,7 @@ export async function mandarParabens(
       body: corpo,
       // Pelo número oficial, fora da janela de 24 h, só modelo aprovado. O
       // conector ignora e manda o corpo.
-      modelo: modeloDeParabens(config, venue.name, p.nome),
+      modelo: modeloDeParabens(config, venue.name, p),
     } as never);
 
     if (error) {
