@@ -936,16 +936,26 @@ export async function clientesDaCasa(raiz, ctx) {
     );
   }
 
+  // Os filtros da agenda sobrevivem à troca de aba: quem escolheu "só o 65"
+  // e foi olhar a lista não quer escolher de novo ao voltar.
+  const filtrosDaAgenda = { dias: "45", ddd: "" };
+
   async function abaAniversarios() {
     limpar(corpo);
     corpo.append(el("p", { classe: "muted", texto: "Carregando a agenda…" }));
 
+    const params = new URLSearchParams({ dias: filtrosDaAgenda.dias });
+    if (filtrosDaAgenda.ddd.startsWith("!")) params.set("fora_do_ddd", filtrosDaAgenda.ddd.slice(1));
+    else if (filtrosDaAgenda.ddd) params.set("ddd", filtrosDaAgenda.ddd);
+
     let pessoas;
     let config;
+    let ddds = [];
     try {
-      [pessoas, config] = await Promise.all([
-        get(`/v1/venues/${ctx.venue}/aniversariantes?dias=45`),
+      [pessoas, config, ddds] = await Promise.all([
+        get(`/v1/venues/${ctx.venue}/aniversariantes?${params}`),
         get(`/v1/venues/${ctx.venue}/clientes/config`),
+        get(`/v1/venues/${ctx.venue}/clientes/ddds`).then((l) => (Array.isArray(l) ? l : [])).catch(() => []),
       ]);
     } catch (e) {
       limpar(corpo);
@@ -953,8 +963,18 @@ export async function clientesDaCasa(raiz, ctx) {
       return;
     }
 
+    const seletorDias = el("select", { classe: "select" }, ["15", "30", "45", "90"].map((d) =>
+      el("option", { value: d, texto: `Próximos ${d} dias`, selected: d === filtrosDaAgenda.dias })));
+    const seletorDdd = el("select", { classe: "select" }, [
+      el("option", { value: "", texto: "Qualquer DDD" }),
+      ...ddds.slice(0, 30).map((d) => el("option", { value: d.ddd, texto: `DDD ${d.ddd} — ${d.pessoas.toLocaleString("pt-BR")}`, selected: d.ddd === filtrosDaAgenda.ddd })),
+      ...(ddds[0] ? [el("option", { value: `!${ddds[0].ddd}`, texto: `Fora do DDD ${ddds[0].ddd}`, selected: `!${ddds[0].ddd}` === filtrosDaAgenda.ddd })] : []),
+    ]);
+    seletorDias.addEventListener("change", () => { filtrosDaAgenda.dias = seletorDias.value; abaAniversarios(); });
+    seletorDdd.addEventListener("change", () => { filtrosDaAgenda.ddd = seletorDdd.value; abaAniversarios(); });
+
     limpar(corpo);
-    const lista = el("div", { classe: "pilha" });
+    const lista = el("div", { classe: "tabela" });
     const marcas = [];
     let botaoEnviar = null;
     let contador = null;
@@ -965,15 +985,12 @@ export async function clientesDaCasa(raiz, ctx) {
       // mesma frase: a casa com 1.865 datas cujo próximo aniversário é em
       // novembro, e a casa sem data nenhuma cadastrada. Quem lia não tinha
       // como distinguir — e o mais provável era achar que a tela quebrou.
-      lista.append(await porQueVazio());
+      lista.append(filtrosDaAgenda.ddd
+        ? vazio("Ninguém deste DDD faz aniversário no período", "Tire o filtro de DDD ou alargue o período.")
+        : await porQueVazio());
     } else {
-      // Uma caixa por pessoa, com a MENSAGEM à vista.
-      //
-      // Marcar sem ler o que vai sair é assinar em branco: o dono precisa ver
-      // a frase inteira, com o nome e a data que o cliente vai ler, antes de
-      // apertar. É por isso que a prévia vem do servidor, montada pelo mesmo
-      // código que monta a mensagem de verdade — prévia feita na tela mente
-      // no dia em que as duas se desencontram.
+      // Uma linha por pessoa, enxuta. A mensagem que vai sair aparece UMA
+      // vez, no topo — é a mesma para todo mundo, só muda o nome.
       for (const p of pessoas) {
         // "Já avisado" só trava quem foi ENTREGUE. Quem falhou ou está parado
         // na fila continua marcável: a mensagem dele nunca chegou.
@@ -990,51 +1007,62 @@ export async function clientesDaCasa(raiz, ctx) {
         marcas.push({ marca, pessoa: p });
 
         lista.append(
-          el("label", { classe: "cartao pilha", style: "cursor:pointer" }, [
-            el("div", { classe: "cabecalho-secao", style: "margin-bottom:6px" }, [
-              el("span", { classe: "linha-principal", style: "flex-direction:row;align-items:center;gap:10px" }, [
-                marca,
-                el("span", {}, [
-                  el("strong", { texto: p.nome || telefoneLegivel(p.telefone) }),
-                  el("br"),
-                  el("small", {
-                    classe: "muted",
-                    texto: [
-                      telefoneLegivel(p.telefone),
-                      quandoFaz(p.dias_ate),
-                      p.nascimento_ano
-                        ? `faz ${Number(p.proximo.slice(0, 4)) - p.nascimento_ano} anos`
-                        : null,
-                    ].filter(Boolean).join(" · "),
-                  }),
-                ]),
-              ]),
-              el("span", { classe: "linha-detalhes" }, [
-                p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
-                seloDoEnvio(p.envio),
-                !p.telefone ? etiqueta("sem telefone", "etiqueta-alerta") : null,
-                el("strong", {
-                  texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}`,
+          el("label", { classe: "linha-tabela", style: "cursor:pointer" }, [
+            el("span", { style: "display:flex;align-items:center;gap:10px;min-width:0;flex:1" }, [
+              marca,
+              el("span", { style: "min-width:0" }, [
+                el("strong", { texto: p.nome || telefoneLegivel(p.telefone) }),
+                el("br"),
+                el("small", {
+                  classe: "muted",
+                  texto: [
+                    telefoneLegivel(p.telefone),
+                    quandoFaz(p.dias_ate),
+                    p.nascimento_ano
+                      ? `faz ${Number(p.proximo.slice(0, 4)) - p.nascimento_ano} anos`
+                      : null,
+                  ].filter(Boolean).join(" · "),
                 }),
-              ].filter(Boolean)),
+              ]),
             ]),
-            el("p", { classe: "previa-mensagem", texto: p.mensagem }),
-            rodapeDoCartao(p, bloqueado),
+            el("span", { classe: "linha-detalhes", style: "align-items:center" }, [
+              p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
+              seloDoEnvio(p.envio),
+              !p.telefone ? etiqueta("sem telefone", "etiqueta-alerta") : null,
+              el("strong", {
+                texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}`,
+              }),
+              rodapeDoCartao(p, bloqueado),
+            ].filter(Boolean)),
           ]),
         );
       }
     }
 
+    // O que vai sair, uma vez só. Pelo oficial é o modelo da Meta; pelo
+    // conector é o texto da aba Parabéns — e a prévia de uma pessoa real
+    // (a primeira da lista) mostra o texto já com nome e data.
+    const oQueVaiSair = config.aniversario_modelo
+      ? el("details", { classe: "detalhes-tecnicos" }, [
+          el("summary", { texto: `Sai pelo número oficial com o modelo “${config.aniversario_modelo}” — ver texto` }),
+          el("p", { classe: "previa-mensagem", texto: pessoas[0]?.mensagem ?? "(sem texto de exemplo)" }),
+          el("small", { classe: "muted", texto: "O texto acima é o do conector; pelo oficial vai o modelo aprovado com as mesmas lacunas. Ajuste os dois na aba Parabéns." }),
+        ])
+      : el("details", { classe: "detalhes-tecnicos" }, [
+          el("summary", { texto: "Sai pelo conector (WhatsApp Web) com o texto da aba Parabéns — ver texto" }),
+          el("p", { classe: "previa-mensagem", texto: pessoas[0]?.mensagem ?? "(sem texto de exemplo)" }),
+        ]);
+
     corpo.append(
       el("div", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
-            el("h2", { texto: "Aniversariantes" }),
+            el("h2", { texto: `Aniversariantes${pessoas.length ? ` · ${pessoas.length}` : ""}` }),
             el("p", {
               classe: "muted",
               texto: config.aniversario_ativo
-                ? `Marque quem deve receber e confira a mensagem antes de enviar. O parabéns também sai sozinho às ${config.aniversario_hora}h, ${config.aniversario_antecedencia} dia(s) antes.`
-                : "Marque quem deve receber e confira a mensagem antes de enviar. O envio automático está desligado — ligue na aba Parabéns se quiser que saia sozinho.",
+                ? `Marque quem deve receber. O parabéns também sai sozinho às ${config.aniversario_hora}h, ${config.aniversario_antecedencia} dia(s) antes.`
+                : "Marque quem deve receber. O envio automático está desligado — ligue na aba Parabéns se quiser que saia sozinho.",
             }),
           ]),
           marcas.length
@@ -1054,6 +1082,8 @@ export async function clientesDaCasa(raiz, ctx) {
               ])
             : null,
         ].filter(Boolean)),
+        el("div", { classe: "linha-campos" }, [seletorDias, seletorDdd]),
+        pessoas.length ? oQueVaiSair : null,
         lista,
         marcas.length ? rodapeDeEnvio() : null,
       ].filter(Boolean)),
@@ -1071,44 +1101,26 @@ export async function clientesDaCasa(raiz, ctx) {
      * explicação vira "o sistema não funciona".
      */
     function rodapeDoCartao(pessoa, bloqueado) {
-      const area = el("div", { classe: "linha-campos", style: "align-items:center;margin-top:4px" });
+      const area = el("span", { style: "display:inline-flex;align-items:center;gap:8px" });
 
-      if (pessoa.descadastrado_em) {
-        area.append(el("small", { classe: "muted", texto: "Pediu para não receber mensagens — não entra em nenhum envio." }));
-        return area;
-      }
-      if (!pessoa.telefone) {
-        area.append(el("small", { classe: "muted", texto: "Sem telefone na base. Cadastre na ficha para poder enviar." }));
-        return area;
-      }
+      // As etiquetas da linha já dizem o motivo ("não quer mensagem", "sem
+      // telefone", "entregue"); repetir em frase deixaria a lista gorda.
       // Já entregue é ponto final: mandar de novo seria dois parabéns no
       // mesmo ano, que é justamente o que a trava existe para impedir.
-      if (pessoa.envio?.status === "sent") {
-        area.append(el("small", { classe: "muted", texto: "Já entregue. Cada pessoa recebe uma vez por ano." }));
-        return area;
-      }
+      if (pessoa.descadastrado_em || !pessoa.telefone || pessoa.envio?.status === "sent") return area;
 
       // Falhou ou está parada na fila: o botão vira SEGUNDA CHANCE. A trava de
       // um por ano impede entrega dobrada, não entrega nenhuma — e uma
       // mensagem que nunca chegou não é uma mensagem enviada.
       const jaTentou = Boolean(pessoa.envio);
-      if (jaTentou) {
-        area.append(
-          el("small", {
-            classe: "muted",
-            style: "flex:1",
-            texto:
-              pessoa.envio.status === "failed"
-                ? "O envio falhou. Com o WhatsApp da casa conectado, dá para tentar de novo."
-                : "Na fila do conector. Se ficar parado, tente de novo com o WhatsApp da casa conectado.",
-          }),
-        );
-      }
 
       const botao = el("button", {
         classe: "btn btn-peq",
         type: "button",
-        texto: jaTentou ? "Tentar de novo" : "Mandar só para esta pessoa",
+        title: jaTentou
+          ? (pessoa.envio.status === "failed" ? "O envio falhou. Tente de novo com o WhatsApp da casa conectado." : "Na fila do conector. Se ficar parado, tente de novo.")
+          : "Manda o parabéns agora, só para esta pessoa",
+        texto: jaTentou ? "Tentar de novo" : "Mandar agora",
         onclick: async (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
@@ -1138,7 +1150,7 @@ export async function clientesDaCasa(raiz, ctx) {
           } catch (e) {
             avisar(e.message, "erro");
             botao.disabled = false;
-            botao.textContent = jaTentou ? "Tentar de novo" : "Mandar só para esta pessoa";
+            botao.textContent = jaTentou ? "Tentar de novo" : "Mandar agora";
           }
         },
       });
@@ -1657,23 +1669,42 @@ export async function clientesDaCasa(raiz, ctx) {
           linha("Dias de antecedência", campos.antecedencia, "No dia é tarde: a pessoa já escolheu onde comemorar. 10 a 30 dias antes ela ainda está decidindo — e é aí que a mensagem muda alguma coisa."),
         ]),
         linha("Teto por dia", campos.teto, "WhatsApp comum disparando muita mensagem de uma vez é WhatsApp banido. O teto protege o número da casa."),
-        linha(
-          "Texto da mensagem",
-          campos.texto,
-          "Marcadores: {nome} vira o primeiro nome, {casa} o nome da casa, {data} a data do aniversário (\"25 de dezembro\"). Em branco, vale o texto padrão do sistema.",
-        ),
-        previa,
-        el("div", { classe: "pilha-fina", style: "margin-top:6px" }, [
-          el("h3", { texto: "Pelo número oficial (Meta)" }),
-          el("p", {
-            classe: "muted",
-            texto: modelos
-              ? "Pelo número oficial a Meta só aceita modelo aprovado — o texto acima vale para o conector. Escolha o modelo do parabéns e diga o que vai em cada lacuna."
-              : "Conecte o WhatsApp oficial em Ajustes → WhatsApp da casa para mandar o parabéns por ele. Enquanto isso, sai pelo conector com o texto acima.",
-          }),
-          modelos ? linha("Modelo aprovado", seletorModelo, null) : null,
-          modelos ? areaLacunas : null,
-        ].filter(Boolean)),
+
+        // COM O OFICIAL CONECTADO, O MODELO DA META É A MENSAGEM. O texto
+        // livre só vale para o conector (WhatsApp Web), e fica recolhido:
+        // escrever uma campanha bonita aqui e descobrir que ela não sai pelo
+        // número oficial é o tipo de trabalho perdido que irrita.
+        modelos
+          ? el("div", { classe: "pilha-fina", style: "margin-top:6px" }, [
+              el("h3", { texto: "A mensagem — modelo aprovado pela Meta" }),
+              el("p", {
+                classe: "muted",
+                texto: "Pelo número oficial a Meta só aceita modelo aprovado: o texto é escolhido, não escrito. Crie o modelo no WhatsApp Manager (categoria Marketing, {{1}} para o nome) e escolha aqui.",
+              }),
+              linha("Modelo aprovado", seletorModelo, null),
+              areaLacunas,
+              el("details", { classe: "detalhes-tecnicos" }, [
+                el("summary", { texto: "Texto pelo conector (WhatsApp Web), quando o oficial não estiver conectado" }),
+                linha(
+                  "Texto da mensagem",
+                  campos.texto,
+                  "Marcadores: {nome} vira o primeiro nome, {casa} o nome da casa, {data} a data do aniversário (\"25 de dezembro\"). Em branco, vale o texto padrão do sistema.",
+                ),
+                previa,
+              ]),
+            ])
+          : el("div", { classe: "pilha-fina", style: "margin-top:6px" }, [
+              linha(
+                "Texto da mensagem",
+                campos.texto,
+                "Marcadores: {nome} vira o primeiro nome, {casa} o nome da casa, {data} a data do aniversário (\"25 de dezembro\"). Em branco, vale o texto padrão do sistema.",
+              ),
+              previa,
+              el("p", {
+                classe: "muted",
+                texto: "Este texto sai pelo conector (WhatsApp Web). Para mandar pelo número oficial da Meta, conecte-o em Ajustes → WhatsApp da casa — aí o parabéns passa a usar um modelo aprovado.",
+              }),
+            ]),
         el("div", { classe: "linha-campos" }, [
           el("button", {
             classe: "btn btn-primario",

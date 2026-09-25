@@ -3630,7 +3630,15 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       const dias = Math.min(Math.max(Number(url.searchParams.get("dias")) || 30, 1), 366);
-      return ok(res, await comErroDeClientes(() => proximosAniversariantes(venue, dias)));
+      return ok(
+        res,
+        await comErroDeClientes(() =>
+          proximosAniversariantes(venue, dias, new Date(), {
+            ddd: dddValido(url.searchParams.get("ddd")),
+            fora_do_ddd: dddValido(url.searchParams.get("fora_do_ddd")),
+          }),
+        ),
+      );
     }
 
     // GET /v1/venues/:slug/aniversariantes/panorama — por que a agenda está

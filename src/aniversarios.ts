@@ -1,7 +1,7 @@
 import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
-import { configDeClientes } from "./clientes.js";
+import { comDdd, configDeClientes } from "./clientes.js";
 import { preencherVariaveis, variaveisValidas } from "./disparos.js";
 import type { Cliente, ConfigDeClientes } from "./clientes.js";
 
@@ -319,6 +319,7 @@ export async function proximosAniversariantes(
   venue: { id: string; name?: string; timezone: string },
   dias = 30,
   agora = new Date(),
+  filtro: { ddd?: string; fora_do_ddd?: string } = {},
 ): Promise<Aniversariante[]> {
   const hojeISO = hojeNaCasa(venue.timezone, agora);
   const config = await configDeClientes(venue.id);
@@ -326,13 +327,15 @@ export async function proximosAniversariantes(
   // Só os meses que a janela alcança: numa base de dezenas de milhares de
   // datas, é a diferença entre cinco páginas e vinte.
   const { data, error } = await todasAsLinhas<Cliente>(() =>
-    cliente()
-      .from("clientes")
-      .select("*")
-      .eq("venue_id", venue.id)
-      .not("nascimento_dia", "is", null)
-      .in("nascimento_mes", mesesDaJanela(hojeISO, dias))
-      .order("id"),
+    comDdd(
+      cliente()
+        .from("clientes")
+        .select("*")
+        .eq("venue_id", venue.id)
+        .not("nascimento_dia", "is", null)
+        .in("nascimento_mes", mesesDaJanela(hojeISO, dias)),
+      filtro,
+    ).order("id"),
   );
   if (error) throw new Error(`Falha ao listar os aniversariantes: ${error.message}`);
 

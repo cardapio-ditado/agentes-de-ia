@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { resumoDaBase, retratoDe } from "../../src/crm.js";
 import { balanco, type Envio } from "../../src/disparos.js";
+import { diasAte, textoDeParabens } from "../../src/aniversarios.js";
 import { resumirModelo } from "../../src/whatsappOficial.js";
 
 // Os modelos como a Meta devolve, passados pelo mesmo resumo do servidor.
@@ -41,6 +42,34 @@ const MODELOS = [
     components: [{ type: "HEADER", format: "IMAGE" }, { type: "BODY", text: "Cardápio novo no ar!" }],
   }),
 ];
+
+const CONFIG_PADRAO = {
+  aniversario_ativo: false,
+  aniversario_hora: 10,
+  aniversario_antecedencia: 10,
+  aniversario_texto: null,
+  aniversario_teto_por_dia: 40,
+  aniversario_modelo: null,
+  aniversario_modelo_variaveis: [],
+};
+
+// A agenda como a API devolve: os dias até o aniversário e a mensagem saem
+// do próprio domínio, e não de contas feitas à mão aqui.
+const montarAniversariantes = () => GENTE
+  .filter((p) => p.nascimento_dia && p.nascimento_mes)
+  .map((p) => {
+    const { dias, proximo } = diasAte(p.nascimento_dia!, p.nascimento_mes!, HOJE);
+    return {
+      ...comRetrato(p),
+      dias_ate: dias,
+      proximo,
+      mensagem: textoDeParabens({ aniversario_texto: null }, "Ditado Popular", p.nome, { dia: p.nascimento_dia!, mes: p.nascimento_mes!, diasAntes: dias }),
+      ja_avisado: p.id === "c1",
+      envio: p.id === "c1" ? { status: "sent", erro: null, criado_em: "2026-09-12T13:00:00.000Z", enviado_em: "2026-09-12T13:00:05.000Z" } : null,
+    };
+  })
+  .filter((p) => p.dias_ate <= 90)
+  .sort((a, b) => a.dias_ate - b.dias_ate);
 
 const ENVIOS: Envio[] = [
   { id: "e1", disparo_id: "d1", venue_id: "v", cliente_id: "c3", telefone: "5565988774455", nome: "Bruno Camargo", status: "respondeu", provider_id: "wamid.1", erro: null, enviado_em: "2026-09-24T21:00:00.000Z", entregue_em: "2026-09-24T21:00:05.000Z", lido_em: "2026-09-24T21:03:00.000Z", respondeu_em: "2026-09-24T21:04:00.000Z", resposta: "Quero!" },
@@ -171,6 +200,22 @@ const ficha = {
     },
     // As três situações que a frase antiga cobria com a MESMA palavra, e que
     // são três problemas diferentes com três saídas diferentes.
+    "aniversarios": {
+      rotulo: "a agenda com gente, enxuta, com os filtros de período e DDD",
+      cliques: ['.aba[data-aba="aniversarios"]'],
+      rotas: {
+        "GET /aniversariantes": montarAniversariantes(),
+        "GET /clientes/config": { ...CONFIG_PADRAO, aniversario_ativo: true, aniversario_modelo: "parabens_ditado" },
+      },
+    },
+    "parabens-com-oficial": {
+      rotulo: "a aba Parabéns com o número oficial conectado: o modelo da Meta é a mensagem",
+      cliques: ['.aba[data-aba="parabens"]'],
+      rotas: {
+        "GET /clientes/config": { ...CONFIG_PADRAO, aniversario_modelo: "parabens_ditado", aniversario_modelo_variaveis: [{ tipo: "primeiro_nome" }, { tipo: "casa" }] },
+        "GET /whatsapp-oficial/modelos": MODELOS,
+      },
+    },
     "aniversarios-fora-de-epoca": {
       rotulo: "agenda vazia porque ainda não é a época",
       cliques: ['.aba[data-aba="aniversarios"]'],

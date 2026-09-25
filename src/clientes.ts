@@ -347,7 +347,7 @@ export function dddValido(bruto: unknown): string | undefined {
 
 /** O pedaço do filtro que o DDD acrescenta — a base guarda "55DDD…". */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function comDdd(busca: any, filtro: { ddd?: string; fora_do_ddd?: string }): any {
+export function comDdd(busca: any, filtro: { ddd?: string; fora_do_ddd?: string }): any {
   if (filtro.ddd) return busca.like("telefone", `55${filtro.ddd}%`);
   if (filtro.fora_do_ddd) return busca.not("telefone", "like", `55${filtro.fora_do_ddd}%`);
   return busca;

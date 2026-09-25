@@ -299,6 +299,226 @@
         ]
       }
     },
+    "aniversarios": {
+      "rotulo": "a agenda com gente, enxuta, com os filtros de período e DDD",
+      "cliques": [
+        ".aba[data-aba=\"aniversarios\"]"
+      ],
+      "rotas": {
+        "GET /aniversariantes": [
+          {
+            "id": "c1",
+            "nome": "Renata Prado",
+            "telefone": "5565981382139",
+            "visitas": 4,
+            "gasto_total_centavos": 184000,
+            "ultima_visita": "2026-09-11",
+            "nascimento_dia": 22,
+            "nascimento_mes": 9,
+            "nascimento_ano": 1988,
+            "origens": [
+              "zig",
+              "agente"
+            ],
+            "nps": 10,
+            "descadastrado_em": null,
+            "gasto_centavos": 184000,
+            "ticket_centavos": 46000,
+            "dias_sem_vir": 2,
+            "selo": "vip",
+            "dias_ate": 9,
+            "proximo": "2026-09-22",
+            "mensagem": "Oi, Renata! Vimos aqui que dia 22 de setembro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
+            "ja_avisado": true,
+            "envio": {
+              "status": "sent",
+              "erro": null,
+              "criado_em": "2026-09-12T13:00:00.000Z",
+              "enviado_em": "2026-09-12T13:00:05.000Z"
+            }
+          },
+          {
+            "id": "c6",
+            "nome": "Elis Fontana",
+            "telefone": "5565994445566",
+            "visitas": 6,
+            "gasto_total_centavos": 61200,
+            "ultima_visita": "2026-09-06",
+            "nascimento_dia": 30,
+            "nascimento_mes": 9,
+            "origens": [
+              "zig",
+              "pesquisa"
+            ],
+            "nps": 6,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 61200,
+            "ticket_centavos": 10200,
+            "dias_sem_vir": 7,
+            "selo": "fiel",
+            "dias_ate": 17,
+            "proximo": "2026-09-30",
+            "mensagem": "Oi, Elis! Vimos aqui que dia 30 de setembro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
+            "ja_avisado": false,
+            "envio": null
+          },
+          {
+            "id": "c2",
+            "nome": "Paulo Vieira",
+            "telefone": "5565999112233",
+            "visitas": 38,
+            "gasto_total_centavos": 190000,
+            "ultima_visita": "2026-09-12",
+            "nascimento_dia": 3,
+            "nascimento_mes": 10,
+            "origens": [
+              "zig"
+            ],
+            "nps": 9,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 190000,
+            "ticket_centavos": 5000,
+            "dias_sem_vir": 1,
+            "selo": "fiel",
+            "dias_ate": 20,
+            "proximo": "2026-10-03",
+            "mensagem": "Oi, Paulo! Vimos aqui que dia 3 de outubro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
+            "ja_avisado": false,
+            "envio": null
+          },
+          {
+            "id": "c3",
+            "nome": "Bruno Camargo",
+            "telefone": "5565988774455",
+            "visitas": 11,
+            "gasto_total_centavos": 520000,
+            "ultima_visita": "2026-06-02",
+            "nascimento_dia": 14,
+            "nascimento_mes": 11,
+            "origens": [
+              "zig",
+              "pesquisa"
+            ],
+            "nps": 8,
+            "nascimento_ano": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 520000,
+            "ticket_centavos": 47273,
+            "dias_sem_vir": 103,
+            "selo": "sumido",
+            "dias_ate": 62,
+            "proximo": "2026-11-14",
+            "mensagem": "Oi, Bruno! Vimos aqui que dia 14 de novembro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
+            "ja_avisado": false,
+            "envio": null
+          },
+          {
+            "id": "c8",
+            "nome": "Gabi Teixeira",
+            "telefone": "5565992221100",
+            "visitas": 0,
+            "gasto_total_centavos": 0,
+            "ultima_visita": null,
+            "nascimento_dia": 5,
+            "nascimento_mes": 12,
+            "origens": [
+              "manual"
+            ],
+            "nascimento_ano": null,
+            "nps": null,
+            "descadastrado_em": null,
+            "gasto_centavos": 0,
+            "ticket_centavos": null,
+            "dias_sem_vir": null,
+            "selo": "novo",
+            "dias_ate": 83,
+            "proximo": "2026-12-05",
+            "mensagem": "Oi, Gabi! Vimos aqui que dia 5 de dezembro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
+            "ja_avisado": false,
+            "envio": null
+          }
+        ],
+        "GET /clientes/config": {
+          "aniversario_ativo": true,
+          "aniversario_hora": 10,
+          "aniversario_antecedencia": 10,
+          "aniversario_texto": null,
+          "aniversario_teto_por_dia": 40,
+          "aniversario_modelo": "parabens_ditado",
+          "aniversario_modelo_variaveis": []
+        }
+      }
+    },
+    "parabens-com-oficial": {
+      "rotulo": "a aba Parabéns com o número oficial conectado: o modelo da Meta é a mensagem",
+      "cliques": [
+        ".aba[data-aba=\"parabens\"]"
+      ],
+      "rotas": {
+        "GET /clientes/config": {
+          "aniversario_ativo": false,
+          "aniversario_hora": 10,
+          "aniversario_antecedencia": 10,
+          "aniversario_texto": null,
+          "aniversario_teto_por_dia": 40,
+          "aniversario_modelo": "parabens_ditado",
+          "aniversario_modelo_variaveis": [
+            {
+              "tipo": "primeiro_nome"
+            },
+            {
+              "tipo": "casa"
+            }
+          ]
+        },
+        "GET /whatsapp-oficial/modelos": [
+          {
+            "name": "quinta_do_chope",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "Oi, {{1}}! Faz tempo que a gente não te vê no {{2}}. Quinta tem {{3}} — te esperamos?",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [
+              "Quero!",
+              "Não, obrigado"
+            ],
+            "lacunas": 3,
+            "suportado": true,
+            "motivo": null
+          },
+          {
+            "name": "parabens_ditado",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "{{1}}, o {{2}} quer comemorar seu aniversário com você. Vem com a galera que o primeiro chope é por nossa conta!",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [],
+            "lacunas": 2,
+            "suportado": true,
+            "motivo": null
+          },
+          {
+            "name": "cardapio_novo",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "PENDING",
+            "corpo": "Cardápio novo no ar!",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [],
+            "lacunas": 0,
+            "suportado": false,
+            "motivo": "cabeçalho de imagem ainda não é suportado"
+          }
+        ]
+      }
+    },
     "aniversarios-fora-de-epoca": {
       "rotulo": "agenda vazia porque ainda não é a época",
       "cliques": [
