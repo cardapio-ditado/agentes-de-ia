@@ -2,6 +2,7 @@ import { db, ehMigracaoPendente } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { configDeClientes } from "./clientes.js";
+import { preencherVariaveis, variaveisValidas } from "./disparos.js";
 import type { Cliente, ConfigDeClientes } from "./clientes.js";
 
 /**
@@ -100,6 +101,24 @@ export function textoDeParabens(
     .replaceAll("{data}", data)
     .replaceAll("{quando}", quandoEmPalavras(diasAntes))
     .trim();
+}
+
+/**
+ * O modelo aprovado do parabéns, com as lacunas preenchidas — ou null, se a
+ * casa não escolheu um (aí o parabéns só sai pelo conector).
+ */
+export function modeloDeParabens(
+  config: Pick<ConfigDeClientes, "aniversario_modelo" | "aniversario_modelo_variaveis">,
+  casa: string,
+  nome: string | null,
+): { name: string; language: string; parametros: string[] } | null {
+  const name = config.aniversario_modelo?.trim();
+  if (!name) return null;
+  return {
+    name,
+    language: "pt_BR",
+    parametros: preencherVariaveis(variaveisValidas(config.aniversario_modelo_variaveis), { nome }, casa),
+  };
 }
 
 /** "hoje", "amanhã", "daqui a 10 dias" — só para quem já usa {quando}. */
@@ -525,6 +544,9 @@ export async function mandarParabens(
       template: `aniversario_${ano}`,
       papel: "administrativo",
       body: corpo,
+      // Pelo número oficial, fora da janela de 24 h, só modelo aprovado. O
+      // conector ignora e manda o corpo.
+      modelo: modeloDeParabens(config, venue.name, p.nome),
     } as never);
 
     if (error) {

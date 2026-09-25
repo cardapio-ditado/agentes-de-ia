@@ -10,6 +10,7 @@ import { cuidarDasRodadas, dispararChecklistsAgendados } from "./checklists.js";
 import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
+import { cuidarDosDisparos } from "./disparos.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
@@ -219,6 +220,14 @@ async function cicloDosChecklists(): Promise<void> {
     if (quantos > 0) console.log(`[lembretes] ${quantos} lembrete(s) na fila.`);
   } catch (e) {
     console.error("[lembretes] varredura falhou:", e instanceof Error ? e.message : e);
+  }
+  // E os disparos pelo número oficial: um lote por disparo por minuto, que
+  // é o ritmo que protege o número. Falha separada, pelo mesmo motivo.
+  try {
+    const r = await cuidarDosDisparos();
+    if (r.concluidos) console.log(`[disparos] ${r.concluidos} disparo(s) concluído(s).`);
+  } catch (e) {
+    console.error("[disparos] relógio falhou:", e instanceof Error ? e.message : e);
   } finally {
     agendadorEmAndamento = false;
   }

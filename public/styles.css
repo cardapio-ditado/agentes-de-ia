@@ -3542,6 +3542,7 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 .crm-numero span { font-size: 0.68rem; color: var(--texto-3); }
 /* Quem sumiu há muito tempo: o número fica vermelho, e não só a etiqueta. */
 .crm-numero-perigo strong { color: var(--perigo); }
+.crm-numero-ok strong { color: var(--ok, #1a7f4b); }
 
 @media (max-width: 640px) {
   .crm-numeros { justify-content: flex-start; gap: 12px; }

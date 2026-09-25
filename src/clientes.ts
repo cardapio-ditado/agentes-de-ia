@@ -485,6 +485,12 @@ export interface ConfigDeClientes {
   aniversario_antecedencia: number;
   aniversario_texto: string | null;
   aniversario_teto_por_dia: number;
+  /**
+   * O modelo aprovado da Meta para o parabéns sair pelo número oficial, e o
+   * que vai em cada lacuna dele. Sem modelo, o parabéns só sai pelo conector.
+   */
+  aniversario_modelo: string | null;
+  aniversario_modelo_variaveis: Array<{ tipo: string; texto?: string }>;
 }
 
 const CONFIG_PADRAO: ConfigDeClientes = {
@@ -494,7 +500,26 @@ const CONFIG_PADRAO: ConfigDeClientes = {
   aniversario_antecedencia: 10,
   aniversario_texto: null,
   aniversario_teto_por_dia: 40,
+  aniversario_modelo: null,
+  aniversario_modelo_variaveis: [],
 };
+
+/** A pessoa por telefone — para o agente saber com quem fala. */
+export async function obterClientePorTelefone(venueId: string, telefone: string): Promise<Cliente | null> {
+  const limpo = telefoneDaBase(telefone);
+  if (!limpo) return null;
+  const { data, error } = await cliente()
+    .from("clientes")
+    .select("*")
+    .eq("venue_id", venueId)
+    .eq("telefone", limpo)
+    .maybeSingle();
+  if (error) {
+    if (!ehMigracaoPendente(error.message)) console.error(`[clientes] não achei ${limpo}: ${error.message}`);
+    return null;
+  }
+  return (data as Cliente | null) ?? null;
+}
 
 /**
  * A configuração da casa — com o padrão quando ela nunca mexeu.

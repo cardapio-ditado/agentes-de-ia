@@ -409,3 +409,96 @@ export async function testarESalvar(venue: { id: string; slug: string }): Promis
   }
   return { ...r, conexao: pronta };
 }
+
+// ============================================================
+// Os modelos aprovados da conta
+// ============================================================
+
+export interface ModeloDaMeta {
+  name: string;
+  idioma: string;
+  categoria: string;
+  status: string;
+  corpo: string;
+  cabecalho: string | null;
+  rodape: string | null;
+  botoes: string[];
+  /** Quantas lacunas o corpo tem ({{1}}, {{2}}…). */
+  lacunas: number;
+  /**
+   * Dá para mandar daqui? Modelo com lacuna no cabeçalho, ou com cabeçalho
+   * de imagem/vídeo, precisa de parâmetro que ainda não montamos.
+   */
+  suportado: boolean;
+  motivo: string | null;
+}
+
+interface ComponenteDaMeta {
+  type?: string;
+  format?: string;
+  text?: string;
+  buttons?: Array<{ type?: string; text?: string }>;
+}
+
+/** O modelo como a Meta devolve, no nosso vocabulário. Puro, testável. */
+export function resumirModelo(bruto: {
+  name?: string;
+  language?: string;
+  category?: string;
+  status?: string;
+  components?: ComponenteDaMeta[];
+}): ModeloDaMeta {
+  const comps = bruto.components ?? [];
+  const corpo = comps.find((c) => c.type === "BODY")?.text ?? "";
+  const cab = comps.find((c) => c.type === "HEADER");
+  const rodape = comps.find((c) => c.type === "FOOTER")?.text ?? null;
+  const botoes = (comps.find((c) => c.type === "BUTTONS")?.buttons ?? []).map((b) => b.text ?? "").filter(Boolean);
+
+  let lacunas = 0;
+  for (const m of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) lacunas = Math.max(lacunas, Number(m[1]));
+
+  let motivo: string | null = null;
+  const FORMATO: Record<string, string> = { IMAGE: "imagem", VIDEO: "vídeo", DOCUMENT: "documento", LOCATION: "localização" };
+  if (cab && cab.format && cab.format !== "TEXT") {
+    motivo = `cabeçalho de ${FORMATO[cab.format] ?? cab.format.toLowerCase()} ainda não é suportado`;
+  }
+  else if (cab?.text && /\{\{/.test(cab.text)) motivo = "lacuna no cabeçalho ainda não é suportada";
+  else if (bruto.status !== "APPROVED") motivo = "a Meta ainda não aprovou este modelo";
+
+  return {
+    name: bruto.name ?? "",
+    idioma: bruto.language ?? "pt_BR",
+    categoria: bruto.category ?? "",
+    status: bruto.status ?? "",
+    corpo,
+    cabecalho: cab?.text ?? null,
+    rodape,
+    botoes,
+    lacunas,
+    suportado: motivo === null,
+    motivo,
+  };
+}
+
+// Um minuto de cache por conta: a tela pede a lista a cada abertura, e a
+// Meta não precisa saber disso.
+const modelosEmCache = new Map<string, { ate: number; lista: ModeloDaMeta[] }>();
+
+export async function modelosDaConta(c: ConexaoOficial, opcoes: { semCache?: boolean } = {}): Promise<ModeloDaMeta[]> {
+  if (!c.token || !c.waba_id) {
+    throw new ErroDaConexao(400, "Conecte o WhatsApp oficial (token e ID da conta) para ver os modelos.");
+  }
+  const chave = c.waba_id;
+  const guardado = modelosEmCache.get(chave);
+  if (!opcoes.semCache && guardado && guardado.ate > Date.now()) return guardado.lista;
+
+  const r = await graph<{ data?: Array<Parameters<typeof resumirModelo>[0]> }>(
+    `${c.waba_id}/message_templates?fields=name,language,category,status,components&limit=200`,
+    c.token,
+  );
+  if (r.error) throw new ErroDaConexao(400, explicarErroDaMeta(r.error, "conta"));
+
+  const lista = (r.data ?? []).map(resumirModelo).sort((a, b) => a.name.localeCompare(b.name));
+  modelosEmCache.set(chave, { ate: Date.now() + 60_000, lista });
+  return lista;
+}

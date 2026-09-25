@@ -11,6 +11,79 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { resumoDaBase, retratoDe } from "../../src/crm.js";
+import { balanco } from "../../src/disparos.js";
+import { resumirModelo } from "../../src/whatsappOficial.js";
+
+// Os modelos como a Meta devolve, passados pelo mesmo resumo do servidor.
+const MODELOS = [
+  resumirModelo({
+    name: "quinta_do_chope",
+    language: "pt_BR",
+    category: "MARKETING",
+    status: "APPROVED",
+    components: [
+      { type: "BODY", text: "Oi, {{1}}! Faz tempo que a gente não te vê no {{2}}. Quinta tem {{3}} — te esperamos?" },
+      { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Quero!" }, { type: "QUICK_REPLY", text: "Não, obrigado" }] },
+    ],
+  }),
+  resumirModelo({
+    name: "parabens_ditado",
+    language: "pt_BR",
+    category: "MARKETING",
+    status: "APPROVED",
+    components: [{ type: "BODY", text: "{{1}}, o {{2}} quer comemorar seu aniversário com você. Vem com a galera que o primeiro chope é por nossa conta!" }],
+  }),
+  resumirModelo({
+    name: "cardapio_novo",
+    language: "pt_BR",
+    category: "MARKETING",
+    status: "PENDING",
+    components: [{ type: "HEADER", format: "IMAGE" }, { type: "BODY", text: "Cardápio novo no ar!" }],
+  }),
+];
+
+const ENVIOS = [
+  { id: "e1", disparo_id: "d1", venue_id: "v", cliente_id: "c3", telefone: "5565988774455", nome: "Bruno Camargo", status: "respondeu", provider_id: "wamid.1", erro: null, enviado_em: "2026-09-24T21:00:00.000Z", entregue_em: "2026-09-24T21:00:05.000Z", lido_em: "2026-09-24T21:03:00.000Z", respondeu_em: "2026-09-24T21:04:00.000Z", resposta: "Quero!" },
+  { id: "e2", disparo_id: "d1", venue_id: "v", cliente_id: "c10", telefone: "5565990098877", nome: "Hugo Barreto", status: "lido", provider_id: "wamid.2", erro: null, enviado_em: "2026-09-24T21:00:01.000Z", entregue_em: "2026-09-24T21:00:06.000Z", lido_em: "2026-09-24T22:10:00.000Z", respondeu_em: null, resposta: null },
+  { id: "e3", disparo_id: "d1", venue_id: "v", cliente_id: null, telefone: "5565991110099", nome: null, status: "entregue", provider_id: "wamid.3", erro: null, enviado_em: "2026-09-24T21:00:02.000Z", entregue_em: "2026-09-24T21:00:07.000Z", lido_em: null, respondeu_em: null, resposta: null },
+  { id: "e4", disparo_id: "d1", venue_id: "v", cliente_id: null, telefone: "5565993332211", nome: "Fábio Rocha", status: "falhou", provider_id: null, erro: "(#131026) Message undeliverable", enviado_em: "2026-09-24T21:00:03.000Z", entregue_em: null, lido_em: null, respondeu_em: null, resposta: null },
+  { id: "e5", disparo_id: "d1", venue_id: "v", cliente_id: null, telefone: "5565997001122", nome: "Carla Menezes", status: "pendente", provider_id: null, erro: null, enviado_em: null, entregue_em: null, lido_em: null, respondeu_em: null, resposta: null },
+];
+
+const DISPAROS = [
+  {
+    id: "d1",
+    venue_id: "v",
+    nome: "Quinta do chope — chamar os sumidos",
+    modelo: "quinta_do_chope",
+    idioma: "pt_BR",
+    corpo: MODELOS[0]!.corpo,
+    variaveis: [{ tipo: "primeiro_nome" }, { tipo: "casa" }, { tipo: "fixo", texto: "chope em dobro" }],
+    publico: { selo: "sumido" },
+    status: "enviando",
+    agendado_para: "2026-09-24T21:00:00.000Z",
+    concluido_em: null,
+    criado_em: "2026-09-24T18:00:00.000Z",
+    atualizado_em: "2026-09-24T21:00:00.000Z",
+    balanco: balanco(ENVIOS),
+  },
+  {
+    id: "d2",
+    venue_id: "v",
+    nome: "Aniversariantes de outubro",
+    modelo: "parabens_ditado",
+    idioma: "pt_BR",
+    corpo: MODELOS[1]!.corpo,
+    variaveis: [{ tipo: "primeiro_nome" }, { tipo: "casa" }],
+    publico: { aniversario_mes: 10 },
+    status: "rascunho",
+    agendado_para: null,
+    concluido_em: null,
+    criado_em: "2026-09-25T10:00:00.000Z",
+    atualizado_em: "2026-09-25T10:00:00.000Z",
+    balanco: balanco([]),
+  },
+];
 
 const HOJE = "2026-09-13";
 
@@ -119,6 +192,29 @@ const ficha = {
         "GET /aniversariantes": [],
         "GET /aniversariantes/panorama": { na_base: 0, com_data: 0, proximo: null },
       },
+    },
+    "disparos": {
+      rotulo: "a aba de disparos, com uma campanha no meio do caminho",
+      cliques: ['.aba[data-aba="disparos"]'],
+      rotas: {
+        "GET /disparos": DISPAROS,
+        "GET /whatsapp-oficial/modelos": MODELOS,
+        "POST /disparos/previa": { pessoas: 2, amostra: ["Bruno Camargo", "Hugo Barreto"] },
+      },
+    },
+    "disparo-aberto": {
+      rotulo: "um disparo aberto, com o que aconteceu com cada pessoa",
+      cliques: ['.aba[data-aba="disparos"]', '[data-disparo="d1"]'],
+      rotas: {
+        "GET /disparos": DISPAROS,
+        "GET /disparos/d1": { ...DISPAROS[0], envios: ENVIOS },
+        "GET /whatsapp-oficial/modelos": MODELOS,
+      },
+    },
+    "disparos-sem-oficial": {
+      rotulo: "a aba de disparos numa casa sem o número oficial",
+      cliques: ['.aba[data-aba="disparos"]'],
+      rotas: { "GET /disparos": [] },
     },
     "base-vazia": {
       rotulo: "casa que acabou de contratar o módulo",

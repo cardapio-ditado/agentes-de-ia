@@ -43,6 +43,12 @@ export interface RunAgentParams {
   venueSlug?: string;
   /** Nome de perfil e telefone legível do interlocutor, quando o canal os conhece. */
   contato?: { nome?: string | null; telefone?: string | null };
+  /**
+   * O que o sistema sabe e o cliente não disse: quem é esta pessoa para a
+   * casa, e a que disparo ela está respondendo. Vai no bloco delimitado,
+   * junto da data — nunca como fala do cliente.
+   */
+  contextoExtra?: string | null;
   /** Recebe os eventos conforme acontecem. Omitir roda sem streaming. */
   onEvent?: (evento: AgentStreamEvent) => void;
 }
@@ -74,7 +80,7 @@ export type AgentStreamEvent =
  * executa as ferramentas que ele pedir e persiste tudo.
  */
 export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> {
-  const { agentSlug, userMessage, channel = "api", externalId, venueSlug, contato, onEvent } = params;
+  const { agentSlug, userMessage, channel = "api", externalId, venueSlug, contato, contextoExtra, onEvent } = params;
 
   const agent = await getAgentBySlug(agentSlug);
   const venue = venueSlug ? await findVenueBySlug(venueSlug) : null;
@@ -111,7 +117,10 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
   // como "o agente falou que hoje é domingo", e aí só o que foi ENVIADO
   // resolve a discussão.
   console.log(`[agente] ${agent.slug} <- ${agora}`);
-  messages.push({ role: "user", content: comContextoDeAgora(userMessage, agora) });
+  messages.push({
+    role: "user",
+    content: comContextoDeAgora(userMessage, [agora, contextoExtra?.trim()].filter(Boolean).join("\n\n")),
+  });
   await insertMessage({
     conversation_id: conversation.id,
     role: "user",

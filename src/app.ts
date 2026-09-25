@@ -384,10 +384,27 @@ import {
   ErroDaConexao,
   apagarConexao,
   conexaoDaCasa,
+  modelosDaConta,
   paraOPainel as conexaoParaOPainel,
   salvarConexao,
   testarESalvar,
 } from "./whatsappOficial.js";
+import {
+  ErroDeDisparo,
+  agendarDisparo,
+  apagarDisparo,
+  atualizarDisparo,
+  cancelarDisparo,
+  criarDisparo,
+  enviosDoDisparo,
+  listarDisparos,
+  obterDisparo,
+  preverPublico,
+  publicoValido,
+  variaveisValidas,
+  balanco as balancoDoDisparo,
+  type DadosDoDisparo,
+} from "./disparos.js";
 import {
   ErroDeClientes,
   apagarCliente,
@@ -828,6 +845,33 @@ async function comErroDaConexao<T>(acao: () => Promise<T>): Promise<T> {
     return await acao();
   } catch (e) {
     if (e instanceof ErroDaConexao) {
+      const codigo =
+        e.status === 404 ? "not_found" : e.status === 409 ? "conflito" : e.status >= 500 ? "internal" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
+/** O corpo da tela de disparos, sem confiar em nada. `parcial` = só o que veio. */
+function dadosDoDisparo(corpo: Record<string, unknown>, parcial = false): DadosDoDisparo {
+  const texto = (v: unknown) => (typeof v === "string" ? v : "");
+  const dados: Partial<DadosDoDisparo> = {};
+  if (!parcial || corpo.nome !== undefined) dados.nome = texto(corpo.nome);
+  if (!parcial || corpo.modelo !== undefined) dados.modelo = texto(corpo.modelo);
+  if (!parcial || corpo.idioma !== undefined) dados.idioma = texto(corpo.idioma) || "pt_BR";
+  if (!parcial || corpo.corpo !== undefined) dados.corpo = texto(corpo.corpo);
+  if (!parcial || corpo.variaveis !== undefined) dados.variaveis = variaveisValidas(corpo.variaveis);
+  if (!parcial || corpo.publico !== undefined) dados.publico = publicoValido(corpo.publico);
+  return dados as DadosDoDisparo;
+}
+
+/** O mesmo tratamento para os erros dos disparos. */
+async function comErroDeDisparo<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDeDisparo) {
       const codigo =
         e.status === 404 ? "not_found" : e.status === 409 ? "conflito" : e.status >= 500 ? "internal" : "invalid_request";
       throw erro(e.status, codigo, e.message);
@@ -3336,6 +3380,14 @@ async function roteasApi(
                   ? undefined
                   : String(corpo.aniversario_texto ?? "").trim() || null,
               aniversario_teto_por_dia: numeroOuNulo(corpo.aniversario_teto_por_dia) ?? undefined,
+              aniversario_modelo:
+                corpo.aniversario_modelo === undefined
+                  ? undefined
+                  : String(corpo.aniversario_modelo ?? "").trim() || null,
+              aniversario_modelo_variaveis:
+                corpo.aniversario_modelo_variaveis === undefined
+                  ? undefined
+                  : variaveisValidas(corpo.aniversario_modelo_variaveis),
             }),
           ),
         );
@@ -3752,6 +3804,87 @@ async function roteasApi(
         inscrita: r.inscrita,
         conexao: conexaoParaOPainel(r.conexao),
       });
+    }
+
+    // GET /v1/venues/:slug/whatsapp-oficial/modelos — os modelos aprovados
+    // da conta, direto da Meta. ?atualizar=1 ignora o cache de um minuto.
+    if (metodo === "GET" && recurso === "whatsapp-oficial" && p[3] === "modelos" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDaConexao(async () =>
+          modelosDaConta(await conexaoDaCasa(venue), { semCache: url.searchParams.get("atualizar") === "1" }),
+        ),
+      );
+    }
+
+    // ---- Disparos pelo número oficial ----
+    //
+    // GET | POST /v1/venues/:slug/disparos
+    if (recurso === "disparos" && p.length === 3) {
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(res, await comErroDeDisparo(() => listarDisparos(venue.id)));
+      }
+      if (metodo === "POST") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDeDisparo(() => criarDisparo(venue.id, dadosDoDisparo(corpo))), 201);
+      }
+    }
+
+    // POST /v1/venues/:slug/disparos/previa — quantos receberiam este público.
+    if (metodo === "POST" && recurso === "disparos" && p[3] === "previa" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      return ok(res, await comErroDeDisparo(() => preverPublico(venue, publicoValido(corpo.publico))));
+    }
+
+    // GET | PUT | DELETE /v1/venues/:slug/disparos/:id
+    if (recurso === "disparos" && p.length === 4 && p[3] !== "previa") {
+      const id = p[3]!;
+      if (metodo === "GET") {
+        const chave = await exigirChave(req, "reservations:read");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        return ok(
+          res,
+          await comErroDeDisparo(async () => {
+            const [disparo, envios] = await Promise.all([obterDisparo(venue.id, id), enviosDoDisparo(venue.id, id)]);
+            return { ...disparo, balanco: balancoDoDisparo(envios), envios };
+          }),
+        );
+      }
+      if (metodo === "PUT") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDeDisparo(() => atualizarDisparo(venue.id, id, dadosDoDisparo(corpo, true))));
+      }
+      if (metodo === "DELETE") {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        await comErroDeDisparo(() => apagarDisparo(venue.id, id));
+        return ok(res, { apagado: true });
+      }
+    }
+
+    // POST /v1/venues/:slug/disparos/:id/agendar {quando?} | /cancelar
+    if (metodo === "POST" && recurso === "disparos" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const id = p[3]!;
+      if (p[4] === "agendar") {
+        const corpo = (await lerJson(req).catch(() => ({}))) as Record<string, unknown>;
+        const quando = typeof corpo.quando === "string" && !Number.isNaN(Date.parse(corpo.quando)) ? new Date(corpo.quando) : null;
+        return ok(res, await comErroDeDisparo(() => agendarDisparo(venue, id, quando)));
+      }
+      if (p[4] === "cancelar") {
+        return ok(res, await comErroDeDisparo(() => cancelarDisparo(venue.id, id)));
+      }
     }
 
     // GET /v1/venues/:slug/pesquisa/zig/visitantes?dia=AAAA-MM-DD

@@ -4,6 +4,11 @@ import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbo
 import { enviarPelaCloudApi } from "../notifications.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { conexaoPeloNumero, type ConexaoOficial } from "../whatsappOficial.js";
+import { contextoDoDisparo, registrarResposta, registrarStatusDaMeta, retratoParaOAgente } from "../disparos.js";
+import { obterClientePorTelefone } from "../clientes.js";
+import { retratoDe } from "../crm.js";
+import { findVenueBySlug } from "../venues.js";
+import { hojeNaCasa } from "../fuso.js";
 
 /**
  * Canal WhatsApp oficial — Cloud API da Meta.
@@ -48,8 +53,17 @@ interface MensagemRecebida {
   sticker?: unknown;
   location?: unknown;
   contacts?: unknown;
-  button?: { text?: string };
+  button?: { text?: string; payload?: string };
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+  /** A mensagem citada — quando a pessoa responde "em cima" de um disparo. */
+  context?: { id?: string };
+}
+
+interface StatusRecebido {
+  id?: string;
+  status?: string;
+  timestamp?: string;
+  errors?: Array<{ title?: string; message?: string }>;
 }
 
 interface Contato {
@@ -67,7 +81,7 @@ interface CorpoWebhook {
         metadata?: { phone_number_id?: string; display_phone_number?: string };
         contacts?: Contato[];
         messages?: MensagemRecebida[];
-        statuses?: unknown[];
+        statuses?: StatusRecebido[];
       };
     }>;
   }>;
@@ -178,6 +192,12 @@ export async function processarWebhookWhatsapp(corpo: CorpoWebhook): Promise<{ m
     for (const mudanca of entry.changes ?? []) {
       if (mudanca.field !== "messages") continue;
       const valor = mudanca.value;
+
+      // "Entregue", "lida", "falhou": a Meta conta o que aconteceu com cada
+      // disparo. Chega no mesmo campo, sem mensagem nenhuma junto.
+      for (const s of valor?.statuses ?? []) {
+        await registrarStatusDaMeta(s).catch((e) => console.error("[whatsapp-cloud] status:", e));
+      }
       if (!valor?.messages?.length) continue;
 
       // De que casa é este número? Um app da Meta tem vários números, e o
@@ -232,6 +252,11 @@ async function processarMensagem(m: MensagemRecebida, nome: string | null, conex
 
   console.log(`[whatsapp-cloud] ${nome ?? "?"} (${telefone}): ${texto.slice(0, 80)}`);
 
+  const contextoExtra = await oQueOSistemaSabe(conexao, telefone, m, texto).catch((e) => {
+    console.error("[whatsapp-cloud] contexto:", e);
+    return null;
+  });
+
   let resultado;
   try {
     resultado = await runAgent({
@@ -241,6 +266,7 @@ async function processarMensagem(m: MensagemRecebida, nome: string | null, conex
       channel: "whatsapp",
       externalId: telefone,
       contato: { nome, telefone },
+      contextoExtra,
     });
   } catch (e) {
     // Plano travado não é falha técnica: o cliente do bar não pode ficar sem
@@ -261,4 +287,35 @@ async function processarMensagem(m: MensagemRecebida, nome: string | null, conex
   if (!envio.enviado) {
     console.error(`[whatsapp-cloud] falha ao responder ${telefone}: ${envio.erro}`);
   }
+}
+
+/**
+ * O que o sistema sabe e o cliente não disse.
+ *
+ * Duas coisas, e as duas mudam a resposta: quem é esta pessoa para a casa
+ * (VIP? sumiu?) e se ela está respondendo a um disparo — e a qual. Sem
+ * isto, a cliente que responde "quero!" à promoção ouve "Olá! Como posso
+ * ajudar?", que é o mesmo que ser atendida por quem não leu o próprio
+ * recado.
+ */
+async function oQueOSistemaSabe(
+  conexao: ConexaoAtendida,
+  telefone: string,
+  m: MensagemRecebida,
+  texto: string,
+): Promise<string | null> {
+  // Pelo slug, e não pelo id: a conexão das variáveis de ambiente não tem
+  // o id da casa.
+  const venue = await findVenueBySlug(conexao.venue_slug);
+  const partes: string[] = [];
+
+  const pessoa = await obterClientePorTelefone(venue.id, telefone);
+  if (pessoa) partes.push(retratoParaOAgente(pessoa, retratoDe(pessoa, hojeNaCasa(venue.timezone))));
+
+  const botao = m.button?.text ?? m.interactive?.button_reply?.title ?? null;
+  const resposta = await registrarResposta(venue.id, telefone, { contextoId: m.context?.id ?? null, texto, botao });
+  if (resposta) {
+    partes.push(contextoDoDisparo(resposta.disparo, resposta.envio, venue.name, venue.timezone, botao));
+  }
+  return partes.length ? partes.join("\n") : null;
 }

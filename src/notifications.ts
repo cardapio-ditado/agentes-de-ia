@@ -160,8 +160,26 @@ async function enviarPorConsole(destino: string, corpo: string): Promise<Resulta
   return { enviado: true, providerId: "console" };
 }
 
+/**
+ * Um modelo aprovado da Meta, com as lacunas já preenchidas.
+ *
+ * Vai junto do aviso quando ele pode sair pelo número oficial fora da janela
+ * de 24 h (parabéns, promoção). O conector (Baileys) não precisa dele: manda
+ * o texto do corpo, que é a mesma mensagem renderizada.
+ */
+export interface ModeloDeMensagem {
+  name: string;
+  language: string;
+  parametros: string[];
+}
+
 /** Baileys quando conectado; senão, a Cloud API da casa. */
-async function enviarPorWhatsapp(destino: string, corpo: string, venueId?: string | null): Promise<ResultadoEnvio> {
+async function enviarPorWhatsapp(
+  destino: string,
+  corpo: string,
+  venueId?: string | null,
+  modelo?: ModeloDeMensagem | null,
+): Promise<ResultadoEnvio> {
   const provedor = provedorWhatsappAtivo();
   if (provedor) return await provedor(destino, corpo);
   if (soOConectorEntrega(destino)) {
@@ -175,6 +193,7 @@ async function enviarPorWhatsapp(destino: string, corpo: string, venueId?: strin
   if (!conexao) {
     return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado para esta casa." };
   }
+  if (modelo?.name) return await enviarModeloPelaCloudApi(destino, modelo, conexao);
   return await enviarPelaCloudApi(destino, corpo, conexao);
 }
 
@@ -188,6 +207,33 @@ async function enviarPorWhatsapp(destino: string, corpo: string, venueId?: strin
 export async function enviarPelaCloudApi(
   destino: string,
   corpo: string,
+  conexao: { token: string; phone_number_id: string },
+): Promise<ResultadoEnvio> {
+  return await postarNaCloudApi(destino, { type: "text", text: { body: corpo } }, conexao);
+}
+
+/**
+ * Um modelo aprovado, pela Cloud API. É o único jeito de a casa INICIAR
+ * conversa pelo número oficial — e o que os disparos e o parabéns usam.
+ */
+export async function enviarModeloPelaCloudApi(
+  destino: string,
+  modelo: ModeloDeMensagem,
+  conexao: { token: string; phone_number_id: string },
+): Promise<ResultadoEnvio> {
+  const components = modelo.parametros.length
+    ? [{ type: "body", parameters: modelo.parametros.map((text) => ({ type: "text", text })) }]
+    : [];
+  return await postarNaCloudApi(
+    destino,
+    { type: "template", template: { name: modelo.name, language: { code: modelo.language }, components } },
+    conexao,
+  );
+}
+
+async function postarNaCloudApi(
+  destino: string,
+  mensagem: Record<string, unknown>,
   conexao: { token: string; phone_number_id: string },
 ): Promise<ResultadoEnvio> {
   const token = conexao.token;
@@ -206,12 +252,7 @@ export async function enviarPelaCloudApi(
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: telefone,
-          type: "text",
-          text: { body: corpo },
-        }),
+        body: JSON.stringify({ messaging_product: "whatsapp", to: telefone, ...mensagem }),
         signal: AbortSignal.timeout(15_000),
       },
     );
@@ -551,7 +592,12 @@ export async function notificarCliente(params: {
 export async function tentarEnviar(notificacao: Notification): Promise<Notification> {
   const resultado =
     notificacao.channel === "whatsapp"
-      ? await enviarPorWhatsapp(notificacao.destination, notificacao.body, notificacao.venue_id)
+      ? await enviarPorWhatsapp(
+          notificacao.destination,
+          notificacao.body,
+          notificacao.venue_id,
+          (notificacao as Notification & { modelo?: ModeloDeMensagem | null }).modelo ?? null,
+        )
       : notificacao.channel === "instagram"
         ? await enviarPorInstagram(notificacao.destination, notificacao.body)
         : await enviarPorConsole(notificacao.destination, notificacao.body);

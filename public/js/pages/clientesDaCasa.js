@@ -153,6 +153,7 @@ export async function clientesDaCasa(raiz, ctx) {
     ["lista", "Clientes"],
     ["aniversarios", "Aniversariantes"],
     ["parabens", "Parabéns"],
+    ["disparos", "Disparos"],
   ];
   const barra = el(
     "div",
@@ -183,6 +184,7 @@ export async function clientesDaCasa(raiz, ctx) {
     limpar(corpo);
     if (abaAtiva === "lista") abaLista();
     else if (abaAtiva === "aniversarios") abaAniversarios();
+    else if (abaAtiva === "disparos") abaDisparos();
     else abaParabens();
   }
 
@@ -1192,6 +1194,290 @@ export async function clientesDaCasa(raiz, ctx) {
     }
   }
 
+  /* ================= Disparos ================= */
+
+  /**
+   * A casa fala com a base — pelo número oficial, por modelo aprovado.
+   *
+   * A lista de disparos em cima, o formulário de um novo embaixo. Um
+   * disparo é escolhido, não escrito: o modelo vem da Meta, as lacunas
+   * dele são preenchidas com quem recebe, e o público sai dos selos do CRM.
+   */
+  async function abaDisparos() {
+    limpar(corpo);
+    corpo.append(el("p", { classe: "muted", texto: "Carregando os disparos…" }));
+
+    let disparos = [];
+    let modelos = null;
+    let erroDosModelos = null;
+    try {
+      [disparos, modelos] = await Promise.all([
+        get(`/v1/venues/${ctx.venue}/disparos`),
+        get(`/v1/venues/${ctx.venue}/whatsapp-oficial/modelos`).catch((e) => {
+          erroDosModelos = e.message;
+          return null;
+        }),
+      ]);
+    } catch (e) {
+      limpar(corpo);
+      corpo.append(vazio("Não deu para carregar", e.message));
+      return;
+    }
+    if (!Array.isArray(modelos)) modelos = null;
+
+    limpar(corpo);
+    corpo.append(el("div", { classe: "pilha" }, [listaDeDisparos(disparos), formularioDeDisparo(modelos, erroDosModelos)].filter(Boolean)));
+
+    function listaDeDisparos(lista) {
+      if (lista.length === 0) {
+        return el("section", { classe: "cartao" }, [
+          el("h2", { texto: "Disparos" }),
+          el("p", { classe: "muted", texto: "Nenhum disparo ainda. O primeiro costuma ser o mais fácil: uma mensagem para quem sumiu." }),
+        ]);
+      }
+      return el("section", { classe: "cartao pilha" }, [
+        el("h2", { texto: "Disparos" }),
+        el("div", { classe: "tabela" }, lista.map((d) => linhaDoDisparo(d))),
+      ]);
+    }
+
+    function linhaDoDisparo(d) {
+      const [rotulo, classe] = ROTULO_DO_DISPARO[d.status] ?? [d.status, ""];
+      const b = d.balanco;
+      return el("button", {
+        classe: "linha-tabela",
+        type: "button",
+        "data-disparo": d.id,
+        onclick: () => abrirDisparo(d.id),
+      }, [
+        el("div", { style: "min-width:0;flex:1" }, [
+          el("strong", { texto: d.nome }),
+          el("div", { classe: "muted", texto: `${descreverPublico(d.publico)} · modelo ${d.modelo}${d.agendado_para ? ` · ${quandoLegivel(d.agendado_para)}` : ""}` }),
+        ]),
+        el("div", { classe: "crm-numeros" }, [
+          numero(b.pessoas, "pessoas"),
+          numero(b.entregues, "entregues"),
+          numero(b.lidos, "leram"),
+          numero(b.responderam, "responderam", b.responderam > 0 ? "crm-numero-ok" : ""),
+          b.falharam > 0 ? numero(b.falharam, "falharam", "crm-numero-perigo") : null,
+        ].filter(Boolean)),
+        etiqueta(rotulo, classe),
+      ]);
+    }
+
+    function numero(valor, rotulo, classe = "") {
+      return el("div", { classe: `crm-numero ${classe}`.trim() }, [el("strong", { texto: String(valor) }), el("span", { texto: rotulo })]);
+    }
+
+    async function abrirDisparo(id) {
+      let d;
+      try {
+        d = await get(`/v1/venues/${ctx.venue}/disparos/${id}`);
+      } catch (e) {
+        avisar(e.message, "erro");
+        return;
+      }
+      const [rotulo, classe] = ROTULO_DO_DISPARO[d.status] ?? [d.status, ""];
+      const podeCancelar = d.status === "agendado" || d.status === "enviando";
+      const podeApagar = d.status === "rascunho" || d.status === "concluido" || d.status === "cancelado";
+
+      limpar(corpo);
+      corpo.append(
+        el("section", { classe: "cartao pilha" }, [
+          el("div", { classe: "cabecalho-secao" }, [
+            el("div", {}, [
+              el("h2", { texto: d.nome }),
+              el("p", { classe: "muted", texto: `${descreverPublico(d.publico)} · modelo ${d.modelo}${d.agendado_para ? ` · ${quandoLegivel(d.agendado_para)}` : ""}` }),
+            ]),
+            etiqueta(rotulo, classe),
+          ]),
+          el("p", { classe: "previa-mensagem", texto: renderizarPrevia(d.corpo, d.variaveis, nomeAproximadoDaCasa(ctx.venue)) }),
+          el("div", { classe: "crm-numeros" }, [
+            numero(d.balanco.pessoas, "pessoas"),
+            numero(d.balanco.enviados, "enviados"),
+            numero(d.balanco.entregues, "entregues"),
+            numero(d.balanco.lidos, "leram"),
+            numero(d.balanco.responderam, "responderam", d.balanco.responderam > 0 ? "crm-numero-ok" : ""),
+            numero(d.balanco.falharam, "falharam", d.balanco.falharam > 0 ? "crm-numero-perigo" : ""),
+          ]),
+          el("div", { classe: "linha-campos" }, [
+            el("button", { classe: "btn", type: "button", texto: "← Voltar", onclick: () => abaDisparos() }),
+            d.status === "rascunho"
+              ? el("button", {
+                  classe: "btn btn-primario",
+                  type: "button",
+                  texto: "Agendar",
+                  onclick: () => agendar(d.id),
+                })
+              : null,
+            podeCancelar
+              ? el("button", {
+                  classe: "btn btn-perigo",
+                  type: "button",
+                  texto: "Cancelar o que falta",
+                  onclick: async () => {
+                    if (!confirm("Cancelar? Quem já recebeu, recebeu; quem ainda não, não recebe.")) return;
+                    try {
+                      await post(`/v1/venues/${ctx.venue}/disparos/${d.id}/cancelar`, {});
+                      avisar("Disparo cancelado.", "ok");
+                      abrirDisparo(d.id);
+                    } catch (e) {
+                      avisar(e.message, "erro");
+                    }
+                  },
+                })
+              : null,
+            podeApagar
+              ? el("button", {
+                  classe: "btn btn-perigo",
+                  type: "button",
+                  texto: "Apagar",
+                  style: "margin-left:auto",
+                  onclick: async () => {
+                    if (!confirm("Apagar este disparo e o histórico dele?")) return;
+                    try {
+                      await del(`/v1/venues/${ctx.venue}/disparos/${d.id}`);
+                      avisar("Apagado.", "ok");
+                      abaDisparos();
+                    } catch (e) {
+                      avisar(e.message, "erro");
+                    }
+                  },
+                })
+              : null,
+          ].filter(Boolean)),
+          d.envios.length
+            ? el("div", { classe: "tabela" }, d.envios.slice(0, 300).map((e) => {
+                const [r, c] = ROTULO_DO_ENVIO[e.status] ?? [e.status, ""];
+                return el("div", { classe: "linha-tabela" }, [
+                  el("div", { style: "min-width:0;flex:1" }, [
+                    el("strong", { texto: e.nome || telefoneLegivel(e.telefone) }),
+                    el("div", { classe: "muted", texto: e.resposta ? `respondeu: “${e.resposta}”` : e.erro ? e.erro : telefoneLegivel(e.telefone) }),
+                  ]),
+                  etiqueta(r, c),
+                ]);
+              }))
+            : el("p", { classe: "muted", texto: "O público é fotografado na hora de agendar — por enquanto, ninguém." }),
+        ]),
+      );
+    }
+
+    async function agendar(id, quandoISO = null) {
+      try {
+        const r = await post(`/v1/venues/${ctx.venue}/disparos/${id}/agendar`, quandoISO ? { quando: quandoISO } : {});
+        avisar(`Agendado para ${r.pessoas} pessoa(s). Sai a ${20} por minuto${quandoISO ? `, a partir de ${quandoLegivel(r.disparo.agendado_para)}` : ", começando agora"}.`, "ok");
+        abrirDisparo(id);
+      } catch (e) {
+        avisar(e.message, "erro");
+      }
+    }
+
+    function formularioDeDisparo(modelos, erro) {
+      if (!modelos) {
+        return el("section", { classe: "cartao" }, [
+          el("h2", { texto: "Novo disparo" }),
+          el("p", {
+            classe: "muted",
+            texto: "Disparo sai pelo número oficial da Meta. Conecte-o em Ajustes → WhatsApp da casa e volte aqui." + (erro ? ` (${erro})` : ""),
+          }),
+        ]);
+      }
+      const aprovados = modelos.filter((m) => m.suportado);
+
+      const nome = el("input", { placeholder: "Ex.: Quinta do chope — chamar os sumidos" });
+      const seletorModelo = seletorDeModelo(modelos, aprovados[0]?.name ?? "");
+      const areaLacunas = el("div", { classe: "pilha-fina" });
+      let lacunas = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletorModelo.value), []);
+      const balao = el("p", { classe: "previa-mensagem" });
+      const atualizarPrevia = () => {
+        const m = modeloEscolhido(modelos, seletorModelo.value);
+        balao.textContent = m ? renderizarPrevia(m.corpo, lacunas(), nomeAproximadoDaCasa(ctx.venue)) : "Escolha um modelo.";
+      };
+      seletorModelo.addEventListener("change", () => {
+        lacunas = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletorModelo.value), [], atualizarPrevia);
+        atualizarPrevia();
+      });
+      areaLacunas.addEventListener("input", atualizarPrevia);
+      atualizarPrevia();
+
+      const publico = el("select", { classe: "select" }, [
+        el("option", { value: "sumido", texto: "Sumidos — vinham e pararam de vir" }),
+        el("option", { value: "vip", texto: "VIPs — a mesa que sustenta a noite" }),
+        el("option", { value: "fiel", texto: "Fiéis — os de casa" }),
+        el("option", { value: "novo", texto: "Novos — vieram uma vez" }),
+        el("option", { value: "comum", texto: "Comuns — aparecem de vez em quando" }),
+        ...MESES.map((m, i) => el("option", { value: `mes:${i + 1}`, texto: `Aniversariantes de ${m}` })),
+        el("option", { value: "todos", texto: "A base inteira" }),
+      ]);
+      const previaDoPublico = el("small", { classe: "muted", texto: "Contando…" });
+      const contar = async () => {
+        try {
+          const r = await post(`/v1/venues/${ctx.venue}/disparos/previa`, { publico: publicoDoSeletor(publico.value) });
+          previaDoPublico.textContent = r.pessoas === 0
+            ? "Ninguém nesse grupo hoje."
+            : `${r.pessoas} pessoa(s)${r.amostra.length ? `: ${r.amostra.join(", ")}${r.pessoas > r.amostra.length ? "…" : ""}` : ""}`;
+        } catch (e) {
+          previaDoPublico.textContent = e.message;
+        }
+      };
+      publico.addEventListener("change", contar);
+      void contar();
+
+      const quando = el("input", { type: "datetime-local" });
+
+      const criar = async (agendarJa) => {
+        const m = modeloEscolhido(modelos, seletorModelo.value);
+        if (!m) return avisar("Escolha um modelo.", "erro");
+        try {
+          const d = await post(`/v1/venues/${ctx.venue}/disparos`, {
+            nome: nome.value.trim(),
+            modelo: m.name,
+            idioma: m.idioma,
+            corpo: m.corpo,
+            variaveis: lacunas(),
+            publico: publicoDoSeletor(publico.value),
+          });
+          if (agendarJa) {
+            await agendar(d.id, quando.value ? new Date(quando.value).toISOString() : null);
+          } else {
+            avisar("Rascunho salvo.", "ok");
+            abaDisparos();
+          }
+        } catch (e) {
+          avisar(e.message, "erro");
+        }
+      };
+
+      return el("section", { classe: "cartao pilha" }, [
+        el("h2", { texto: "Novo disparo" }),
+        el("p", {
+          classe: "muted",
+          texto: "Pelo número oficial, a Meta só aceita modelos que ela aprovou — o texto é escolhido, não escrito. Crie modelos em business.facebook.com → WhatsApp Manager → Modelos de mensagem; eles aparecem aqui quando aprovados.",
+        }),
+        aprovados.length === 0
+          ? el("p", { classe: "aviso aviso-alerta", texto: "Nenhum modelo aprovado ainda. Crie um no WhatsApp Manager (categoria Marketing, com {{1}} para o nome) e espere a aprovação — costuma levar minutos." })
+          : null,
+        el("div", { classe: "grade" }, [
+          campoDaTela("Nome do disparo (só para você)", nome),
+          campoDaTela("Modelo aprovado", seletorModelo),
+        ]),
+        areaLacunas,
+        el("div", { classe: "pilha-fina" }, [
+          el("small", { classe: "muted", texto: "Como uma pessoa vai ler:" }),
+          balao,
+        ]),
+        el("div", { classe: "grade" }, [
+          campoDaTela("Quem recebe", el("div", { classe: "pilha-fina" }, [publico, previaDoPublico])),
+          campoDaTela("Quando (em branco = agora)", quando),
+        ]),
+        el("div", { classe: "linha-campos" }, [
+          el("button", { classe: "btn", type: "button", texto: "Salvar rascunho", onclick: () => criar(false) }),
+          el("button", { classe: "btn btn-primario", type: "button", texto: "Agendar e enviar", disabled: aprovados.length === 0, onclick: () => criar(true) }),
+        ]),
+      ].filter(Boolean));
+    }
+  }
+
   /* ================= Ajustes do parabéns ================= */
 
   async function abaParabens() {
@@ -1206,6 +1492,11 @@ export async function clientesDaCasa(raiz, ctx) {
       corpo.append(vazio("Não deu para carregar", e.message));
       return;
     }
+    // Os modelos aprovados da conta oficial. Sem conexão oficial a lista
+    // simplesmente não vem, e o parabéns segue pelo conector.
+    const modelos = await get(`/v1/venues/${ctx.venue}/whatsapp-oficial/modelos`)
+      .then((lista) => (Array.isArray(lista) ? lista : null))
+      .catch(() => null);
 
     const campos = {
       ativo: el("input", { type: "checkbox", checked: config.aniversario_ativo }),
@@ -1266,6 +1557,15 @@ export async function clientesDaCasa(raiz, ctx) {
     campos.texto.addEventListener("input", atualizarPrevia);
     atualizarPrevia();
 
+    // Pelo número oficial, o parabéns só sai por modelo aprovado. O seletor
+    // e as lacunas dele moram aqui, ao lado do texto do conector.
+    const seletorModelo = seletorDeModelo(modelos, config.aniversario_modelo);
+    const areaLacunas = el("div", { classe: "pilha-fina" });
+    let lacunasDoParabens = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletorModelo.value), config.aniversario_modelo_variaveis ?? []);
+    seletorModelo.addEventListener("change", () => {
+      lacunasDoParabens = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletorModelo.value), []);
+    });
+
     limpar(corpo);
     corpo.append(
       el("section", { classe: "cartao pilha" }, [
@@ -1297,6 +1597,17 @@ export async function clientesDaCasa(raiz, ctx) {
           "Marcadores: {nome} vira o primeiro nome, {casa} o nome da casa, {data} a data do aniversário (\"25 de dezembro\"). Em branco, vale o texto padrão do sistema.",
         ),
         previa,
+        el("div", { classe: "pilha-fina", style: "margin-top:6px" }, [
+          el("h3", { texto: "Pelo número oficial (Meta)" }),
+          el("p", {
+            classe: "muted",
+            texto: modelos
+              ? "Pelo número oficial a Meta só aceita modelo aprovado — o texto acima vale para o conector. Escolha o modelo do parabéns e diga o que vai em cada lacuna."
+              : "Conecte o WhatsApp oficial em Ajustes → WhatsApp da casa para mandar o parabéns por ele. Enquanto isso, sai pelo conector com o texto acima.",
+          }),
+          modelos ? linha("Modelo aprovado", seletorModelo, null) : null,
+          modelos ? areaLacunas : null,
+        ].filter(Boolean)),
         el("div", { classe: "linha-campos" }, [
           el("button", {
             classe: "btn btn-primario",
@@ -1310,6 +1621,8 @@ export async function clientesDaCasa(raiz, ctx) {
                   aniversario_antecedencia: Number(campos.antecedencia.value),
                   aniversario_teto_por_dia: Number(campos.teto.value),
                   aniversario_texto: campos.texto.value,
+                  aniversario_modelo: modelos ? seletorModelo.value : undefined,
+                  aniversario_modelo_variaveis: modelos ? lacunasDoParabens() : undefined,
                 });
                 avisar("Salvo.", "ok");
               } catch (e) {
@@ -1321,4 +1634,111 @@ export async function clientesDaCasa(raiz, ctx) {
       ]),
     );
   }
+}
+
+/* ================= Disparos: o que é comum às abas ================= */
+
+const ROTULO_DO_DISPARO = {
+  rascunho: ["Rascunho", ""],
+  agendado: ["Agendado", "etiqueta-alerta"],
+  enviando: ["Enviando", "etiqueta-alerta"],
+  concluido: ["Concluído", "etiqueta-ok"],
+  cancelado: ["Cancelado", "etiqueta-perigo"],
+};
+
+const ROTULO_DO_ENVIO = {
+  pendente: ["na fila", ""],
+  enviado: ["enviado", ""],
+  entregue: ["entregue", "etiqueta-info"],
+  lido: ["leu", "etiqueta-info"],
+  respondeu: ["respondeu", "etiqueta-ok"],
+  falhou: ["falhou", "etiqueta-perigo"],
+};
+
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+const TIPOS_DE_LACUNA = [
+  ["primeiro_nome", "Primeiro nome do cliente"],
+  ["nome", "Nome completo do cliente"],
+  ["casa", "Nome da casa"],
+  ["fixo", "Um texto fixo…"],
+];
+
+function descreverPublico(p) {
+  if (p?.aniversario_mes) return `aniversariantes de ${MESES[p.aniversario_mes - 1]}`;
+  if (p?.selo) return `clientes ${SELO_POR_ID[p.selo]?.nome?.toLowerCase() ?? p.selo}${p.selo === "vip" ? "s" : "s"}`.replace("vips", "VIP");
+  if (p?.todos) return "a base inteira";
+  return "ninguém escolhido";
+}
+
+function publicoDoSeletor(valor) {
+  if (valor === "todos") return { todos: true };
+  if (valor.startsWith("mes:")) return { aniversario_mes: Number(valor.slice(4)) };
+  return { selo: valor };
+}
+
+function quandoLegivel(iso) {
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function campoDaTela(rotulo, controle) {
+  return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+}
+
+/** O seletor de modelos: os que dá para mandar daqui primeiro, o resto desabilitado com o motivo. */
+function seletorDeModelo(modelos, escolhido) {
+  return el("select", { classe: "select" }, [
+    el("option", { value: "", texto: "— Nenhum —" }),
+    ...(modelos ?? []).map((m) =>
+      el("option", {
+        value: m.name,
+        texto: m.suportado ? `${m.name} (${m.categoria.toLowerCase()})` : `${m.name} — ${m.motivo}`,
+        disabled: !m.suportado,
+        selected: m.name === escolhido,
+      }),
+    ),
+  ]);
+}
+
+function modeloEscolhido(modelos, name) {
+  return (modelos ?? []).find((m) => m.name === name) ?? null;
+}
+
+/**
+ * Um seletor por lacuna do modelo. Devolve a função que lê o que está
+ * escolhido, no formato que o servidor grava.
+ */
+function editorDeLacunas(area, modelo, valoresSalvos, aoMudar) {
+  limpar(area);
+  if (!modelo || modelo.lacunas === 0) {
+    if (modelo) area.append(el("small", { classe: "muted", texto: "Este modelo não tem lacunas." }));
+    return () => [];
+  }
+  const linhas = [];
+  for (let i = 0; i < modelo.lacunas; i += 1) {
+    const salvo = valoresSalvos[i] ?? { tipo: i === 0 ? "primeiro_nome" : "fixo", texto: "" };
+    const tipo = el("select", { classe: "select" }, TIPOS_DE_LACUNA.map(([id, rotulo]) => el("option", { value: id, texto: rotulo, selected: id === salvo.tipo })));
+    const texto = el("input", { placeholder: "O texto que vai nessa lacuna", value: salvo.texto ?? "", style: salvo.tipo === "fixo" ? "" : "display:none" });
+    tipo.addEventListener("change", () => {
+      texto.style.display = tipo.value === "fixo" ? "" : "none";
+      aoMudar?.();
+    });
+    linhas.push({ tipo, texto });
+    area.append(
+      el("div", { classe: "linha-campos" }, [
+        el("span", { classe: "muted", style: "min-width:64px", texto: `{{${i + 1}}} =` }),
+        tipo,
+        texto,
+      ]),
+    );
+  }
+  return () => linhas.map(({ tipo, texto }) => (tipo.value === "fixo" ? { tipo: "fixo", texto: texto.value } : { tipo: tipo.value }));
+}
+
+/** A prévia como uma pessoa leria — aproximada, com "Maria" e a casa de exemplo. */
+function renderizarPrevia(corpo, variaveis, casa = "sua casa") {
+  const valores = (variaveis ?? []).map((v) =>
+    v.tipo === "primeiro_nome" ? "Maria" : v.tipo === "nome" ? "Maria Souza" : v.tipo === "casa" ? casa : (v.texto || "…"),
+  );
+  return (corpo ?? "").replace(/\{\{\s*(\d+)\s*\}\}/g, (tudo, n) => valores[Number(n) - 1] ?? tudo);
 }
