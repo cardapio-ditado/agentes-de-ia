@@ -11,7 +11,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { resumoDaBase, retratoDe } from "../../src/crm.js";
-import { balanco } from "../../src/disparos.js";
+import { balanco, type Envio } from "../../src/disparos.js";
 import { resumirModelo } from "../../src/whatsappOficial.js";
 
 // Os modelos como a Meta devolve, passados pelo mesmo resumo do servidor.
@@ -42,7 +42,7 @@ const MODELOS = [
   }),
 ];
 
-const ENVIOS = [
+const ENVIOS: Envio[] = [
   { id: "e1", disparo_id: "d1", venue_id: "v", cliente_id: "c3", telefone: "5565988774455", nome: "Bruno Camargo", status: "respondeu", provider_id: "wamid.1", erro: null, enviado_em: "2026-09-24T21:00:00.000Z", entregue_em: "2026-09-24T21:00:05.000Z", lido_em: "2026-09-24T21:03:00.000Z", respondeu_em: "2026-09-24T21:04:00.000Z", resposta: "Quero!" },
   { id: "e2", disparo_id: "d1", venue_id: "v", cliente_id: "c10", telefone: "5565990098877", nome: "Hugo Barreto", status: "lido", provider_id: "wamid.2", erro: null, enviado_em: "2026-09-24T21:00:01.000Z", entregue_em: "2026-09-24T21:00:06.000Z", lido_em: "2026-09-24T22:10:00.000Z", respondeu_em: null, resposta: null },
   { id: "e3", disparo_id: "d1", venue_id: "v", cliente_id: null, telefone: "5565991110099", nome: null, status: "entregue", provider_id: "wamid.3", erro: null, enviado_em: "2026-09-24T21:00:02.000Z", entregue_em: "2026-09-24T21:00:07.000Z", lido_em: null, respondeu_em: null, resposta: null },
