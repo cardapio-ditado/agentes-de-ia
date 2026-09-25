@@ -1,4 +1,4 @@
-import { db, ehMigracaoPendente } from "./supabase.js";
+import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { reivindicar } from "./rotinas.js";
 import { hojeNaCasa } from "./fuso.js";
 import { conexaoDaCasa, prontaParaEnviar } from "./whatsappOficial.js";
@@ -178,11 +178,14 @@ export function selecionarPublico(pessoas: Cliente[]): Cliente[] {
 
 async function pessoasDoPublico(venue: { id: string; timezone: string }, publico: Publico): Promise<Cliente[]> {
   const hoje = hojeNaCasa(venue.timezone);
+  // A base inteira, quando é o caso: o público é o que o dono vê na prévia,
+  // e a prévia não pode dizer "2.000" numa casa com 46 mil pessoas.
+  const limite = 50_000;
   if (publico.aniversario_mes) {
-    return selecionarPublico(await listarClientes(venue.id, { mes: publico.aniversario_mes, comAniversario: true, limite: 2000, hoje }));
+    return selecionarPublico(await listarClientes(venue.id, { mes: publico.aniversario_mes, comAniversario: true, limite, hoje }));
   }
-  if (publico.selo) return selecionarPublico(await listarClientes(venue.id, { selo: publico.selo, limite: 2000, hoje }));
-  if (publico.todos) return selecionarPublico(await listarClientes(venue.id, { limite: 2000, hoje }));
+  if (publico.selo) return selecionarPublico(await listarClientes(venue.id, { selo: publico.selo, limite, hoje }));
+  if (publico.todos) return selecionarPublico(await listarClientes(venue.id, { limite, hoje }));
   return [];
 }
 
@@ -431,11 +434,13 @@ export async function listarDisparos(venueId: string): Promise<Array<Disparo & {
   const disparos = ((data ?? []) as Record<string, unknown>[]).map(disparoDaLinha);
   if (disparos.length === 0) return [];
 
-  const { data: envios } = await cliente()
-    .from("disparos_envios")
-    .select("disparo_id, status")
-    .in("disparo_id", disparos.map((d) => d.id))
-    .limit(20_000);
+  const { data: envios } = await todasAsLinhas<{ disparo_id: string; status: StatusDoEnvio }>(() =>
+    cliente()
+      .from("disparos_envios")
+      .select("disparo_id, status")
+      .in("disparo_id", disparos.map((d) => d.id))
+      .order("id"),
+  );
   const porDisparo = new Map<string, Array<{ status: StatusDoEnvio }>>();
   for (const e of (envios ?? []) as Array<{ disparo_id: string; status: StatusDoEnvio }>) {
     const lista = porDisparo.get(e.disparo_id) ?? [];
@@ -446,16 +451,18 @@ export async function listarDisparos(venueId: string): Promise<Array<Disparo & {
 }
 
 export async function enviosDoDisparo(venueId: string, id: string): Promise<Envio[]> {
-  const { data, error } = await cliente()
-    .from("disparos_envios")
-    .select("*")
-    .eq("disparo_id", id)
-    .eq("venue_id", venueId)
-    .order("enviado_em", { ascending: false, nullsFirst: false })
-    .order("nome", { ascending: true })
-    .limit(5000);
+  const { data, error } = await todasAsLinhas<Envio>(() =>
+    cliente()
+      .from("disparos_envios")
+      .select("*")
+      .eq("disparo_id", id)
+      .eq("venue_id", venueId)
+      .order("enviado_em", { ascending: false, nullsFirst: false })
+      .order("nome", { ascending: true })
+      .order("id"),
+  );
   if (error) erroDoBanco(error, "ler os envios");
-  return (data ?? []) as Envio[];
+  return data;
 }
 
 /** Quantos receberiam, e alguns nomes — a prévia antes de agendar. */

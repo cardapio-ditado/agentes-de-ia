@@ -78,3 +78,34 @@ export function ehMigracaoPendente(mensagem: string | null | undefined): boolean
     /could not find the .+ (column|table)/i.test(m)
   );
 }
+
+/**
+ * TODAS as linhas de uma consulta, em páginas.
+ *
+ * O PostgREST do Supabase entrega no máximo 1.000 linhas por resposta, e
+ * um `.limit(5000)` é obedecido em silêncio como 1.000 — sem erro, sem
+ * aviso. Foi assim que a agenda de aniversariantes ficou vazia com 2.414
+ * pessoas fazendo aniversário: as mil primeiras linhas da tabela, na ordem
+ * física, não tinham ninguém na janela.
+ *
+ * `monta` devolve a consulta NOVA a cada página (com filtros e ordem), e
+ * aqui só se acrescenta o `range`. A ordem precisa ser estável — inclua
+ * um desempate (o id) — senão as páginas se sobrepõem.
+ */
+export async function todasAsLinhas<T>(
+  monta: () => { range(de: number, ate: number): PromiseLike<{ data: T[] | null; error: { message: string } | null }> },
+  opcoes: { teto?: number; pagina?: number } = {},
+): Promise<{ data: T[]; error: { message: string } | null }> {
+  const pagina = Math.min(opcoes.pagina ?? 1000, 1000);
+  const teto = opcoes.teto ?? 50_000;
+  const linhas: T[] = [];
+  for (let de = 0; de < teto; de += pagina) {
+    const ate = Math.min(de + pagina, teto) - 1;
+    const { data, error } = await monta().range(de, ate);
+    if (error) return { data: linhas, error };
+    const lote = data ?? [];
+    linhas.push(...lote);
+    if (lote.length < ate - de + 1) break;
+  }
+  return { data: linhas, error: null };
+}

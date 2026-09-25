@@ -1,4 +1,4 @@
-import { db, ehMigracaoPendente } from "./supabase.js";
+import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import {
   DIAS_PARA_SUMIR,
   resumoDaBase,
@@ -377,11 +377,17 @@ export async function listarClientes(
   if (filtro.selo === "novo") busca = busca.lte("visitas", 1);
   if (filtro.selo === "vip" || filtro.selo === "fiel") busca = busca.gt("visitas", 1);
 
-  const teto = filtro.selo ? Math.max(filtro.limite ?? 200, 1000) : (filtro.limite ?? 200);
-  const { data, error } = await busca
-    .order("ultima_visita", { ascending: false, nullsFirst: false })
-    .order("criado_em", { ascending: false })
-    .limit(Math.min(teto, 2000));
+  // Com selo, o filtro fino é em memória (VIP e fiel dependem do ticket),
+  // então a fatia pedida ao banco é maior que a página devolvida.
+  const teto = filtro.selo ? Math.max(filtro.limite ?? 200, 2000) : (filtro.limite ?? 200);
+  const { data, error } = await todasAsLinhas<Cliente>(
+    () =>
+      busca
+        .order("ultima_visita", { ascending: false, nullsFirst: false })
+        .order("criado_em", { ascending: false })
+        .order("id"),
+    { teto: Math.min(teto, 50_000) },
+  );
   if (error) throw new ErroDeClientes(500, `Falha ao listar os clientes: ${error.message}`);
 
   const comRetrato = ((data ?? []) as Cliente[]).map((c) => ({ ...c, ...retratoDe(c, hoje) }));
@@ -404,11 +410,13 @@ function diasAtras(diaISO: string, dias: number): string {
  */
 export async function resumoDosClientes(venueId: string, hoje?: string): Promise<ResumoDaBase> {
   const dia = hoje ?? new Date().toISOString().slice(0, 10);
-  const { data, error } = await cliente()
-    .from("clientes")
-    .select("visitas, gasto_total_centavos, ultima_visita")
-    .eq("venue_id", venueId)
-    .limit(50_000);
+  const { data, error } = await todasAsLinhas<ClienteCru>(() =>
+    cliente()
+      .from("clientes")
+      .select("visitas, gasto_total_centavos, ultima_visita")
+      .eq("venue_id", venueId)
+      .order("id"),
+  );
   if (error) throw new ErroDeClientes(500, `Falha ao resumir a base: ${error.message}`);
   return resumoDaBase(((data ?? []) as ClienteCru[]).map((c) => retratoDe(c, dia)));
 }

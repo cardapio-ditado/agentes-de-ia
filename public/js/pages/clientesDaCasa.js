@@ -340,14 +340,33 @@ export async function clientesDaCasa(raiz, ctx) {
     // é o tipo de coisa que funciona no teste do dono e trava no cliente
     // grande. Espera a digitação parar antes de perguntar.
     let temporizador = null;
+    // A lista vem em páginas de 200; "Mostrar mais" pede a próxima. Numa
+    // base de 46 mil pessoas, a tira lá em cima diz quantas são — a lista
+    // é para achar alguém, não para ler inteira.
+    let limite = 200;
     const recarregar = async () => {
       const params = new URLSearchParams();
       if (busca.value.trim()) params.set("busca", busca.value.trim());
       if (filtroOrigem.value) params.set("origem", filtroOrigem.value);
       if (seloAtivo) params.set("selo", seloAtivo);
+      params.set("limite", String(limite));
       try {
         const achados = await get(`/v1/venues/${ctx.venue}/clientes?${params}`);
         desenharLinhas(achados);
+        if (achados.length >= limite) {
+          lista.append(
+            el("button", {
+              classe: "btn linha-tabela",
+              type: "button",
+              style: "justify-content:center",
+              texto: `Mostrando ${achados.length} — mostrar mais 200`,
+              onclick: () => {
+                limite += 200;
+                void recarregar();
+              },
+            }),
+          );
+        }
       } catch (e) {
         limpar(lista);
         lista.append(vazio("Não deu para carregar", e.message));

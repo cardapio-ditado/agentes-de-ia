@@ -1,4 +1,4 @@
-import { db, ehMigracaoPendente } from "./supabase.js";
+import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { inserirAvisos } from "./notifications.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { configDeClientes } from "./clientes.js";
@@ -241,6 +241,18 @@ export function diasAte(
   return { dias: 0, proximo: hojeISO };
 }
 
+/** Os meses (1–12) que uma janela de N dias a partir de hoje toca. */
+export function mesesDaJanela(hojeISO: string, dias: number): number[] {
+  const inicio = new Date(`${hojeISO}T12:00:00Z`);
+  const meses = new Set<number>();
+  for (let d = 0; d <= dias; d += 1) {
+    const dia = new Date(inicio.getTime() + d * 86_400_000);
+    meses.add(dia.getUTCMonth() + 1);
+    if (meses.size === 12) break;
+  }
+  return [...meses];
+}
+
 /**
  * O PANORAMA — por que a agenda está vazia.
  *
@@ -271,13 +283,15 @@ export async function panoramaDeAniversarios(
 
   const [{ count: naBase }, { data, error }] = await Promise.all([
     cliente().from("clientes").select("id", { count: "exact", head: true }).eq("venue_id", venue.id),
-    cliente()
-      .from("clientes")
-      .select("nome, nascimento_dia, nascimento_mes")
-      .eq("venue_id", venue.id)
-      .not("nascimento_dia", "is", null)
-      .not("nascimento_mes", "is", null)
-      .limit(20_000),
+    todasAsLinhas<{ nome: string | null; nascimento_dia: number; nascimento_mes: number }>(() =>
+      cliente()
+        .from("clientes")
+        .select("nome, nascimento_dia, nascimento_mes")
+        .eq("venue_id", venue.id)
+        .not("nascimento_dia", "is", null)
+        .not("nascimento_mes", "is", null)
+        .order("id"),
+    ),
   ]);
   if (error) throw new Error(`Falha ao ler o panorama de aniversários: ${error.message}`);
 
@@ -309,13 +323,17 @@ export async function proximosAniversariantes(
   const hojeISO = hojeNaCasa(venue.timezone, agora);
   const config = await configDeClientes(venue.id);
 
-  const { data, error } = await cliente()
-    .from("clientes")
-    .select("*")
-    .eq("venue_id", venue.id)
-    .not("nascimento_dia", "is", null)
-    .not("nascimento_mes", "is", null)
-    .limit(5000);
+  // Só os meses que a janela alcança: numa base de dezenas de milhares de
+  // datas, é a diferença entre cinco páginas e vinte.
+  const { data, error } = await todasAsLinhas<Cliente>(() =>
+    cliente()
+      .from("clientes")
+      .select("*")
+      .eq("venue_id", venue.id)
+      .not("nascimento_dia", "is", null)
+      .in("nascimento_mes", mesesDaJanela(hojeISO, dias))
+      .order("id"),
+  );
   if (error) throw new Error(`Falha ao listar os aniversariantes: ${error.message}`);
 
   const proximos = ((data ?? []) as Cliente[])

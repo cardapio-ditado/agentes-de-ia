@@ -1,4 +1,4 @@
-import { db, ehMigracaoPendente } from "./supabase.js";
+import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { ErroDePesquisa, enviarConvite, telefoneLimpo } from "./pesquisa.js";
 import { hojeNaCasa, horaNaCasa } from "./fuso.js";
 import { registrarClienteSeDer } from "./clientes.js";
@@ -454,12 +454,15 @@ export async function telefonesConvidadosRecentemente(
 ): Promise<Set<string>> {
   if (dias <= 0) return new Set();
   const corte = new Date(agora.getTime() - dias * 86_400_000).toISOString();
-  const { data, error } = await cliente()
-    .from("pesquisa_convites")
-    .select("telefone")
-    .eq("venue_id", venueId)
-    .gte("created_at", corte)
-    .limit(10_000);
+  const { data, error } = await todasAsLinhas<{ telefone: string }>(() =>
+    cliente()
+      .from("pesquisa_convites")
+      .select("telefone")
+      .eq("venue_id", venueId)
+      .gte("created_at", corte)
+      .order("created_at")
+      .order("id"),
+  );
   if (error) throw new ErroDePesquisa(500, `Falha ao conferir convites recentes: ${error.message}`);
 
   // Cada telefone entra com e sem o 55 na frente: o convite digitado no

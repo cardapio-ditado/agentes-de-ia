@@ -1,4 +1,4 @@
-import { db, ehMigracaoPendente } from "./supabase.js";
+import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { hojeNaCasa } from "./fuso.js";
 import { reivindicar } from "./rotinas.js";
 import { alimentarBasePelaZig, diaAnterior } from "./pesquisaZig.js";
@@ -80,9 +80,14 @@ export function buracos(janela: string[], jaTem: Set<string>): string[] {
  * um desperdício por outro.
  */
 async function diasJaBuscados(venueId: string, desde: string): Promise<Set<string>> {
+  // As visitas são uma linha por pessoa por dia — dezenas de milhares no
+  // ano. Sem paginar, o corte de mil linhas do PostgREST faria os dias
+  // além dele parecerem buracos, e a carga refaria o que já tem.
   const [marcados, comVisita] = await Promise.all([
-    cliente().from("clientes_dias_zig").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(50_000),
-    cliente().from("clientes_visitas").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(50_000),
+    cliente().from("clientes_dias_zig").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(1000),
+    todasAsLinhas<{ dia: string }>(() =>
+      cliente().from("clientes_visitas").select("dia").eq("venue_id", venueId).gte("dia", desde).order("dia").order("cliente_id"),
+    ),
   ]);
 
   // Banco sem a migração ainda: o marcador simplesmente não conta, e a
