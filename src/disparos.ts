@@ -3,7 +3,7 @@ import { reivindicar } from "./rotinas.js";
 import { hojeNaCasa } from "./fuso.js";
 import { conexaoDaCasa, prontaParaEnviar } from "./whatsappOficial.js";
 import { enviarModeloPelaCloudApi, normalizarTelefone } from "./notifications.js";
-import { listarClientes, type Cliente } from "./clientes.js";
+import { dddValido, listarClientes, type Cliente } from "./clientes.js";
 import { SELOS, faltaHaQuantoTempo, retratoDe, type Retrato, type Selo } from "./crm.js";
 
 /**
@@ -136,27 +136,45 @@ export interface Publico {
   aniversario_mes?: number;
   /** A base inteira. */
   todos?: boolean;
+  /** Só quem é deste DDD — a promoção de quinta não é para turista. */
+  ddd?: string;
+  /** Só quem NÃO é deste DDD — o pacote de temporada é. */
+  fora_do_ddd?: string;
 }
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 export function descreverPublico(p: Publico): string {
-  if (p.aniversario_mes) return `aniversariantes de ${MESES[p.aniversario_mes - 1] ?? p.aniversario_mes}`;
-  if (p.selo) {
+  let quem: string;
+  if (p.aniversario_mes) quem = `aniversariantes de ${MESES[p.aniversario_mes - 1] ?? p.aniversario_mes}`;
+  else if (p.selo) {
     const selo = SELOS.find((s) => s.id === p.selo);
-    return selo ? `clientes ${selo.nome.toLowerCase()}${p.selo === "vip" ? "" : "s"}`.replace("comuns", "comuns") : p.selo;
-  }
-  if (p.todos) return "a base inteira";
-  return "ninguém escolhido";
+    quem = selo ? `clientes ${selo.nome.toLowerCase()}${p.selo === "vip" ? "" : "s"}` : p.selo;
+  } else if (p.todos) quem = "a base inteira";
+  else return "ninguém escolhido";
+
+  if (p.ddd) return `${quem} do DDD ${p.ddd}`;
+  if (p.fora_do_ddd) return `${quem} de fora do DDD ${p.fora_do_ddd}`;
+  return quem;
 }
 
 export function publicoValido(bruto: unknown): Publico {
   const b = (bruto ?? {}) as Record<string, unknown>;
   const mes = Number(b.aniversario_mes);
-  if (mes >= 1 && mes <= 12) return { aniversario_mes: mes };
-  if (typeof b.selo === "string" && SELOS.some((s) => s.id === b.selo)) return { selo: b.selo as Selo };
-  if (b.todos === true) return { todos: true };
-  return {};
+  const base: Publico =
+    mes >= 1 && mes <= 12
+      ? { aniversario_mes: mes }
+      : typeof b.selo === "string" && SELOS.some((s) => s.id === b.selo)
+        ? { selo: b.selo as Selo }
+        : b.todos === true
+          ? { todos: true }
+          : {};
+  if (Object.keys(base).length === 0) return base;
+  const ddd = dddValido(b.ddd);
+  const fora = dddValido(b.fora_do_ddd);
+  if (ddd) base.ddd = ddd;
+  else if (fora) base.fora_do_ddd = fora;
+  return base;
 }
 
 /**
@@ -180,12 +198,12 @@ async function pessoasDoPublico(venue: { id: string; timezone: string }, publico
   const hoje = hojeNaCasa(venue.timezone);
   // A base inteira, quando é o caso: o público é o que o dono vê na prévia,
   // e a prévia não pode dizer "2.000" numa casa com 46 mil pessoas.
-  const limite = 50_000;
+  const comum = { limite: 50_000, hoje, ddd: publico.ddd, fora_do_ddd: publico.fora_do_ddd };
   if (publico.aniversario_mes) {
-    return selecionarPublico(await listarClientes(venue.id, { mes: publico.aniversario_mes, comAniversario: true, limite, hoje }));
+    return selecionarPublico(await listarClientes(venue.id, { ...comum, mes: publico.aniversario_mes, comAniversario: true }));
   }
-  if (publico.selo) return selecionarPublico(await listarClientes(venue.id, { selo: publico.selo, limite, hoje }));
-  if (publico.todos) return selecionarPublico(await listarClientes(venue.id, { limite, hoje }));
+  if (publico.selo) return selecionarPublico(await listarClientes(venue.id, { ...comum, selo: publico.selo }));
+  if (publico.todos) return selecionarPublico(await listarClientes(venue.id, comum));
   return [];
 }
 

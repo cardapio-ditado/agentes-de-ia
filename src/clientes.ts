@@ -334,6 +334,33 @@ export interface FiltroDeClientes {
   selo?: Selo;
   /** O dia de hoje no calendário da casa, para contar "sumido há quanto". */
   hoje?: string;
+  /** Só quem é deste DDD ("65") — ou, com `fora_do_ddd`, só quem NÃO é. */
+  ddd?: string;
+  fora_do_ddd?: string;
+}
+
+/** Dois dígitos, ou nada. "65", " 65 ", "(65)" viram "65"; "abc" vira undefined. */
+export function dddValido(bruto: unknown): string | undefined {
+  const digitos = String(bruto ?? "").replace(/\D/g, "");
+  return digitos.length === 2 ? digitos : undefined;
+}
+
+/** O pedaço do filtro que o DDD acrescenta — a base guarda "55DDD…". */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function comDdd(busca: any, filtro: { ddd?: string; fora_do_ddd?: string }): any {
+  if (filtro.ddd) return busca.like("telefone", `55${filtro.ddd}%`);
+  if (filtro.fora_do_ddd) return busca.not("telefone", "like", `55${filtro.fora_do_ddd}%`);
+  return busca;
+}
+
+/** Quantas pessoas em cada DDD, do maior para o menor. */
+export async function dddsDaBase(venueId: string): Promise<Array<{ ddd: string; pessoas: number }>> {
+  const { data, error } = await cliente().rpc("clientes_por_ddd", { casa: venueId });
+  if (error) {
+    if (ehMigracaoPendente(error.message)) return [];
+    throw new ErroDeClientes(500, `Falha ao contar os DDDs: ${error.message}`);
+  }
+  return ((data ?? []) as Array<{ ddd: string; pessoas: number | string }>).map((l) => ({ ddd: l.ddd, pessoas: Number(l.pessoas) }));
 }
 
 /** O cliente com o retrato calculado — o que a lista desenha. */
@@ -366,6 +393,7 @@ export async function listarClientes(
       : busca.ilike("nome", `%${t}%`);
   }
   if (filtro.origem) busca = busca.contains("origens", [filtro.origem]);
+  busca = comDdd(busca, filtro);
   if (filtro.comAniversario) busca = busca.not("nascimento_dia", "is", null);
   if (filtro.mes) busca = busca.eq("nascimento_mes", filtro.mes);
 
@@ -408,14 +436,20 @@ function diasAtras(diaISO: string, dias: number): string {
  * Lê só as três colunas da conta — não o cadastro inteiro — porque isto
  * atravessa a base toda, e não a página que está na tela.
  */
-export async function resumoDosClientes(venueId: string, hoje?: string): Promise<ResumoDaBase> {
+export async function resumoDosClientes(
+  venueId: string,
+  hoje?: string,
+  filtro: { ddd?: string; fora_do_ddd?: string } = {},
+): Promise<ResumoDaBase> {
   const dia = hoje ?? new Date().toISOString().slice(0, 10);
   const { data, error } = await todasAsLinhas<ClienteCru>(() =>
-    cliente()
-      .from("clientes")
-      .select("visitas, gasto_total_centavos, ultima_visita")
-      .eq("venue_id", venueId)
-      .order("id"),
+    comDdd(
+      cliente()
+        .from("clientes")
+        .select("visitas, gasto_total_centavos, ultima_visita")
+        .eq("venue_id", venueId),
+      filtro,
+    ).order("id"),
   );
   if (error) throw new ErroDeClientes(500, `Falha ao resumir a base: ${error.message}`);
   return resumoDaBase(((data ?? []) as ClienteCru[]).map((c) => retratoDe(c, dia)));

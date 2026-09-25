@@ -415,6 +415,8 @@ import {
   // (tenants). Aqui são os clientes DA casa — gente que bebe no bar.
   listarClientes as listarClientesDaCasa,
   resumoDosClientes,
+  dddValido,
+  dddsDaBase,
   registrarCliente,
   salvarConfigDeClientes,
   visitasDoCliente,
@@ -3475,7 +3477,22 @@ async function roteasApi(
     if (metodo === "GET" && recurso === "clientes" && p[3] === "resumo" && p.length === 4) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      return ok(res, await comErroDeClientes(() => resumoDosClientes(venue.id, hojeNaCasa(venue.timezone))));
+      return ok(
+        res,
+        await comErroDeClientes(() =>
+          resumoDosClientes(venue.id, hojeNaCasa(venue.timezone), {
+            ddd: dddValido(url.searchParams.get("ddd")),
+            fora_do_ddd: dddValido(url.searchParams.get("fora_do_ddd")),
+          }),
+        ),
+      );
+    }
+
+    // GET /v1/venues/:slug/clientes/ddds — quantas pessoas em cada DDD.
+    if (metodo === "GET" && recurso === "clientes" && p[3] === "ddds" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(res, await comErroDeClientes(() => dddsDaBase(venue.id)));
     }
 
     // GET | POST /v1/venues/:slug/clientes
@@ -3492,6 +3509,8 @@ async function roteasApi(
             mes: Number(url.searchParams.get("mes")) || undefined,
             limite: Number(url.searchParams.get("limite")) || undefined,
             selo: (url.searchParams.get("selo") as Selo | null) ?? undefined,
+            ddd: dddValido(url.searchParams.get("ddd")),
+            fora_do_ddd: dddValido(url.searchParams.get("fora_do_ddd")),
             hoje: hojeNaCasa(venue.timezone),
           }),
         );

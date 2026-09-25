@@ -212,6 +212,27 @@ export async function clientesDaCasa(raiz, ctx) {
     // Qual selo está filtrando agora. `null` = a base inteira.
     let seloAtivo = null;
 
+    // O DDD: "só quem é daqui" é o filtro que o dono mais usa, e as tiras
+    // seguem junto — "quantos sumidos de Cuiabá?" é uma pergunta só.
+    const filtroDdd = el("select", { classe: "select", style: "flex:1" }, [
+      el("option", { value: "", texto: "Qualquer DDD" }),
+    ]);
+    get(`/v1/venues/${ctx.venue}/clientes/ddds`)
+      .then((ddds) => {
+        if (!Array.isArray(ddds) || ddds.length === 0) return;
+        for (const d of ddds.slice(0, 30)) {
+          filtroDdd.append(el("option", { value: d.ddd, texto: `DDD ${d.ddd} — ${d.pessoas.toLocaleString("pt-BR")}` }));
+        }
+        filtroDdd.append(el("option", { value: `!${ddds[0].ddd}`, texto: `Fora do DDD ${ddds[0].ddd}` }));
+      })
+      .catch(() => undefined);
+    const paramsDeDdd = (params) => {
+      const v = filtroDdd.value;
+      if (v.startsWith("!")) params.set("fora_do_ddd", v.slice(1));
+      else if (v) params.set("ddd", v);
+      return params;
+    };
+
     /* ---- Importar planilha ----
      *
      * O seletor de arquivo fica escondido e um botão comum o aciona: um
@@ -349,6 +370,7 @@ export async function clientesDaCasa(raiz, ctx) {
       if (busca.value.trim()) params.set("busca", busca.value.trim());
       if (filtroOrigem.value) params.set("origem", filtroOrigem.value);
       if (seloAtivo) params.set("selo", seloAtivo);
+      paramsDeDdd(params);
       params.set("limite", String(limite));
       try {
         const achados = await get(`/v1/venues/${ctx.venue}/clientes?${params}`);
@@ -377,6 +399,10 @@ export async function clientesDaCasa(raiz, ctx) {
       temporizador = setTimeout(recarregar, 300);
     });
     filtroOrigem.addEventListener("change", recarregar);
+    filtroDdd.addEventListener("change", () => {
+      limite = 200;
+      void Promise.all([recarregar(), desenharTiras()]);
+    });
 
     /**
      * O retrato da base, em tiras que também são o filtro.
@@ -392,7 +418,7 @@ export async function clientesDaCasa(raiz, ctx) {
     async function desenharTiras() {
       let resumo;
       try {
-        resumo = await get(`/v1/venues/${ctx.venue}/clientes/resumo`);
+        resumo = await get(`/v1/venues/${ctx.venue}/clientes/resumo?${paramsDeDdd(new URLSearchParams())}`);
       } catch {
         // Sem resumo a lista continua de pé: é enfeite útil, não alicerce.
         limpar(tiras);
@@ -524,7 +550,7 @@ export async function clientesDaCasa(raiz, ctx) {
         ]),
         painelDaPlanilha,
         tiras,
-        el("div", { classe: "linha-campos" }, [busca, filtroOrigem]),
+        el("div", { classe: "linha-campos" }, [busca, filtroOrigem, filtroDdd]),
         lista,
       ]),
     );
@@ -1428,10 +1454,30 @@ export async function clientesDaCasa(raiz, ctx) {
         ...MESES.map((m, i) => el("option", { value: `mes:${i + 1}`, texto: `Aniversariantes de ${m}` })),
         el("option", { value: "todos", texto: "A base inteira" }),
       ]);
+      // O DDD do disparo: a promoção de quinta não é para turista, e o
+      // pacote de temporada não é para quem mora aqui.
+      const dddDoDisparo = el("select", { classe: "select" }, [el("option", { value: "", texto: "Qualquer DDD" })]);
+      get(`/v1/venues/${ctx.venue}/clientes/ddds`)
+        .then((ddds) => {
+          if (!Array.isArray(ddds) || ddds.length === 0) return;
+          for (const d of ddds.slice(0, 30)) {
+            dddDoDisparo.append(el("option", { value: d.ddd, texto: `Só o DDD ${d.ddd} — ${d.pessoas.toLocaleString("pt-BR")}` }));
+          }
+          dddDoDisparo.append(el("option", { value: `!${ddds[0].ddd}`, texto: `Só quem é de fora do DDD ${ddds[0].ddd}` }));
+        })
+        .catch(() => undefined);
+      const publicoEscolhido = () => {
+        const p = publicoDoSeletor(publico.value);
+        const v = dddDoDisparo.value;
+        if (v.startsWith("!")) p.fora_do_ddd = v.slice(1);
+        else if (v) p.ddd = v;
+        return p;
+      };
+
       const previaDoPublico = el("small", { classe: "muted", texto: "Contando…" });
       const contar = async () => {
         try {
-          const r = await post(`/v1/venues/${ctx.venue}/disparos/previa`, { publico: publicoDoSeletor(publico.value) });
+          const r = await post(`/v1/venues/${ctx.venue}/disparos/previa`, { publico: publicoEscolhido() });
           previaDoPublico.textContent = r.pessoas === 0
             ? "Ninguém nesse grupo hoje."
             : `${r.pessoas} pessoa(s)${r.amostra.length ? `: ${r.amostra.join(", ")}${r.pessoas > r.amostra.length ? "…" : ""}` : ""}`;
@@ -1440,6 +1486,7 @@ export async function clientesDaCasa(raiz, ctx) {
         }
       };
       publico.addEventListener("change", contar);
+      dddDoDisparo.addEventListener("change", contar);
       void contar();
 
       const quando = el("input", { type: "datetime-local" });
@@ -1454,7 +1501,7 @@ export async function clientesDaCasa(raiz, ctx) {
             idioma: m.idioma,
             corpo: m.corpo,
             variaveis: lacunas(),
-            publico: publicoDoSeletor(publico.value),
+            publico: publicoEscolhido(),
           });
           if (agendarJa) {
             await agendar(d.id, quando.value ? new Date(quando.value).toISOString() : null);
@@ -1486,7 +1533,7 @@ export async function clientesDaCasa(raiz, ctx) {
           balao,
         ]),
         el("div", { classe: "grade" }, [
-          campoDaTela("Quem recebe", el("div", { classe: "pilha-fina" }, [publico, previaDoPublico])),
+          campoDaTela("Quem recebe", el("div", { classe: "pilha-fina" }, [publico, dddDoDisparo, previaDoPublico])),
           campoDaTela("Quando (em branco = agora)", quando),
         ]),
         el("div", { classe: "linha-campos" }, [
@@ -1684,10 +1731,14 @@ const TIPOS_DE_LACUNA = [
 ];
 
 function descreverPublico(p) {
-  if (p?.aniversario_mes) return `aniversariantes de ${MESES[p.aniversario_mes - 1]}`;
-  if (p?.selo) return `clientes ${SELO_POR_ID[p.selo]?.nome?.toLowerCase() ?? p.selo}${p.selo === "vip" ? "s" : "s"}`.replace("vips", "VIP");
-  if (p?.todos) return "a base inteira";
-  return "ninguém escolhido";
+  let quem;
+  if (p?.aniversario_mes) quem = `aniversariantes de ${MESES[p.aniversario_mes - 1]}`;
+  else if (p?.selo) quem = p.selo === "vip" ? "clientes VIP" : `clientes ${SELO_POR_ID[p.selo]?.nome?.toLowerCase() ?? p.selo}s`;
+  else if (p?.todos) quem = "a base inteira";
+  else return "ninguém escolhido";
+  if (p.ddd) return `${quem} do DDD ${p.ddd}`;
+  if (p.fora_do_ddd) return `${quem} de fora do DDD ${p.fora_do_ddd}`;
+  return quem;
 }
 
 function publicoDoSeletor(valor) {

@@ -221,6 +221,24 @@
       "gasto_total_centavos": 1225300,
       "ticket_medio_centavos": 13465
     },
+    "GET /clientes/ddds": [
+      {
+        "ddd": "65",
+        "pessoas": 25364
+      },
+      {
+        "ddd": "66",
+        "pessoas": 5225
+      },
+      {
+        "ddd": "11",
+        "pessoas": 1784
+      },
+      {
+        "ddd": "69",
+        "pessoas": 1221
+      }
+    ],
     "GET /clientes/config": {
       "parabens_ativo": true,
       "parabens_hora": "10:00",

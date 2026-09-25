@@ -152,6 +152,12 @@ const ficha = {
   rotas: {
     "GET /clientes": TODOS,
     "GET /clientes/resumo": RESUMO,
+    "GET /clientes/ddds": [
+      { ddd: "65", pessoas: 25364 },
+      { ddd: "66", pessoas: 5225 },
+      { ddd: "11", pessoas: 1784 },
+      { ddd: "69", pessoas: 1221 },
+    ],
     "GET /clientes/config": CONFIG,
     "GET /aniversariantes": [],
   },

@@ -50,6 +50,14 @@ test("as variáveis e o público não confiam no que vem da tela", () => {
   assert.equal(descreverPublico({ aniversario_mes: 10 }), "aniversariantes de outubro");
   assert.equal(descreverPublico({ selo: "sumido" }), "clientes sumidos");
   assert.equal(descreverPublico({}), "ninguém escolhido");
+
+  // O DDD anda junto do público, nunca sozinho: "só o 65" de ninguém é ninguém.
+  assert.deepEqual(publicoValido({ selo: "sumido", ddd: "(65)" }), { selo: "sumido", ddd: "65" });
+  assert.deepEqual(publicoValido({ todos: true, fora_do_ddd: "65" }), { todos: true, fora_do_ddd: "65" });
+  assert.deepEqual(publicoValido({ ddd: "65" }), {});
+  assert.deepEqual(publicoValido({ selo: "vip", ddd: "abc" }), { selo: "vip" });
+  assert.equal(descreverPublico({ selo: "sumido", ddd: "65" }), "clientes sumidos do DDD 65");
+  assert.equal(descreverPublico({ todos: true, fora_do_ddd: "65" }), "a base inteira de fora do DDD 65");
 });
 
 test("o público sai sem repetir telefone, sem quem pediu para sair e sem quem não tem telefone", () => {
