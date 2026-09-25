@@ -72,7 +72,7 @@ const PAGINAS = [
   { id: "a-casa", modulo: "ajustes", rotulo: "A casa agora", icone: ICONES.painel, render: aCasa, subtitulo: "A planta do bar com o que está acontecendo em cada setor" },
   { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Nome, contato e o fuso horário que todos os módulos usam" },
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
-  { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número que envia checklist, avisos e confirmações" },
+  { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número oficial da Meta e o do conector, que envia checklist, avisos e confirmações" },
   { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
 
   // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link

@@ -1,0 +1,115 @@
+{
+  "rotulo": "WhatsApp da casa — o oficial da Meta e o do conector",
+  "modulo": "/js/pages/canaisDaCasa.js",
+  "funcao": "canaisDaCasa",
+  "venue": "casa-de-teste",
+  "rotas": {
+    "GET /whatsapp-oficial": {
+      "phone_number_id": "1370957436093649",
+      "waba_id": "1582085583665675",
+      "agent_slug": "lucas-promocoes",
+      "telefone": "+55 65 9985-5207",
+      "nome_verificado": "Ditado Popular",
+      "inscrita_em": "2026-09-25T17:40:00.000Z",
+      "testada_em": "2026-09-25T17:40:00.000Z",
+      "tem_token": true,
+      "token_final": "…k3Qa",
+      "situacao": "ativa",
+      "falta": []
+    },
+    "GET /v1/agents": [
+      {
+        "slug": "fernanda",
+        "name": "Fernanda",
+        "description": null,
+        "model": "claude-opus-5",
+        "effort": "high",
+        "enabled": true
+      },
+      {
+        "slug": "lucas-promocoes",
+        "name": "Lucas (promoções)",
+        "description": null,
+        "model": "claude-opus-5",
+        "effort": "high",
+        "enabled": true
+      }
+    ],
+    "GET /v1/whatsapp/status": {
+      "status": "conectado",
+      "telefone": "5565999990000",
+      "versao": "2026.09.25",
+      "fonte": "ponte"
+    }
+  },
+  "variacoes": {
+    "nao-configurada": {
+      "rotulo": "casa que ainda não conectou o número oficial",
+      "rotas": {
+        "GET /whatsapp-oficial": {
+          "phone_number_id": null,
+          "waba_id": null,
+          "agent_slug": null,
+          "telefone": null,
+          "nome_verificado": null,
+          "inscrita_em": null,
+          "testada_em": null,
+          "tem_token": false,
+          "token_final": null,
+          "situacao": "nao_configurada",
+          "falta": [
+            "o token de acesso",
+            "o ID do telefone",
+            "o ID da conta"
+          ]
+        }
+      }
+    },
+    "falta-testar": {
+      "rotulo": "dados colados, teste por fazer — o estado que enganou a primeira casa",
+      "rotas": {
+        "GET /whatsapp-oficial": {
+          "phone_number_id": "1370957436093649",
+          "waba_id": "1582085583665675",
+          "agent_slug": "lucas-promocoes",
+          "telefone": null,
+          "nome_verificado": null,
+          "inscrita_em": null,
+          "testada_em": null,
+          "tem_token": true,
+          "token_final": "…k3Qa",
+          "situacao": "falta_testar",
+          "falta": []
+        }
+      }
+    },
+    "so-envia": {
+      "rotulo": "ativa sem agente: o número só dispara, ninguém responde",
+      "rotas": {
+        "GET /whatsapp-oficial": {
+          "phone_number_id": "1370957436093649",
+          "waba_id": "1582085583665675",
+          "agent_slug": null,
+          "telefone": "+55 65 9985-5207",
+          "nome_verificado": "Ditado Popular",
+          "inscrita_em": "2026-09-25T17:40:00.000Z",
+          "testada_em": "2026-09-25T17:40:00.000Z",
+          "tem_token": true,
+          "token_final": "…k3Qa",
+          "situacao": "ativa",
+          "falta": []
+        }
+      }
+    },
+    "sem-conector": {
+      "rotulo": "o oficial ativo e o conector fora do ar",
+      "rotas": {
+        "GET /v1/whatsapp/status": {
+          "status": "sem_conector",
+          "telefone": null,
+          "versao": null
+        }
+      }
+    }
+  }
+}

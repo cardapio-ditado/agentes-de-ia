@@ -53,13 +53,19 @@ export async function canais(raiz, ctx) {
   void desenharInstagram();
   void desenharCloud();
 
+  // O oficial mora em Ajustes → WhatsApp da casa (é da casa, não do módulo).
+  // Aqui só o retrato: quem atende por ele, e o atalho para lá.
   async function desenharCloud() {
     let estado;
     try {
-      estado = await get("/v1/whatsapp/cloud/status");
+      estado = await get(`/v1/whatsapp/cloud/status?venue=${encodeURIComponent(ctx.venue)}`);
     } catch {
       return; // API antiga sem a rota: o cartão simplesmente não aparece.
     }
+
+    const casa = estado.casa;
+    const ativa = casa?.situacao === "ativa";
+    const agente = ativa ? agentes.find((a) => a.slug === casa.agent_slug) : null;
 
     limpar(areaCloud).append(
       el("section", { classe: "cartao" }, [
@@ -68,25 +74,23 @@ export async function canais(raiz, ctx) {
             el("h2", { texto: "WhatsApp oficial (Meta)" }),
             el("p", {
               classe: "muted",
-              texto: estado.configurado
-                ? `Número oficial atendido por "${estado.agente}" · sem QR, sem computador ligado e sem risco de banimento.`
+              texto: ativa
+                ? `${casa.telefone}${agente ? ` · atendido por ${agente.name}` : " · só envia — nenhum agente escolhido"} · sem QR, sem computador ligado e sem risco de banimento.`
                 : "Canal oficial da Meta (Cloud API): o cliente escreve para o número da casa e o agente responde direto na nuvem.",
             }),
           ]),
-          etiqueta(estado.configurado ? "Ativo" : "Não configurado", estado.configurado ? "etiqueta-ok" : ""),
+          etiqueta(ativa ? "Ativo" : "Não configurado", ativa ? "etiqueta-ok" : ""),
         ]),
-        el("p", { classe: "muted", texto: `Endereço do webhook para colar no painel da Meta: ${location.origin}/v1/whatsapp/webhook` }),
-        estado.configurado
+        el("p", {
+          classe: "muted",
+          texto: "Conecte e escolha o agente em Ajustes → WhatsApp da casa.",
+        }),
+        estado.webhook_pronto
           ? null
-          : el("div", {}, [
-              el("p", { classe: "muted", texto: "Para ativar, falta configurar na Vercel:" }),
-              el("ul", { classe: "muted", style: "padding-left:18px;line-height:1.8" }, estado.faltando.map((v) => el("li", { texto: v }))),
-              el("p", {
-                classe: "muted",
-                texto:
-                  "Token e ID do número vêm do app em developers.facebook.com (WhatsApp > Configuração da API); o verify token você inventa e cola nos dois lugares; o App Secret é o mesmo do Instagram.",
-              }),
-            ]),
+          : el("p", {
+              classe: "aviso aviso-alerta",
+              texto: `O webhook do app ainda não está pronto na Vercel (falta ${estado.faltando.join(", ")}). Isso é da equipe Brasa Food, uma vez só.`,
+            }),
       ]),
     );
   }

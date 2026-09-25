@@ -2,6 +2,7 @@ import { db, ehMigracaoPendente } from "./supabase.js";
 import type { Tables } from "./database.types.js";
 import type { Reservation, Venue } from "./venues.js";
 import type { PapelWhatsapp } from "./ponteWhatsapp.js";
+import { conexaoDaCasa, prontaParaEnviar, type ConexaoOficial } from "./whatsappOficial.js";
 
 export type Notification = Tables<"notifications">;
 
@@ -124,18 +125,34 @@ export function registrarProvedorWhatsapp(
   provedores[papel] = envio;
 }
 
-function temCloudApi(): boolean {
-  return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+/**
+ * A conexão oficial da casa, pronta para enviar — ou null.
+ *
+ * Nunca estoura: um banco que falha ao ler a conexão não pode derrubar a
+ * notificação inteira; ela cai no caminho de "sem provedor" e fica na fila.
+ */
+async function cloudApiDaCasa(
+  venueId: string | null | undefined,
+): Promise<(ConexaoOficial & { token: string; phone_number_id: string }) | null> {
+  if (!venueId) return null;
+  try {
+    const c = await conexaoDaCasa({ id: venueId });
+    return prontaParaEnviar(c) ? c : null;
+  } catch (e) {
+    console.error(`[notifications] não li a conexão oficial da casa ${venueId}: ${(e as Error).message}`);
+    return null;
+  }
 }
 
 /**
- * Provedor ativo, na ordem: Baileys conectado, depois Cloud API da Meta.
+ * Provedor ativo, na ordem: Baileys conectado, depois a Cloud API da casa.
  *
  * Sem nenhum dos dois, cai no `console`: a mensagem é registrada no banco e
  * impressa no log em vez de sumir silenciosamente.
  */
-export function canalAtivo(): "whatsapp" | "console" {
-  return provedorWhatsappAtivo() || temCloudApi() ? "whatsapp" : "console";
+export async function canalAtivo(venueId?: string | null): Promise<"whatsapp" | "console"> {
+  if (provedorWhatsappAtivo()) return "whatsapp";
+  return (await cloudApiDaCasa(venueId)) ? "whatsapp" : "console";
 }
 
 async function enviarPorConsole(destino: string, corpo: string): Promise<ResultadoEnvio> {
@@ -143,8 +160,8 @@ async function enviarPorConsole(destino: string, corpo: string): Promise<Resulta
   return { enviado: true, providerId: "console" };
 }
 
-/** Baileys quando conectado; senão, Cloud API da Meta. */
-async function enviarPorWhatsapp(destino: string, corpo: string): Promise<ResultadoEnvio> {
+/** Baileys quando conectado; senão, a Cloud API da casa. */
+async function enviarPorWhatsapp(destino: string, corpo: string, venueId?: string | null): Promise<ResultadoEnvio> {
   const provedor = provedorWhatsappAtivo();
   if (provedor) return await provedor(destino, corpo);
   if (soOConectorEntrega(destino)) {
@@ -154,22 +171,27 @@ async function enviarPorWhatsapp(destino: string, corpo: string): Promise<Result
       erro: "Esperando o conector do WhatsApp: este contato só é alcançável por ele.",
     };
   }
-  if (!temCloudApi()) {
-    return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado." };
+  const conexao = await cloudApiDaCasa(venueId);
+  if (!conexao) {
+    return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado para esta casa." };
   }
-  return await enviarPelaCloudApi(destino, corpo);
+  return await enviarPelaCloudApi(destino, corpo, conexao);
 }
 
 /**
- * WhatsApp Cloud API (Meta).
+ * WhatsApp Cloud API (Meta), pela conexão da casa.
  *
  * Mensagem livre só é aceita dentro da janela de 24h desde a última mensagem
  * do cliente. Fora dela a Meta exige template aprovado — o envio falha e a
  * notificação fica registrada como `failed` para reenvio ou contato manual.
  */
-export async function enviarPelaCloudApi(destino: string, corpo: string): Promise<ResultadoEnvio> {
-  const token = process.env.WHATSAPP_TOKEN!;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+export async function enviarPelaCloudApi(
+  destino: string,
+  corpo: string,
+  conexao: { token: string; phone_number_id: string },
+): Promise<ResultadoEnvio> {
+  const token = conexao.token;
+  const phoneNumberId = conexao.phone_number_id;
   const versao = process.env.WHATSAPP_API_VERSION ?? "v21.0";
 
   const telefone = normalizarTelefone(destino);
@@ -514,7 +536,7 @@ export async function notificarCliente(params: {
     return null;
   }
 
-  if (entrega.canal === "whatsapp" && canalAtivo() === "console") {
+  if (entrega.canal === "whatsapp" && (await canalAtivo(venue.id)) === "console") {
     console.log(
       `[notifications] sem provedor de WhatsApp neste processo — ` +
         `notificação ${notificacao.id} aguardando o conector na fila.`,
@@ -529,7 +551,7 @@ export async function notificarCliente(params: {
 export async function tentarEnviar(notificacao: Notification): Promise<Notification> {
   const resultado =
     notificacao.channel === "whatsapp"
-      ? await enviarPorWhatsapp(notificacao.destination, notificacao.body)
+      ? await enviarPorWhatsapp(notificacao.destination, notificacao.body, notificacao.venue_id)
       : notificacao.channel === "instagram"
         ? await enviarPorInstagram(notificacao.destination, notificacao.body)
         : await enviarPorConsole(notificacao.destination, notificacao.body);

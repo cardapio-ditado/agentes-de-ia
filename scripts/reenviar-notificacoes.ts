@@ -17,7 +17,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`${pendentes.length} pendente(s). Canal ativo: ${canalAtivo()}.\n`);
+  console.log(`${pendentes.length} pendente(s). Canal ativo: ${await canalAtivo(pendentes[0]?.venue_id)}.\n`);
   let enviadas = 0;
 
   for (const notificacao of pendentes) {

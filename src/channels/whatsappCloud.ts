@@ -3,23 +3,28 @@ import { runAgent } from "../agent.js";
 import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
 import { enviarPelaCloudApi } from "../notifications.js";
 import { PlanoBloqueadoError } from "../pontos.js";
+import { conexaoPeloNumero, type ConexaoOficial } from "../whatsappOficial.js";
 
 /**
  * Canal WhatsApp oficial — Cloud API da Meta.
  *
  * O Baileys (canal não oficial) precisa de um processo vivo com a sessão do
  * número; aqui não: a Meta entrega cada mensagem por webhook (HTTPS puro,
- * roda na Vercel) e a resposta sai pela Graph API com o token permanente.
+ * roda na Vercel) e a resposta sai pela Graph API com o token da casa.
  * Sem QR, sem computador ligado, sem risco de banimento.
  *
- * Configuração (variáveis na Vercel):
- *   WHATSAPP_TOKEN            — token permanente do usuário do sistema
- *   WHATSAPP_PHONE_NUMBER_ID  — o "ID do número de telefone" do painel da Meta
- *   WHATSAPP_VERIFY_TOKEN     — string que você inventa e cola no painel da Meta
- *   WHATSAPP_APP_SECRET       — App Secret do app (o mesmo do Instagram, é um
- *                               app só; cai em INSTAGRAM_APP_SECRET se vazio)
- *   WHATSAPP_CLOUD_AGENT      — slug do agente que atende (cai em INSTAGRAM_AGENT)
- *   WHATSAPP_CLOUD_VENUE      — slug da casa (cai em INSTAGRAM_VENUE, depois WHATSAPP_VENUE)
+ * O QUE É DO APP e o que é DA CASA:
+ *
+ *   do app (variáveis na Vercel, um app da Meta para o sistema inteiro):
+ *     WHATSAPP_VERIFY_TOKEN  — string que você inventa e cola no painel da Meta
+ *     WHATSAPP_APP_SECRET    — App Secret do app (cai em INSTAGRAM_APP_SECRET)
+ *
+ *   da casa (tabela whatsapp_oficial, preenchida em Ajustes > WhatsApp da
+ *   casa): token, ID do telefone, ID da conta e o agente que responde.
+ *   O webhook é um só; ele descobre a casa pelo phone_number_id de cada
+ *   mensagem. Ver src/whatsappOficial.ts — inclusive para as variáveis
+ *   antigas (WHATSAPP_TOKEN etc.), que seguem valendo como conexão da casa
+ *   que WHATSAPP_CLOUD_VENUE nomeia.
  *
  * A janela de 24h da Meta: mensagem livre só é aceita para quem escreveu nas
  * últimas 24 horas. Atendimento é exatamente isso.
@@ -70,44 +75,26 @@ interface CorpoWebhook {
 
 function config() {
   return {
-    token: process.env.WHATSAPP_TOKEN,
-    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
     appSecret: process.env.WHATSAPP_APP_SECRET || process.env.INSTAGRAM_APP_SECRET,
-    agent: process.env.WHATSAPP_CLOUD_AGENT || process.env.INSTAGRAM_AGENT,
-    venue: process.env.WHATSAPP_CLOUD_VENUE || process.env.INSTAGRAM_VENUE || process.env.WHATSAPP_VENUE,
   };
 }
 
-/** Para a aba Canais: o que está (ou não) configurado, sem expor segredos. */
-export function estadoWhatsappCloud(): {
-  configurado: boolean;
-  faltando: string[];
-  agente: string | null;
-  venue: string | null;
-  phone_number_id: string | null;
-} {
+/**
+ * O webhook do app está pronto para receber a Meta? É o que a equipe Brasa
+ * Food configura uma vez; o resto é de cada casa.
+ */
+export function estadoWhatsappCloud(): { webhook_pronto: boolean; faltando: string[] } {
   const cfg = config();
   const faltando = (
     [
-      ["WHATSAPP_TOKEN", cfg.token],
-      ["WHATSAPP_PHONE_NUMBER_ID", cfg.phoneNumberId],
       ["WHATSAPP_VERIFY_TOKEN", cfg.verifyToken],
       ["WHATSAPP_APP_SECRET", cfg.appSecret],
-      ["WHATSAPP_CLOUD_AGENT", cfg.agent],
-      ["WHATSAPP_CLOUD_VENUE", cfg.venue],
     ] as const
   )
     .filter(([, valor]) => !valor)
     .map(([nome]) => nome);
-
-  return {
-    configurado: faltando.length === 0,
-    faltando,
-    agente: cfg.agent ?? null,
-    venue: cfg.venue ?? null,
-    phone_number_id: cfg.phoneNumberId ?? null,
-  };
+  return { webhook_pronto: faltando.length === 0, faltando };
 }
 
 /**
@@ -185,11 +172,6 @@ function jaVista(id: string | undefined): boolean {
  */
 export async function processarWebhookWhatsapp(corpo: CorpoWebhook): Promise<{ mensagens: number }> {
   if (corpo.object !== "whatsapp_business_account") return { mensagens: 0 };
-  const cfg = config();
-  if (!cfg.agent || !cfg.venue || !cfg.token || !cfg.phoneNumberId) {
-    console.error("[whatsapp-cloud] webhook recebido, mas o canal não está totalmente configurado.");
-    return { mensagens: 0 };
-  }
 
   let mensagens = 0;
   for (const entry of corpo.entry ?? []) {
@@ -197,15 +179,25 @@ export async function processarWebhookWhatsapp(corpo: CorpoWebhook): Promise<{ m
       if (mudanca.field !== "messages") continue;
       const valor = mudanca.value;
       if (!valor?.messages?.length) continue;
-      // Só o número desta casa: um app da Meta pode ter vários números, e o
+
+      // De que casa é este número? Um app da Meta tem vários números, e o
       // webhook é um só para todos eles.
-      if (valor.metadata?.phone_number_id && valor.metadata.phone_number_id !== cfg.phoneNumberId) continue;
+      const numero = valor.metadata?.phone_number_id;
+      const conexao = await conexaoPeloNumero(numero);
+      if (!conexao) {
+        console.error(`[whatsapp-cloud] mensagem para o telefone ${numero ?? "?"}, que não é de nenhuma casa.`);
+        continue;
+      }
+      if (!conexao.agent_slug) {
+        console.log(`[whatsapp-cloud] ${conexao.venue_slug}: o número oficial só envia — ninguém responde.`);
+        continue;
+      }
 
       const nomes = new Map((valor.contacts ?? []).map((c) => [c.wa_id, c.profile?.name?.trim() || null]));
       for (const m of valor.messages) {
         mensagens += 1;
         try {
-          await processarMensagem(m, nomes.get(m.from) ?? null, cfg.agent, cfg.venue);
+          await processarMensagem(m, nomes.get(m.from) ?? null, conexao as ConexaoAtendida);
         } catch (e) {
           console.error("[whatsapp-cloud] falha ao processar mensagem:", e);
         }
@@ -215,12 +207,11 @@ export async function processarWebhookWhatsapp(corpo: CorpoWebhook): Promise<{ m
   return { mensagens };
 }
 
-async function processarMensagem(
-  m: MensagemRecebida,
-  nome: string | null,
-  agentSlug: string,
-  venueSlug: string,
-): Promise<void> {
+type ConexaoAtendida = ConexaoOficial & { venue_slug: string; agent_slug: string; token: string; phone_number_id: string };
+
+async function processarMensagem(m: MensagemRecebida, nome: string | null, conexao: ConexaoAtendida): Promise<void> {
+  const agentSlug = conexao.agent_slug;
+  const venueSlug = conexao.venue_slug;
   const telefone = m.from?.replace(/\D/g, "");
   if (!telefone || jaVista(m.id)) return;
 
@@ -235,7 +226,7 @@ async function processarMensagem(
       console.log(`[whatsapp-cloud] ${telefone}: mídia numa conversa com pessoa — não respondi.`);
       return;
     }
-    await enviarPelaCloudApi(telefone, midia.acolhida);
+    await enviarPelaCloudApi(telefone, midia.acolhida, conexao);
     return;
   }
 
@@ -255,7 +246,7 @@ async function processarMensagem(
     // Plano travado não é falha técnica: o cliente do bar não pode ficar sem
     // resposta nenhuma, e a conversa já foi passada para atendimento humano.
     if (e instanceof PlanoBloqueadoError) {
-      await enviarPelaCloudApi(telefone, "Recebi sua mensagem! Alguém da equipe vai te responder em instantes.");
+      await enviarPelaCloudApi(telefone, "Recebi sua mensagem! Alguém da equipe vai te responder em instantes.", conexao);
       return;
     }
     throw e;
@@ -266,7 +257,7 @@ async function processarMensagem(
     return;
   }
 
-  const envio = await enviarPelaCloudApi(telefone, resultado.text || "Desculpe, não consegui responder agora. Pode tentar de novo?");
+  const envio = await enviarPelaCloudApi(telefone, resultado.text || "Desculpe, não consegui responder agora. Pode tentar de novo?", conexao);
   if (!envio.enviado) {
     console.error(`[whatsapp-cloud] falha ao responder ${telefone}: ${envio.erro}`);
   }

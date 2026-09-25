@@ -381,6 +381,14 @@ import {
   alimentarBasePelaZig,
 } from "./pesquisaZig.js";
 import {
+  ErroDaConexao,
+  apagarConexao,
+  conexaoDaCasa,
+  paraOPainel as conexaoParaOPainel,
+  salvarConexao,
+  testarESalvar,
+} from "./whatsappOficial.js";
+import {
   ErroDeClientes,
   apagarCliente,
   configDeClientes,
@@ -808,6 +816,20 @@ async function comErroDePesquisa<T>(acao: () => Promise<T>): Promise<T> {
     if (e instanceof ErroDePesquisa) {
       const codigo =
         e.status === 404 ? "not_found" : e.status === 409 ? "conflito" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
+/** O mesmo tratamento para os erros da conexão oficial do WhatsApp. */
+async function comErroDaConexao<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDaConexao) {
+      const codigo =
+        e.status === 404 ? "not_found" : e.status === 409 ? "conflito" : e.status >= 500 ? "internal" : "invalid_request";
       throw erro(e.status, codigo, e.message);
     }
     throw e;
@@ -3681,6 +3703,57 @@ async function roteasApi(
       );
     }
 
+    // ---- WhatsApp oficial (Cloud API da Meta), por casa ----
+    //
+    // GET | PUT | DELETE /v1/venues/:slug/whatsapp-oficial — a conexão da
+    // casa: token, ID do telefone, ID da conta e o agente que responde.
+    // O token nunca volta na resposta; só o rabo dele, para reconhecer.
+    if (recurso === "whatsapp-oficial" && p.length === 3) {
+      const chave = await exigirChave(req, metodo === "GET" ? "reservations:read" : "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      if (metodo === "GET") {
+        return ok(res, conexaoParaOPainel(await comErroDaConexao(() => conexaoDaCasa(venue))));
+      }
+      if (metodo === "PUT") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        const texto = (v: unknown) => (typeof v === "string" ? v : undefined);
+        // O agente tem de ser desta organização — senão qualquer slug
+        // colaria um agente alheio no número da casa.
+        const agentSlug = texto(corpo.agent_slug);
+        if (agentSlug && !(await getAgentInOrg(chave.org_id, agentSlug))) {
+          throw erro(400, "invalid_request", `Não achei o agente "${agentSlug}".`);
+        }
+        const salvo = await comErroDaConexao(() =>
+          salvarConexao(venue, {
+            token: texto(corpo.token),
+            phone_number_id: texto(corpo.phone_number_id),
+            waba_id: texto(corpo.waba_id),
+            agent_slug: agentSlug,
+          }),
+        );
+        return ok(res, conexaoParaOPainel(salvo));
+      }
+      if (metodo === "DELETE") {
+        await comErroDaConexao(() => apagarConexao(venue.id));
+        return ok(res, { removida: true });
+      }
+    }
+
+    // POST /v1/venues/:slug/whatsapp-oficial/testar — pergunta à Meta quem é
+    // o telefone e inscreve a conta no app. É o que liga a conexão de fato.
+    if (metodo === "POST" && recurso === "whatsapp-oficial" && p[3] === "testar" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const r = await comErroDaConexao(() => testarESalvar(venue));
+      return ok(res, {
+        telefone: r.telefone,
+        nome_verificado: r.nome_verificado,
+        qualidade: r.qualidade,
+        inscrita: r.inscrita,
+        conexao: conexaoParaOPainel(r.conexao),
+      });
+    }
+
     // GET /v1/venues/:slug/pesquisa/zig/visitantes?dia=AAAA-MM-DD
     //
     // A lista de quem esteve na casa no dia, com o gasto de cada um — SEM
@@ -5269,10 +5342,16 @@ async function roteasApi(
     }
   }
 
-  // GET /v1/whatsapp/cloud/status — configuração do canal oficial, para a aba Canais
+  // GET /v1/whatsapp/cloud/status?venue=slug — o webhook do app está pronto,
+  // e a conexão desta casa (sem o token), para a aba Canais.
   if (metodo === "GET" && p[0] === "whatsapp" && p[1] === "cloud" && p[2] === "status" && p.length === 3) {
-    await exigirChave(req, "reservations:write");
-    return ok(res, estadoWhatsappCloud());
+    const chave = await exigirChave(req, "reservations:write");
+    const slugDaCasa = url.searchParams.get("venue");
+    const casa = slugDaCasa ? await findVenueBySlugInOrg(chave.org_id, slugDaCasa) : null;
+    return ok(res, {
+      ...estadoWhatsappCloud(),
+      casa: casa ? conexaoParaOPainel(await comErroDaConexao(() => conexaoDaCasa(casa))) : null,
+    });
   }
 
   // ---- WhatsApp (Baileys) ----

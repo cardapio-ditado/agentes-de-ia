@@ -66,27 +66,19 @@ test("o texto sai de mensagem de texto, botão ou lista; mídia vira null com ac
   assert.match(descreverMidia({ type: "unknown" }).acolhida, /texto/);
 });
 
-test("o estado lista o que falta, sem expor os segredos", () => {
+test("o estado do webhook lista só o que é do app, sem expor os segredos", () => {
+  // Token, telefone e agente são da CASA agora (whatsapp_oficial); aqui só
+  // entra o que a Meta precisa para falar com o app.
   comAmbiente(
-    {
-      WHATSAPP_TOKEN: "t",
-      WHATSAPP_PHONE_NUMBER_ID: "123",
-      WHATSAPP_VERIFY_TOKEN: undefined,
-      WHATSAPP_APP_SECRET: undefined,
-      INSTAGRAM_APP_SECRET: "s",
-      WHATSAPP_CLOUD_AGENT: undefined,
-      INSTAGRAM_AGENT: "fernanda",
-      WHATSAPP_CLOUD_VENUE: undefined,
-      INSTAGRAM_VENUE: undefined,
-      WHATSAPP_VENUE: "ditado-popular",
-    },
+    { WHATSAPP_VERIFY_TOKEN: undefined, WHATSAPP_APP_SECRET: undefined, INSTAGRAM_APP_SECRET: "segredo-s" },
     () => {
       const estado = estadoWhatsappCloud();
-      assert.equal(estado.configurado, false);
+      assert.equal(estado.webhook_pronto, false);
       assert.deepEqual(estado.faltando, ["WHATSAPP_VERIFY_TOKEN"]);
-      assert.equal(estado.agente, "fernanda");
-      assert.equal(estado.venue, "ditado-popular");
-      assert.equal(JSON.stringify(estado).includes('"t"'), false);
+      assert.equal(JSON.stringify(estado).includes("segredo-s"), false);
     },
   );
+  comAmbiente({ WHATSAPP_VERIFY_TOKEN: "v", WHATSAPP_APP_SECRET: "s" }, () => {
+    assert.equal(estadoWhatsappCloud().webhook_pronto, true);
+  });
 });
