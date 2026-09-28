@@ -26,6 +26,8 @@ import {
 } from "../notifications.js";
 import { interpretarComando, responderComandoDeReserva } from "../comandosDeReserva.js";
 import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
+import { descadastrarPorTelefone, despedidaDoDescadastro, pediuParaSair } from "../clientes.js";
+import { findVenueBySlug } from "../venues.js";
 
 /**
  * Conector WhatsApp via Baileys (protocolo do WhatsApp Web).
@@ -455,6 +457,20 @@ async function aoReceberMensagem(
   const telefoneReal = extrairTelefone(jid, mensagem.key.remoteJidAlt);
   const telefoneExibicao = telefoneReal ?? jid.split("@")[0] ?? jid;
   console.log(`[whatsapp] ${nomePerfil ?? "?"} (${telefoneExibicao}): ${texto.slice(0, 80)}`);
+
+  // "SAIR" é sagrado, neste número também: quem respondeu ao parabéns pedindo
+  // para sair, sai da base na hora — e o agente não tenta convencer.
+  if (pediuParaSair(texto) && telefoneReal) {
+    try {
+      const venue = await findVenueBySlug(opcoes.venueSlug);
+      await descadastrarPorTelefone(venue.id, telefoneReal, nomePerfil);
+    } catch (e) {
+      console.error(`[whatsapp] não descadastrei ${telefoneExibicao}: ${(e as Error).message}`);
+    }
+    await responder(jid, despedidaDoDescadastro(nomePerfil));
+    console.log(`[whatsapp] ${telefoneExibicao}: pediu para sair — descadastrado.`);
+    return;
+  }
 
   try {
     await socket?.sendPresenceUpdate("composing", jid);

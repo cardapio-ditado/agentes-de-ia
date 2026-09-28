@@ -5,7 +5,7 @@ import { enviarPelaCloudApi } from "../notifications.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { conexaoPeloNumero, type ConexaoOficial } from "../whatsappOficial.js";
 import { contextoDoDisparo, registrarResposta, registrarStatusDaMeta, retratoParaOAgente } from "../disparos.js";
-import { obterClientePorTelefone } from "../clientes.js";
+import { descadastrarPorTelefone, despedidaDoDescadastro, obterClientePorTelefone, pediuParaSair } from "../clientes.js";
 import { retratoDe } from "../crm.js";
 import { findVenueBySlug } from "../venues.js";
 import { hojeNaCasa } from "../fuso.js";
@@ -251,6 +251,18 @@ async function processarMensagem(m: MensagemRecebida, nome: string | null, conex
   }
 
   console.log(`[whatsapp-cloud] ${nome ?? "?"} (${telefone}): ${texto.slice(0, 80)}`);
+
+  // "SAIR" é sagrado: sai da base na hora, recebe a confirmação, e o agente
+  // não tenta convencer. É o rodapé de todo modelo — e é o que a Meta olha
+  // quando decide se um número é spam.
+  if (pediuParaSair(texto)) {
+    const venue = await findVenueBySlug(conexao.venue_slug);
+    await descadastrarPorTelefone(venue.id, telefone, nome);
+    await registrarResposta(venue.id, telefone, { contextoId: m.context?.id ?? null, texto }).catch(() => null);
+    await enviarPelaCloudApi(telefone, despedidaDoDescadastro(nome), conexao);
+    console.log(`[whatsapp-cloud] ${telefone}: pediu para sair — descadastrado.`);
+    return;
+  }
 
   const contextoExtra = await oQueOSistemaSabe(conexao, telefone, m, texto).catch((e) => {
     console.error("[whatsapp-cloud] contexto:", e);

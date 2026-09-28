@@ -546,6 +546,58 @@ const CONFIG_PADRAO: ConfigDeClientes = {
   aniversario_modelo_variaveis: [],
 };
 
+/**
+ * A pessoa pediu para sair?
+ *
+ * "SAIR" é o que o rodapé dos modelos ensina; o resto é como gente escreve
+ * de verdade. Só no COMEÇO da mensagem, de propósito: "quero sair cedo
+ * hoje, tem mesa?" é reserva, não descadastro.
+ */
+export function pediuParaSair(texto: string | null | undefined): boolean {
+  const t = (texto ?? "").trim().toLowerCase().replace(/[.!\s]+$/g, "");
+  if (!t) return false;
+  // A palavra sozinha, ou a frase inteira: "cancelar minha reserva" é
+  // pedido de reserva, e o agente sabe tratar.
+  return /^(sair|parar|pare|stop|cancelar|descadastrar|remover)$/.test(t) || /^(n[aã]o|nao) quero (mais )?(receber|mensage)/.test(t);
+}
+
+/**
+ * Tira a pessoa de TODOS os envios da casa, agora.
+ *
+ * Quem não está na base entra já descadastrado: senão a Zig cadastra a
+ * pessoa amanhã, limpa, e o pedido de hoje se perde. Nunca estoura — o
+ * pedido de sair tem de ser atendido mesmo com o banco de mau humor, e o
+ * chamador confirma à pessoa de qualquer jeito.
+ */
+export async function descadastrarPorTelefone(venueId: string, telefone: string, nome?: string | null): Promise<boolean> {
+  const limpo = telefoneDaBase(telefone);
+  if (!limpo) return false;
+  try {
+    const agora = new Date().toISOString();
+    const { data } = await cliente()
+      .from("clientes")
+      .update({ descadastrado_em: agora, atualizado_em: agora })
+      .eq("venue_id", venueId)
+      .eq("telefone", limpo)
+      .select("id");
+    if ((data ?? []).length > 0) return true;
+    const { error } = await cliente()
+      .from("clientes")
+      .insert({ venue_id: venueId, telefone: limpo, nome: nome?.trim() || null, origens: ["agente"], descadastrado_em: agora });
+    if (error && !ehMigracaoPendente(error.message)) console.error(`[clientes] não descadastrei ${limpo}: ${error.message}`);
+    return !error;
+  } catch (e) {
+    console.error(`[clientes] não descadastrei ${limpo}: ${(e as Error).message}`);
+    return false;
+  }
+}
+
+/** A resposta a quem pediu para sair: curta, sem tentar segurar. */
+export function despedidaDoDescadastro(nome?: string | null): string {
+  const primeiro = (nome ?? "").trim().split(/\s+/)[0];
+  return `${primeiro ? `Pronto, ${primeiro}. ` : "Pronto. "}Você não vai mais receber mensagens da casa por aqui. Se mudar de ideia, é só escrever.`;
+}
+
 /** A pessoa por telefone — para o agente saber com quem fala. */
 export async function obterClientePorTelefone(venueId: string, telefone: string): Promise<Cliente | null> {
   const limpo = telefoneDaBase(telefone);
