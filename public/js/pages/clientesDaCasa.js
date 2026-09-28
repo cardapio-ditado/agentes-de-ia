@@ -1552,7 +1552,71 @@ export async function clientesDaCasa(raiz, ctx) {
           el("button", { classe: "btn", type: "button", texto: "Salvar rascunho", onclick: () => criar(false) }),
           el("button", { classe: "btn btn-primario", type: "button", texto: "Agendar e enviar", disabled: aprovados.length === 0, onclick: () => criar(true) }),
         ]),
+        criadorDeModeloLivre(),
       ].filter(Boolean));
+    }
+
+    /**
+     * Criar um modelo novo na Meta, daqui — para campanhas.
+     *
+     * O texto é livre; o que a tela faz é lembrar as regras que a Meta usa
+     * para rejeitar (é o que já rejeitou uma vez) e mandar no formato certo,
+     * com exemplos das lacunas, botões e o rodapé de saída.
+     */
+    function criadorDeModeloLivre() {
+      const area = el("details", { classe: "detalhes-tecnicos" }, [
+        el("summary", { texto: "Criar um modelo novo na Meta" }),
+      ]);
+      let montado = false;
+      area.addEventListener("toggle", () => {
+        if (!area.open || montado) return;
+        montado = true;
+        const nome = el("input", { placeholder: "ex.: chefe_do_role (minúsculas, números e _)" });
+        const texto = el("textarea", {
+          classe: "campo",
+          rows: 10,
+          placeholder: "Oi, {{1}}! … (a lacuna sempre no meio da frase; {{1}}, {{2}} em ordem)",
+        });
+        const exemplos = el("input", { placeholder: "Um exemplo por lacuna, na ordem — separe com | (ex.: Bruno | Ditado Popular)" });
+        const botoes = el("input", { value: "Quero reservar | Não, obrigado", placeholder: "Separe com | (até 25 letras cada)" });
+        const rodape = el("input", { value: "Responda SAIR para não receber mais mensagens." });
+        const enviar = el("button", {
+          classe: "btn btn-primario",
+          type: "button",
+          texto: "Mandar para a Meta aprovar",
+          onclick: async () => {
+            enviar.disabled = true;
+            try {
+              const r = await post(`/v1/venues/${ctx.venue}/whatsapp-oficial/modelos`, {
+                name: nome.value.trim(),
+                categoria: "MARKETING",
+                corpo: texto.value,
+                exemplos: exemplos.value.split("|").map((s) => s.trim()).filter(Boolean),
+                botoes: botoes.value.split("|").map((s) => s.trim()).filter(Boolean),
+                rodape: rodape.value.trim() || null,
+              });
+              avisar(`Modelo enviado — ${r.status === "APPROVED" ? "já aprovado" : "em análise pela Meta (minutos, às vezes horas)"}. Quando aprovar, ele aparece no seletor.`, "ok");
+              abaDisparos();
+            } catch (e) {
+              avisar(e.message, "erro");
+              enviar.disabled = false;
+            }
+          },
+        });
+        area.append(
+          el("div", { classe: "pilha-fina", style: "margin-top:8px" }, [
+            el("p", {
+              classe: "muted",
+              texto: "O que a Meta rejeita: CAIXA ALTA, várias exclamações, lacuna no começo ou no fim, oferta sem condição escrita (dia, mínimo, o que está incluso), menção a bebida alcoólica, e modelo de promoção marcado como utilidade. Categoria aqui é sempre Marketing.",
+            }),
+            el("div", { classe: "grade" }, [campoDaTela("Nome do modelo", nome), campoDaTela("Botões (separe com |)", botoes)]),
+            campoDaTela("Texto", texto),
+            el("div", { classe: "grade" }, [campoDaTela("Exemplos das lacunas (separe com |)", exemplos), campoDaTela("Rodapé", rodape)]),
+            el("div", { classe: "linha-campos" }, [enviar]),
+          ]),
+        );
+      });
+      return area;
     }
   }
 
