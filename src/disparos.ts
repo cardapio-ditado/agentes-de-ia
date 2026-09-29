@@ -62,6 +62,7 @@ export type Variavel =
   | { tipo: "nome" }
   | { tipo: "casa" }
   | { tipo: "data_aniversario" }
+  | { tipo: "link" }
   | { tipo: "fixo"; texto: string };
 
 export const TIPOS_DE_VARIAVEL: Array<{ id: Variavel["tipo"]; nome: string }> = [
@@ -69,6 +70,7 @@ export const TIPOS_DE_VARIAVEL: Array<{ id: Variavel["tipo"]; nome: string }> = 
   { id: "nome", nome: "Nome completo do cliente" },
   { id: "casa", nome: "Nome da casa" },
   { id: "data_aniversario", nome: "Data do aniversário (\"25 de dezembro\")" },
+  { id: "link", nome: "O link (da pesquisa, do cardápio…)" },
   { id: "fixo", nome: "Um texto fixo" },
 ];
 
@@ -83,6 +85,8 @@ export interface PessoaDaLacuna {
   nome: string | null;
   nascimento_dia?: number | null;
   nascimento_mes?: number | null;
+  /** O link desta pessoa — o da pesquisa dela, por exemplo. */
+  link?: string | null;
 }
 
 /**
@@ -105,6 +109,8 @@ export function preencherVariaveis(variaveis: Variavel[], pessoa: PessoaDaLacuna
         return pessoa.nascimento_dia && pessoa.nascimento_mes
           ? `${pessoa.nascimento_dia} de ${MESES_POR_EXTENSO[pessoa.nascimento_mes - 1] ?? "?"}`
           : "seu aniversário";
+      case "link":
+        return pessoa.link?.trim() || "-";
       case "fixo":
         return v.texto.trim() || "-";
     }
@@ -129,7 +135,7 @@ export function variaveisValidas(bruto: unknown): Variavel[] {
   const saida: Variavel[] = [];
   for (const v of bruto) {
     const tipo = (v as { tipo?: string })?.tipo;
-    if (tipo === "primeiro_nome" || tipo === "nome" || tipo === "casa" || tipo === "data_aniversario") saida.push({ tipo });
+    if (tipo === "primeiro_nome" || tipo === "nome" || tipo === "casa" || tipo === "data_aniversario" || tipo === "link") saida.push({ tipo });
     else if (tipo === "fixo") saida.push({ tipo, texto: String((v as { texto?: unknown }).texto ?? "") });
   }
   return saida;

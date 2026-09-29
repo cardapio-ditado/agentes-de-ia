@@ -2356,6 +2356,10 @@ async function roteasApi(
                   ? undefined
                   : String(corpo.detrator_avisar_whatsapp ?? "").trim() || null,
               detrator_nota_maxima: numeroOuNulo(corpo.detrator_nota_maxima) ?? undefined,
+              convite_modelo:
+                corpo.convite_modelo === undefined ? undefined : String(corpo.convite_modelo ?? "").trim() || null,
+              convite_modelo_variaveis:
+                corpo.convite_modelo_variaveis === undefined ? undefined : variaveisValidas(corpo.convite_modelo_variaveis),
             }),
           ),
         );

@@ -1,5 +1,6 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
 import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { editorDeLacunas, modeloEscolhido, nomeAproximadoDaCasa, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 
 /**
  * O que a casa configura na pesquisa, em quatro abas.
@@ -1349,23 +1350,102 @@ function cartaoCupons(premios) {
 /* ============ Convites ============ */
 
 async function telaConvites(ctx, recarregar) {
-  const [convites, config] = await Promise.all([
+  const [convites, config, modelos] = await Promise.all([
     get(`/v1/venues/${ctx.venue}/pesquisa/convites`),
     // O prêmio entra na mensagem por extenso; mostrar aqui o texto que VAI
     // sair evita a surpresa de descobrir o que foi prometido pelo print que
     // o cliente manda de volta.
     get(`/v1/venues/${ctx.venue}/pesquisa/config`).catch(() => null),
+    // Os modelos aprovados do número oficial. Sem conexão oficial não vem
+    // lista, e o convite segue pelo conector.
+    get(`/v1/venues/${ctx.venue}/whatsapp-oficial/modelos`)
+      .then((l) => (Array.isArray(l) ? l : null))
+      .catch(() => null),
   ]);
 
   const telefone = el("input", { type: "tel", placeholder: "(65) 99999-0000", required: true });
   const nome = el("input", { placeholder: "Nome do cliente (opcional)" });
   const mensagem = el("input", { placeholder: "Deixe vazio para usar o texto padrão" });
 
+  const peloOficial = Boolean(modelos && config?.convite_modelo);
   const premioNaMensagem =
     config?.premio_ativo && config.premio_titulo?.trim() ? config.premio_titulo.trim() : null;
-  const previaDaMensagem = premioNaMensagem
-    ? `Sai assim: “…São 30 segundos — e quem responde ganha ${premioNaMensagem.charAt(0).toLowerCase() + premioNaMensagem.slice(1)}.”`
-    : "O prêmio está desligado, então a mensagem não promete nada. Ligue em “O prêmio” para citá-lo aqui.";
+  const previaDaMensagem = peloOficial
+    ? `Sai pelo número oficial com o modelo “${config.convite_modelo}”. O campo "Mensagem" abaixo só vale para o conector.`
+    : premioNaMensagem
+      ? `Sai assim: “…São 30 segundos — e quem responde ganha ${premioNaMensagem.charAt(0).toLowerCase() + premioNaMensagem.slice(1)}.”`
+      : "O prêmio está desligado, então a mensagem não promete nada. Ligue em “O prêmio” para citá-lo aqui.";
+
+  /* ---- Pelo número oficial (Meta): o modelo do convite ---- */
+
+  const cartaoModelo = (() => {
+    if (!modelos) {
+      return el("section", { classe: "cartao" }, [
+        el("h3", { texto: "Pelo número oficial (Meta)" }),
+        el("p", {
+          classe: "muted",
+          texto: "Conecte o WhatsApp oficial em Ajustes → WhatsApp da casa para mandar o convite por ele. Enquanto isso, sai pelo conector com o texto padrão.",
+        }),
+      ]);
+    }
+    const seletor = seletorDeModelo(modelos, config?.convite_modelo ?? "");
+    const areaLacunas = el("div", { classe: "pilha-fina" });
+    const balao = el("p", { classe: "previa-mensagem" });
+    // A primeira lacuna do convite costuma ser o nome; a segunda, o link —
+    // a menos que o modelo tenha botão de link, e aí o link vai sozinho.
+    const sugestao = (m) => (m?.botao_url_dinamico ? ["primeiro_nome", "casa"] : ["primeiro_nome", "link"]);
+    let lacunas = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletor.value), config?.convite_modelo_variaveis ?? [], atualizarPrevia, sugestao(modeloEscolhido(modelos, seletor.value)));
+    function atualizarPrevia() {
+      const m = modeloEscolhido(modelos, seletor.value);
+      balao.textContent = m
+        ? renderizarPrevia(m.corpo, lacunas(), nomeAproximadoDaCasa(ctx.venue)) + (m.botao_url_dinamico ? `\n\n[botão: ${m.botoes[0] ?? "Responder"} → o link da pessoa]` : "")
+        : "Nenhum modelo: o convite sai pelo conector com o texto padrão.";
+    }
+    seletor.addEventListener("change", () => {
+      lacunas = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletor.value), [], atualizarPrevia, sugestao(modeloEscolhido(modelos, seletor.value)));
+      atualizarPrevia();
+    });
+    areaLacunas.addEventListener("input", atualizarPrevia);
+    atualizarPrevia();
+
+    const semLink = () => {
+      const m = modeloEscolhido(modelos, seletor.value);
+      return Boolean(m) && !m.botao_url_dinamico && !lacunas().some((v) => v.tipo === "link");
+    };
+
+    return el("section", { classe: "cartao pilha" }, [
+      el("h3", { texto: "Pelo número oficial (Meta)" }),
+      el("p", {
+        classe: "muted",
+        texto: "Pelo número oficial o convite sai por um modelo aprovado pela Meta. O link da pesquisa entra numa lacuna do texto, ou no botão de link do modelo. Sem modelo escolhido, sai pelo conector.",
+      }),
+      campo("Modelo aprovado", seletor),
+      areaLacunas,
+      el("div", { classe: "pilha-fina" }, [el("small", { classe: "muted", texto: "Como uma pessoa vai ler:" }), balao]),
+      el("div", { classe: "linha-campos" }, [
+        el("button", {
+          classe: "btn btn-primario",
+          type: "button",
+          texto: "Salvar",
+          onclick: async (e) => {
+            if (semLink() && !confirm("Este modelo não tem lacuna de link nem botão de link — a pessoa vai receber o convite sem o caminho para responder. Salvar mesmo assim?")) return;
+            e.target.disabled = true;
+            try {
+              await put(`/v1/venues/${ctx.venue}/pesquisa/config`, {
+                convite_modelo: seletor.value,
+                convite_modelo_variaveis: lacunas(),
+              });
+              avisar(seletor.value ? "Salvo: os convites saem pelo número oficial." : "Salvo: os convites voltam a sair pelo conector.", "ok");
+              await recarregar();
+            } catch (err) {
+              avisar(err.message, "erro");
+              e.target.disabled = false;
+            }
+          },
+        }),
+      ]),
+    ]);
+  })();
 
   const form = el("form", {
     classe: "cartao",
@@ -1811,7 +1891,7 @@ async function telaConvites(ctx, recarregar) {
         ]),
   ]);
 
-  return el("div", { classe: "pilha" }, [form, cartaoZig, cartaoPlanilha, lista]);
+  return el("div", { classe: "pilha" }, [cartaoModelo, form, cartaoZig, cartaoPlanilha, lista]);
 }
 
 /* ============ peças ============ */

@@ -432,6 +432,13 @@ export interface ModeloDaMeta {
   cabecalho: string | null;
   rodape: string | null;
   botoes: string[];
+  /**
+   * A URL do botão de link, como cadastrada na Meta — com {{1}} no fim
+   * quando o pedaço final varia por pessoa (é assim que o link da pesquisa
+   * vai: "https://brasafood.app/pesquisa?t={{1}}").
+   */
+  botao_url: string | null;
+  botao_url_dinamico: boolean;
   /** Quantas lacunas o corpo tem ({{1}}, {{2}}…). */
   lacunas: number;
   /**
@@ -446,7 +453,20 @@ interface ComponenteDaMeta {
   type?: string;
   format?: string;
   text?: string;
-  buttons?: Array<{ type?: string; text?: string }>;
+  buttons?: Array<{ type?: string; text?: string; url?: string }>;
+}
+
+/**
+ * O pedaço que vai no botão de link, para este link.
+ *
+ * A Meta guarda a URL com {{1}} no fim ("…/pesquisa?t={{1}}") e só aceita
+ * o SUFIXO na hora de mandar. Se o link começa com o pedaço fixo, sobra o
+ * resto; se não começa, vai o link inteiro — e a URL final fica errada, o
+ * que é melhor descobrir num teste do que engolir em silêncio.
+ */
+export function sufixoParaBotao(urlDoModelo: string | null | undefined, link: string): string {
+  const fixo = (urlDoModelo ?? "").split("{{")[0] ?? "";
+  return fixo && link.startsWith(fixo) ? link.slice(fixo.length) : link;
 }
 
 /** O modelo como a Meta devolve, no nosso vocabulário. Puro, testável. */
@@ -461,7 +481,10 @@ export function resumirModelo(bruto: {
   const corpo = comps.find((c) => c.type === "BODY")?.text ?? "";
   const cab = comps.find((c) => c.type === "HEADER");
   const rodape = comps.find((c) => c.type === "FOOTER")?.text ?? null;
-  const botoes = (comps.find((c) => c.type === "BUTTONS")?.buttons ?? []).map((b) => b.text ?? "").filter(Boolean);
+  const todosOsBotoes = comps.find((c) => c.type === "BUTTONS")?.buttons ?? [];
+  const botoes = todosOsBotoes.map((b) => b.text ?? "").filter(Boolean);
+  const deLink = todosOsBotoes.find((b) => b.type === "URL" && b.url);
+  const botao_url = deLink?.url ?? null;
 
   let lacunas = 0;
   for (const m of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) lacunas = Math.max(lacunas, Number(m[1]));
@@ -483,6 +506,8 @@ export function resumirModelo(bruto: {
     cabecalho: cab?.text ?? null,
     rodape,
     botoes,
+    botao_url,
+    botao_url_dinamico: /\{\{\s*1\s*\}\}/.test(botao_url ?? ""),
     lacunas,
     suportado: motivo === null,
     motivo,

@@ -1,5 +1,6 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
 import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { editorDeLacunas, modeloEscolhido, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 
 /**
  * Clientes: quem já esteve na casa, num lugar só.
@@ -1888,14 +1889,6 @@ const ROTULO_DO_ENVIO = {
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
-const TIPOS_DE_LACUNA = [
-  ["primeiro_nome", "Primeiro nome do cliente"],
-  ["nome", "Nome completo do cliente"],
-  ["casa", "Nome da casa"],
-  ["data_aniversario", "Data do aniversário (“25 de dezembro”)"],
-  ["fixo", "Um texto fixo…"],
-];
-
 function descreverPublico(p) {
   let quem;
   if (p?.aniversario_mes) quem = `aniversariantes de ${MESES[p.aniversario_mes - 1]}`;
@@ -1919,66 +1912,4 @@ function quandoLegivel(iso) {
 
 function campoDaTela(rotulo, controle) {
   return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
-}
-
-/** O seletor de modelos: os que dá para mandar daqui primeiro, o resto desabilitado com o motivo. */
-function seletorDeModelo(modelos, escolhido) {
-  return el("select", { classe: "select" }, [
-    el("option", { value: "", texto: "— Nenhum —" }),
-    ...(modelos ?? []).map((m) =>
-      el("option", {
-        value: m.name,
-        texto: m.suportado ? `${m.name} (${m.categoria.toLowerCase()})` : `${m.name} — ${m.motivo}`,
-        disabled: !m.suportado,
-        selected: m.name === escolhido,
-      }),
-    ),
-  ]);
-}
-
-function modeloEscolhido(modelos, name) {
-  return (modelos ?? []).find((m) => m.name === name) ?? null;
-}
-
-/**
- * Um seletor por lacuna do modelo. Devolve a função que lê o que está
- * escolhido, no formato que o servidor grava.
- */
-function editorDeLacunas(area, modelo, valoresSalvos, aoMudar) {
-  limpar(area);
-  if (!modelo || modelo.lacunas === 0) {
-    if (modelo) area.append(el("small", { classe: "muted", texto: "Este modelo não tem lacunas." }));
-    return () => [];
-  }
-  const linhas = [];
-  for (let i = 0; i < modelo.lacunas; i += 1) {
-    const salvo = valoresSalvos[i] ?? { tipo: i === 0 ? "primeiro_nome" : "fixo", texto: "" };
-    const tipo = el("select", { classe: "select" }, TIPOS_DE_LACUNA.map(([id, rotulo]) => el("option", { value: id, texto: rotulo, selected: id === salvo.tipo })));
-    const texto = el("input", { placeholder: "O texto que vai nessa lacuna", value: salvo.texto ?? "", style: salvo.tipo === "fixo" ? "" : "display:none" });
-    tipo.addEventListener("change", () => {
-      texto.style.display = tipo.value === "fixo" ? "" : "none";
-      aoMudar?.();
-    });
-    linhas.push({ tipo, texto });
-    area.append(
-      el("div", { classe: "linha-campos" }, [
-        el("span", { classe: "muted", style: "min-width:64px", texto: `{{${i + 1}}} =` }),
-        tipo,
-        texto,
-      ]),
-    );
-  }
-  return () => linhas.map(({ tipo, texto }) => (tipo.value === "fixo" ? { tipo: "fixo", texto: texto.value } : { tipo: tipo.value }));
-}
-
-/** A prévia como uma pessoa leria — aproximada, com "Maria" e a casa de exemplo. */
-function renderizarPrevia(corpo, variaveis, casa = "sua casa") {
-  const valores = (variaveis ?? []).map((v) =>
-    v.tipo === "primeiro_nome" ? "Maria"
-      : v.tipo === "nome" ? "Maria Souza"
-        : v.tipo === "casa" ? casa
-          : v.tipo === "data_aniversario" ? "25 de dezembro"
-            : (v.texto || "…"),
-  );
-  return (corpo ?? "").replace(/\{\{\s*(\d+)\s*\}\}/g, (tudo, n) => valores[Number(n) - 1] ?? tudo);
 }

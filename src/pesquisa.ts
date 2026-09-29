@@ -8,6 +8,9 @@ import { instanteNaCasa } from "./fuso.js";
 import { avisarDetrator, mereceAviso } from "./pesquisaAlerta.js";
 import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
 import { registrarClienteSeDer } from "./clientes.js";
+import { preencherVariaveis, variaveisValidas, type Variavel } from "./disparos.js";
+import { conexaoDaCasa, modelosDaConta, prontaParaEnviar, sufixoParaBotao } from "./whatsappOficial.js";
+import type { ModeloDeMensagem } from "./notifications.js";
 import { colunaFaltante, inserirAvisos } from "./notifications.js";
 
 /**
@@ -83,6 +86,12 @@ export interface ConfigDaPesquisa {
   detrator_avisar_whatsapp: string | null;
   /** Nota até a qual a resposta dispara aviso. 6 é a régua do NPS. */
   detrator_nota_maxima: number;
+  /**
+   * O modelo aprovado da Meta para o convite sair pelo número oficial, e o
+   * que vai em cada lacuna (uma delas é o link). Sem modelo: pelo conector.
+   */
+  convite_modelo: string | null;
+  convite_modelo_variaveis: Variavel[];
 }
 
 const CONFIG_PADRAO: ConfigDaPesquisa = {
@@ -101,6 +110,8 @@ const CONFIG_PADRAO: ConfigDaPesquisa = {
   // acordado às onze da noite.
   detrator_avisar_whatsapp: null,
   detrator_nota_maxima: 6,
+  convite_modelo: null,
+  convite_modelo_variaveis: [],
 };
 
 /**
@@ -138,6 +149,32 @@ export async function configDaPesquisa(venueId: string): Promise<ConfigDaPesquis
       linha.detrator_nota_maxima == null
         ? CONFIG_PADRAO.detrator_nota_maxima
         : Number(linha.detrator_nota_maxima),
+    convite_modelo: (linha.convite_modelo as string) || null,
+    convite_modelo_variaveis: variaveisValidas(linha.convite_modelo_variaveis),
+  };
+}
+
+/**
+ * O convite como modelo da Meta, para esta pessoa — ou null, sem modelo.
+ *
+ * O link entra de dois jeitos, conforme o modelo foi feito: numa lacuna do
+ * corpo ({{n}} = link) ou no botão de link com o fim variável. O botão é o
+ * jeito bonito ("Responder" que abre a pesquisa); o corpo é o que sempre
+ * funciona.
+ */
+export function modeloDoConvite(
+  config: Pick<ConfigDaPesquisa, "convite_modelo" | "convite_modelo_variaveis">,
+  modelo: { botao_url_dinamico: boolean; botao_url: string | null; idioma: string } | null,
+  pessoa: { nome: string | null; link: string },
+  casa: string,
+): ModeloDeMensagem | null {
+  const name = config.convite_modelo?.trim();
+  if (!name) return null;
+  return {
+    name,
+    language: modelo?.idioma || "pt_BR",
+    parametros: preencherVariaveis(config.convite_modelo_variaveis, pessoa, casa),
+    botao_url: modelo?.botao_url_dinamico ? sufixoParaBotao(modelo.botao_url, pessoa.link) : null,
   };
 }
 
@@ -911,6 +948,28 @@ export async function criarConvite(params: {
  * de Ajustes da pesquisa. Prêmio desligado volta ao convite sem promessa —
  * prometer o que a casa não vai entregar é pior do que não prometer nada.
  */
+/**
+ * O modelo do convite desta casa, já com a forma do modelo na Meta (o
+ * botão de link, se houver). Nunca estoura: qualquer tropeço vira "sem
+ * modelo", e o convite sai pelo conector como sempre saiu.
+ */
+async function modeloDoConviteDaCasa(
+  venue: { id: string; name: string },
+  pessoa: { nome: string | null; link: string },
+): Promise<ModeloDeMensagem | null> {
+  try {
+    const config = await configDaPesquisa(venue.id);
+    if (!config.convite_modelo) return null;
+    const conexao = await conexaoDaCasa({ id: venue.id });
+    if (!prontaParaEnviar(conexao)) return null;
+    const naMeta = (await modelosDaConta(conexao)).find((m) => m.name === config.convite_modelo) ?? null;
+    return modeloDoConvite(config, naMeta, pessoa, venue.name);
+  } catch (e) {
+    console.error(`[pesquisa] convite sem modelo da Meta: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 async function textoDoConvite(
   venue: { id: string; name: string },
   nome: string | null,
@@ -977,7 +1036,10 @@ export async function enviarConvite(
     template: "pesquisa_convite",
     papel: "administrativo",
     body: params.mensagem ? `${params.mensagem}\n\n${link}` : mensagemPadrao,
-  });
+    // Pelo número oficial, se a casa escolheu um modelo. O conector ignora
+    // e manda o texto.
+    modelo: await modeloDoConviteDaCasa(venue, { nome: convite.nome, link }),
+  } as never);
 
   if (error) {
     console.error(`[pesquisa] convite ${convite.id} sem envio: ${error.message}`);

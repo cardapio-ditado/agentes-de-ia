@@ -171,15 +171,32 @@ export interface ModeloDeMensagem {
   name: string;
   language: string;
   parametros: string[];
+  /**
+   * O pedaço variável do botão de link do modelo (o que entra no lugar do
+   * {{1}} da URL cadastrada na Meta). O convite da pesquisa vive aqui: o
+   * botão "Responder" leva ao link daquela pessoa.
+   */
+  botao_url?: string | null;
 }
 
-/** Baileys quando conectado; senão, a Cloud API da casa. */
+/**
+ * Por onde o aviso sai.
+ *
+ * Com MODELO e conexão oficial pronta, sai pelo oficial — mesmo com o
+ * conector ligado. Modelo escolhido é a casa dizendo "este aviso vai pelo
+ * número da Meta"; mandá-lo como texto pelo conector seria ignorar a
+ * escolha. Sem modelo: conector quando conectado, senão a Cloud API.
+ */
 async function enviarPorWhatsapp(
   destino: string,
   corpo: string,
   venueId?: string | null,
   modelo?: ModeloDeMensagem | null,
 ): Promise<ResultadoEnvio> {
+  if (modelo?.name && !soOConectorEntrega(destino)) {
+    const oficial = await cloudApiDaCasa(venueId);
+    if (oficial) return await enviarModeloPelaCloudApi(destino, modelo, oficial);
+  }
   const provedor = provedorWhatsappAtivo();
   if (provedor) return await provedor(destino, corpo);
   if (soOConectorEntrega(destino)) {
@@ -193,7 +210,6 @@ async function enviarPorWhatsapp(
   if (!conexao) {
     return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado para esta casa." };
   }
-  if (modelo?.name) return await enviarModeloPelaCloudApi(destino, modelo, conexao);
   return await enviarPelaCloudApi(destino, corpo, conexao);
 }
 
@@ -221,9 +237,12 @@ export async function enviarModeloPelaCloudApi(
   modelo: ModeloDeMensagem,
   conexao: { token: string; phone_number_id: string },
 ): Promise<ResultadoEnvio> {
-  const components = modelo.parametros.length
+  const components: Array<Record<string, unknown>> = modelo.parametros.length
     ? [{ type: "body", parameters: modelo.parametros.map((text) => ({ type: "text", text })) }]
     : [];
+  if (modelo.botao_url) {
+    components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: modelo.botao_url }] });
+  }
   return await postarNaCloudApi(
     destino,
     { type: "template", template: { name: modelo.name, language: { code: modelo.language }, components } },
