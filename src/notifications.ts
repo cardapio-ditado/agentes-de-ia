@@ -785,3 +785,72 @@ export async function listNotificationsForReservation(
   if (error) throw new Error(`Falha ao listar notificações: ${error.message}`);
   return data ?? [];
 }
+
+// ============================================================
+// O que a casa mandou a esta pessoa — para o agente saber a que ela responde
+// ============================================================
+
+/** Resposta até aqui depois do aviso ainda é resposta ao aviso. */
+export const HORAS_DE_RESPOSTA_AO_AVISO = 72;
+
+/**
+ * O último aviso que a casa mandou a este telefone e que chegou.
+ *
+ * O parabéns e o convite da pesquisa não passam pelos disparos — saem
+ * pela fila de avisos. Sem isto, quem responde "quero!" ao parabéns cai
+ * no agente como se tivesse puxado conversa do nada, e ele responde com
+ * o treinamento que tiver mais à mão — a promoção errada, no caso real.
+ */
+export async function ultimoAvisoParaOTelefone(
+  venueId: string,
+  telefone: string,
+  opcoes: { contextoId?: string | null; agora?: Date } = {},
+): Promise<Notification | null> {
+  const e164 = normalizarTelefone(telefone);
+  if (!e164) return null;
+  const agora = opcoes.agora ?? new Date();
+
+  if (opcoes.contextoId) {
+    const { data } = await db()
+      .from("notifications")
+      .select("*")
+      .eq("venue_id", venueId)
+      .eq("provider_id", opcoes.contextoId)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const desde = new Date(agora.getTime() - HORAS_DE_RESPOSTA_AO_AVISO * 3_600_000).toISOString();
+  const { data, error } = await db()
+    .from("notifications")
+    .select("*")
+    .eq("venue_id", venueId)
+    .eq("status", "sent")
+    .in("destination", variacoesDoTelefone(e164))
+    .gte("sent_at", desde)
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error(`[notifications] não li o último aviso de ${e164}: ${error.message}`);
+    return null;
+  }
+  return data ?? null;
+}
+
+/** O aviso numa frase para o agente. Puro, testável. */
+export function contextoDoAviso(
+  aviso: { template: string; body: string; sent_at: string | null },
+  timezone: string,
+): string {
+  const quando = aviso.sent_at
+    ? ` em ${new Intl.DateTimeFormat("pt-BR", { timeZone: timezone, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(aviso.sent_at))}`
+    : "";
+  const tipo = nomeDoAviso(aviso.template).toLowerCase();
+  return (
+    `Esta pessoa está RESPONDENDO a uma mensagem que a casa mandou${quando} (${tipo}). ` +
+    `O texto que ela recebeu foi: "${aviso.body.trim()}". ` +
+    `Responda como continuação dessa mensagem, com as regras DELA — não confunda com outra promoção. ` +
+    `Não pergunte "como posso ajudar": ela já sabe do que se trata.`
+  );
+}
