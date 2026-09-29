@@ -1109,6 +1109,8 @@ export type Database = {
           org_id: string
           phone: string | null
           plano: string
+          plano_travar: boolean
+          pontos_extras: number
           pontos_mensais: number
           settings: Json
           slug: string
@@ -1130,6 +1132,8 @@ export type Database = {
           org_id: string
           phone?: string | null
           plano?: string
+          plano_travar?: boolean
+          pontos_extras?: number
           pontos_mensais?: number
           settings?: Json
           slug: string
@@ -1151,6 +1155,8 @@ export type Database = {
           org_id?: string
           phone?: string | null
           plano?: string
+          plano_travar?: boolean
+          pontos_extras?: number
           pontos_mensais?: number
           settings?: Json
           slug?: string

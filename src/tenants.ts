@@ -15,7 +15,7 @@
  */
 
 import { createApiKey } from "./apikeys.js";
-import { extratoDePontos } from "./pontos.js";
+import { esquecerEstado, extratoDePontos } from "./pontos.js";
 import type { ModuloDoCliente } from "./modulos.js";
 import { db, dbAuth } from "./supabase.js";
 import { senhaLegivel } from "./senhaInicial.js";
@@ -238,6 +238,9 @@ export interface ResumoDeCliente {
   estabelecimentos: number;
   plano: string | null;
   pontos_mensais: number | null;
+  /** Avulsos deste ciclo, e se a casa trava quando acaba. */
+  pontos_extras: number | null;
+  plano_travar: boolean | null;
   /** Consumo do ciclo corrente. null quando o cliente não tem estabelecimento. */
   pontos_usados: number | null;
   pontos_restantes: number | null;
@@ -272,7 +275,7 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
   if (ids.length === 0) return [];
 
   const [{ data: venues }, { data: membros }] = await Promise.all([
-    db().from("venues").select("id, org_id, plano, pontos_mensais, timezone, ciclo_dia").in("org_id", ids),
+    db().from("venues").select("id, org_id, plano, pontos_mensais, pontos_extras, plano_travar, timezone, ciclo_dia").in("org_id", ids),
     db()
       .from("org_members")
       .select("org_id, primeiro_acesso_em")
@@ -326,6 +329,8 @@ export async function listarClientes(): Promise<ResumoDeCliente[]> {
       estabelecimentos: meus.length,
       plano,
       pontos_mensais: principal?.pontos_mensais ?? null,
+      pontos_extras: principal?.pontos_extras ?? null,
+      plano_travar: principal?.plano_travar ?? null,
       pontos_usados: saldo?.usados ?? null,
       pontos_restantes: saldo?.restantes ?? null,
       estado_do_plano: saldo?.estado ?? null,
@@ -402,6 +407,40 @@ export function resumirPlataforma(clientes: ResumoDeCliente[]): ResumoDaPlatafor
       .map(([plano, v]) => ({ plano, clientes: v.clientes, receita: v.receita }))
       .sort((a, b) => b.receita - a.receita),
   };
+}
+
+/**
+ * Pontos avulsos e a trava, em todas as casas do cliente.
+ *
+ * `adicionar` soma (nunca substitui): dois cliques em "+1000" são dois mil,
+ * como quem paga duas vezes. A memória do plano é esquecida na hora, senão
+ * o agente continuaria calado por até um minuto depois da venda.
+ */
+export async function atualizarPontos(
+  orgId: string,
+  dados: { adicionar?: number; travar?: boolean },
+): Promise<{ pontos_extras: number; plano_travar: boolean } | null> {
+  const { data: venues, error } = await db().from("venues").select("id, pontos_extras, plano_travar").eq("org_id", orgId);
+  if (error) throw new Error(`Falha ao ler as casas do cliente: ${error.message}`);
+  if (!venues?.length) return null;
+
+  let resultado: { pontos_extras: number; plano_travar: boolean } | null = null;
+  for (const v of venues) {
+    const mudancas: { pontos_extras?: number; plano_travar?: boolean } = {};
+    if (typeof dados.adicionar === "number" && dados.adicionar !== 0) {
+      mudancas.pontos_extras = Math.max(0, (v.pontos_extras ?? 0) + Math.trunc(dados.adicionar));
+    }
+    if (typeof dados.travar === "boolean") mudancas.plano_travar = dados.travar;
+    if (Object.keys(mudancas).length === 0) continue;
+    const { error: erroUpdate } = await db().from("venues").update(mudancas).eq("id", v.id);
+    if (erroUpdate) throw new Error(`Falha ao atualizar os pontos: ${erroUpdate.message}`);
+    esquecerEstado(v.id);
+    resultado ??= {
+      pontos_extras: mudancas.pontos_extras ?? v.pontos_extras ?? 0,
+      plano_travar: mudancas.plano_travar ?? v.plano_travar ?? true,
+    };
+  }
+  return resultado;
 }
 
 /** Atualiza os dados comerciais de um cliente. */

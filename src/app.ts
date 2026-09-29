@@ -175,6 +175,7 @@ import {
 import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
 import {
   atualizarComercial,
+  atualizarPontos,
   criarCliente,
   listarClientes,
   resumirPlataforma,
@@ -4452,6 +4453,7 @@ async function roteasApi(
           canal: url.searchParams.get("canal"),
           status: url.searchParams.get("status"),
           apenasHumanas: url.searchParams.get("humanas") === "1",
+          agente: url.searchParams.get("agente"),
         }),
       );
     }
@@ -4674,11 +4676,19 @@ async function roteasApi(
       if (typeof corpo.mensalidade === "number") dados.mensalidade = corpo.mensalidade;
       if (typeof corpo.vencimento_dia === "number") dados.vencimento_dia = corpo.vencimento_dia;
 
-      if (Object.keys(dados).length === 0) {
+      // Pontos avulsos e a trava: são das casas, não da organização.
+      const pontos: { adicionar?: number; travar?: boolean } = {};
+      if (typeof corpo.pontos_adicionar === "number" && Number.isFinite(corpo.pontos_adicionar)) {
+        pontos.adicionar = Math.trunc(corpo.pontos_adicionar);
+      }
+      if (typeof corpo.plano_travar === "boolean") pontos.travar = corpo.plano_travar;
+
+      if (Object.keys(dados).length === 0 && Object.keys(pontos).length === 0) {
         throw erro(400, "invalid_request", "Nada para atualizar.");
       }
-      await atualizarComercial(p[2]!, dados);
-      return ok(res, { atualizado: true });
+      if (Object.keys(dados).length > 0) await atualizarComercial(p[2]!, dados);
+      const saldo = Object.keys(pontos).length > 0 ? await atualizarPontos(p[2]!, pontos) : null;
+      return ok(res, { atualizado: true, ...(saldo ?? {}) });
     }
 
     // POST /v1/admin/clientes — cria organização, estabelecimento, agente,

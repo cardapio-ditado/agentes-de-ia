@@ -161,10 +161,54 @@ export async function clientes(raiz, ctx) {
             barra,
             el("p", {
               classe: "muted",
-              texto: `${numeroBr(c.pontos_usados)} de ${numeroBr(c.pontos_mensais)} pontos usados · restam ${numeroBr(c.pontos_restantes)}`,
+              texto:
+                `${numeroBr(c.pontos_usados)} de ${numeroBr((c.pontos_mensais ?? 0) + (c.pontos_extras ?? 0))} pontos usados · restam ${numeroBr(c.pontos_restantes)}` +
+                (c.pontos_extras ? ` · ${numeroBr(c.pontos_extras)} avulsos neste ciclo` : ""),
             }),
           ])
         : el("p", { classe: "muted", texto: "Sem consumo registrado neste ciclo." }),
+
+      // Pontos e trava: o que a Brasa Food faz quando o cliente liga dizendo
+      // "o agente parou". Dois cliques, sem SQL.
+      c.venue_id
+        ? el("div", { classe: "linha-campos", style: "margin:6px 0 10px;align-items:center" }, [
+            ...[500, 1000, 2500].map((n) =>
+              el("button", {
+                classe: "btn btn-peq",
+                type: "button",
+                texto: `+${numeroBr(n)} pontos`,
+                onclick: async (ev) => {
+                  ev.target.disabled = true;
+                  try {
+                    await patch(`/v1/admin/clientes/${c.org_id}`, { pontos_adicionar: n });
+                    avisar(`${numeroBr(n)} pontos adicionados. O agente volta a responder em instantes.`, "ok");
+                    await listar();
+                  } catch (e) {
+                    avisar(e.message, "erro");
+                    ev.target.disabled = false;
+                  }
+                },
+              }),
+            ),
+            el("label", { classe: "check-linha", style: "margin-left:auto" }, [
+              el("input", {
+                type: "checkbox",
+                checked: c.plano_travar !== false,
+                onchange: async (ev) => {
+                  try {
+                    await patch(`/v1/admin/clientes/${c.org_id}`, { plano_travar: ev.target.checked });
+                    avisar(ev.target.checked ? "Trava ligada: o agente pausa quando os pontos acabarem." : "Trava desligada: o agente nunca pausa (teste ou cortesia).", "ok");
+                    await listar();
+                  } catch (e) {
+                    avisar(e.message, "erro");
+                    ev.target.checked = !ev.target.checked;
+                  }
+                },
+              }),
+              el("span", { texto: "Pausar o agente quando os pontos acabarem" }),
+            ]),
+          ])
+        : null,
 
       linha("Plano", NOMES_DE_PLANO[c.plano] ?? c.plano ?? "—"),
       linha("Mensalidade", dinheiro(c.mensalidade)),

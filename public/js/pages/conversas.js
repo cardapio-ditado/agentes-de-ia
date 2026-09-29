@@ -22,7 +22,7 @@ import { avisar, dataHora, desde, el, etiqueta, limpar, vazio } from "../ui.js";
 const INTERVALO_MS = 8000;
 
 export async function conversas(raiz, ctx) {
-  const filtros = { canal: "", status: "", humanas: false };
+  const filtros = { canal: "", status: "", humanas: false, agente: "" };
   let selecionada = null;
 
   /**
@@ -74,10 +74,24 @@ export async function conversas(raiz, ctx) {
     ],
   );
 
+  // Um seletor por agente: com dois números (o do conector e o oficial),
+  // cada um tem o seu agente, e "o que a recepcionista respondeu hoje" é
+  // uma pergunta diferente de "o que a Fernanda respondeu".
+  const selAgente = el(
+    "select",
+    { classe: "select", onchange: (e) => ((filtros.agente = e.target.value), carregarLista()) },
+    [el("option", { value: "", texto: "Todos os agentes" })],
+  );
+  get("/v1/agents?all=1")
+    .then((agentes) => {
+      for (const a of agentes) selAgente.append(el("option", { value: a.slug, texto: a.name }));
+    })
+    .catch(() => undefined);
+
   raiz.append(
     el("div", { classe: "inbox" }, [
       el("div", { classe: "inbox-lista" }, [
-        el("div", { classe: "inbox-filtros" }, [selCanal, selStatus, selQuem]),
+        el("div", { classe: "inbox-filtros" }, [selAgente, selCanal, selStatus, selQuem]),
         itens,
       ]),
       painelThread,
@@ -185,6 +199,7 @@ export async function conversas(raiz, ctx) {
     if (filtros.canal) busca.set("canal", filtros.canal);
     if (filtros.status) busca.set("status", filtros.status);
     if (filtros.humanas) busca.set("humanas", "1");
+    if (filtros.agente) busca.set("agente", filtros.agente);
 
     const lista = await get(`/v1/venues/${ctx.venue}/conversations?${busca}`);
 
@@ -239,6 +254,7 @@ export async function conversas(raiz, ctx) {
             el("div", { classe: "conversa-previa", texto: previa }),
             el("div", { classe: "conversa-linha" }, [
               etiqueta(c.canal === "whatsapp" ? "WhatsApp" : c.canal),
+              c.agente ? etiqueta(c.agente.nome, "etiqueta-info") : null,
               c.status !== "open" ? etiqueta("fechada") : null,
             ]),
           ],

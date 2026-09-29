@@ -66,6 +66,8 @@ export async function listConversations(params: {
   canal?: string | null;
   status?: string | null;
   apenasHumanas?: boolean;
+  /** Só as conversas deste agente (slug). Com dois números, cada um tem o seu. */
+  agente?: string | null;
 }): Promise<ConversaResumo[]> {
   let consulta = db()
     .from("conversations")
@@ -76,6 +78,13 @@ export async function listConversations(params: {
 
   if (params.canal) consulta = consulta.eq("channel", params.canal);
   if (params.status) consulta = consulta.eq("status", params.status);
+  if (params.agente) {
+    // No banco, e não depois: filtrar em memória cortaria as conversas do
+    // agente pedido junto com o teto da lista.
+    const { data: agente } = await db().from("agents").select("id").eq("slug", params.agente).maybeSingle();
+    if (!agente) return [];
+    consulta = consulta.eq("agent_id", agente.id);
+  }
 
   const { data, error } = await consulta;
   if (error) throw new Error(`Falha ao listar conversas: ${error.message}`);

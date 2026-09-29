@@ -180,6 +180,10 @@ export function estadoPelaExaustao(
 export interface Extrato {
   plano: string;
   total: number;
+  /** Quanto do total é avulso (colocado pela Brasa Food neste ciclo). */
+  extras: number;
+  /** false = a casa não trava quando os pontos acabam. */
+  travar: boolean;
   usados: number;
   restantes: number;
   percentual: number;
@@ -203,6 +207,10 @@ interface VenueDoPlano {
   timezone: string;
   plano?: string | null;
   pontos_mensais?: number | null;
+  /** Avulsos deste ciclo, somados aos mensais. */
+  pontos_extras?: number | null;
+  /** false = nunca cala, mesmo sem pontos (casa em teste ou cortesia negociada). */
+  plano_travar?: boolean | null;
   ciclo_dia?: number | null;
 }
 
@@ -210,7 +218,9 @@ interface VenueDoPlano {
  * Extrato do ciclo corrente: gasto, sobra e quanto tempo a sobra dura.
  */
 export async function extratoDePontos(venue: VenueDoPlano, agora = new Date()): Promise<Extrato> {
-  const total = Math.max(0, venue.pontos_mensais ?? 2500);
+  const extras = Math.max(0, venue.pontos_extras ?? 0);
+  const total = Math.max(0, venue.pontos_mensais ?? 2500) + extras;
+  const travar = venue.plano_travar !== false;
   const ciclo = cicloAtual(venue.ciclo_dia ?? 1, venue.timezone, agora);
 
   const porModelo = new Map<string, { mensagens: number; pontos: number; modelo: string | null }>();
@@ -267,11 +277,18 @@ export async function extratoDePontos(venue: VenueDoPlano, agora = new Date()): 
     };
   });
 
-  const { estado, cortesiaAte, horasDeCortesia } = estadoPelaExaustao(esgotadoEm, agora);
+  const exaustao = estadoPelaExaustao(esgotadoEm, agora);
+  // Casa destravada: o consumo continua contado (é o que a Brasa Food olha
+  // na carteira), mas o agente nunca cala.
+  const { estado, cortesiaAte, horasDeCortesia } = travar
+    ? exaustao
+    : { estado: "ativo" as EstadoDoPlano, cortesiaAte: null, horasDeCortesia: null };
 
   return {
     plano: venue.plano ?? "profissional",
     total,
+    extras,
+    travar,
     usados,
     restantes,
     percentual: total > 0 ? Math.min(100, Math.round((usados / total) * 100)) : 0,

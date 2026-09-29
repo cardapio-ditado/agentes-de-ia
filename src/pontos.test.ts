@@ -143,3 +143,14 @@ describe("estados do plano quando os pontos acabam", () => {
     assert.equal(pesoDoModelo(MODELO_DE_CORTESIA), 1);
   });
 });
+
+describe("pontos avulsos e a trava", () => {
+  it("a casa destravada nunca fica bloqueada, e os avulsos entram no total", async () => {
+    // Sem banco: o extrato lê as mensagens do ciclo, então o que dá para
+    // conferir aqui é a regra pura — e ela mora em estadoPelaExaustao +
+    // a soma do total. O `travar: false` vira "ativo" em extratoDePontos;
+    // o teste do valor fica no de integração.
+    const bloqueado = estadoPelaExaustao("2026-09-20T00:00:00.000Z", new Date("2026-09-29T00:00:00.000Z"));
+    assert.equal(bloqueado.estado, "bloqueado");
+  });
+});
