@@ -430,15 +430,21 @@ export async function proximosAniversariantes(
   if (!proximos.length) return proximos;
 
   // O que já foi disparado para o ano da PRÓXIMA comemoração, com o status de
-  // entrega. Numa consulta só: uma por cliente viraria centenas de idas ao
-  // banco para abrir a tela.
+  // entrega. Pela CASA e pelo ANO, e não pela lista de pessoas: 4.816
+  // aniversariantes em três meses viravam 4.816 ids na URL, o PostgREST
+  // recusava, e o erro era engolido — a tela mostrava todo mundo como "sem
+  // envio" no mesmo dia em que 44 tinham saído. Paginado, porque numa casa
+  // grande os parabéns de um ano passam de mil.
   const anos = [...new Set(proximos.map((c) => `aniversario_${c.proximo.slice(0, 4)}`))];
-  const { data: avisados } = await cliente()
-    .from("notifications")
-    .select("cliente_id, template, status, error, attempts, created_at, sent_at, entregue_em, lido_em, respondido_em")
-    .eq("venue_id", venue.id)
-    .in("template", anos)
-    .in("cliente_id", proximos.map((c) => c.id));
+  const { data: avisados, error: erroDosAvisos } = await todasAsLinhas<LinhaDeAviso>(() =>
+    cliente()
+      .from("notifications")
+      .select("cliente_id, template, status, error, attempts, created_at, sent_at, entregue_em, lido_em, respondido_em")
+      .eq("venue_id", venue.id)
+      .in("template", anos)
+      .order("id"),
+  );
+  if (erroDosAvisos) throw new Error(`Falha ao ler os parabéns já mandados: ${erroDosAvisos.message}`);
 
   type LinhaDeAviso = {
     cliente_id: string;

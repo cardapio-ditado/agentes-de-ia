@@ -755,7 +755,17 @@ export async function registrarStatusDaMeta(status: {
     // Com as tentativas no teto: a Meta já recusou depois de aceitar, e
     // tentar de novo sozinho em um minuto dá o mesmo resultado (número fora
     // do WhatsApp, entrega segurada). O "Tentar de novo" da tela zera.
-    const { data: f } = await cliente().from("notifications").update({ status: "failed", error: erro, attempts: MAX_TENTATIVAS }).eq("provider_id", status.id).select("id");
+    //
+    // E nunca por cima de "entregue" ou "lida": a Meta mandou "falhou" para
+    // quatro parabéns que ela mesma já tinha marcado como lidos, e a fila
+    // reenviou os quatro. Quem já chegou não falha.
+    const { data: f } = await cliente()
+      .from("notifications")
+      .update({ status: "failed", error: erro, attempts: MAX_TENTATIVAS })
+      .eq("provider_id", status.id)
+      .is("entregue_em", null)
+      .is("lido_em", null)
+      .select("id");
     avisoMexido ||= (f ?? []).length > 0;
   }
 
