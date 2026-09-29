@@ -11,6 +11,7 @@ import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
 import { cuidarDosDisparos } from "./disparos.js";
+import { enviarPendentesPeloOficial } from "./filaOficial.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
@@ -228,6 +229,13 @@ async function cicloDosChecklists(): Promise<void> {
     if (r.concluidos) console.log(`[disparos] ${r.concluidos} disparo(s) concluído(s).`);
   } catch (e) {
     console.error("[disparos] relógio falhou:", e instanceof Error ? e.message : e);
+  }
+  // E os avisos com modelo (parabéns, convite da pesquisa) pelo oficial,
+  // sem depender do conector estar conectado.
+  try {
+    await enviarPendentesPeloOficial();
+  } catch (e) {
+    console.error("[fila-oficial] relógio falhou:", e instanceof Error ? e.message : e);
   } finally {
     agendadorEmAndamento = false;
   }
