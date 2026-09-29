@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { modeloDeParabens, modeloSugeridoDeParabens, podeReenviar, situacaoDoEnvio } from "./aniversarios.js";
+import { dataValida, janelaDaAgenda, modeloDeParabens, modeloSugeridoDeParabens, podeReenviar, situacaoDoEnvio } from "./aniversarios.js";
 import { corpoParaAMeta, porQueNaoCria } from "./whatsappOficial.js";
 import { preencherVariaveis, renderizar } from "./disparos.js";
 
@@ -68,6 +68,22 @@ test("o que a Meta recusaria é dito antes de chamar a Meta", () => {
   assert.match(porQueNaoCria({ ...base, corpo: "Oi {{2}}, tudo?" })[0]!, /seguidas/);
   assert.match(porQueNaoCria({ ...base, botoes: ["x".repeat(30)] })[0]!, /25 caracteres/);
   assert.match(porQueNaoCria({ ...base, corpo: "a".repeat(1025) })[0]!, /1024/);
+});
+
+test("a janela da agenda: os próximos N dias, ou um período que vence os dias", () => {
+  const hoje = "2026-09-29";
+  assert.deepEqual(janelaDaAgenda(hoje, 30), { dias: 30, de: "2026-09-29", ate: "2026-10-29" });
+  // Período explícito: a janela em dias vai até a ponta de trás.
+  assert.deepEqual(janelaDaAgenda(hoje, 30, { de: "2026-10-01", ate: "2026-10-07" }), { dias: 8, de: "2026-10-01", ate: "2026-10-07" });
+  // Uma data só é um período de um dia.
+  assert.deepEqual(janelaDaAgenda(hoje, 30, { de: "2026-10-03" }), { dias: 4, de: "2026-10-03", ate: "2026-10-03" });
+  // Começo no passado sobe para hoje: aniversário que passou só volta no ano que vem.
+  assert.deepEqual(janelaDaAgenda(hoje, 30, { de: "2026-09-01", ate: "2026-10-02" }), { dias: 3, de: "2026-09-29", ate: "2026-10-02" });
+  // Período inteiro no passado: janela zero, ninguém.
+  assert.deepEqual(janelaDaAgenda(hoje, 30, { de: "2026-08-01", ate: "2026-08-31" }), { dias: 0, de: "2026-09-29", ate: "2026-09-29" });
+  assert.equal(dataValida("2026-10-01"), "2026-10-01");
+  assert.equal(dataValida("01/10/2026"), undefined);
+  assert.equal(dataValida(""), undefined);
 });
 
 test("a situação do envio é o degrau mais alto que ele alcançou", () => {

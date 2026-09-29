@@ -182,6 +182,17 @@ function seloDoEnvio(envio) {
   return selo;
 }
 
+/** "3/10" ou "1/10 a 7/10" — o período escolhido, curto, no título. */
+function descreverPeriodo({ de, ate }) {
+  const curta = (iso) => {
+    const [, m, d] = String(iso ?? "").split("-");
+    return d && m ? `${Number(d)}/${Number(m)}` : String(iso ?? "");
+  };
+  const inicio = de || ate;
+  const fim = ate || de;
+  return inicio === fim ? curta(inicio) : `${curta(inicio)} a ${curta(fim)}`;
+}
+
 /** "faz aniversário hoje", "…amanhã", "…em 12 dias". */
 function quandoFaz(dias) {
   if (dias === 0) return "faz aniversário hoje";
@@ -982,7 +993,9 @@ export async function clientesDaCasa(raiz, ctx) {
 
   // Os filtros da agenda sobrevivem à troca de aba: quem escolheu "só o 65"
   // e foi olhar a lista não quer escolher de novo ao voltar.
-  const filtrosDaAgenda = { dias: "45", ddd: "", situacao: "", ordem: "aniversario" };
+  // `dias` vale quando `de`/`ate` estão vazios; um período (ou uma data só,
+  // de = até) vence os dias — é o filtro do disparo em massa.
+  const filtrosDaAgenda = { dias: "45", de: "", ate: "", ddd: "", situacao: "", ordem: "aniversario" };
   // Cada desenho da agenda ganha um número. O relógio que atualiza os status
   // confere se ainda é o desenho dele antes de mexer na tela — trocar de aba
   // e voltar não pode deixar dois relógios disputando a mesma lista.
@@ -1008,6 +1021,11 @@ export async function clientesDaCasa(raiz, ctx) {
     corpo.append(el("p", { classe: "muted", texto: "Carregando a agenda…" }));
 
     const params = new URLSearchParams({ dias: filtrosDaAgenda.dias });
+    const porPeriodo = Boolean(filtrosDaAgenda.de || filtrosDaAgenda.ate);
+    if (porPeriodo) {
+      params.set("de", filtrosDaAgenda.de || filtrosDaAgenda.ate);
+      params.set("ate", filtrosDaAgenda.ate || filtrosDaAgenda.de);
+    }
     if (filtrosDaAgenda.ddd.startsWith("!")) params.set("fora_do_ddd", filtrosDaAgenda.ddd.slice(1));
     else if (filtrosDaAgenda.ddd) params.set("ddd", filtrosDaAgenda.ddd);
     const urlDaAgenda = `/v1/venues/${ctx.venue}/aniversariantes?${params}`;
@@ -1030,8 +1048,38 @@ export async function clientesDaCasa(raiz, ctx) {
     if (versao !== versaoDaAgenda) return;
     ordenar(pessoas);
 
-    const seletorDias = el("select", { classe: "select" }, ["15", "30", "45", "90"].map((d) =>
-      el("option", { value: d, texto: `Próximos ${d} dias`, selected: d === filtrosDaAgenda.dias })));
+    // "Próximos N dias" para olhar a agenda; "Data exata" e "Entre datas" para
+    // o disparo em massa — "quem faz de 1º a 7 de outubro" é um lote, e o
+    // lote é o que se manda de uma vez.
+    const modo = !porPeriodo ? "dias" : filtrosDaAgenda.de && filtrosDaAgenda.ate && filtrosDaAgenda.de !== filtrosDaAgenda.ate ? "periodo" : "data";
+    const seletorDias = el("select", { classe: "select" }, [
+      ...["15", "30", "45", "90"].map((d) =>
+        el("option", { value: d, texto: `Próximos ${d} dias`, selected: modo === "dias" && d === filtrosDaAgenda.dias })),
+      el("option", { value: "data", texto: "Data exata…", selected: modo === "data" }),
+      el("option", { value: "periodo", texto: "Entre datas…", selected: modo === "periodo" }),
+    ]);
+    const hojeISO = new Date().toLocaleDateString("en-CA");
+    const campoDe = el("input", { classe: "input", type: "date", min: hojeISO, value: filtrosDaAgenda.de || filtrosDaAgenda.ate, style: "width:auto" });
+    const campoAte = el("input", { classe: "input", type: "date", min: hojeISO, value: filtrosDaAgenda.ate || filtrosDaAgenda.de, style: "width:auto" });
+    const aplicarPeriodo = el("button", { classe: "btn btn-peq", type: "button", texto: "Aplicar" });
+    const rotuloAte = el("span", { classe: "muted", texto: "até", hidden: modo !== "periodo" });
+    const camposDoPeriodo = el("span", { classe: "linha-campos", style: "margin:0;align-items:center", hidden: modo === "dias" }, [
+      campoDe,
+      rotuloAte,
+      modo === "periodo" ? campoAte : null,
+      aplicarPeriodo,
+    ]);
+    const escolherPeriodo = () => {
+      const de = campoDe.value;
+      const ate = seletorDias.value === "periodo" ? campoAte.value || de : de;
+      if (!de) { avisar("Escolha a data.", "info"); return; }
+      filtrosDaAgenda.de = de;
+      filtrosDaAgenda.ate = ate < de ? de : ate;
+      abaAniversarios();
+    };
+    aplicarPeriodo.addEventListener("click", escolherPeriodo);
+    campoDe.addEventListener("keydown", (ev) => { if (ev.key === "Enter") escolherPeriodo(); });
+    campoAte.addEventListener("keydown", (ev) => { if (ev.key === "Enter") escolherPeriodo(); });
     const seletorDdd = el("select", { classe: "select" }, [
       el("option", { value: "", texto: "Qualquer DDD" }),
       ...ddds.slice(0, 30).map((d) => el("option", { value: d.ddd, texto: `DDD ${d.ddd} — ${d.pessoas.toLocaleString("pt-BR")}`, selected: d.ddd === filtrosDaAgenda.ddd })),
@@ -1041,7 +1089,27 @@ export async function clientesDaCasa(raiz, ctx) {
       el("option", { value: "aniversario", texto: "Por data do aniversário", selected: filtrosDaAgenda.ordem === "aniversario" }),
       el("option", { value: "envio", texto: "Pelo último envio", selected: filtrosDaAgenda.ordem === "envio" }),
     ]);
-    seletorDias.addEventListener("change", () => { filtrosDaAgenda.dias = seletorDias.value; abaAniversarios(); });
+    seletorDias.addEventListener("change", () => {
+      if (seletorDias.value === "data" || seletorDias.value === "periodo") {
+        // Só mostra os campos; a lista muda quando a pessoa aplicar. Trocar
+        // de "data" para "entre datas" com datas já escolhidas redesenha.
+        if (filtrosDaAgenda.de) {
+          filtrosDaAgenda.ate = seletorDias.value === "data" ? filtrosDaAgenda.de : filtrosDaAgenda.ate;
+          abaAniversarios();
+          return;
+        }
+        camposDoPeriodo.hidden = false;
+        rotuloAte.hidden = seletorDias.value !== "periodo";
+        if (seletorDias.value === "periodo" && !camposDoPeriodo.contains(campoAte)) aplicarPeriodo.before(campoAte);
+        if (seletorDias.value === "data" && camposDoPeriodo.contains(campoAte)) campoAte.remove();
+        campoDe.focus();
+        return;
+      }
+      filtrosDaAgenda.dias = seletorDias.value;
+      filtrosDaAgenda.de = "";
+      filtrosDaAgenda.ate = "";
+      abaAniversarios();
+    });
     seletorDdd.addEventListener("change", () => { filtrosDaAgenda.ddd = seletorDdd.value; abaAniversarios(); });
     seletorOrdem.addEventListener("change", () => { filtrosDaAgenda.ordem = seletorOrdem.value; abaAniversarios(); });
 
@@ -1063,9 +1131,11 @@ export async function clientesDaCasa(raiz, ctx) {
       // mesma frase: a casa com 1.865 datas cujo próximo aniversário é em
       // novembro, e a casa sem data nenhuma cadastrada. Quem lia não tinha
       // como distinguir — e o mais provável era achar que a tela quebrou.
-      lista.append(filtrosDaAgenda.ddd
-        ? vazio("Ninguém deste DDD faz aniversário no período", "Tire o filtro de DDD ou alargue o período.")
-        : await porQueVazio());
+      lista.append(porPeriodo
+        ? vazio("Ninguém faz aniversário nessas datas", filtrosDaAgenda.ddd ? "Tire o filtro de DDD ou escolha outras datas." : "Escolha outras datas, ou volte para 'Próximos dias'.")
+        : filtrosDaAgenda.ddd
+          ? vazio("Ninguém deste DDD faz aniversário no período", "Tire o filtro de DDD ou alargue o período.")
+          : await porQueVazio());
     } else {
       for (const p of pessoas) lista.append(linhaDaPessoa(p));
     }
@@ -1093,7 +1163,7 @@ export async function clientesDaCasa(raiz, ctx) {
       el("div", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
-            el("h2", { texto: `Aniversariantes${pessoas.length ? ` · ${pessoas.length}` : ""}` }),
+            el("h2", { texto: `Aniversariantes${pessoas.length ? ` · ${pessoas.length}` : ""}${porPeriodo ? ` · ${descreverPeriodo(filtrosDaAgenda)}` : ""}` }),
             el("p", {
               classe: "muted",
               texto: config.aniversario_ativo
@@ -1119,7 +1189,7 @@ export async function clientesDaCasa(raiz, ctx) {
               ])
             : null,
         ].filter(Boolean)),
-        el("div", { classe: "linha-campos" }, [seletorDias, seletorDdd, seletorOrdem]),
+        el("div", { classe: "linha-campos", style: "align-items:center" }, [seletorDias, camposDoPeriodo, seletorDdd, seletorOrdem]),
         pessoas.length
           ? el("section", { classe: "cartao pilha-fina" }, [
               el("div", { classe: "cabecalho-secao", style: "margin:0" }, [
@@ -1159,7 +1229,9 @@ export async function clientesDaCasa(raiz, ctx) {
         disabled: bloqueado,
         // Quem faz nos próximos dias já vem marcado: é o caso comum, e
         // desmarcar quem não interessa dá menos trabalho que marcar um a um.
-        checked: !bloqueado && p.dias_ate <= 15,
+        // Com datas escolhidas, o lote inteiro vem marcado: é para isso que
+        // se escolhe datas.
+        checked: !bloqueado && (porPeriodo || p.dias_ate <= 15),
       });
       marca.dataset.cliente = p.id;
       const selo = el("span", { classe: "selo-do-envio" }, [seloDoEnvio(p.envio)].filter(Boolean));

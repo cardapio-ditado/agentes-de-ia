@@ -383,13 +383,49 @@ export async function panoramaDeAniversarios(
  * descadastrado também, marcado — esconder quem pediu para sair faria o
  * gerente achar que o cadastro sumiu.
  */
+/** AAAA-MM-DD de verdade — ou null, para o que veio da URL e não é data. */
+export function dataValida(valor: string | null | undefined): string | undefined {
+  if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return undefined;
+  const d = new Date(`${valor}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== valor ? undefined : valor;
+}
+
+/**
+ * A janela da agenda: "os próximos N dias" ou "de tal data a tal data".
+ *
+ * O período vence quando vem: o disparo em massa é "quem faz aniversário
+ * de 1º a 7 de outubro", e não "quem faz nos próximos 30 dias". Uma data só
+ * é um período de um dia. O que sai é a janela em dias (para saber que
+ * meses ler do banco) e as duas pontas (para filtrar o que voltou). A
+ * ponta de trás nunca fica antes de hoje: aniversário que passou este ano
+ * só volta no ano que vem, e a agenda é do que vem pela frente.
+ */
+export function janelaDaAgenda(
+  hojeISO: string,
+  dias: number,
+  periodo: { de?: string; ate?: string } = {},
+): { dias: number; de: string; ate: string } {
+  const hoje = new Date(`${hojeISO}T12:00:00Z`);
+  if (!periodo.de && !periodo.ate) {
+    const fim = new Date(hoje.getTime() + dias * 86_400_000);
+    return { dias, de: hojeISO, ate: fim.toISOString().slice(0, 10) };
+  }
+  const de = periodo.de && periodo.de > hojeISO ? periodo.de : hojeISO;
+  const ate = periodo.ate ?? periodo.de!;
+  const fim = new Date(`${ate}T12:00:00Z`);
+  const ateHoje = Math.round((fim.getTime() - hoje.getTime()) / 86_400_000);
+  return { dias: Math.min(Math.max(ateHoje, 0), 366), de, ate: ate < de ? de : ate };
+}
+
 export async function proximosAniversariantes(
   venue: { id: string; name?: string; timezone: string },
   dias = 30,
   agora = new Date(),
-  filtro: { ddd?: string; fora_do_ddd?: string } = {},
+  filtro: { ddd?: string; fora_do_ddd?: string; de?: string; ate?: string } = {},
 ): Promise<Aniversariante[]> {
   const hojeISO = hojeNaCasa(venue.timezone, agora);
+  const janela = janelaDaAgenda(hojeISO, dias, filtro);
+  dias = janela.dias;
   const config = await configDeClientes(venue.id);
 
   // Só os meses que a janela alcança: numa base de dezenas de milhares de
@@ -424,7 +460,7 @@ export async function proximosAniversariantes(
         diasAntes: d,
       }),
     }))
-    .filter((c) => c.dias_ate <= dias)
+    .filter((c) => c.dias_ate <= dias && c.proximo >= janela.de && c.proximo <= janela.ate)
     .sort((a, b) => a.dias_ate - b.dias_ate);
 
   if (!proximos.length) return proximos;

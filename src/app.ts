@@ -425,7 +425,7 @@ import {
 } from "./clientes.js";
 import type { OrigemDeCliente } from "./clientes.js";
 import type { Selo } from "./crm.js";
-import { mandarParabens, modeloSugeridoDeParabens, panoramaDeAniversarios, proximosAniversariantes } from "./aniversarios.js";
+import { dataValida, mandarParabens, modeloSugeridoDeParabens, panoramaDeAniversarios, proximosAniversariantes } from "./aniversarios.js";
 import { lerPlanilhaDeClientes } from "./planilhaDeClientes.js";
 import type { LinhaRecusada } from "./planilhaDeClientes.js";
 import type { EventoParaGravar } from "./importarProgramacao.js";
@@ -3642,6 +3642,9 @@ async function roteasApi(
           proximosAniversariantes(venue, dias, new Date(), {
             ddd: dddValido(url.searchParams.get("ddd")),
             fora_do_ddd: dddValido(url.searchParams.get("fora_do_ddd")),
+            // Um período (ou uma data só) vence os "próximos N dias".
+            de: dataValida(url.searchParams.get("de")),
+            ate: dataValida(url.searchParams.get("ate")),
           }),
         ),
       );
