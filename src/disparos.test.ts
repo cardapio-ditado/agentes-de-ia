@@ -5,6 +5,7 @@ import {
   contextoDoDisparo,
   descreverPublico,
   lacunasDe,
+  motivoDaMeta,
   porQueNaoAgenda,
   preencherVariaveis,
   publicoValido,
@@ -153,4 +154,11 @@ test("o modelo da Meta vira o nosso vocabulário, e diz quando não dá para man
 
   const pendente = resumirModelo({ name: "y", status: "PENDING", components: [{ type: "BODY", text: "oi" }] });
   assert.match(pendente.motivo!, /não aprovou/);
+});
+
+test("o motivo da Meta vem com código e em português para os casos de número novo", () => {
+  assert.match(motivoDaMeta([{ code: 131049, message: "This message was not delivered to maintain healthy ecosystem engagement." }]), /#131049.*marketing por pessoa/);
+  assert.match(motivoDaMeta([{ code: 131026, message: "Message undeliverable." }]), /não está no WhatsApp/);
+  assert.equal(motivoDaMeta([{ code: 1, title: "Unknown", error_data: { details: "algo" } }]), "(#1) algo");
+  assert.equal(motivoDaMeta(undefined), "a Meta não entregou");
 });

@@ -713,28 +713,61 @@ export async function cuidarDosDisparos(agora = new Date()): Promise<{ enviados:
 // ============================================================
 
 /** Um status do webhook ("delivered", "read", "failed") para o envio certo. */
+/** O erro da Meta numa frase: código + o motivo que ela dá. Puro, testável. */
+export function motivoDaMeta(errors: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }> | undefined): string {
+  const e = errors?.[0];
+  if (!e) return "a Meta não entregou";
+  const detalhe = e.error_data?.details ?? e.message ?? e.title ?? "";
+  const codigo = e.code ? `(#${e.code}) ` : "";
+  // Os dois que mais aparecem num número novo, em português.
+  if (e.code === 131049) return `${codigo}a Meta segurou a entrega: limite de mensagens de marketing por pessoa (o número ainda não tem histórico)`;
+  if (e.code === 131026) return `${codigo}o número não está no WhatsApp ou bloqueou a casa`;
+  if (e.code === 131047) return `${codigo}fora da janela de 24 h — só modelo aprovado`;
+  return `${codigo}${detalhe || "a Meta não entregou"}`.trim();
+}
+
 export async function registrarStatusDaMeta(status: {
   id?: string;
   status?: string;
   timestamp?: string;
-  errors?: Array<{ title?: string; message?: string }>;
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>;
 }): Promise<boolean> {
   const novo = statusDaMeta(status.status);
   if (!novo || !status.id) return false;
 
+  const quando = status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString();
+  const erro = novo === "falhou" ? motivoDaMeta(status.errors) : null;
+
+  // Os avisos (parabéns, convite da pesquisa) também têm o wamid da Meta:
+  // é por ele que a tela deixa de chamar "aceito" de "entregue". Cada
+  // carimbo só entra uma vez — a Meta manda "lida" antes de "entregue"
+  // de vez em quando, e o primeiro carimbo é o que vale.
+  let avisoMexido = false;
+  if (novo === "entregue" || novo === "lido") {
+    const { data: e } = await cliente().from("notifications").update({ entregue_em: quando }).eq("provider_id", status.id).is("entregue_em", null).select("id");
+    avisoMexido ||= (e ?? []).length > 0;
+  }
+  if (novo === "lido") {
+    const { data: l } = await cliente().from("notifications").update({ lido_em: quando }).eq("provider_id", status.id).is("lido_em", null).select("id");
+    avisoMexido ||= (l ?? []).length > 0;
+  }
+  if (novo === "falhou") {
+    const { data: f } = await cliente().from("notifications").update({ status: "failed", error: erro }).eq("provider_id", status.id).select("id");
+    avisoMexido ||= (f ?? []).length > 0;
+  }
+
   const { data } = await cliente().from("disparos_envios").select("id, status").eq("provider_id", status.id).maybeSingle();
-  if (!data) return false;
+  if (!data) return avisoMexido;
   const atual = (data as { status: StatusDoEnvio }).status;
   if (!sobe(atual, novo)) return false;
 
-  const quando = status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString();
   const campos: Record<string, unknown> = { status: novo };
   if (novo === "entregue") campos.entregue_em = quando;
   if (novo === "lido") {
     campos.lido_em = quando;
     campos.entregue_em = campos.entregue_em ?? quando;
   }
-  if (novo === "falhou") campos.erro = status.errors?.[0]?.message ?? status.errors?.[0]?.title ?? "a Meta não entregou";
+  if (novo === "falhou") campos.erro = erro;
   await cliente().from("disparos_envios").update(campos).eq("id", (data as { id: string }).id);
   return true;
 }

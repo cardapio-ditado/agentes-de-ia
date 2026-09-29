@@ -124,11 +124,14 @@ function nomeAproximadoDaCasa(slug) {
  */
 function seloDoEnvio(envio) {
   if (!envio) return null;
+  const hora = (iso) =>
+    iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
   if (envio.status === "sent") {
-    const hora = envio.enviado_em
-      ? new Date(envio.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-      : "";
-    return etiqueta(hora ? `entregue ${hora}` : "entregue", "etiqueta-ok");
+    // Três degraus, e a diferença é exatamente a que a Meta cobra: "aceito"
+    // é ela ter recebido a mensagem; "entregue" é ter chegado no celular.
+    if (envio.lido_em) return etiqueta(`lida ${hora(envio.lido_em)}`, "etiqueta-ok");
+    if (envio.entregue_em) return etiqueta(`entregue ${hora(envio.entregue_em)}`, "etiqueta-ok");
+    return etiqueta(`aceita pela Meta ${hora(envio.enviado_em)} · ainda não entregue`.trim(), "etiqueta-info");
   }
   if (envio.status === "failed") {
     return etiqueta(envio.erro ? `falhou: ${envio.erro.slice(0, 60)}` : "falhou", "etiqueta-perigo");

@@ -234,7 +234,11 @@ export interface EnvioDoParabens {
   status: string;
   erro: string | null;
   criado_em: string;
+  /** Quando a Meta (ou o conector) ACEITOU a mensagem. Não é entrega. */
   enviado_em: string | null;
+  /** O que a Meta contou de volta: chegou no celular, foi lida. */
+  entregue_em: string | null;
+  lido_em: string | null;
 }
 
 export interface Aniversariante extends Cliente {
@@ -416,7 +420,7 @@ export async function proximosAniversariantes(
   const anos = [...new Set(proximos.map((c) => `aniversario_${c.proximo.slice(0, 4)}`))];
   const { data: avisados } = await cliente()
     .from("notifications")
-    .select("cliente_id, template, status, error, created_at, sent_at")
+    .select("cliente_id, template, status, error, created_at, sent_at, entregue_em, lido_em")
     .eq("venue_id", venue.id)
     .in("template", anos)
     .in("cliente_id", proximos.map((c) => c.id));
@@ -428,6 +432,8 @@ export async function proximosAniversariantes(
     error: string | null;
     created_at: string;
     sent_at: string | null;
+    entregue_em?: string | null;
+    lido_em?: string | null;
   };
   const porPessoa = new Map<string, LinhaDeAviso>();
   for (const n of (avisados ?? []) as LinhaDeAviso[]) {
@@ -443,6 +449,8 @@ export async function proximosAniversariantes(
           erro: achado.error,
           criado_em: achado.created_at,
           enviado_em: achado.sent_at,
+          entregue_em: achado.entregue_em ?? null,
+          lido_em: achado.lido_em ?? null,
         }
       : null;
   }
