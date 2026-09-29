@@ -486,25 +486,47 @@ async function clientesEscolhidos(venueId: string, ids: string[]): Promise<Clien
  * falha e agora a casa pode ter mudado o texto da campanha, e é o texto de
  * hoje que deve sair.
  */
+/** Aceito pela Meta há mais que isto sem chegar, já não vai chegar. */
+export const HORAS_PARA_DESISTIR_DA_ENTREGA = 2;
+
+/**
+ * Dá para mandar este parabéns de novo?
+ *
+ * Falhou ou está parado: sim, nunca chegou. Aceito pela Meta mas sem
+ * "entregue" depois de duas horas: sim — a Meta entrega em minutos quando
+ * vai entregar, e o que ela segurou (limite de marketing por pessoa) não
+ * chega mais. Entregue ou lido: não, seria dois parabéns no mesmo ano.
+ */
+export function podeReenviar(
+  aviso: { status: string; sent_at: string | null; entregue_em?: string | null; lido_em?: string | null },
+  agora = new Date(),
+): boolean {
+  if (aviso.status !== "sent") return true;
+  if (aviso.entregue_em || aviso.lido_em) return false;
+  if (!aviso.sent_at) return true;
+  return agora.getTime() - new Date(aviso.sent_at).getTime() >= HORAS_PARA_DESISTIR_DA_ENTREGA * 3_600_000;
+}
+
 async function reenfileirarSeNaoChegou(
   venueId: string,
   clienteId: string,
   template: string,
   corpo: string,
+  modelo: { name: string; language: string; parametros: string[] } | null,
 ): Promise<boolean> {
   const { data, error } = await cliente()
     .from("notifications")
-    .select("id, status")
+    .select("id, status, sent_at, entregue_em, lido_em")
     .eq("venue_id", venueId)
     .eq("cliente_id", clienteId)
     .eq("template", template)
     .maybeSingle();
   if (error || !data) return false;
-  if (data.status === "sent") return false;
+  if (!podeReenviar(data)) return false;
 
   const { error: erroUpdate } = await cliente()
     .from("notifications")
-    .update({ status: "pending", attempts: 0, error: null, body: corpo } as never)
+    .update({ status: "pending", attempts: 0, error: null, body: corpo, modelo, provider_id: null, sent_at: null } as never)
     .eq("id", data.id);
   if (erroUpdate) {
     console.error(`[aniversarios] não reenfileirei ${data.id}: ${erroUpdate.message}`);
@@ -637,7 +659,7 @@ export async function mandarParabens(
         // tentativas) e ficou morto no banco. Sem isto, a trava transformaria
         // uma falha de conexão numa condenação: aquela pessoa nunca mais
         // receberia o parabéns, e a tela contaria como "já avisado".
-        if (await reenfileirarSeNaoChegou(venue.id, p.id, `aniversario_${ano}`, corpo)) {
+        if (await reenfileirarSeNaoChegou(venue.id, p.id, `aniversario_${ano}`, corpo, modeloDeParabens(config, venue.name, p))) {
           resultado.enfileirados += 1;
         } else {
           resultado.repetidos += 1;

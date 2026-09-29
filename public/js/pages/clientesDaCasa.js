@@ -131,6 +131,11 @@ function seloDoEnvio(envio) {
     // é ela ter recebido a mensagem; "entregue" é ter chegado no celular.
     if (envio.lido_em) return etiqueta(`lida ${hora(envio.lido_em)}`, "etiqueta-ok");
     if (envio.entregue_em) return etiqueta(`entregue ${hora(envio.entregue_em)}`, "etiqueta-ok");
+    // Aceita há horas e nada: a Meta segurou (limite de marketing por
+    // pessoa em número novo) e não vai entregar mais. Pode mandar de novo.
+    if (!chegouOuAindaPodeChegar(envio)) {
+      return etiqueta(`aceita pela Meta ${hora(envio.enviado_em)} · não chegou`.trim(), "etiqueta-alerta");
+    }
     return etiqueta(`aceita pela Meta ${hora(envio.enviado_em)} · ainda não entregue`.trim(), "etiqueta-info");
   }
   if (envio.status === "failed") {
@@ -140,6 +145,19 @@ function seloDoEnvio(envio) {
   // administrativo caiu, é aqui que a fila fica parada — e é isto que o
   // gerente precisa ver antes de achar que mandou.
   return etiqueta("na fila, ainda não entregue", "etiqueta-alerta");
+}
+
+/**
+ * Chegou de verdade, ou foi aceito há pouco e ainda pode chegar?
+ *
+ * É o que trava o reenvio. Aceito pela Meta há mais de duas horas sem
+ * "entregue" não vai chegar mais — a mesma régua do servidor.
+ */
+function chegouOuAindaPodeChegar(envio) {
+  if (!envio || envio.status !== "sent") return false;
+  if (envio.entregue_em || envio.lido_em) return true;
+  if (!envio.enviado_em) return false;
+  return Date.now() - new Date(envio.enviado_em).getTime() < 2 * 3_600_000;
 }
 
 /** "faz aniversário hoje", "…amanhã", "…em 12 dias". */
@@ -996,10 +1014,11 @@ export async function clientesDaCasa(raiz, ctx) {
       // Uma linha por pessoa, enxuta. A mensagem que vai sair aparece UMA
       // vez, no topo — é a mesma para todo mundo, só muda o nome.
       for (const p of pessoas) {
-        // "Já avisado" só trava quem foi ENTREGUE. Quem falhou ou está parado
-        // na fila continua marcável: a mensagem dele nunca chegou.
-        const entregue = p.envio?.status === "sent";
-        const bloqueado = Boolean(p.descadastrado_em) || entregue || !p.telefone;
+        // "Já avisado" só trava quem foi ENTREGUE (ou aceito há pouco, que
+        // ainda pode chegar). Quem falhou, está parado, ou foi aceito pela
+        // Meta há horas sem chegar, continua marcável: a mensagem dele
+        // nunca chegou.
+        const bloqueado = Boolean(p.descadastrado_em) || chegouOuAindaPodeChegar(p.envio) || !p.telefone;
         const marca = el("input", {
           type: "checkbox",
           disabled: bloqueado,
@@ -1111,18 +1130,23 @@ export async function clientesDaCasa(raiz, ctx) {
       // telefone", "entregue"); repetir em frase deixaria a lista gorda.
       // Já entregue é ponto final: mandar de novo seria dois parabéns no
       // mesmo ano, que é justamente o que a trava existe para impedir.
-      if (pessoa.descadastrado_em || !pessoa.telefone || pessoa.envio?.status === "sent") return area;
+      if (pessoa.descadastrado_em || !pessoa.telefone || chegouOuAindaPodeChegar(pessoa.envio)) return area;
 
-      // Falhou ou está parada na fila: o botão vira SEGUNDA CHANCE. A trava de
-      // um por ano impede entrega dobrada, não entrega nenhuma — e uma
-      // mensagem que nunca chegou não é uma mensagem enviada.
+      // Falhou, está parada na fila, ou a Meta aceitou e não entregou: o
+      // botão vira SEGUNDA CHANCE. A trava de um por ano impede entrega
+      // dobrada, não entrega nenhuma — e uma mensagem que nunca chegou não é
+      // uma mensagem enviada.
       const jaTentou = Boolean(pessoa.envio);
 
       const botao = el("button", {
         classe: "btn btn-peq",
         type: "button",
         title: jaTentou
-          ? (pessoa.envio.status === "failed" ? "O envio falhou. Tente de novo com o WhatsApp da casa conectado." : "Na fila do conector. Se ficar parado, tente de novo.")
+          ? (pessoa.envio.status === "failed"
+              ? "O envio falhou. Tente de novo."
+              : pessoa.envio.status === "sent"
+                ? "A Meta aceitou há horas e não entregou. Reenviar manda de novo pelo número oficial."
+                : "Na fila. Se ficar parado, tente de novo.")
           : "Manda o parabéns agora, só para esta pessoa",
         texto: jaTentou ? "Tentar de novo" : "Mandar agora",
         onclick: async (ev) => {

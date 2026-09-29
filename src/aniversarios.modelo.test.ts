@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { modeloDeParabens, modeloSugeridoDeParabens } from "./aniversarios.js";
+import { modeloDeParabens, modeloSugeridoDeParabens, podeReenviar } from "./aniversarios.js";
 import { corpoParaAMeta, porQueNaoCria } from "./whatsappOficial.js";
 import { preencherVariaveis, renderizar } from "./disparos.js";
 
@@ -68,4 +68,17 @@ test("o que a Meta recusaria é dito antes de chamar a Meta", () => {
   assert.match(porQueNaoCria({ ...base, corpo: "Oi {{2}}, tudo?" })[0]!, /seguidas/);
   assert.match(porQueNaoCria({ ...base, botoes: ["x".repeat(30)] })[0]!, /25 caracteres/);
   assert.match(porQueNaoCria({ ...base, corpo: "a".repeat(1025) })[0]!, /1024/);
+});
+
+test("o parabéns pode ser reenviado quando nunca chegou — inclusive o que a Meta aceitou e segurou", () => {
+  const agora = new Date("2026-09-29T20:00:00.000Z");
+  assert.equal(podeReenviar({ status: "failed", sent_at: null }, agora), true);
+  assert.equal(podeReenviar({ status: "pending", sent_at: null }, agora), true);
+  // Aceito há quatro horas, sem "entregue": a Meta não vai entregar mais.
+  assert.equal(podeReenviar({ status: "sent", sent_at: "2026-09-29T16:00:00.000Z" }, agora), true);
+  // Aceito há dez minutos: ainda pode chegar, não manda de novo.
+  assert.equal(podeReenviar({ status: "sent", sent_at: "2026-09-29T19:50:00.000Z" }, agora), false);
+  // Entregue ou lido: nunca — seriam dois parabéns no mesmo ano.
+  assert.equal(podeReenviar({ status: "sent", sent_at: "2026-09-29T16:00:00.000Z", entregue_em: "2026-09-29T16:01:00.000Z" }, agora), false);
+  assert.equal(podeReenviar({ status: "sent", sent_at: "2026-09-29T16:00:00.000Z", lido_em: "2026-09-29T16:05:00.000Z" }, agora), false);
 });
