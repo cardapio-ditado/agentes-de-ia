@@ -115,49 +115,71 @@ function nomeAproximadoDaCasa(slug) {
 }
 
 /**
- * O que aconteceu com a mensagem daquela pessoa.
+ * Os degraus do envio, na ordem da escada: fila → aceito → entregue → lido →
+ * respondeu, mais os dois desvios (não chegou, falhou) e quem nem entra.
  *
- * "Enfileirado" não é "entregue": entre uma coisa e outra estão o conector, o
- * WhatsApp e o número da pessoa. Sem este selo, um disparo em que metade
- * falhou parece um disparo inteiro — e foi assim que se perdeu meia lista sem
- * ninguém ter onde olhar.
+ * A situação de cada pessoa vem PRONTA do servidor (`envio.situacao`), na
+ * mesma régua que trava o reenvio lá. Aqui só mora o vocabulário: nome, cor
+ * e a explicação que aparece ao passar o mouse. O quadro conta por isto, a
+ * lista filtra por isto, e as duas telas nunca discordam.
  */
-function seloDoEnvio(envio) {
-  if (!envio) return null;
-  const hora = (iso) =>
-    iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-  if (envio.status === "sent") {
-    // Três degraus, e a diferença é exatamente a que a Meta cobra: "aceito"
-    // é ela ter recebido a mensagem; "entregue" é ter chegado no celular.
-    if (envio.lido_em) return etiqueta(`lida ${hora(envio.lido_em)}`, "etiqueta-ok");
-    if (envio.entregue_em) return etiqueta(`entregue ${hora(envio.entregue_em)}`, "etiqueta-ok");
-    // Aceita há horas e nada: a Meta segurou (limite de marketing por
-    // pessoa em número novo) e não vai entregar mais. Pode mandar de novo.
-    if (!chegouOuAindaPodeChegar(envio)) {
-      return etiqueta(`aceita pela Meta ${hora(envio.enviado_em)} · não chegou`.trim(), "etiqueta-alerta");
-    }
-    return etiqueta(`aceita pela Meta ${hora(envio.enviado_em)} · ainda não entregue`.trim(), "etiqueta-info");
-  }
-  if (envio.status === "failed") {
-    return etiqueta(envio.erro ? `falhou: ${envio.erro.slice(0, 60)}` : "falhou", "etiqueta-perigo");
-  }
-  // pending: saiu da tela e está com o conector. Numa casa cujo número
-  // administrativo caiu, é aqui que a fila fica parada — e é isto que o
-  // gerente precisa ver antes de achar que mandou.
-  return etiqueta("na fila, ainda não entregue", "etiqueta-alerta");
+const SITUACOES = [
+  ["sem_envio", "Sem envio", "", "", "Ainda não recebeu o parabéns deste ano"],
+  ["na_fila", "Na fila", "etiqueta-alerta", "alerta", "Vai sair em instantes pelo número oficial"],
+  ["aceito", "Aguardando entrega", "etiqueta-info", "info", "A Meta aceitou; costuma chegar em minutos"],
+  ["entregue", "Entregues", "etiqueta-ok", "ok", "Chegou no celular da pessoa"],
+  ["lido", "Lidas", "etiqueta-ok", "ok", "A pessoa abriu a mensagem"],
+  ["respondeu", "Responderam", "etiqueta-marca", "marca", "A pessoa escreveu de volta — a conversa está em Conversas"],
+  ["nao_chegou", "Não chegou", "etiqueta-alerta", "alerta", "A Meta aceitou há mais de 2 h e não entregou. Pode reenviar"],
+  ["falhou", "Falhou", "etiqueta-perigo", "perigo", "A Meta recusou; o motivo está na linha"],
+  ["fora", "Fora", "", "", "Sem telefone, ou pediu para não receber"],
+];
+const SITUACAO = Object.fromEntries(SITUACOES.map(([id, nome, classe, tom, dica]) => [id, { nome, classe, tom, dica }]));
+
+/** Em que degrau esta pessoa está — inclusive quem nem entra na fila. */
+function situacaoDaPessoa(p) {
+  if (p.descadastrado_em || !p.telefone) return "fora";
+  return p.envio?.situacao ?? "sem_envio";
 }
 
 /**
  * Chegou de verdade, ou foi aceito há pouco e ainda pode chegar?
  *
  * É o que trava o reenvio. Aceito pela Meta há mais de duas horas sem
- * "entregue" não vai chegar mais — a mesma régua do servidor.
+ * "entregue" não vai chegar mais — e é o servidor que faz essa conta.
  */
 function chegouOuAindaPodeChegar(envio) {
-  if (!envio || envio.status !== "sent") return false;
-  if (envio.entregue_em || envio.lido_em) return true;
-  if (!envio.enviado_em) return false;
-  return Date.now() - new Date(envio.enviado_em).getTime() < 2 * 3_600_000;
+  return ["aceito", "entregue", "lido", "respondeu"].includes(envio?.situacao);
+}
+
+/** "29/09 17:41" — a hora de um carimbo, curta o bastante para caber na linha. */
+function horaCurta(iso) {
+  return iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+}
+
+/**
+ * O que aconteceu com a mensagem daquela pessoa, num selo.
+ *
+ * "Enfileirado" não é "entregue": entre uma coisa e outra estão a Meta, o
+ * WhatsApp e o número da pessoa. Sem este selo, um disparo em que metade
+ * ficou segurada parece um disparo inteiro — e foi assim que 44 "enviados"
+ * viraram 3 entregues sem ninguém ter onde olhar.
+ */
+function seloDoEnvio(envio) {
+  if (!envio) return null;
+  const s = SITUACAO[envio.situacao] ?? SITUACAO.na_fila;
+  const texto = {
+    na_fila: "na fila",
+    aceito: `aceita ${horaCurta(envio.enviado_em)} · aguardando`,
+    entregue: `entregue ${horaCurta(envio.entregue_em)}`,
+    lido: `lida ${horaCurta(envio.lido_em)}`,
+    respondeu: `respondeu ${horaCurta(envio.respondido_em)}`,
+    nao_chegou: `aceita ${horaCurta(envio.enviado_em)} · não chegou`,
+    falhou: envio.erro ? `falhou: ${envio.erro.slice(0, 60)}` : "falhou",
+  }[envio.situacao] ?? "na fila";
+  const selo = etiqueta(texto.trim(), s.classe);
+  selo.title = envio.situacao === "falhou" && envio.erro ? envio.erro : s.dica;
+  return selo;
 }
 
 /** "faz aniversário hoje", "…amanhã", "…em 12 dias". */
@@ -960,22 +982,42 @@ export async function clientesDaCasa(raiz, ctx) {
 
   // Os filtros da agenda sobrevivem à troca de aba: quem escolheu "só o 65"
   // e foi olhar a lista não quer escolher de novo ao voltar.
-  const filtrosDaAgenda = { dias: "45", ddd: "" };
+  const filtrosDaAgenda = { dias: "45", ddd: "", situacao: "", ordem: "aniversario" };
+  // Cada desenho da agenda ganha um número. O relógio que atualiza os status
+  // confere se ainda é o desenho dele antes de mexer na tela — trocar de aba
+  // e voltar não pode deixar dois relógios disputando a mesma lista.
+  let versaoDaAgenda = 0;
 
+  /**
+   * A agenda de aniversários como QUADRO DE GESTÃO, e não só como lista.
+   *
+   * Em cima, o quadro: quantos no período e em que degrau cada envio está
+   * (na fila, aguardando, entregue, lida, respondeu, não chegou, falhou).
+   * Cada número é um filtro — clicar em "Não chegou" deixa só eles, e
+   * "Marcar todos" passa a valer para os que estão à vista. Embaixo, a lista,
+   * com o selo de cada pessoa e a hora do carimbo.
+   *
+   * Enquanto houver envio em andamento, a tela se atualiza sozinha, em
+   * silêncio e SEM redesenhar: troca os selos no lugar, mantém as marcações
+   * e a rolagem. Foi a falta disto que fez "mandei e não vejo nada" —
+   * a resposta existia no banco e a tela só a mostrava recarregando.
+   */
   async function abaAniversarios() {
+    const versao = ++versaoDaAgenda;
     limpar(corpo);
     corpo.append(el("p", { classe: "muted", texto: "Carregando a agenda…" }));
 
     const params = new URLSearchParams({ dias: filtrosDaAgenda.dias });
     if (filtrosDaAgenda.ddd.startsWith("!")) params.set("fora_do_ddd", filtrosDaAgenda.ddd.slice(1));
     else if (filtrosDaAgenda.ddd) params.set("ddd", filtrosDaAgenda.ddd);
+    const urlDaAgenda = `/v1/venues/${ctx.venue}/aniversariantes?${params}`;
 
     let pessoas;
     let config;
     let ddds = [];
     try {
       [pessoas, config, ddds] = await Promise.all([
-        get(`/v1/venues/${ctx.venue}/aniversariantes?${params}`),
+        get(urlDaAgenda),
         get(`/v1/venues/${ctx.venue}/clientes/config`),
         get(`/v1/venues/${ctx.venue}/clientes/ddds`).then((l) => (Array.isArray(l) ? l : [])).catch(() => []),
       ]);
@@ -984,6 +1026,9 @@ export async function clientesDaCasa(raiz, ctx) {
       corpo.append(vazio("Não deu para carregar", e.message));
       return;
     }
+    // Trocou de aba (ou de filtro) enquanto carregava: este desenho morreu.
+    if (versao !== versaoDaAgenda) return;
+    ordenar(pessoas);
 
     const seletorDias = el("select", { classe: "select" }, ["15", "30", "45", "90"].map((d) =>
       el("option", { value: d, texto: `Próximos ${d} dias`, selected: d === filtrosDaAgenda.dias })));
@@ -992,14 +1037,25 @@ export async function clientesDaCasa(raiz, ctx) {
       ...ddds.slice(0, 30).map((d) => el("option", { value: d.ddd, texto: `DDD ${d.ddd} — ${d.pessoas.toLocaleString("pt-BR")}`, selected: d.ddd === filtrosDaAgenda.ddd })),
       ...(ddds[0] ? [el("option", { value: `!${ddds[0].ddd}`, texto: `Fora do DDD ${ddds[0].ddd}`, selected: `!${ddds[0].ddd}` === filtrosDaAgenda.ddd })] : []),
     ]);
+    const seletorOrdem = el("select", { classe: "select" }, [
+      el("option", { value: "aniversario", texto: "Por data do aniversário", selected: filtrosDaAgenda.ordem === "aniversario" }),
+      el("option", { value: "envio", texto: "Pelo último envio", selected: filtrosDaAgenda.ordem === "envio" }),
+    ]);
     seletorDias.addEventListener("change", () => { filtrosDaAgenda.dias = seletorDias.value; abaAniversarios(); });
     seletorDdd.addEventListener("change", () => { filtrosDaAgenda.ddd = seletorDdd.value; abaAniversarios(); });
+    seletorOrdem.addEventListener("change", () => { filtrosDaAgenda.ordem = seletorOrdem.value; abaAniversarios(); });
 
     limpar(corpo);
     const lista = el("div", { classe: "tabela" });
+    // Uma entrada por pessoa: a marcação, a linha inteira (para esconder no
+    // filtro), o selo e o rodapé (para trocar no lugar quando o status muda).
     const marcas = [];
+    const quadro = el("div", { classe: "quadro-envios" });
+    const notaDoQuadro = el("p", { classe: "muted", style: "margin:0" });
+    const acoesDoQuadro = el("div", { classe: "linha-campos", style: "margin:0" });
     let botaoEnviar = null;
     let contador = null;
+
     if (!pessoas.length) {
       // A TELA TEM DE DIZER O QUE ELA SABE.
       //
@@ -1011,56 +1067,13 @@ export async function clientesDaCasa(raiz, ctx) {
         ? vazio("Ninguém deste DDD faz aniversário no período", "Tire o filtro de DDD ou alargue o período.")
         : await porQueVazio());
     } else {
-      // Uma linha por pessoa, enxuta. A mensagem que vai sair aparece UMA
-      // vez, no topo — é a mesma para todo mundo, só muda o nome.
-      for (const p of pessoas) {
-        // "Já avisado" só trava quem foi ENTREGUE (ou aceito há pouco, que
-        // ainda pode chegar). Quem falhou, está parado, ou foi aceito pela
-        // Meta há horas sem chegar, continua marcável: a mensagem dele
-        // nunca chegou.
-        const bloqueado = Boolean(p.descadastrado_em) || chegouOuAindaPodeChegar(p.envio) || !p.telefone;
-        const marca = el("input", {
-          type: "checkbox",
-          disabled: bloqueado,
-          // Quem faz nos próximos dias já vem marcado: é o caso comum, e
-          // desmarcar quem não interessa dá menos trabalho que marcar um a um.
-          checked: !bloqueado && p.dias_ate <= 15,
-        });
-        marca.dataset.cliente = p.id;
-        marcas.push({ marca, pessoa: p });
-
-        lista.append(
-          el("label", { classe: "linha-tabela", style: "cursor:pointer" }, [
-            el("span", { style: "display:flex;align-items:center;gap:10px;min-width:0;flex:1" }, [
-              marca,
-              el("span", { style: "min-width:0" }, [
-                el("strong", { texto: p.nome || telefoneLegivel(p.telefone) }),
-                el("br"),
-                el("small", {
-                  classe: "muted",
-                  texto: [
-                    telefoneLegivel(p.telefone),
-                    quandoFaz(p.dias_ate),
-                    p.nascimento_ano
-                      ? `faz ${Number(p.proximo.slice(0, 4)) - p.nascimento_ano} anos`
-                      : null,
-                  ].filter(Boolean).join(" · "),
-                }),
-              ]),
-            ]),
-            el("span", { classe: "linha-detalhes", style: "align-items:center" }, [
-              p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
-              seloDoEnvio(p.envio),
-              !p.telefone ? etiqueta("sem telefone", "etiqueta-alerta") : null,
-              el("strong", {
-                texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}`,
-              }),
-              rodapeDoCartao(p, bloqueado),
-            ].filter(Boolean)),
-          ]),
-        );
-      }
+      for (const p of pessoas) lista.append(linhaDaPessoa(p));
     }
+    const semNinguemAVista = el("div", { classe: "vazio", hidden: true }, [
+      el("strong", { texto: "Ninguém nesta situação" }),
+      el("span", { texto: "Clique no mesmo número de novo para ver todo mundo." }),
+    ]);
+    lista.append(semNinguemAVista);
 
     // O que vai sair, uma vez só. Pelo oficial é o modelo da Meta; pelo
     // conector é o texto da aba Parabéns — e a prévia de uma pessoa real
@@ -1094,6 +1107,7 @@ export async function clientesDaCasa(raiz, ctx) {
                   classe: "btn btn-peq",
                   type: "button",
                   texto: "Marcar todos",
+                  title: "Marca quem está à vista e pode receber",
                   onclick: () => marcarTodos(true),
                 }),
                 el("button", {
@@ -1105,49 +1119,119 @@ export async function clientesDaCasa(raiz, ctx) {
               ])
             : null,
         ].filter(Boolean)),
-        el("div", { classe: "linha-campos" }, [seletorDias, seletorDdd]),
+        el("div", { classe: "linha-campos" }, [seletorDias, seletorDdd, seletorOrdem]),
+        pessoas.length
+          ? el("section", { classe: "cartao pilha-fina" }, [
+              el("div", { classe: "cabecalho-secao", style: "margin:0" }, [
+                el("h3", { texto: "Quadro de envios", style: "margin:0" }),
+                el("button", {
+                  classe: "btn btn-peq",
+                  type: "button",
+                  texto: "Atualizar",
+                  title: "Busca os status de novo, sem perder as marcações",
+                  onclick: () => atualizarSituacoes(),
+                }),
+              ]),
+              quadro,
+              acoesDoQuadro,
+              notaDoQuadro,
+            ])
+          : null,
         pessoas.length ? oQueVaiSair : null,
         lista,
         marcas.length ? rodapeDeEnvio() : null,
       ].filter(Boolean)),
     );
+    desenharQuadro();
+    aplicarFiltro();
+    agendarAtualizacao();
+
+    /* ---------- uma linha da lista ---------- */
+
+    function linhaDaPessoa(p) {
+      // "Já avisado" só trava quem foi ENTREGUE (ou aceito há pouco, que
+      // ainda pode chegar). Quem falhou, está parado, ou foi aceito pela
+      // Meta há horas sem chegar, continua marcável: a mensagem dele nunca
+      // chegou.
+      const bloqueado = Boolean(p.descadastrado_em) || chegouOuAindaPodeChegar(p.envio) || !p.telefone;
+      const marca = el("input", {
+        type: "checkbox",
+        disabled: bloqueado,
+        // Quem faz nos próximos dias já vem marcado: é o caso comum, e
+        // desmarcar quem não interessa dá menos trabalho que marcar um a um.
+        checked: !bloqueado && p.dias_ate <= 15,
+      });
+      marca.dataset.cliente = p.id;
+      const selo = el("span", { classe: "selo-do-envio" }, [seloDoEnvio(p.envio)].filter(Boolean));
+      const rodape = el("span", { style: "display:inline-flex;align-items:center;gap:8px" });
+      preencherRodape(rodape, p, bloqueado, marca);
+
+      const linha = el("label", { classe: "linha-tabela", style: "cursor:pointer" }, [
+        el("span", { style: "display:flex;align-items:center;gap:10px;min-width:0;flex:1" }, [
+          marca,
+          el("span", { style: "min-width:0" }, [
+            el("strong", { texto: p.nome || telefoneLegivel(p.telefone) }),
+            el("br"),
+            el("small", {
+              classe: "muted",
+              texto: [
+                telefoneLegivel(p.telefone),
+                quandoFaz(p.dias_ate),
+                p.nascimento_ano
+                  ? `faz ${Number(p.proximo.slice(0, 4)) - p.nascimento_ano} anos`
+                  : null,
+              ].filter(Boolean).join(" · "),
+            }),
+          ]),
+        ]),
+        el("span", { classe: "linha-detalhes", style: "align-items:center" }, [
+          p.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
+          selo,
+          !p.telefone ? etiqueta("sem telefone", "etiqueta-alerta") : null,
+          el("strong", {
+            texto: `${String(p.nascimento_dia).padStart(2, "0")}/${String(p.nascimento_mes).padStart(2, "0")}`,
+          }),
+          rodape,
+        ].filter(Boolean)),
+      ]);
+      marcas.push({ marca, pessoa: p, linha, selo, rodape });
+      return linha;
+    }
 
     /**
-     * O rodapé do cartão: o motivo, ou o botão de mandar só para esta pessoa.
+     * O rodapé do cartão: o botão de mandar só para esta pessoa, ou nada.
      *
      * O botão fica AQUI, e não só no fim da lista, porque na prática o gerente
      * abre a agenda, lê a mensagem de uma pessoa e quer mandar aquela. Rolar
      * até o rodapé para disparar quem está no topo da tela é o tipo de atrito
      * que faz a ferramenta ser usada pela metade.
      *
-     * E quando não dá para mandar, o cartão DIZ POR QUÊ. Botão que some sem
-     * explicação vira "o sistema não funciona".
+     * Preenche um contêiner em vez de devolver um: quando o status muda pelo
+     * relógio, o mesmo contêiner é esvaziado e preenchido de novo no lugar.
      */
-    function rodapeDoCartao(pessoa, bloqueado) {
-      const area = el("span", { style: "display:inline-flex;align-items:center;gap:8px" });
-
+    function preencherRodape(area, pessoa, bloqueado, marca) {
+      limpar(area);
       // As etiquetas da linha já dizem o motivo ("não quer mensagem", "sem
       // telefone", "entregue"); repetir em frase deixaria a lista gorda.
       // Já entregue é ponto final: mandar de novo seria dois parabéns no
       // mesmo ano, que é justamente o que a trava existe para impedir.
-      if (pessoa.descadastrado_em || !pessoa.telefone || chegouOuAindaPodeChegar(pessoa.envio)) return area;
+      if (bloqueado) return;
 
       // Falhou, está parada na fila, ou a Meta aceitou e não entregou: o
       // botão vira SEGUNDA CHANCE. A trava de um por ano impede entrega
       // dobrada, não entrega nenhuma — e uma mensagem que nunca chegou não é
       // uma mensagem enviada.
       const jaTentou = Boolean(pessoa.envio);
+      const dica = {
+        falhou: "O envio falhou. Tente de novo.",
+        nao_chegou: "A Meta aceitou há horas e não entregou. Reenviar manda de novo pelo número oficial.",
+        na_fila: "Na fila. Se ficar parado, tente de novo.",
+      }[pessoa.envio?.situacao] ?? "Manda o parabéns agora, só para esta pessoa";
 
       const botao = el("button", {
         classe: "btn btn-peq",
         type: "button",
-        title: jaTentou
-          ? (pessoa.envio.status === "failed"
-              ? "O envio falhou. Tente de novo."
-              : pessoa.envio.status === "sent"
-                ? "A Meta aceitou há horas e não entregou. Reenviar manda de novo pelo número oficial."
-                : "Na fila. Se ficar parado, tente de novo.")
-          : "Manda o parabéns agora, só para esta pessoa",
+        title: dica,
         texto: jaTentou ? "Tentar de novo" : "Mandar agora",
         onclick: async (ev) => {
           ev.preventDefault();
@@ -1164,17 +1248,16 @@ export async function clientesDaCasa(raiz, ctx) {
             });
             // Troca o rodapé no lugar, sem redesenhar a lista: redesenhar
             // jogaria a rolagem para o topo, que é justamente o incômodo que
-            // este botão existe para resolver.
+            // este botão existe para resolver. O relógio traz o selo novo.
             limpar(area).append(
               el("small", {
                 classe: "muted",
-                texto: r.enfileirados
-                  ? "Na fila do conector — vai sair em instantes."
-                  : explicarResultado(r),
+                texto: r.enfileirados ? "Na fila — vai sair em instantes." : explicarResultado(r),
               }),
             );
-            if (marca) marca.disabled = true;
+            marca.checked = false;
             atualizarRodape();
+            setTimeout(() => atualizarSituacoes(), 1500);
           } catch (e) {
             avisar(e.message, "erro");
             botao.disabled = false;
@@ -1182,12 +1265,156 @@ export async function clientesDaCasa(raiz, ctx) {
           }
         },
       });
-      // `bloqueado` cobre o que a lista já sabe; o botão confere de novo por
-      // segurança, mas a essa altura ele nem chega a ser desenhado.
-      botao.disabled = bloqueado;
-      const marca = marcas.find((m) => m.pessoa.id === pessoa.id)?.marca ?? null;
       area.append(botao);
-      return area;
+    }
+
+    /* ---------- o quadro ---------- */
+
+    /**
+     * Os números do período, um por degrau, e cada um é um filtro.
+     *
+     * Só aparecem os degraus com alguém: uma fileira de zeros diz menos que
+     * uma fileira curta. "No período" é o total e desliga o filtro.
+     */
+    function desenharQuadro() {
+      const contagem = {};
+      for (const { pessoa } of marcas) {
+        const s = situacaoDaPessoa(pessoa);
+        contagem[s] = (contagem[s] ?? 0) + 1;
+      }
+      limpar(quadro);
+      const tile = (chave, nome, n, dica, tom) => {
+        const ativa = filtrosDaAgenda.situacao === chave;
+        const b = el("button", {
+          classe: `quadro-tile ${ativa ? "quadro-tile-ativa" : ""}`.trim(),
+          type: "button",
+          title: dica,
+          "data-tom": tom || null,
+          onclick: () => {
+            filtrosDaAgenda.situacao = ativa ? "" : chave;
+            desenharQuadro();
+            aplicarFiltro();
+          },
+        }, [
+          el("span", { classe: "quadro-numero", texto: String(n) }),
+          el("span", { classe: "quadro-rotulo", texto: nome }),
+        ]);
+        return b;
+      };
+      quadro.append(tile("", "No período", marcas.length, "Todo mundo que faz aniversário no período. Clique para ver todos.", ""));
+      for (const [id, nome, , tom, dica] of SITUACOES) {
+        const n = contagem[id] ?? 0;
+        if (n || id === filtrosDaAgenda.situacao) quadro.append(tile(id, nome, n, dica, tom));
+      }
+
+      // O atalho que a gestão pede: os que a Meta segurou, prontos para
+      // marcar de uma vez. Falhou fica de fora de propósito — número fora do
+      // WhatsApp não melhora na segunda tentativa.
+      limpar(acoesDoQuadro);
+      const naoChegaram = contagem.nao_chegou ?? 0;
+      if (naoChegaram) {
+        acoesDoQuadro.append(el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: naoChegaram === 1 ? "Marcar a 1 que não chegou" : `Marcar as ${naoChegaram} que não chegaram`,
+          title: "Filtra por 'Não chegou' e marca todas. Depois é só mandar.",
+          onclick: () => {
+            filtrosDaAgenda.situacao = "nao_chegou";
+            desenharQuadro();
+            aplicarFiltro();
+            marcarTodos(true);
+            botaoEnviar?.scrollIntoView({ behavior: "smooth", block: "center" });
+          },
+        }));
+      }
+      const respondeu = contagem.respondeu ?? 0;
+      if (respondeu) {
+        acoesDoQuadro.append(el("a", {
+          classe: "btn btn-peq",
+          href: "#conversas",
+          texto: "Ver as conversas",
+          title: "Quem respondeu está falando com o agente em Conversas",
+        }));
+      }
+
+      const ultimo = marcas
+        .map(({ pessoa }) => pessoa.envio?.enviado_em)
+        .filter(Boolean)
+        .sort()
+        .at(-1);
+      const emAndamento = (contagem.na_fila ?? 0) + (contagem.aceito ?? 0);
+      notaDoQuadro.textContent = [
+        ultimo ? `Último envio ${horaCurta(ultimo)}.` : "Nenhum envio ainda neste período.",
+        emAndamento ? `${emAndamento} em andamento — a tela se atualiza sozinha.` : null,
+        "Clique num número para ver só aquelas pessoas.",
+      ].filter(Boolean).join(" ");
+    }
+
+    /** Esconde quem não está na situação escolhida. Sem filtro, mostra todos. */
+    function aplicarFiltro() {
+      let aVista = 0;
+      for (const { pessoa, linha } of marcas) {
+        const fora = Boolean(filtrosDaAgenda.situacao) && situacaoDaPessoa(pessoa) !== filtrosDaAgenda.situacao;
+        linha.hidden = fora;
+        if (!fora) aVista += 1;
+      }
+      semNinguemAVista.hidden = !marcas.length || aVista > 0;
+      atualizarRodape();
+    }
+
+    /**
+     * Busca os status de novo e troca só o que mudou, no lugar.
+     *
+     * Nada de redesenhar: as marcações, o filtro e a rolagem ficam como
+     * estão. Uma pessoa que passou de "na fila" para "entregue" ganha o selo
+     * novo, perde o botão e sai da conta de marcáveis — e é só isso.
+     */
+    async function atualizarSituacoes() {
+      if (versao !== versaoDaAgenda || abaAtiva !== "aniversarios") return;
+      let novas;
+      try {
+        novas = await get(urlDaAgenda);
+      } catch {
+        agendarAtualizacao();
+        return;
+      }
+      if (versao !== versaoDaAgenda || !Array.isArray(novas)) return;
+
+      const porId = new Map(novas.map((p) => [p.id, p]));
+      for (const item of marcas) {
+        const nova = porId.get(item.pessoa.id);
+        if (!nova) continue;
+        const mudou = JSON.stringify(nova.envio) !== JSON.stringify(item.pessoa.envio);
+        item.pessoa = nova;
+        if (!mudou) continue;
+        const bloqueado = Boolean(nova.descadastrado_em) || chegouOuAindaPodeChegar(nova.envio) || !nova.telefone;
+        item.marca.disabled = bloqueado;
+        if (bloqueado) item.marca.checked = false;
+        limpar(item.selo);
+        const selo = seloDoEnvio(nova.envio);
+        if (selo) item.selo.append(selo);
+        preencherRodape(item.rodape, nova, bloqueado, item.marca);
+      }
+      desenharQuadro();
+      aplicarFiltro();
+      notaDoQuadro.textContent += ` Atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}.`;
+      agendarAtualizacao();
+    }
+
+    /** Enquanto houver algo na fila ou aguardando a Meta, volta em 15 s. */
+    function agendarAtualizacao() {
+      const emAndamento = marcas.some(({ pessoa }) => ["na_fila", "aceito"].includes(situacaoDaPessoa(pessoa)));
+      if (!emAndamento) return;
+      setTimeout(() => atualizarSituacoes(), 15_000);
+    }
+
+    /* ---------- ordem, seleção e o envio em massa ---------- */
+
+    /** Por aniversário (o servidor já manda assim) ou pelo envio mais recente. */
+    function ordenar(lista) {
+      if (filtrosDaAgenda.ordem !== "envio") return;
+      const quando = (p) => (p.envio ? Date.parse(p.envio.enviado_em ?? p.envio.criado_em) || 0 : -1);
+      lista.sort((a, b) => quando(b) - quando(a) || a.dias_ate - b.dias_ate);
     }
 
     /**
@@ -1206,8 +1433,9 @@ export async function clientesDaCasa(raiz, ctx) {
       return partes.length ? partes.join(" · ") : "Ninguém elegível nesta seleção.";
     }
 
+    /** Marca (ou desmarca) quem está À VISTA e pode receber. */
     function marcarTodos(valor) {
-      for (const { marca } of marcas) if (!marca.disabled) marca.checked = valor;
+      for (const { marca, linha } of marcas) if (!marca.disabled && !linha.hidden) marca.checked = valor;
       atualizarRodape();
     }
 
@@ -1235,7 +1463,7 @@ export async function clientesDaCasa(raiz, ctx) {
     }
 
     function escolhidos() {
-      return marcas.filter(({ marca }) => marca.checked && !marca.disabled);
+      return marcas.filter(({ marca, linha }) => marca.checked && !marca.disabled && !linha.hidden);
     }
 
     function atualizarRodape() {
@@ -1244,9 +1472,12 @@ export async function clientesDaCasa(raiz, ctx) {
       botaoEnviar.textContent = n === 1 ? "Mandar para 1 pessoa" : `Mandar para ${n} pessoas`;
       botaoEnviar.disabled = n === 0;
       const fora = marcas.filter(({ marca }) => marca.disabled).length;
-      contador.textContent = fora
-        ? `${n} marcado(s) · ${fora} fora da lista (já avisados, sem telefone ou que pediram para não receber)`
-        : `${n} marcado(s)`;
+      const escondidos = marcas.filter(({ linha }) => linha.hidden).length;
+      contador.textContent = [
+        `${n} marcado(s)`,
+        escondidos ? `${escondidos} fora do filtro` : null,
+        fora ? `${fora} sem como receber (já chegou, sem telefone ou pediram para não receber)` : null,
+      ].filter(Boolean).join(" · ");
     }
 
     async function mandarAosMarcados() {
@@ -1267,14 +1498,18 @@ export async function clientesDaCasa(raiz, ctx) {
         const detalhe = r.enfileirados && fora !== "Ninguém elegível nesta seleção." ? ` · ${fora}` : "";
         avisar(
           r.enfileirados
-            ? `${r.enfileirados} parabéns na fila de envio${detalhe}.`
+            ? `${r.enfileirados} parabéns na fila de envio${detalhe}. Acompanhe no quadro.`
             : fora,
           r.enfileirados ? "ok" : "info",
         );
-        abaAniversarios();
+        for (const { marca } of alvos) marca.checked = false;
+        // Sem redesenhar: o quadro e os selos mudam no lugar, e a rolagem
+        // fica onde está.
+        await atualizarSituacoes();
       } catch (e) {
         avisar(e.message, "erro");
-        botaoEnviar.disabled = false;
+      } finally {
+        atualizarRodape();
       }
     }
   }

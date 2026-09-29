@@ -2,7 +2,7 @@ import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
 import { reivindicar } from "./rotinas.js";
 import { hojeNaCasa } from "./fuso.js";
 import { conexaoDaCasa, prontaParaEnviar } from "./whatsappOficial.js";
-import { enviarModeloPelaCloudApi, normalizarTelefone } from "./notifications.js";
+import { MAX_TENTATIVAS, enviarModeloPelaCloudApi, normalizarTelefone } from "./notifications.js";
 import { dddValido, listarClientes, type Cliente } from "./clientes.js";
 import { SELOS, faltaHaQuantoTempo, retratoDe, type Retrato, type Selo } from "./crm.js";
 
@@ -752,7 +752,10 @@ export async function registrarStatusDaMeta(status: {
     avisoMexido ||= (l ?? []).length > 0;
   }
   if (novo === "falhou") {
-    const { data: f } = await cliente().from("notifications").update({ status: "failed", error: erro }).eq("provider_id", status.id).select("id");
+    // Com as tentativas no teto: a Meta já recusou depois de aceitar, e
+    // tentar de novo sozinho em um minuto dá o mesmo resultado (número fora
+    // do WhatsApp, entrega segurada). O "Tentar de novo" da tela zera.
+    const { data: f } = await cliente().from("notifications").update({ status: "failed", error: erro, attempts: MAX_TENTATIVAS }).eq("provider_id", status.id).select("id");
     avisoMexido ||= (f ?? []).length > 0;
   }
 

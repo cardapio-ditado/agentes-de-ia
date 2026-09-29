@@ -229,16 +229,31 @@ export async function aniversariantesDoDia(
   return (data ?? []) as Cliente[];
 }
 
+/**
+ * A situação de um parabéns, num vocabulário só, do servidor para a tela.
+ *
+ * É a escada do disparo: na fila → aceito pela Meta → entregue → lido →
+ * respondeu. Dois desvios: "não chegou" (aceito há horas e nada — a Meta
+ * segurou) e "falhou" (recusado, com motivo). A tela filtra, conta e trava
+ * o reenvio por ISTO, e não por combinações de carimbos que cada página
+ * interpretaria de um jeito.
+ */
+export type SituacaoDoEnvio = "na_fila" | "aceito" | "entregue" | "lido" | "respondeu" | "nao_chegou" | "falhou";
+
 export interface EnvioDoParabens {
   /** pending, sent ou failed — como a fila de avisos registra. */
   status: string;
+  situacao: SituacaoDoEnvio;
   erro: string | null;
+  tentativas: number;
   criado_em: string;
   /** Quando a Meta (ou o conector) ACEITOU a mensagem. Não é entrega. */
   enviado_em: string | null;
   /** O que a Meta contou de volta: chegou no celular, foi lida. */
   entregue_em: string | null;
   lido_em: string | null;
+  /** A pessoa escreveu de volta depois do parabéns. */
+  respondido_em: string | null;
 }
 
 export interface Aniversariante extends Cliente {
@@ -420,7 +435,7 @@ export async function proximosAniversariantes(
   const anos = [...new Set(proximos.map((c) => `aniversario_${c.proximo.slice(0, 4)}`))];
   const { data: avisados } = await cliente()
     .from("notifications")
-    .select("cliente_id, template, status, error, created_at, sent_at, entregue_em, lido_em")
+    .select("cliente_id, template, status, error, attempts, created_at, sent_at, entregue_em, lido_em, respondido_em")
     .eq("venue_id", venue.id)
     .in("template", anos)
     .in("cliente_id", proximos.map((c) => c.id));
@@ -430,10 +445,12 @@ export async function proximosAniversariantes(
     template: string;
     status: string;
     error: string | null;
+    attempts: number;
     created_at: string;
     sent_at: string | null;
     entregue_em?: string | null;
     lido_em?: string | null;
+    respondido_em?: string | null;
   };
   const porPessoa = new Map<string, LinhaDeAviso>();
   for (const n of (avisados ?? []) as LinhaDeAviso[]) {
@@ -446,11 +463,14 @@ export async function proximosAniversariantes(
     c.envio = achado
       ? {
           status: achado.status,
+          situacao: situacaoDoEnvio(achado, agora),
           erro: achado.error,
+          tentativas: achado.attempts ?? 0,
           criado_em: achado.created_at,
           enviado_em: achado.sent_at,
           entregue_em: achado.entregue_em ?? null,
           lido_em: achado.lido_em ?? null,
+          respondido_em: achado.respondido_em ?? null,
         }
       : null;
   }
@@ -489,22 +509,42 @@ async function clientesEscolhidos(venueId: string, ids: string[]): Promise<Clien
 /** Aceito pela Meta há mais que isto sem chegar, já não vai chegar. */
 export const HORAS_PARA_DESISTIR_DA_ENTREGA = 2;
 
+type AvisoParaSituacao = {
+  status: string;
+  sent_at: string | null;
+  entregue_em?: string | null;
+  lido_em?: string | null;
+  respondido_em?: string | null;
+};
+
+/**
+ * Em que degrau da escada este parabéns está. Puro, testável.
+ *
+ * O degrau mais alto vence: quem respondeu foi lida, entregue e aceita, e é
+ * "respondeu" que a casa quer ver. Aceito sem "entregue" por mais de duas
+ * horas vira "não chegou" — a Meta entrega em minutos quando vai entregar,
+ * e o que ela segurou (limite de marketing por pessoa) não chega mais.
+ */
+export function situacaoDoEnvio(aviso: AvisoParaSituacao, agora = new Date()): SituacaoDoEnvio {
+  if (aviso.status === "failed") return "falhou";
+  if (aviso.status !== "sent") return "na_fila";
+  if (aviso.respondido_em) return "respondeu";
+  if (aviso.lido_em) return "lido";
+  if (aviso.entregue_em) return "entregue";
+  if (!aviso.sent_at) return "nao_chegou";
+  const idade = agora.getTime() - new Date(aviso.sent_at).getTime();
+  return idade >= HORAS_PARA_DESISTIR_DA_ENTREGA * 3_600_000 ? "nao_chegou" : "aceito";
+}
+
 /**
  * Dá para mandar este parabéns de novo?
  *
- * Falhou ou está parado: sim, nunca chegou. Aceito pela Meta mas sem
- * "entregue" depois de duas horas: sim — a Meta entrega em minutos quando
- * vai entregar, e o que ela segurou (limite de marketing por pessoa) não
- * chega mais. Entregue ou lido: não, seria dois parabéns no mesmo ano.
+ * Só o que nunca chegou: falhou, parado na fila, ou aceito e segurado.
+ * Entregue, lido ou respondido: não, seria dois parabéns no mesmo ano.
  */
-export function podeReenviar(
-  aviso: { status: string; sent_at: string | null; entregue_em?: string | null; lido_em?: string | null },
-  agora = new Date(),
-): boolean {
-  if (aviso.status !== "sent") return true;
-  if (aviso.entregue_em || aviso.lido_em) return false;
-  if (!aviso.sent_at) return true;
-  return agora.getTime() - new Date(aviso.sent_at).getTime() >= HORAS_PARA_DESISTIR_DA_ENTREGA * 3_600_000;
+export function podeReenviar(aviso: AvisoParaSituacao, agora = new Date()): boolean {
+  const s = situacaoDoEnvio(aviso, agora);
+  return s === "falhou" || s === "na_fila" || s === "nao_chegou";
 }
 
 async function reenfileirarSeNaoChegou(
@@ -516,7 +556,7 @@ async function reenfileirarSeNaoChegou(
 ): Promise<boolean> {
   const { data, error } = await cliente()
     .from("notifications")
-    .select("id, status, sent_at, entregue_em, lido_em")
+    .select("id, status, sent_at, entregue_em, lido_em, respondido_em")
     .eq("venue_id", venueId)
     .eq("cliente_id", clienteId)
     .eq("template", template)
@@ -526,7 +566,7 @@ async function reenfileirarSeNaoChegou(
 
   const { error: erroUpdate } = await cliente()
     .from("notifications")
-    .update({ status: "pending", attempts: 0, error: null, body: corpo, modelo, provider_id: null, sent_at: null } as never)
+    .update({ status: "pending", attempts: 0, error: null, body: corpo, modelo, provider_id: null, sent_at: null, entregue_em: null, lido_em: null } as never)
     .eq("id", data.id);
   if (erroUpdate) {
     console.error(`[aniversarios] não reenfileirei ${data.id}: ${erroUpdate.message}`);

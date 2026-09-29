@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { runAgent } from "../agent.js";
 import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
-import { contextoDoAviso, enviarPelaCloudApi, ultimoAvisoParaOTelefone } from "../notifications.js";
+import { contextoDoAviso, enviarPelaCloudApi, marcarRespondido, ultimoAvisoParaOTelefone } from "../notifications.js";
 import { PlanoBloqueadoError } from "../pontos.js";
 import { conexaoPeloNumero, type ConexaoOficial } from "../whatsappOficial.js";
 import { contextoDoDisparo, registrarResposta, registrarStatusDaMeta, retratoParaOAgente } from "../disparos.js";
@@ -332,7 +332,12 @@ async function oQueOSistemaSabe(
     // Não é disparo: pode ser o parabéns ou o convite da pesquisa, que saem
     // pela fila de avisos. O agente precisa saber do mesmo jeito.
     const aviso = await ultimoAvisoParaOTelefone(venue.id, telefone, { contextoId: m.context?.id ?? null });
-    if (aviso) partes.push(contextoDoAviso(aviso, venue.timezone) + (botao ? ` Ela tocou no botão "${botao}".` : ""));
+    if (aviso) {
+      partes.push(contextoDoAviso(aviso, venue.timezone) + (botao ? ` Ela tocou no botão "${botao}".` : ""));
+      // O quadro de envios ganha o degrau "respondeu" — o que a casa quer
+      // ver, porque é o que vira reserva.
+      await marcarRespondido(aviso.id);
+    }
   }
   return partes.length ? partes.join("\n") : null;
 }

@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { resumoDaBase, retratoDe } from "../../src/crm.js";
 import { balanco, type Envio } from "../../src/disparos.js";
-import { diasAte, textoDeParabens } from "../../src/aniversarios.js";
+import { diasAte, situacaoDoEnvio, textoDeParabens } from "../../src/aniversarios.js";
 import { resumirModelo } from "../../src/whatsappOficial.js";
 
 // Os modelos como a Meta devolve, passados pelo mesmo resumo do servidor.
@@ -53,19 +53,43 @@ const CONFIG_PADRAO = {
   aniversario_modelo_variaveis: [],
 };
 
+// O que já saiu para os aniversariantes, um degrau de cada: respondeu,
+// lida, aceita e segurada pela Meta, recusada. A situação sai da mesma
+// régua do servidor, para a tela de mentira nunca inventar um degrau.
+const AVISOS_DE_PARABENS: Record<string, { status: string; error?: string; attempts?: number; sent_at: string | null; entregue_em?: string; lido_em?: string; respondido_em?: string }> = {
+  c1: { status: "sent", sent_at: "2026-09-12T13:00:05.000Z", entregue_em: "2026-09-12T13:00:12.000Z", lido_em: "2026-09-12T13:04:00.000Z", respondido_em: "2026-09-12T13:05:30.000Z" },
+  c6: { status: "sent", sent_at: "2026-09-12T13:00:06.000Z", entregue_em: "2026-09-12T13:00:14.000Z", lido_em: "2026-09-12T18:20:00.000Z" },
+  c2: { status: "sent", sent_at: "2026-09-12T13:00:07.000Z" },
+  c3: { status: "failed", error: "(#131026) o número não está no WhatsApp ou bloqueou a casa", attempts: 4, sent_at: "2026-09-12T13:00:08.000Z" },
+};
+const AGORA_NA_TELA = new Date("2026-09-13T15:00:00.000Z"); // HOJE, 15h UTC
+
 // A agenda como a API devolve: os dias até o aniversário e a mensagem saem
 // do próprio domínio, e não de contas feitas à mão aqui.
 const montarAniversariantes = () => GENTE
   .filter((p) => p.nascimento_dia && p.nascimento_mes)
   .map((p) => {
     const { dias, proximo } = diasAte(p.nascimento_dia!, p.nascimento_mes!, HOJE);
+    const aviso = AVISOS_DE_PARABENS[p.id];
     return {
       ...comRetrato(p),
       dias_ate: dias,
       proximo,
       mensagem: textoDeParabens({ aniversario_texto: null }, "Ditado Popular", p.nome, { dia: p.nascimento_dia!, mes: p.nascimento_mes!, diasAntes: dias }),
-      ja_avisado: p.id === "c1",
-      envio: p.id === "c1" ? { status: "sent", erro: null, criado_em: "2026-09-12T13:00:00.000Z", enviado_em: "2026-09-12T13:00:05.000Z" } : null,
+      ja_avisado: Boolean(aviso),
+      envio: aviso
+        ? {
+            status: aviso.status,
+            situacao: situacaoDoEnvio(aviso, AGORA_NA_TELA),
+            erro: aviso.error ?? null,
+            tentativas: aviso.attempts ?? 1,
+            criado_em: "2026-09-12T13:00:00.000Z",
+            enviado_em: aviso.sent_at,
+            entregue_em: aviso.entregue_em ?? null,
+            lido_em: aviso.lido_em ?? null,
+            respondido_em: aviso.respondido_em ?? null,
+          }
+        : null,
     };
   })
   .filter((p) => p.dias_ate <= 90)

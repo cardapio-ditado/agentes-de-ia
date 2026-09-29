@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { modeloDeParabens, modeloSugeridoDeParabens, podeReenviar } from "./aniversarios.js";
+import { modeloDeParabens, modeloSugeridoDeParabens, podeReenviar, situacaoDoEnvio } from "./aniversarios.js";
 import { corpoParaAMeta, porQueNaoCria } from "./whatsappOficial.js";
 import { preencherVariaveis, renderizar } from "./disparos.js";
 
@@ -68,6 +68,19 @@ test("o que a Meta recusaria é dito antes de chamar a Meta", () => {
   assert.match(porQueNaoCria({ ...base, corpo: "Oi {{2}}, tudo?" })[0]!, /seguidas/);
   assert.match(porQueNaoCria({ ...base, botoes: ["x".repeat(30)] })[0]!, /25 caracteres/);
   assert.match(porQueNaoCria({ ...base, corpo: "a".repeat(1025) })[0]!, /1024/);
+});
+
+test("a situação do envio é o degrau mais alto que ele alcançou", () => {
+  const agora = new Date("2026-09-29T20:00:00.000Z");
+  const aceito = "2026-09-29T19:50:00.000Z";
+  assert.equal(situacaoDoEnvio({ status: "pending", sent_at: null }, agora), "na_fila");
+  assert.equal(situacaoDoEnvio({ status: "failed", sent_at: aceito }, agora), "falhou");
+  assert.equal(situacaoDoEnvio({ status: "sent", sent_at: aceito }, agora), "aceito");
+  assert.equal(situacaoDoEnvio({ status: "sent", sent_at: "2026-09-29T16:00:00.000Z" }, agora), "nao_chegou");
+  assert.equal(situacaoDoEnvio({ status: "sent", sent_at: aceito, entregue_em: aceito }, agora), "entregue");
+  // "Lida" sem "entregue" acontece (a Meta manda fora de ordem): lida vence.
+  assert.equal(situacaoDoEnvio({ status: "sent", sent_at: aceito, lido_em: aceito }, agora), "lido");
+  assert.equal(situacaoDoEnvio({ status: "sent", sent_at: aceito, entregue_em: aceito, lido_em: aceito, respondido_em: aceito }, agora), "respondeu");
 });
 
 test("o parabéns pode ser reenviado quando nunca chegou — inclusive o que a Meta aceitou e segurou", () => {

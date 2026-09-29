@@ -332,9 +332,14 @@
             "ja_avisado": true,
             "envio": {
               "status": "sent",
+              "situacao": "respondeu",
               "erro": null,
+              "tentativas": 1,
               "criado_em": "2026-09-12T13:00:00.000Z",
-              "enviado_em": "2026-09-12T13:00:05.000Z"
+              "enviado_em": "2026-09-12T13:00:05.000Z",
+              "entregue_em": "2026-09-12T13:00:12.000Z",
+              "lido_em": "2026-09-12T13:04:00.000Z",
+              "respondido_em": "2026-09-12T13:05:30.000Z"
             }
           },
           {
@@ -360,8 +365,18 @@
             "dias_ate": 17,
             "proximo": "2026-09-30",
             "mensagem": "Oi, Elis! Vimos aqui que dia 30 de setembro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
-            "ja_avisado": false,
-            "envio": null
+            "ja_avisado": true,
+            "envio": {
+              "status": "sent",
+              "situacao": "lido",
+              "erro": null,
+              "tentativas": 1,
+              "criado_em": "2026-09-12T13:00:00.000Z",
+              "enviado_em": "2026-09-12T13:00:06.000Z",
+              "entregue_em": "2026-09-12T13:00:14.000Z",
+              "lido_em": "2026-09-12T18:20:00.000Z",
+              "respondido_em": null
+            }
           },
           {
             "id": "c2",
@@ -385,8 +400,18 @@
             "dias_ate": 20,
             "proximo": "2026-10-03",
             "mensagem": "Oi, Paulo! Vimos aqui que dia 3 de outubro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
-            "ja_avisado": false,
-            "envio": null
+            "ja_avisado": true,
+            "envio": {
+              "status": "sent",
+              "situacao": "nao_chegou",
+              "erro": null,
+              "tentativas": 1,
+              "criado_em": "2026-09-12T13:00:00.000Z",
+              "enviado_em": "2026-09-12T13:00:07.000Z",
+              "entregue_em": null,
+              "lido_em": null,
+              "respondido_em": null
+            }
           },
           {
             "id": "c3",
@@ -411,8 +436,18 @@
             "dias_ate": 62,
             "proximo": "2026-11-14",
             "mensagem": "Oi, Bruno! Vimos aqui que dia 14 de novembro é seu aniversário e a gente já quer comemorar junto! 🎉 Se quiser trazer a turma, é só responder esta mensagem que a gente separa a melhor mesa pra você. Um abraço, Ditado Popular.",
-            "ja_avisado": false,
-            "envio": null
+            "ja_avisado": true,
+            "envio": {
+              "status": "failed",
+              "situacao": "falhou",
+              "erro": "(#131026) o número não está no WhatsApp ou bloqueou a casa",
+              "tentativas": 4,
+              "criado_em": "2026-09-12T13:00:00.000Z",
+              "enviado_em": "2026-09-12T13:00:08.000Z",
+              "entregue_em": null,
+              "lido_em": null,
+              "respondido_em": null
+            }
           },
           {
             "id": "c8",
@@ -486,6 +521,8 @@
               "Quero!",
               "Não, obrigado"
             ],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 3,
             "suportado": true,
             "motivo": null
@@ -499,6 +536,8 @@
             "cabecalho": null,
             "rodape": null,
             "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 2,
             "suportado": true,
             "motivo": null
@@ -512,6 +551,8 @@
             "cabecalho": null,
             "rodape": null,
             "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 0,
             "suportado": false,
             "motivo": "cabeçalho de imagem ainda não é suportado"
@@ -656,6 +697,8 @@
               "Quero!",
               "Não, obrigado"
             ],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 3,
             "suportado": true,
             "motivo": null
@@ -669,6 +712,8 @@
             "cabecalho": null,
             "rodape": null,
             "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 2,
             "suportado": true,
             "motivo": null
@@ -682,6 +727,8 @@
             "cabecalho": null,
             "rodape": null,
             "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 0,
             "suportado": false,
             "motivo": "cabeçalho de imagem ainda não é suportado"
@@ -907,6 +954,8 @@
               "Quero!",
               "Não, obrigado"
             ],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 3,
             "suportado": true,
             "motivo": null
@@ -920,6 +969,8 @@
             "cabecalho": null,
             "rodape": null,
             "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 2,
             "suportado": true,
             "motivo": null
@@ -933,6 +984,8 @@
             "cabecalho": null,
             "rodape": null,
             "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
             "lacunas": 0,
             "suportado": false,
             "motivo": "cabeçalho de imagem ainda não é suportado"

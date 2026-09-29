@@ -838,6 +838,22 @@ export async function ultimoAvisoParaOTelefone(
   return data ?? null;
 }
 
+/**
+ * A pessoa escreveu de volta: carimba o aviso como respondido.
+ *
+ * Só o primeiro carimbo vale — a segunda mensagem dela não é uma segunda
+ * resposta ao parabéns. É o último degrau do quadro de envios, e o único
+ * que a Meta não conta: vem da conversa, não do webhook de status.
+ */
+export async function marcarRespondido(avisoId: string, quando = new Date()): Promise<void> {
+  const { error } = await db()
+    .from("notifications")
+    .update({ respondido_em: quando.toISOString() } as never)
+    .eq("id", avisoId)
+    .is("respondido_em", null);
+  if (error) console.error(`[notifications] não carimbei a resposta ao aviso ${avisoId}: ${error.message}`);
+}
+
 /** O aviso numa frase para o agente. Puro, testável. */
 export function contextoDoAviso(
   aviso: { template: string; body: string; sent_at: string | null },
