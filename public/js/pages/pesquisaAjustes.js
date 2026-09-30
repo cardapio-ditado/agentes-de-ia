@@ -1399,7 +1399,12 @@ async function telaConvites(ctx, recarregar) {
     function atualizarPrevia() {
       const m = modeloEscolhido(modelos, seletor.value);
       balao.textContent = m
-        ? renderizarPrevia(m.corpo, lacunas(), nomeAproximadoDaCasa(ctx.venue)) + (m.botao_url_dinamico ? `\n\n[botão: ${m.botoes[0] ?? "Responder"} → o link da pessoa]` : "")
+        ? renderizarPrevia(m.corpo, lacunas(), nomeAproximadoDaCasa(ctx.venue))
+          + (m.botao_url_dinamico
+            ? `\n\n[botão: ${m.botoes[0] ?? "Responder"} → o link da pessoa]`
+            : m.botao_url
+              ? `\n\n[botão: ${m.botoes[0] ?? "Responder"} → link FIXO, igual para todo mundo: ${m.botao_url}]`
+              : "")
         : "Nenhum modelo: o convite sai pelo conector com o texto padrão.";
     }
     seletor.addEventListener("change", () => {
@@ -1429,7 +1434,13 @@ async function telaConvites(ctx, recarregar) {
           type: "button",
           texto: "Salvar",
           onclick: async (e) => {
-            if (semLink() && !confirm("Este modelo não tem lacuna de link nem botão de link — a pessoa vai receber o convite sem o caminho para responder. Salvar mesmo assim?")) return;
+            if (semLink()) {
+              const m = modeloEscolhido(modelos, seletor.value);
+              const aviso = m?.botao_url
+                ? `O botão deste modelo tem link FIXO (${m.botao_url}). Todo mundo recebe essa mesma URL, e não o link da própria pesquisa — a resposta não fica ligada ao convite nem ao prêmio.\n\nSalvar mesmo assim?`
+                : "Este modelo não tem lacuna de link nem botão de link — a pessoa vai receber o convite sem o caminho para responder. Salvar mesmo assim?";
+              if (!confirm(aviso)) return;
+            }
             e.target.disabled = true;
             try {
               await put(`/v1/venues/${ctx.venue}/pesquisa/config`, {

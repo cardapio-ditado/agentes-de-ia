@@ -60,6 +60,7 @@ export function editorDeLacunas(area, modelo, valoresSalvos, aoMudar, padrao = [
       area.append(el("small", { classe: "muted", texto: modelo.botao_url_dinamico
         ? "Este modelo não tem lacunas no texto; o link vai no botão."
         : "Este modelo não tem lacunas." }));
+      area.append(notaDoBotao(modelo));
     }
     return () => [];
   }
@@ -81,10 +82,26 @@ export function editorDeLacunas(area, modelo, valoresSalvos, aoMudar, padrao = [
       ]),
     );
   }
-  if (modelo.botao_url_dinamico) {
-    area.append(el("small", { classe: "muted", texto: `O botão de link do modelo (${modelo.botao_url}) recebe o link de cada pessoa sozinho.` }));
-  }
+  area.append(notaDoBotao(modelo));
   return () => linhas.map(({ tipo, texto }) => (tipo.value === "fixo" ? { tipo: "fixo", texto: texto.value } : { tipo: tipo.value }));
+}
+
+/**
+ * O que o botão de link do modelo faz — dito com a URL, porque a diferença
+ * entre "dinâmico" e "fixo" é invisível na Meta e decide tudo aqui.
+ *
+ * Fixo: a Meta manda a mesma URL para todo mundo, e a gente não tem como
+ * trocar. Foi assim que um convite saiu "com botão" e sem o link da
+ * pessoa: o botão existia, só não era dela.
+ */
+export function notaDoBotao(modelo) {
+  if (!modelo?.botao_url) return null;
+  if (modelo.botao_url_dinamico) {
+    return el("small", { classe: "muted", texto: `O botão de link do modelo (${modelo.botao_url}) recebe o link de cada pessoa sozinho.` });
+  }
+  return el("small", { classe: "erro", texto:
+    `O botão deste modelo tem link FIXO (${modelo.botao_url}): a Meta manda essa mesma URL para todo mundo, e não dá para trocar pelo link de cada pessoa. ` +
+    `Para o link individual, edite o modelo na Meta e troque o tipo da URL do botão para "dinâmico", terminando em {{1}} — ou ponha o link numa lacuna do texto.` });
 }
 
 /** A prévia como uma pessoa leria — aproximada, com "Maria" e a casa de exemplo. */
