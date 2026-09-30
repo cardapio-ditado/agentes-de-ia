@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COMPETICOES, converter, tituloDoJogo } from "./jogos.js";
+import { COMPETICOES, converter, mesesDaJanela, tituloDoJogo } from "./jogos.js";
 
 /**
  * Um jogo como o placar do ESPN devolve.
@@ -208,4 +208,13 @@ test("as competições oferecidas cobrem o que um bar brasileiro passa", () => {
   // O código de liga vai direto na URL; espaço ou barra ali viraria uma
   // requisição para um endereço diferente do pretendido.
   for (const c of COMPETICOES) assert.match(c.id, /^[a-z0-9._]+$/);
+});
+
+test("a janela de 30 dias vira os meses que ela toca — é o que o ESPN ainda aceita", () => {
+  // Dentro de um mês só: um pedido.
+  assert.deepEqual(mesesDaJanela(new Date("2026-10-02T12:00:00Z"), new Date("2026-10-28T12:00:00Z")), ["202610"]);
+  // De ontem a daqui a 30 dias cruzando a virada: dois pedidos.
+  assert.deepEqual(mesesDaJanela(new Date("2026-09-29T12:00:00Z"), new Date("2026-10-30T12:00:00Z")), ["202609", "202610"]);
+  // Virada de ano.
+  assert.deepEqual(mesesDaJanela(new Date("2026-12-20T12:00:00Z"), new Date("2027-01-19T12:00:00Z")), ["202612", "202701"]);
 });

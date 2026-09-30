@@ -93,9 +93,56 @@ export function jogosConfigurados(): boolean {
   return true;
 }
 
-/** AAAAMMDD, o formato de data que o ESPN aceita no parâmetro `dates`. */
-function comoDataDoEspn(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
+/**
+ * Os meses (AAAAMM) que uma janela de datas toca, em UTC.
+ *
+ * É a unidade de consulta que sobrou. Desde 15/09/2026 o ESPN recusa o
+ * intervalo de dias (`dates=AAAAMMDD-AAAAMMDD`) com 400 "Failed to get
+ * events endpoint" — para todo esporte, de propósito. Dia único, mês e
+ * temporada continuam valendo. Pedir os meses da janela e ficar só com os
+ * dias pedidos dá o mesmo resultado que o intervalo dava.
+ */
+export function mesesDaJanela(de: Date, ate: Date): string[] {
+  const meses: string[] = [];
+  const cursor = new Date(Date.UTC(de.getUTCFullYear(), de.getUTCMonth(), 1));
+  const fim = new Date(Date.UTC(ate.getUTCFullYear(), ate.getUTCMonth(), 1));
+  while (cursor.getTime() <= fim.getTime()) {
+    meses.push(`${cursor.getUTCFullYear()}${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return meses;
+}
+
+/** Um mês do placar de uma competição, cru como o ESPN devolve. */
+async function eventosDoMes(competicaoId: string, mes: string): Promise<unknown[]> {
+  // limit=500: sem ele o ESPN corta a lista do mês e a rodada final some.
+  const url = `${HOST}/${competicaoId}/scoreboard?dates=${mes}&limit=500`;
+
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (e) {
+    throw new ErroDeJogos(502, `Não consegui falar com o serviço de jogos: ${(e as Error).message}`);
+  }
+
+  if (!resposta.ok) {
+    // O corpo no log, e não na tela: é ele que conta o que o ESPN mudou
+    // desta vez, e foi a falta dele que fez um 400 virar mistério.
+    const corpo = await resposta.text().catch(() => "");
+    console.error(`[jogos] ESPN respondeu ${resposta.status} para ${url}: ${corpo.slice(0, 200)}`);
+    throw new ErroDeJogos(
+      502,
+      resposta.status === 404
+        ? "Essa competição não foi encontrada na fonte de jogos."
+        : `O serviço de jogos respondeu ${resposta.status}.`,
+    );
+  }
+
+  const corpo = (await resposta.json().catch(() => null)) as { events?: unknown[] } | null;
+  return corpo?.events ?? [];
 }
 
 export async function proximosJogos(params: {
@@ -110,39 +157,27 @@ export async function proximosJogos(params: {
   }
 
   const agora = new Date();
-  // O intervalo começa ONTEM, de propósito. `dates` é interpretado em UTC, e
-  // no Brasil o dia UTC vira antes do nosso: às 21h de Cuiabá já é o dia
-  // seguinte em UTC, e pedir "de hoje em diante" perderia justamente os jogos
-  // desta noite — os mais prováveis de alguém querer marcar.
+  // A janela começa ONTEM, de propósito. As datas são em UTC, e no Brasil o
+  // dia UTC vira antes do nosso: às 21h de Cuiabá já é o dia seguinte em
+  // UTC, e pedir "de hoje em diante" perderia justamente os jogos desta
+  // noite — os mais prováveis de alguém querer marcar.
   const de = new Date(agora.getTime() - 864e5);
   const ate = new Date(agora.getTime() + dias * 864e5);
-  // Sem o intervalo, o placar traz só os jogos de HOJE — e a tela existe para
-  // escolher o que vai passar nas próximas semanas.
-  const url =
-    `${HOST}/${params.competicaoId}/scoreboard` +
-    `?dates=${comoDataDoEspn(de)}-${comoDataDoEspn(ate)}`;
 
-  let resposta: Response;
-  try {
-    resposta = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch (e) {
-    throw new ErroDeJogos(502, `Não consegui falar com o serviço de jogos: ${(e as Error).message}`);
-  }
+  // Um pedido por mês da janela (dois, no máximo, para 30 dias), e o corte
+  // pelos dias fica aqui. O mesmo jogo pode vir em dois meses quando o ESPN
+  // o realoca; o id desempata.
+  const eventos: unknown[] = [];
+  for (const mes of mesesDaJanela(de, ate)) eventos.push(...(await eventosDoMes(params.competicaoId, mes)));
 
-  if (!resposta.ok) {
-    throw new ErroDeJogos(
-      502,
-      resposta.status === 404
-        ? "Essa competição não foi encontrada na fonte de jogos."
-        : `O serviço de jogos respondeu ${resposta.status}.`,
-    );
-  }
-
-  const corpo = (await resposta.json().catch(() => null)) as { events?: unknown[] } | null;
-  const jogos = converter(corpo?.events ?? []);
+  const vistos = new Set<string>();
+  const jogos = converter(eventos).filter((j) => {
+    const t = Date.parse(j.quando);
+    if (t < de.getTime() || t > ate.getTime()) return false;
+    if (vistos.has(j.id)) return false;
+    vistos.add(j.id);
+    return true;
+  });
   cache.set(chaveCache, { em: Date.now(), jogos });
   return jogos;
 }
