@@ -4,7 +4,7 @@ import { montarPainel } from "./pesquisaMetricas.js";
 import type { NotaBruta, PainelDaPesquisa, RespostaBruta } from "./pesquisaMetricas.js";
 import { notaNormalizada, pesquisaAtiva } from "./pesquisaModelo.js";
 import type { ItemDaPesquisa } from "./pesquisaModelo.js";
-import { instanteNaCasa } from "./fuso.js";
+import { hojeNaCasa, instanteNaCasa } from "./fuso.js";
 import { avisarDetrator, mereceAviso } from "./pesquisaAlerta.js";
 import type { CategoriaDaResposta } from "./pesquisaAlerta.js";
 import { registrarClienteSeDer } from "./clientes.js";
@@ -165,7 +165,7 @@ export async function configDaPesquisa(venueId: string): Promise<ConfigDaPesquis
 export function modeloDoConvite(
   config: Pick<ConfigDaPesquisa, "convite_modelo" | "convite_modelo_variaveis">,
   modelo: { botao_url_dinamico: boolean; botao_url: string | null; idioma: string } | null,
-  pessoa: { nome: string | null; link: string },
+  pessoa: { nome: string | null; link: string; dia_visita?: string | null; hoje?: string | null },
   casa: string,
 ): ModeloDeMensagem | null {
   const name = config.convite_modelo?.trim();
@@ -955,7 +955,7 @@ export async function criarConvite(params: {
  */
 async function modeloDoConviteDaCasa(
   venue: { id: string; name: string },
-  pessoa: { nome: string | null; link: string },
+  pessoa: { nome: string | null; link: string; dia_visita?: string | null; hoje?: string | null },
 ): Promise<ModeloDeMensagem | null> {
   try {
     const config = await configDaPesquisa(venue.id);
@@ -1008,7 +1008,7 @@ export function primeiraMinuscula(texto: string): string {
 }
 
 export async function enviarConvite(
-  venue: { id: string; name: string },
+  venue: { id: string; name: string; timezone?: string },
   params: {
     telefone: string;
     nome?: string | null;
@@ -1029,6 +1029,13 @@ export async function enviarConvite(
   const link = `${base}/pesquisa?t=${convite.token}`;
   const mensagemPadrao = await textoDoConvite(venue, convite.nome, link);
 
+  // O dia da visita, para a lacuna "ontem"/"sábado" do modelo: o da Zig
+  // quando veio dela; senão, hoje — o convite digitado no painel é para
+  // quem acabou de sair.
+  const hoje = hojeNaCasa(venue.timezone ?? "America/Sao_Paulo");
+  const diaDoConvite = (convite as { dia_visita?: string | null }).dia_visita;
+  const diaVisita = params.diaVisita ?? (typeof diaDoConvite === "string" ? diaDoConvite.slice(0, 10) : null) ?? hoje;
+
   const { error } = await inserirAvisos({
     venue_id: venue.id,
     channel: "whatsapp",
@@ -1038,7 +1045,7 @@ export async function enviarConvite(
     body: params.mensagem ? `${params.mensagem}\n\n${link}` : mensagemPadrao,
     // Pelo número oficial, se a casa escolheu um modelo. O conector ignora
     // e manda o texto.
-    modelo: await modeloDoConviteDaCasa(venue, { nome: convite.nome, link }),
+    modelo: await modeloDoConviteDaCasa(venue, { nome: convite.nome, link, dia_visita: diaVisita, hoje }),
   } as never);
 
   if (error) {

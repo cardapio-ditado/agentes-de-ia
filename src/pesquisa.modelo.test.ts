@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { modeloDoConvite } from "./pesquisa.js";
 import { resumirModelo, sufixoParaBotao } from "./whatsappOficial.js";
-import { preencherVariaveis } from "./disparos.js";
+import { diaDaVisitaPorExtenso, preencherVariaveis } from "./disparos.js";
 
 const LINK = "https://brasafood.app/pesquisa?t=abc123";
 
@@ -54,6 +54,28 @@ test("o convite vira modelo: link no botão quando o modelo tem, na lacuna quand
 
   // Sem modelo escolhido, sem modelo — o convite sai pelo conector.
   assert.equal(modeloDoConvite({ convite_modelo: null, convite_modelo_variaveis: [] }, null, pessoa, "x"), null);
+});
+
+test("a lacuna do dia da visita fala como gente: hoje, ontem, o dia da semana, a data", () => {
+  const hoje = "2026-09-30"; // quarta
+  assert.equal(diaDaVisitaPorExtenso("2026-09-30", hoje), "hoje");
+  assert.equal(diaDaVisitaPorExtenso("2026-09-29", hoje), "ontem");
+  assert.equal(diaDaVisitaPorExtenso("2026-09-26", hoje), "sábado");
+  assert.equal(diaDaVisitaPorExtenso("2026-09-24", hoje), "quinta");
+  assert.equal(diaDaVisitaPorExtenso("2026-09-20", hoje), "dia 20/09");
+  // Data quebrada não derruba o convite.
+  assert.equal(diaDaVisitaPorExtenso("lixo", hoje), "hoje");
+
+  // No convite: o dia da Zig quando veio dela; sem dia, a visita foi hoje.
+  assert.deepEqual(preencherVariaveis([{ tipo: "dia_visita" }], { nome: null, dia_visita: "2026-09-29", hoje }, "x"), ["ontem"]);
+  assert.deepEqual(preencherVariaveis([{ tipo: "dia_visita" }], { nome: null }, "x"), ["hoje"]);
+  const m = modeloDoConvite(
+    { convite_modelo: "convite_nps", convite_modelo_variaveis: [{ tipo: "primeiro_nome" }, { tipo: "dia_visita" }] },
+    { botao_url_dinamico: true, botao_url: "https://brasafood.app/pesquisa?t={{1}}", idioma: "pt_BR" },
+    { nome: "Bruno Camargo", link: LINK, dia_visita: "2026-09-26", hoje },
+    "Ditado Popular",
+  );
+  assert.deepEqual(m?.parametros, ["Bruno", "sábado"]);
 });
 
 test("a lacuna de link nunca sai vazia", () => {

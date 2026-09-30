@@ -1391,9 +1391,10 @@ async function telaConvites(ctx, recarregar) {
     const seletor = seletorDeModelo(modelos, config?.convite_modelo ?? "");
     const areaLacunas = el("div", { classe: "pilha-fina" });
     const balao = el("p", { classe: "previa-mensagem" });
-    // A primeira lacuna do convite costuma ser o nome; a segunda, o link —
-    // a menos que o modelo tenha botão de link, e aí o link vai sozinho.
-    const sugestao = (m) => (m?.botao_url_dinamico ? ["primeiro_nome", "casa"] : ["primeiro_nome", "link"]);
+    // A primeira lacuna do convite costuma ser o nome; a segunda, o dia da
+    // visita ("como foi ontem?"); a terceira, o link — a menos que o modelo
+    // tenha botão de link, e aí o link vai sozinho.
+    const sugestao = (m) => (m?.botao_url_dinamico ? ["primeiro_nome", "dia_visita", "casa"] : ["primeiro_nome", "dia_visita", "link"]);
     let lacunas = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletor.value), config?.convite_modelo_variaveis ?? [], atualizarPrevia, sugestao(modeloEscolhido(modelos, seletor.value)));
     function atualizarPrevia() {
       const m = modeloEscolhido(modelos, seletor.value);

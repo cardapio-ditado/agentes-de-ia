@@ -13,6 +13,7 @@ export const TIPOS_DE_LACUNA = [
   ["nome", "Nome completo do cliente"],
   ["casa", "Nome da casa"],
   ["data_aniversario", "Data do aniversário (“25 de dezembro”)"],
+  ["dia_visita", "Dia da visita (“ontem”, “sábado”, “dia 27/09”)"],
   ["link", "O link (da pesquisa, do cardápio…)"],
   ["fixo", "Um texto fixo…"],
 ];
@@ -93,8 +94,9 @@ export function renderizarPrevia(corpo, variaveis, casa = "sua casa") {
       : v.tipo === "nome" ? "Maria Souza"
         : v.tipo === "casa" ? casa
           : v.tipo === "data_aniversario" ? "25 de dezembro"
-            : v.tipo === "link" ? "https://brasafood.app/pesquisa?t=…"
-              : (v.texto || "…"),
+            : v.tipo === "dia_visita" ? "ontem"
+              : v.tipo === "link" ? "https://brasafood.app/pesquisa?t=…"
+                : (v.texto || "…"),
   );
   return (corpo ?? "").replace(/\{\{\s*(\d+)\s*\}\}/g, (tudo, n) => valores[Number(n) - 1] ?? tudo);
 }

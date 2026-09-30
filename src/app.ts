@@ -1024,7 +1024,7 @@ async function qrcodeDataUrl(texto: string): Promise<string> {
  * `enviarConvite` (pesquisa.ts) — o mesmo corredor da Zig e da planilha.
  */
 async function convidarParaPesquisa(
-  venue: { id: string; name: string; slug: string },
+  venue: { id: string; name: string; slug: string; timezone?: string },
   corpo: Record<string, unknown>,
 ): Promise<{ convite: unknown; enfileirado: boolean }> {
   return await enviarConvite(venue, {

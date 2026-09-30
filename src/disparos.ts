@@ -62,6 +62,7 @@ export type Variavel =
   | { tipo: "nome" }
   | { tipo: "casa" }
   | { tipo: "data_aniversario" }
+  | { tipo: "dia_visita" }
   | { tipo: "link" }
   | { tipo: "fixo"; texto: string };
 
@@ -70,9 +71,30 @@ export const TIPOS_DE_VARIAVEL: Array<{ id: Variavel["tipo"]; nome: string }> = 
   { id: "nome", nome: "Nome completo do cliente" },
   { id: "casa", nome: "Nome da casa" },
   { id: "data_aniversario", nome: "Data do aniversário (\"25 de dezembro\")" },
+  { id: "dia_visita", nome: "Dia da visita (\"ontem\", \"sábado\", \"dia 27/09\")" },
   { id: "link", nome: "O link (da pesquisa, do cardápio…)" },
   { id: "fixo", nome: "Um texto fixo" },
 ];
+
+const DIAS_DA_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/**
+ * O dia da visita como quem fala: "hoje", "ontem", "sábado", "dia 27/09".
+ *
+ * Cabe depois de "obrigado pela visita de…" em qualquer das quatro formas —
+ * é o que a lacuna do convite da pesquisa precisa. Até seis dias atrás o
+ * nome do dia da semana ainda diz algo; antes disso, só a data.
+ */
+export function diaDaVisitaPorExtenso(diaISO: string, hojeISO: string): string {
+  const dia = new Date(`${diaISO}T12:00:00Z`);
+  const hoje = new Date(`${hojeISO}T12:00:00Z`);
+  if (Number.isNaN(dia.getTime()) || Number.isNaN(hoje.getTime())) return "hoje";
+  const atras = Math.round((hoje.getTime() - dia.getTime()) / 86_400_000);
+  if (atras <= 0) return "hoje";
+  if (atras === 1) return "ontem";
+  if (atras <= 6) return DIAS_DA_SEMANA[dia.getUTCDay()]!;
+  return `dia ${String(dia.getUTCDate()).padStart(2, "0")}/${String(dia.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 function primeiroNome(nome: string | null | undefined): string | null {
   const limpo = (nome ?? "").trim();
@@ -87,6 +109,10 @@ export interface PessoaDaLacuna {
   nascimento_mes?: number | null;
   /** O link desta pessoa — o da pesquisa dela, por exemplo. */
   link?: string | null;
+  /** AAAA-MM-DD da visita que motivou a mensagem (o convite da pesquisa). */
+  dia_visita?: string | null;
+  /** AAAA-MM-DD de hoje na casa — é contra ele que "ontem" se calcula. */
+  hoje?: string | null;
 }
 
 /**
@@ -109,6 +135,10 @@ export function preencherVariaveis(variaveis: Variavel[], pessoa: PessoaDaLacuna
         return pessoa.nascimento_dia && pessoa.nascimento_mes
           ? `${pessoa.nascimento_dia} de ${MESES_POR_EXTENSO[pessoa.nascimento_mes - 1] ?? "?"}`
           : "seu aniversário";
+      case "dia_visita":
+        // Sem dia conhecido, a visita foi hoje: é o convite digitado no
+        // painel logo depois de a pessoa sair.
+        return pessoa.dia_visita && pessoa.hoje ? diaDaVisitaPorExtenso(pessoa.dia_visita, pessoa.hoje) : "hoje";
       case "link":
         return pessoa.link?.trim() || "-";
       case "fixo":
@@ -135,7 +165,7 @@ export function variaveisValidas(bruto: unknown): Variavel[] {
   const saida: Variavel[] = [];
   for (const v of bruto) {
     const tipo = (v as { tipo?: string })?.tipo;
-    if (tipo === "primeiro_nome" || tipo === "nome" || tipo === "casa" || tipo === "data_aniversario" || tipo === "link") saida.push({ tipo });
+    if (tipo === "primeiro_nome" || tipo === "nome" || tipo === "casa" || tipo === "data_aniversario" || tipo === "dia_visita" || tipo === "link") saida.push({ tipo });
     else if (tipo === "fixo") saida.push({ tipo, texto: String((v as { texto?: unknown }).texto ?? "") });
   }
   return saida;
