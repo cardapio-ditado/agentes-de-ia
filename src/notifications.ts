@@ -193,11 +193,23 @@ async function enviarPorWhatsapp(
   venueId?: string | null,
   modelo?: ModeloDeMensagem | null,
 ): Promise<ResultadoEnvio> {
+  const provedor = provedorWhatsappAtivo();
   if (modelo?.name && !soOConectorEntrega(destino)) {
     const oficial = await cloudApiDaCasa(venueId);
-    if (oficial) return await enviarModeloPelaCloudApi(destino, modelo, oficial);
+    if (oficial) {
+      const r = await enviarModeloPelaCloudApi(destino, modelo, oficial);
+      // O MODELO sumiu (em análise depois de uma edição, pausado, recusado,
+      // apagado) e o conector está de pé: vai o texto por ele. É o erro do
+      // modelo, não do número — insistir pela Meta gastaria as tentativas e
+      // a pessoa ficaria sem o aviso. Os outros erros (número fora do
+      // WhatsApp, entrega segurada) ficam como estão.
+      if (!r.enviado && provedor && erroDeModelo(r.erro)) {
+        console.warn(`[notifications] modelo "${modelo.name}" recusado pela Meta (${r.erro}); vai pelo conector.`);
+        return await provedor(destino, corpo);
+      }
+      return r;
+    }
   }
-  const provedor = provedorWhatsappAtivo();
   if (provedor) return await provedor(destino, corpo);
   if (soOConectorEntrega(destino)) {
     return {
@@ -211,6 +223,18 @@ async function enviarPorWhatsapp(
     return { enviado: false, erro: "Nenhum provedor de WhatsApp configurado para esta casa." };
   }
   return await enviarPelaCloudApi(destino, corpo, conexao);
+}
+
+/**
+ * A Meta recusou por causa do MODELO — e não do número ou da pessoa?
+ *
+ * Os códigos 132xxx são os do modelo: não existe (132001), parâmetros não
+ * batem (132000/132012), pausado (132015), desativado (132016). Modelo em
+ * análise depois de uma edição volta como "não existe". Puro, testável.
+ */
+export function erroDeModelo(erro: string | undefined): boolean {
+  if (!erro) return false;
+  return /\(#132\d{3}\)|#132\d{3}|\btemplate\b/i.test(erro) && !/131\d{3}/.test(erro);
 }
 
 /**
@@ -277,13 +301,17 @@ async function postarNaCloudApi(
     );
 
     const dados = (await resposta.json().catch(() => null)) as
-      | { messages?: { id?: string }[]; error?: { message?: string } }
+      | { messages?: { id?: string }[]; error?: { message?: string; code?: number; error_data?: { details?: string } } }
       | null;
 
     if (!resposta.ok) {
+      // Com o código na frente: é por ele que se distingue "o modelo não
+      // está aprovado" de "o número não existe" — e é o que aparece na tela.
+      const codigo = dados?.error?.code ? `(#${dados.error.code}) ` : "";
+      const detalhe = dados?.error?.error_data?.details ?? dados?.error?.message;
       return {
         enviado: false,
-        erro: dados?.error?.message ?? `HTTP ${resposta.status} da API do WhatsApp.`,
+        erro: detalhe ? `${codigo}${detalhe}` : `HTTP ${resposta.status} da API do WhatsApp.`,
       };
     }
     return { enviado: true, providerId: dados?.messages?.[0]?.id };

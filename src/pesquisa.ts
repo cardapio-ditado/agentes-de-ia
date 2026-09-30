@@ -963,6 +963,14 @@ async function modeloDoConviteDaCasa(
     const conexao = await conexaoDaCasa({ id: venue.id });
     if (!prontaParaEnviar(conexao)) return null;
     const naMeta = (await modelosDaConta(conexao)).find((m) => m.name === config.convite_modelo) ?? null;
+    // Modelo que a Meta não aceita agora (em análise depois de uma edição,
+    // pausado, rejeitado) não sai por ela: a Meta recusaria o envio, a fila
+    // gastaria as quatro tentativas e o convite morreria. Pelo conector,
+    // com o link no texto, ele chega — e volta ao modelo quando aprovar.
+    if (naMeta && !naMeta.suportado) {
+      console.log(`[pesquisa] modelo "${naMeta.name}" fora do ar na Meta (${naMeta.motivo}); convite sai pelo conector.`);
+      return null;
+    }
     return modeloDoConvite(config, naMeta, pessoa, venue.name);
   } catch (e) {
     console.error(`[pesquisa] convite sem modelo da Meta: ${(e as Error).message}`);
