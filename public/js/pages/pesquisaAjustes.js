@@ -1,6 +1,7 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
 import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, nomeAproximadoDaCasa, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
+import { contarSituacoes, seloDoEnvio, tilesDeSituacao } from "../envios.js";
 
 /**
  * O que a casa configura na pesquisa, em quatro abas.
@@ -1828,19 +1829,65 @@ async function telaConvites(ctx, recarregar) {
 
   const respondidos = convites.filter((c) => c.respondido_em).length;
 
+  // O QUADRO DE ENVIOS, o mesmo dos aniversariantes: um número por degrau
+  // (aceito, entregue, lida, respondeu, não chegou, falhou) e cada número
+  // filtra a tabela. "Enviado" não é "entregue" — e a Meta mostrando 1
+  // entregue num disparo de 30 foi o que fez falta este quadro aqui.
+  const situacaoDoConvite = (c) => (c.respondido_em ? "respondeu" : c.envio?.situacao ?? (c.enviado_em ? "aceito" : "na_fila"));
+  let filtroDeSituacao = "";
+  const quadro = el("div", {});
+  const corpoDaTabela = el("tbody", {});
+  const notaDoQuadro = el("p", { classe: "muted", style: "margin:0" });
+
+  function desenharQuadroDosConvites() {
+    const contagem = contarSituacoes(convites, situacaoDoConvite);
+    limpar(quadro).append(tilesDeSituacao({
+      contagem,
+      total: convites.length,
+      rotuloDoTotal: "Convites",
+      dicaDoTotal: "Os últimos convites. Clique para ver todos.",
+      ativa: filtroDeSituacao,
+      aoEscolher: (chave) => {
+        filtroDeSituacao = chave;
+        desenharQuadroDosConvites();
+        desenharLinhas();
+      },
+    }));
+    const emAndamento = (contagem.na_fila ?? 0) + (contagem.aceito ?? 0);
+    notaDoQuadro.textContent = [
+      `${respondidos} de ${convites.length} responderam (${convites.length ? Math.round((respondidos / convites.length) * 100) : 0}%).`,
+      emAndamento ? `${emAndamento} em andamento.` : null,
+      "Clique num número para ver só aqueles convites.",
+    ].filter(Boolean).join(" ");
+  }
+
+  function desenharLinhas() {
+    const aVista = convites.filter((c) => !filtroDeSituacao || situacaoDoConvite(c) === filtroDeSituacao).slice(0, 80);
+    limpar(corpoDaTabela).append(
+      ...(aVista.length
+        ? aVista.map(linhaDoConvite)
+        : [el("tr", {}, [el("td", { colspan: "5", classe: "muted", texto: "Ninguém nesta situação. Clique no mesmo número de novo para ver todos." })])]),
+    );
+  }
+
   const lista = el("section", { classe: "cartao" }, [
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h3", { texto: "Convites enviados" }),
-        el("p", {
-          classe: "muted",
-          texto:
-            convites.length === 0
-              ? "Nenhum convite ainda."
-              : `${respondidos} de ${convites.length} responderam (${Math.round((respondidos / convites.length) * 100)}%).`,
-        }),
+        el("p", { classe: "muted", texto: convites.length === 0 ? "Nenhum convite ainda." : "Cada convite com o que a Meta contou de volta." }),
       ]),
-    ]),
+      convites.length
+        ? el("button", {
+            classe: "btn btn-peq",
+            type: "button",
+            texto: "Atualizar",
+            title: "Busca os status de novo",
+            onclick: () => recarregar(),
+          })
+        : null,
+    ].filter(Boolean)),
+    convites.length ? quadro : null,
+    convites.length ? notaDoQuadro : null,
     convites.length === 0
       ? null
       : el("div", { classe: "rolagem-x", style: "margin-top:10px" }, [
@@ -1854,18 +1901,24 @@ async function telaConvites(ctx, recarregar) {
                 el("th", { classe: "col-acoes", texto: "" }),
               ]),
             ]),
-            el(
-              "tbody",
-              {},
-              convites.slice(0, 80).map((c) =>
-                el("tr", {}, [
+            corpoDaTabela,
+          ]),
+        ]),
+  ].filter(Boolean));
+  if (convites.length) {
+    desenharQuadroDosConvites();
+    desenharLinhas();
+  }
+
+  function linhaDoConvite(c) {
+    return el("tr", {}, [
                   el("td", { texto: c.nome || "—" }),
                   el("td", { texto: c.telefone }),
                   el("td", { texto: c.enviado_em ? dataHora(c.enviado_em) : "na fila" }),
                   el("td", {}, [
                     c.respondido_em
-                      ? etiqueta(`respondeu ${dataHora(c.respondido_em)}`, "etiqueta-ok")
-                      : etiqueta("aguardando"),
+                      ? etiqueta(`respondeu ${dataHora(c.respondido_em)}`, "etiqueta-marca")
+                      : seloDoEnvio(c.envio) ?? etiqueta(c.enviado_em ? "enviado, sem retorno da Meta" : "na fila", c.enviado_em ? "" : "etiqueta-alerta"),
                   ]),
                   el("td", { classe: "col-acoes" }, [
                     el("button", {
@@ -1896,12 +1949,8 @@ async function telaConvites(ctx, recarregar) {
                       },
                     }),
                   ]),
-                ]),
-              ),
-            ),
-          ]),
-        ]),
-  ]);
+                ]);
+  }
 
   return el("div", { classe: "pilha" }, [cartaoModelo, form, cartaoZig, cartaoPlanilha, lista]);
 }

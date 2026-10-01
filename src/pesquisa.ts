@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { db, ehMigracaoPendente } from "./supabase.js";
+import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
+import { situacaoDoEnvio, type SituacaoDoEnvio } from "./aniversarios.js";
 import { montarPainel } from "./pesquisaMetricas.js";
 import type { NotaBruta, PainelDaPesquisa, RespostaBruta } from "./pesquisaMetricas.js";
 import { notaNormalizada, pesquisaAtiva } from "./pesquisaModelo.js";
@@ -1064,7 +1065,73 @@ export async function enviarConvite(
   return { convite, enfileirado: true };
 }
 
-export async function listarConvites(venueId: string, limite = 100): Promise<Convite[]> {
+/**
+ * O que aconteceu com a MENSAGEM do convite — o degrau do quadro de envios.
+ *
+ * O convite é a linha de pesquisa_convites; a mensagem é o aviso que saiu
+ * por ele. Os dois não se apontam: ligam-se pelo telefone e pela hora. É o
+ * aviso daquele número criado logo depois do convite (e não um de um
+ * convite anterior ao mesmo cliente, meses atrás).
+ */
+export interface EnvioDoConvite {
+  status: string;
+  situacao: SituacaoDoEnvio;
+  erro: string | null;
+  enviado_em: string | null;
+  entregue_em: string | null;
+  lido_em: string | null;
+  respondido_em: string | null;
+}
+
+export type ConviteComEnvio = Convite & { envio: EnvioDoConvite | null };
+
+type AvisoDoConvite = {
+  destination: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+  entregue_em?: string | null;
+  lido_em?: string | null;
+};
+
+/**
+ * Casa cada convite com o aviso que saiu por ele. Puro, testável.
+ *
+ * Respondeu vence tudo: a pessoa que respondeu a pesquisa recebeu, leu e
+ * agiu — é o degrau mais alto, e vem do convite, não da Meta.
+ */
+export function casarConvitesComAvisos(convites: Convite[], avisos: AvisoDoConvite[], agora = new Date()): ConviteComEnvio[] {
+  const porTelefone = new Map<string, AvisoDoConvite[]>();
+  for (const a of avisos) {
+    const tel = telefoneLimpo(a.destination);
+    const lista = porTelefone.get(tel) ?? [];
+    lista.push(a);
+    porTelefone.set(tel, lista);
+  }
+  for (const lista of porTelefone.values()) lista.sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  return convites.map((c) => {
+    const criado = Date.parse(c.created_at) - 60_000;
+    const aviso = (porTelefone.get(telefoneLimpo(c.telefone)) ?? []).find((a) => Date.parse(a.created_at) >= criado) ?? null;
+    if (!aviso) return { ...c, envio: null };
+    const situacao = c.respondido_em ? "respondeu" : situacaoDoEnvio(aviso, agora);
+    return {
+      ...c,
+      envio: {
+        status: aviso.status,
+        situacao,
+        erro: aviso.error,
+        enviado_em: aviso.sent_at,
+        entregue_em: aviso.entregue_em ?? null,
+        lido_em: aviso.lido_em ?? null,
+        respondido_em: c.respondido_em,
+      },
+    };
+  });
+}
+
+export async function listarConvites(venueId: string, limite = 100): Promise<ConviteComEnvio[]> {
   const { data, error } = await cliente()
     .from("pesquisa_convites")
     .select("*")
@@ -1072,7 +1139,29 @@ export async function listarConvites(venueId: string, limite = 100): Promise<Con
     .order("created_at", { ascending: false })
     .limit(limite);
   if (error) throw new ErroDePesquisa(500, `Falha ao listar os convites: ${error.message}`);
-  return (data ?? []) as Convite[];
+  const convites = (data ?? []) as Convite[];
+  if (!convites.length) return [];
+
+  // Só os avisos desde o convite mais antigo da página: pela casa e pelo
+  // tipo, nunca por lista de telefones na URL — foi isso que apagou o
+  // status dos parabéns numa casa grande.
+  const maisAntigo = convites[convites.length - 1]!.created_at;
+  const desde = new Date(Date.parse(maisAntigo) - 60_000).toISOString();
+  const { data: avisos, error: erroDosAvisos } = await todasAsLinhas<AvisoDoConvite>(() =>
+    cliente()
+      .from("notifications")
+      .select("destination, status, error, created_at, sent_at, entregue_em, lido_em")
+      .eq("venue_id", venueId)
+      .eq("template", "pesquisa_convite")
+      .gte("created_at", desde)
+      .order("id"),
+  );
+  if (erroDosAvisos) {
+    // Sem o status não se perde a lista: o convite aparece sem o degrau.
+    console.error(`[pesquisa] não li os avisos dos convites: ${erroDosAvisos.message}`);
+    return convites.map((c) => ({ ...c, envio: null }));
+  }
+  return casarConvitesComAvisos(convites, (avisos ?? []) as AvisoDoConvite[]);
 }
 
 /**

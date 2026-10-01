@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { modeloDoConvite } from "./pesquisa.js";
+import { casarConvitesComAvisos, modeloDoConvite } from "./pesquisa.js";
 import { resumirModelo, sufixoParaBotao } from "./whatsappOficial.js";
 import { diaDaVisitaPorExtenso, preencherVariaveis } from "./disparos.js";
 
@@ -81,4 +81,25 @@ test("a lacuna do dia da visita fala como gente: hoje, ontem, o dia da semana, a
 test("a lacuna de link nunca sai vazia", () => {
   assert.deepEqual(preencherVariaveis([{ tipo: "link" }], { nome: null }, "x"), ["-"]);
   assert.deepEqual(preencherVariaveis([{ tipo: "link" }], { nome: null, link: LINK }, "x"), [LINK]);
+});
+
+test("cada convite casa com o aviso que saiu por ele — pelo telefone e pela hora, e respondeu vence tudo", () => {
+  const agora = new Date("2026-10-01T20:00:00.000Z");
+  const convites = [
+    { id: "c1", telefone: "5565999990001", nome: "Ana", token: "t1", enviado_em: "2026-10-01T15:37:10.000Z", respondido_em: null, created_at: "2026-10-01T15:37:04.000Z" },
+    { id: "c2", telefone: "5565999990002", nome: "Bia", token: "t2", enviado_em: "2026-10-01T15:37:12.000Z", respondido_em: "2026-10-01T16:00:00.000Z", created_at: "2026-10-01T15:37:05.000Z" },
+    { id: "c3", telefone: "5565999990003", nome: "Caio", token: "t3", enviado_em: null, respondido_em: null, created_at: "2026-10-01T15:37:06.000Z" },
+  ];
+  const avisos = [
+    // Um convite antigo da Ana, meses atrás: não é o deste convite.
+    { destination: "5565999990001", status: "sent", error: null, created_at: "2026-06-01T12:00:00.000Z", sent_at: "2026-06-01T12:00:05.000Z", entregue_em: "2026-06-01T12:00:08.000Z" },
+    { destination: "5565999990001", status: "sent", error: null, created_at: "2026-10-01T15:37:04.500Z", sent_at: "2026-10-01T15:37:10.000Z", entregue_em: "2026-10-01T15:37:13.000Z" },
+    { destination: "5565999990002", status: "sent", error: null, created_at: "2026-10-01T15:37:05.500Z", sent_at: "2026-10-01T15:37:12.000Z", entregue_em: null },
+  ];
+  const [ana, bia, caio] = casarConvitesComAvisos(convites, avisos, agora);
+  assert.equal(ana!.envio?.situacao, "entregue");
+  assert.equal(ana!.envio?.entregue_em, "2026-10-01T15:37:13.000Z");
+  // Aceito há horas sem entrega seria "não chegou" — mas ela respondeu.
+  assert.equal(bia!.envio?.situacao, "respondeu");
+  assert.equal(caio!.envio, null);
 });
