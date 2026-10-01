@@ -367,10 +367,14 @@ export async function concluirLogin(params: {
     // por uma hora — o bastante para testar os DMs hoje e para o log dizer
     // de que lado está o problema. Se nem o /me responde, o token não é
     // desta API, e a mensagem diz isso.
-    const prova = await graph<{ user_id?: string | number; id?: string; username?: string }>(
-      `${GRAPH}/${app.versao}/me?${new URLSearchParams({ fields: "user_id,username", access_token: tokenCurto })}`,
-    );
-    console.error(`[instagram] prova do token curto em graph.instagram.com/me: ${JSON.stringify(prova)}`);
+    type Eu = { user_id?: string | number; id?: string; username?: string };
+    let prova = await graph<Eu>(`${GRAPH}/${app.versao}/me?${new URLSearchParams({ fields: "user_id,username", access_token: tokenCurto })}`);
+    console.error(`[instagram] prova do token curto em graph.instagram.com/me (token na URL): ${JSON.stringify(prova)}`);
+    if (prova.error) {
+      // O mesmo, com o token no cabeçalho — é como o canal responde os DMs.
+      prova = await graph<Eu>(`${GRAPH}/${app.versao}/me?fields=user_id,username`, { headers: { authorization: `Bearer ${tokenCurto}` } });
+      console.error(`[instagram] prova do token curto em graph.instagram.com/me (token no cabeçalho): ${JSON.stringify(prova)}`);
+    }
     if (prova.error) {
       throw new ErroDoInstagram(
         400,
