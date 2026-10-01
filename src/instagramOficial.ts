@@ -54,6 +54,8 @@ export interface ConexaoInstagram {
   comentarios: string;
   /** A frase fixa que vai no post quando o modo é publico_e_privado. Vazio = padrão. */
   comentarios_aviso: string | null;
+  /** Elogio e emoji ganham uma resposta curta e pública. É o "curtir" que a API não dá. */
+  comentarios_agradecer: boolean;
   conectado_em: string | null;
 }
 
@@ -88,6 +90,7 @@ export function paraOPainel(c: ConexaoInstagram | null): Record<string, unknown>
     agent_slug: c.agent_slug,
     comentarios: c.comentarios,
     comentarios_aviso: c.comentarios_aviso,
+    comentarios_agradecer: c.comentarios_agradecer,
     expira_em: c.expira_em,
     renovado_em: c.renovado_em,
     conectado_em: c.conectado_em,
@@ -177,6 +180,7 @@ function daVariaveisDeAmbiente(): (ConexaoInstagram & { venue_slug: string }) | 
     agent_slug: process.env.INSTAGRAM_AGENT || null,
     comentarios: "desligado",
     comentarios_aviso: null,
+    comentarios_agradecer: false,
     conectado_em: null,
   };
 }
@@ -197,6 +201,7 @@ function daLinha(linha: Record<string, unknown>): ConexaoInstagram {
     agent_slug: (linha.agent_slug as string | null) ?? null,
     comentarios: (linha.comentarios as string | null) ?? "privado",
     comentarios_aviso: (linha.comentarios_aviso as string | null) ?? null,
+    comentarios_agradecer: linha.comentarios_agradecer !== false,
     conectado_em: (linha.conectado_em as string | null) ?? null,
   };
 }
@@ -270,6 +275,7 @@ export interface AjustesDoInstagram {
   agent_slug?: string | null;
   comentarios?: string;
   comentarios_aviso?: string | null;
+  comentarios_agradecer?: boolean;
 }
 
 /** O que a casa escolhe depois de conectar: quem responde e o que fazer com comentários. */
@@ -281,6 +287,7 @@ export async function salvarAjustes(venueId: string, ajustes: AjustesDoInstagram
     agent_slug: ajustes.agent_slug === undefined ? atual.agent_slug : ajustes.agent_slug?.trim() || null,
     comentarios: ajustes.comentarios ?? atual.comentarios,
     comentarios_aviso: ajustes.comentarios_aviso === undefined ? atual.comentarios_aviso : ajustes.comentarios_aviso?.trim() || null,
+    comentarios_agradecer: ajustes.comentarios_agradecer ?? atual.comentarios_agradecer,
   };
   await gravar({
     venue_id: venueId,
@@ -289,6 +296,7 @@ export async function salvarAjustes(venueId: string, ajustes: AjustesDoInstagram
     agent_slug: proxima.agent_slug,
     comentarios: proxima.comentarios,
     comentarios_aviso: proxima.comentarios_aviso,
+    comentarios_agradecer: proxima.comentarios_agradecer,
   });
   return proxima;
 }
@@ -448,6 +456,7 @@ export async function concluirLogin(params: {
     agent_slug: anterior?.venue_id ? anterior.agent_slug : null,
     comentarios: anterior?.venue_id ? anterior.comentarios : "privado",
     comentarios_aviso: anterior?.venue_id ? anterior.comentarios_aviso : null,
+    comentarios_agradecer: anterior?.venue_id ? anterior.comentarios_agradecer : true,
     conectado_em: agora.toISOString(),
   };
   await gravar({
@@ -461,6 +470,7 @@ export async function concluirLogin(params: {
     agent_slug: conexao.agent_slug,
     comentarios: conexao.comentarios,
     comentarios_aviso: conexao.comentarios_aviso,
+    comentarios_agradecer: conexao.comentarios_agradecer,
     conectado_em: conexao.conectado_em,
   });
   return conexao;

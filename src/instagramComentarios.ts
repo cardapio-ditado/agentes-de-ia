@@ -73,21 +73,32 @@ export function comentariosDoEntry(entry: { changes?: unknown[] } | undefined): 
 const SO_EMOJI = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s!.?❤️♥️]+$/u;
 const SO_MARCACOES = /^(\s*@[\w.]+\s*)+$/;
 
+/** O que fazer com um comentário: direct do agente, agradecer no post, ou nada. */
+export type DestinoDoComentario = "direct" | "agradecer" | "ignorar";
+
 /**
- * O que não merece direct nenhum, antes de gastar um modelo: vazio, só
- * emoji, só marcação de amigo ("@fulano olha isso"), ou curtíssimo.
- * Puro, testável.
+ * A peneira barata, sem modelo. Puro, testável.
+ *
+ * Só emoji: agradece com emoji (é o "curtir" que a API não dá). Só
+ * marcação de amigo ("@fulano olha isso"): é conversa entre eles, não com a
+ * casa — nada. Curto demais para dizer algo: nada. O resto vai ao modelo.
  */
-export function comentarioDescartavel(texto: string): boolean {
+export function peneiraBarata(texto: string): DestinoDoComentario | null {
   const limpo = texto.trim();
-  if (limpo.length < 3) return true;
-  if (SO_EMOJI.test(limpo)) return true;
-  if (SO_MARCACOES.test(limpo)) return true;
-  return false;
+  if (!limpo) return "ignorar";
+  if (SO_EMOJI.test(limpo)) return "agradecer";
+  if (SO_MARCACOES.test(limpo)) return "ignorar";
+  if (limpo.length < 3) return "ignorar";
+  return null;
+}
+
+/** Compatibilidade: o que NÃO merece direct de jeito nenhum. */
+export function comentarioDescartavel(texto: string): boolean {
+  return peneiraBarata(texto) !== null;
 }
 
 // ============================================================
-// O modelo decide o resto: responder ou ignorar
+// O modelo decide o resto: direct, agradecer ou ignorar
 // ============================================================
 
 let clienteIa: Anthropic | undefined;
@@ -98,25 +109,26 @@ function anthropic(): Anthropic {
 
 export function promptDaPeneira(params: { casa: string; legenda: string | null }): string {
   return [
-    `Você filtra comentários nos posts do Instagram do bar ${params.casa}.`,
-    "Decida se o comentário merece que a casa chame a pessoa no direct.",
+    `Você classifica comentários nos posts do Instagram do bar ${params.casa}.`,
     "",
-    "RESPONDER quando o comentário: faz uma pergunta (horário, preço, reserva, cardápio, estacionamento, evento);",
+    "DIRECT quando o comentário: faz uma pergunta (horário, preço, reserva, cardápio, estacionamento, evento);",
     "demonstra interesse em ir, reservar ou comprar (\"quero\", \"bora\", \"como faço\", \"tem mesa?\");",
     "reclama de algo (um direct resolve melhor que um post); ou pede contato.",
     "",
-    "IGNORAR quando é só elogio ou reação (\"lindo\", \"top\", \"saudade\"), marcação de amigo, piada, spam,",
-    "propaganda de outro negócio, ofensa, ou algo que não é dirigido à casa.",
+    "AGRADECER quando é elogio, carinho ou reação positiva dirigida à casa (\"lindo\", \"top\", \"saudade desse lugar\", \"melhor chope da cidade\").",
+    "",
+    "IGNORAR quando é marcação de amigo, piada entre amigos, spam, propaganda de outro negócio, ofensa, ou algo que não é dirigido à casa.",
     "",
     params.legenda ? `Legenda do post: """${params.legenda.slice(0, 600)}"""` : "Legenda do post: (desconhecida)",
     "",
-    'Responda SÓ com uma palavra: "responder" ou "ignorar".',
+    'Responda SÓ com uma palavra: "direct", "agradecer" ou "ignorar".',
   ].join("\n");
 }
 
-/** Decisão barata; qualquer tropeço no modelo vira "ignorar" — spam de direct é pior que um comentário sem resposta. */
-export async function mereceDirect(params: { casa: string; legenda: string | null; texto: string }): Promise<boolean> {
-  if (comentarioDescartavel(params.texto)) return false;
+/** O destino do comentário; qualquer tropeço vira "ignorar" — spam da casa é pior que silêncio. */
+export async function destinoDoComentario(params: { casa: string; legenda: string | null; texto: string }): Promise<DestinoDoComentario> {
+  const barato = peneiraBarata(params.texto);
+  if (barato) return barato;
   try {
     const r = await anthropic().messages.create({
       model: modeloDaTarefa("comentarios"),
@@ -125,10 +137,58 @@ export async function mereceDirect(params: { casa: string; legenda: string | nul
       messages: [{ role: "user", content: `Comentário: """${params.texto.slice(0, 500)}"""` }],
     });
     const texto = r.content.map((c) => ("text" in c ? c.text : "")).join("").trim().toLowerCase();
-    return texto.startsWith("responder");
+    if (texto.startsWith("direct")) return "direct";
+    if (texto.startsWith("agradecer")) return "agradecer";
+    return "ignorar";
   } catch (e) {
     console.error(`[instagram] a peneira de comentários falhou: ${(e as Error).message}`);
-    return false;
+    return "ignorar";
+  }
+}
+
+/** Compatibilidade com quem só pergunta "vai para o agente?". */
+export async function mereceDirect(params: { casa: string; legenda: string | null; texto: string }): Promise<boolean> {
+  return (await destinoDoComentario(params)) === "direct";
+}
+
+// ============================================================
+// O agradecimento público — curto, variado, com teto por dia
+// ============================================================
+
+/** Para comentário só de emoji: emoji de volta, sem modelo. */
+const EMOJIS_DE_VOLTA = ["🙌", "🔥", "🍻", "❤️", "😍", "🧡"];
+
+/** Agradecimentos públicos por casa por dia. Acima disto, parece robô — e a Meta limita. */
+export const TETO_DE_AGRADECIMENTOS_POR_DIA = 60;
+
+export function promptDoAgradecimento(casa: string): string {
+  return [
+    `Você responde, em público, um elogio deixado num post do Instagram do bar ${casa}.`,
+    "Uma frase só, até 10 palavras, em português do Brasil, como gente da casa — nunca como atendimento.",
+    "Pode usar um emoji. Não faça pergunta, não prometa nada, não convide para o direct, não repita o comentário.",
+    "Varie: cada resposta diferente da anterior.",
+    "Responda só com a frase.",
+  ].join("\n");
+}
+
+/**
+ * O texto do agradecimento. Emoji responde emoji; texto responde uma
+ * frase curta do modelo. Tropeço vira o emoji — melhor "🙌" que silêncio.
+ */
+export async function textoDoAgradecimento(params: { casa: string; texto: string }): Promise<string> {
+  const emoji = EMOJIS_DE_VOLTA[Math.floor(Math.random() * EMOJIS_DE_VOLTA.length)]!;
+  if (SO_EMOJI.test(params.texto.trim())) return emoji;
+  try {
+    const r = await anthropic().messages.create({
+      model: modeloDaTarefa("comentarios"),
+      max_tokens: 40,
+      system: promptDoAgradecimento(params.casa),
+      messages: [{ role: "user", content: `Comentário: """${params.texto.slice(0, 300)}"""` }],
+    });
+    const frase = r.content.map((c) => ("text" in c ? c.text : "")).join("").trim().replace(/^["“]|["”]$/g, "");
+    return frase && frase.length <= 120 ? frase : emoji;
+  } catch {
+    return emoji;
   }
 }
 
@@ -226,6 +286,19 @@ export async function reservarComentario(venueId: string, c: ComentarioRecebido)
   // do que calar o canal inteiro.
   console.error(`[instagram] não reservei o comentário ${c.id}: ${error.message}`);
   return true;
+}
+
+/** Quantos agradecimentos públicos a casa já fez nas últimas 24 h. */
+export async function agradecimentosRecentes(venueId: string): Promise<number> {
+  const desde = new Date(Date.now() - 86_400_000).toISOString();
+  const { count, error } = await cliente()
+    .from("instagram_comentarios")
+    .select("comment_id", { count: "exact", head: true })
+    .eq("venue_id", venueId)
+    .eq("acao", "agradecido")
+    .gte("created_at", desde);
+  if (error) return 0;
+  return count ?? 0;
 }
 
 export async function anotarComentario(commentId: string, acao: string, erro?: string | null): Promise<void> {

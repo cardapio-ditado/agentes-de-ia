@@ -49,6 +49,7 @@ const INSTAGRAM: ConexaoInstagram = {
   agent_slug: "fernanda",
   comentarios: "publico_e_privado",
   comentarios_aviso: null,
+  comentarios_agradecer: true,
   conectado_em: "2026-09-29T12:00:00.000Z",
 };
 // O login só existe quando o app tem as chaves: na tela de mentira, tem.

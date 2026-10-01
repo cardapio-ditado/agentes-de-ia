@@ -5,15 +5,18 @@ import { enviarPorInstagram } from "../notifications.js";
 import { conexaoPelaConta, loginDisponivel, type ConexaoInstagram } from "../instagramOficial.js";
 import {
   AVISO_PUBLICO_PADRAO,
+  TETO_DE_AGRADECIMENTOS_POR_DIA,
+  agradecimentosRecentes,
   anotarComentario,
   comentariosDoEntry,
   contextoDoComentario,
+  destinoDoComentario,
   legendaDoPost,
-  mereceDirect,
   modoValido,
   reservarComentario,
   responderNoDirect,
   responderNoPost,
+  textoDoAgradecimento,
   type ComentarioRecebido,
 } from "../instagramComentarios.js";
 import { findVenueBySlug } from "../venues.js";
@@ -210,9 +213,29 @@ async function processarComentario(
 
   const venue = await findVenueBySlug(conexao.venue_slug);
   const legenda = await legendaDoPost(conexao, c.media_id);
-  if (!(await mereceDirect({ casa: venue.name, legenda, texto: c.texto }))) {
+  const destino = await destinoDoComentario({ casa: venue.name, legenda, texto: c.texto });
+
+  if (destino === "ignorar") {
     await anotarComentario(c.id, "ignorado");
     console.log(`[instagram] comentário de @${c.autor ?? c.autor_id} ignorado: "${c.texto.slice(0, 60)}"`);
+    return;
+  }
+
+  // Elogio e emoji: uma resposta curta no post, se a casa quiser e o teto
+  // do dia não estourou. É o "curtir" que a API da Meta não oferece.
+  if (destino === "agradecer") {
+    if (!conexao.comentarios_agradecer) {
+      await anotarComentario(c.id, "ignorado", "agradecer desligado");
+      return;
+    }
+    if ((await agradecimentosRecentes(conexao.venue_id)) >= TETO_DE_AGRADECIMENTOS_POR_DIA) {
+      await anotarComentario(c.id, "ignorado", "teto de agradecimentos do dia");
+      return;
+    }
+    const frase = await textoDoAgradecimento({ casa: venue.name, texto: c.texto });
+    const r = await responderNoPost(conexao, c.id, frase);
+    await anotarComentario(c.id, r.ok ? "agradecido" : "falhou", r.ok ? null : r.erro);
+    console.log(`[instagram] comentário de @${c.autor ?? c.autor_id} → ${r.ok ? `agradecido: "${frase}"` : `falhou: ${r.erro}`}`);
     return;
   }
 

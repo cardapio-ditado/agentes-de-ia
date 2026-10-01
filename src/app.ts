@@ -3867,6 +3867,7 @@ async function roteasApi(
                 agent_slug: agentSlug === undefined ? undefined : agentSlug || null,
                 comentarios: modo ?? undefined,
                 comentarios_aviso: typeof corpo.comentarios_aviso === "string" ? corpo.comentarios_aviso.slice(0, 200) : undefined,
+                comentarios_agradecer: typeof corpo.comentarios_agradecer === "boolean" ? corpo.comentarios_agradecer : undefined,
               }),
             ),
           ),

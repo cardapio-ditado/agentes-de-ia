@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { comentarioDescartavel, comentariosDoEntry, contextoDoComentario, modoValido, promptDaPeneira } from "./instagramComentarios.js";
+import { comentarioDescartavel, comentariosDoEntry, contextoDoComentario, modoValido, peneiraBarata, promptDaPeneira, promptDoAgradecimento } from "./instagramComentarios.js";
 
 test("os comentários saem do webhook com autor, post e texto; o resto do lote é ignorado", () => {
   const entry = {
@@ -37,7 +37,7 @@ test("o agente fica sabendo que começou num comentário, e de qual post", () =>
   assert.match(texto, /Sábado tem feijoada/);
   assert.match(texto, /MENSAGEM PRIVADA/);
   assert.match(texto, /não pergunte "como posso ajudar"/i);
-  assert.match(promptDaPeneira({ casa: "Ditado", legenda: null }), /"responder" ou "ignorar"/);
+  assert.match(promptDaPeneira({ casa: "Ditado", legenda: null }), /"direct"/);
 });
 
 test("o modo de comentários não confia na tela", () => {
@@ -46,4 +46,16 @@ test("o modo de comentários não confia na tela", () => {
   assert.equal(modoValido("desligado"), "desligado");
   assert.equal(modoValido("tudo"), null);
   assert.equal(modoValido(undefined), null);
+});
+
+test("a peneira barata manda emoji para o obrigado, marcação de amigo para o nada, e o resto para o modelo", () => {
+  assert.equal(peneiraBarata("🔥🔥🔥"), "agradecer");
+  assert.equal(peneiraBarata("❤️"), "agradecer");
+  assert.equal(peneiraBarata("@fulano @ciclana"), "ignorar");
+  assert.equal(peneiraBarata("  "), "ignorar");
+  assert.equal(peneiraBarata("ok"), "ignorar");
+  assert.equal(peneiraBarata("melhor chope da cidade"), null);
+  assert.equal(peneiraBarata("tem mesa sábado?"), null);
+  assert.match(promptDaPeneira({ casa: "Ditado", legenda: null }), /"direct", "agradecer" ou "ignorar"/);
+  assert.match(promptDoAgradecimento("Ditado"), /até 10 palavras/);
 });

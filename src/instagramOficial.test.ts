@@ -48,6 +48,7 @@ test("o painel vê a conta e o agente, nunca o token", () => {
     agent_slug: "recepcionista",
     comentarios: "privado",
     comentarios_aviso: null,
+    comentarios_agradecer: true,
     conectado_em: "2026-10-01T12:00:00.000Z",
   });
   assert.equal(tela.conectado, true);

@@ -122,6 +122,11 @@ export async function canaisDaCasa(raiz, ctx) {
       campo("A frase que fica no post (igual para todo mundo)", campoAviso),
     ]);
     seletorComentarios.addEventListener("change", () => { areaDoAviso.hidden = seletorComentarios.value !== "publico_e_privado"; });
+    const caixaAgradecer = el("input", { type: "checkbox", checked: conexao.comentarios_agradecer !== false });
+    const linhaAgradecer = el("label", { classe: "linha-campos", style: "align-items:center;gap:8px;margin-top:10px;cursor:pointer" }, [
+      caixaAgradecer,
+      el("span", { texto: "Agradecer elogios e emojis no post, com uma frase curta (até 60 por dia)" }),
+    ]);
 
     const conectar = async (e) => {
       e.target.disabled = true;
@@ -162,11 +167,12 @@ export async function canaisDaCasa(raiz, ctx) {
             ])
           : null,
         conectado ? areaDoAviso : null,
+        conectado ? linhaAgradecer : null,
         conectado
           ? el("p", {
               classe: "muted",
               style: "margin-top:6px",
-              texto: "Quem comenta com pergunta, interesse ou reclamação recebe o agente no direct — a Meta permite isso por 7 dias depois do comentário. Elogio, emoji e marcação de amigo ficam quietos. O agente nunca escreve no post: ali só sai a frase fixa.",
+              texto: "Quem comenta com pergunta, interesse ou reclamação recebe o agente no direct — a Meta permite isso por 7 dias depois do comentário. Elogio e emoji ganham um obrigado curto no post (a Meta não deixa curtir comentário). Marcação de amigo e spam ficam quietos. O agente nunca conversa em público.",
             })
           : null,
 
@@ -187,6 +193,7 @@ export async function canaisDaCasa(raiz, ctx) {
                       agent_slug: seletorAgente.value,
                       comentarios: seletorComentarios.value,
                       comentarios_aviso: campoAviso.value,
+                      comentarios_agradecer: caixaAgradecer.checked,
                     });
                     avisar(seletorAgente.value ? "Pronto: os DMs e os comentários passam a ser atendidos." : "Salvo. Ninguém responde os DMs por enquanto.", "ok");
                     await desenharInstagram();
