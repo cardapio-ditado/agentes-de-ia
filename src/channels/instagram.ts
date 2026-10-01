@@ -95,12 +95,19 @@ export function verificarWebhook(params: URLSearchParams): string | null {
 
 /** Assinatura HMAC-SHA256 do corpo cru, enviada em X-Hub-Signature-256. */
 export function assinaturaValida(corpoBruto: Buffer, cabecalho: string | undefined): boolean {
-  const cfg = config();
-  if (!cfg.appSecret || !cabecalho?.startsWith("sha256=")) return false;
-
-  const esperada = createHmac("sha256", cfg.appSecret).update(corpoBruto).digest();
+  if (!cabecalho?.startsWith("sha256=")) return false;
   const recebida = Buffer.from(cabecalho.slice("sha256=".length), "hex");
-  return esperada.length === recebida.length && timingSafeEqual(esperada, recebida);
+
+  // O app da Meta tem DOIS segredos: o do app do Instagram (na tela do
+  // produto Instagram) e o do app em si (Configurações → Básico). A Meta
+  // assina o webhook com um deles, e qual é muda conforme o app foi
+  // montado. Aceitar os dois é o que evita um 403 silencioso na
+  // primeira mensagem.
+  const segredos = [process.env.INSTAGRAM_APP_SECRET, process.env.WHATSAPP_APP_SECRET].filter((s): s is string => Boolean(s));
+  return segredos.some((segredo) => {
+    const esperada = createHmac("sha256", segredo).update(corpoBruto).digest();
+    return esperada.length === recebida.length && timingSafeEqual(esperada, recebida);
+  });
 }
 
 /** Nome e @usuário do interlocutor, para a inbox. Falha vira null, nunca erro. */
