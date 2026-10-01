@@ -3,6 +3,20 @@ import { runAgent } from "../agent.js";
 import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
 import { enviarPorInstagram } from "../notifications.js";
 import { conexaoPelaConta, loginDisponivel, type ConexaoInstagram } from "../instagramOficial.js";
+import {
+  AVISO_PUBLICO_PADRAO,
+  anotarComentario,
+  comentariosDoEntry,
+  contextoDoComentario,
+  legendaDoPost,
+  mereceDirect,
+  modoValido,
+  reservarComentario,
+  responderNoDirect,
+  responderNoPost,
+  type ComentarioRecebido,
+} from "../instagramComentarios.js";
+import { findVenueBySlug } from "../venues.js";
 
 /**
  * Canal Instagram — API oficial de mensagens da Meta (login pelo Instagram).
@@ -41,7 +55,7 @@ interface EventoMensagem {
 
 interface CorpoWebhook {
   object?: string;
-  entry?: Array<{ id?: string; messaging?: EventoMensagem[] }>;
+  entry?: Array<{ id?: string; messaging?: EventoMensagem[]; changes?: unknown[] }>;
 }
 
 function config() {
@@ -156,14 +170,81 @@ export async function processarWebhookInstagram(corpo: CorpoWebhook): Promise<vo
       console.log(`[instagram] @${conexao.usuario ?? entry.id}: conta conectada sem agente — ninguém responde.`);
       continue;
     }
+    const pronta = conexao as ConexaoInstagram & { venue_slug: string; agent_slug: string };
     for (const evento of entry.messaging ?? []) {
       try {
-        await processarEvento(evento, conexao as ConexaoInstagram & { venue_slug: string; agent_slug: string });
+        await processarEvento(evento, pronta);
       } catch (e) {
         console.error("[instagram] falha ao processar evento:", e);
       }
     }
+    // Comentários nos posts vêm no mesmo webhook, em `changes`.
+    for (const comentario of comentariosDoEntry(entry)) {
+      try {
+        await processarComentario(comentario, pronta);
+      } catch (e) {
+        console.error("[instagram] falha ao processar comentário:", e);
+      }
+    }
   }
+}
+
+/**
+ * Um comentário num post: peneira, agente, direct — e, se a casa quiser,
+ * uma frase fixa no post.
+ *
+ * A conversa fica com o id da PESSOA, não do comentário: quando ela
+ * responder o direct, é o mesmo fio. O agente sabe que começou num
+ * comentário e de qual post, pelo contexto.
+ */
+async function processarComentario(
+  c: ComentarioRecebido,
+  conexao: ConexaoInstagram & { venue_slug: string; agent_slug: string },
+): Promise<void> {
+  const modo = modoValido(conexao.comentarios) ?? "privado";
+  if (modo === "desligado") return;
+  // A própria casa respondendo no post (inclusive a nossa frase fixa)
+  // volta pelo webhook como comentário novo.
+  if (!c.autor_id || c.autor_id === conexao.ig_user_id) return;
+  if (!(await reservarComentario(conexao.venue_id, c))) return;
+
+  const venue = await findVenueBySlug(conexao.venue_slug);
+  const legenda = await legendaDoPost(conexao, c.media_id);
+  if (!(await mereceDirect({ casa: venue.name, legenda, texto: c.texto }))) {
+    await anotarComentario(c.id, "ignorado");
+    console.log(`[instagram] comentário de @${c.autor ?? c.autor_id} ignorado: "${c.texto.slice(0, 60)}"`);
+    return;
+  }
+
+  const resultado = await runAgent({
+    agentSlug: conexao.agent_slug,
+    venueSlug: conexao.venue_slug,
+    userMessage: c.texto,
+    channel: "instagram",
+    externalId: c.autor_id,
+    contato: { nome: c.autor, telefone: c.autor ? `@${c.autor}` : null },
+    contextoExtra: contextoDoComentario({ autor: c.autor, texto: c.texto, legenda, casa: venue.name }),
+  });
+  if (!resultado.respondeu) {
+    await anotarComentario(c.id, "ignorado", "conversa com pessoa no comando");
+    return;
+  }
+
+  const direct = await responderNoDirect(conexao, c.id, resultado.text || "Oi! Vi seu comentário no nosso post — me conta o que você precisa?");
+  if (!direct.ok) {
+    console.error(`[instagram] direct para o comentário ${c.id} falhou: ${direct.erro}`);
+    await anotarComentario(c.id, "falhou", direct.erro);
+    return;
+  }
+
+  let acao = "direct";
+  if (modo === "publico_e_privado") {
+    const publico = await responderNoPost(conexao, c.id, conexao.comentarios_aviso?.trim() || AVISO_PUBLICO_PADRAO);
+    if (publico.ok) acao = "direct_e_post";
+    else console.error(`[instagram] resposta no post ${c.id} falhou: ${publico.erro}`);
+  }
+  await anotarComentario(c.id, acao);
+  console.log(`[instagram] comentário de @${c.autor ?? c.autor_id} → ${acao}`);
 }
 
 async function processarEvento(

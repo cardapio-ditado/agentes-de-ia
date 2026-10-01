@@ -110,6 +110,18 @@ export async function canaisDaCasa(raiz, ctx) {
       el("option", { value: "", texto: "Ninguém — os DMs ficam sem resposta automática" }),
       ...agentes.map((a) => el("option", { value: a.slug, texto: a.name, selected: a.slug === conexao.agent_slug })),
     ]);
+    const MODOS = [
+      ["desligado", "Não responder"],
+      ["privado", "Chamar no direct"],
+      ["publico_e_privado", "Responder no post e chamar no direct"],
+    ];
+    const seletorComentarios = el("select", { classe: "select" }, MODOS.map(([id, nome]) =>
+      el("option", { value: id, texto: nome, selected: id === (conexao.comentarios ?? "privado") })));
+    const campoAviso = el("input", { value: conexao.comentarios_aviso ?? "", placeholder: "Te chamei no direct 😉", maxlength: "200" });
+    const areaDoAviso = el("div", { classe: "grade", style: "margin-top:12px", hidden: seletorComentarios.value !== "publico_e_privado" }, [
+      campo("A frase que fica no post (igual para todo mundo)", campoAviso),
+    ]);
+    seletorComentarios.addEventListener("change", () => { areaDoAviso.hidden = seletorComentarios.value !== "publico_e_privado"; });
 
     const conectar = async (e) => {
       e.target.disabled = true;
@@ -144,7 +156,18 @@ export async function canaisDaCasa(raiz, ctx) {
             : null,
 
         conectado
-          ? el("div", { classe: "grade", style: "margin-top:12px" }, [campo("Quem responde os DMs", seletorAgente)])
+          ? el("div", { classe: "grade", style: "margin-top:12px" }, [
+              campo("Quem responde os DMs", seletorAgente),
+              campo("Comentários nos posts", seletorComentarios),
+            ])
+          : null,
+        conectado ? areaDoAviso : null,
+        conectado
+          ? el("p", {
+              classe: "muted",
+              style: "margin-top:6px",
+              texto: "Quem comenta com pergunta, interesse ou reclamação recebe o agente no direct — a Meta permite isso por 7 dias depois do comentário. Elogio, emoji e marcação de amigo ficam quietos. O agente nunca escreve no post: ali só sai a frase fixa.",
+            })
           : null,
 
         !conectado && !conexao.login_disponivel
@@ -160,8 +183,12 @@ export async function canaisDaCasa(raiz, ctx) {
                 onclick: async (e) => {
                   e.target.disabled = true;
                   try {
-                    await put(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram`, { agent_slug: seletorAgente.value });
-                    avisar(seletorAgente.value ? "Pronto: os DMs passam a ser atendidos." : "Salvo. Ninguém responde os DMs por enquanto.", "ok");
+                    await put(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram`, {
+                      agent_slug: seletorAgente.value,
+                      comentarios: seletorComentarios.value,
+                      comentarios_aviso: campoAviso.value,
+                    });
+                    avisar(seletorAgente.value ? "Pronto: os DMs e os comentários passam a ser atendidos." : "Salvo. Ninguém responde os DMs por enquanto.", "ok");
                     await desenharInstagram();
                   } catch (err) {
                     avisar(err.message, "erro");

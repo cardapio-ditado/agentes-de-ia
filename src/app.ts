@@ -201,11 +201,12 @@ import {
   concluirLogin as concluirLoginDoInstagram,
   conexaoDaCasa as instagramDaCasa,
   ErroDoInstagram,
-  escolherAgente as escolherAgenteDoInstagram,
   lerState,
   paraOPainel as instagramParaOPainel,
+  salvarAjustes as salvarAjustesDoInstagram,
   urlDeLogin as urlDeLoginDoInstagram,
 } from "./instagramOficial.js";
+import { modoValido as modoDeComentariosValido } from "./instagramComentarios.js";
 import {
   assinaturaWhatsappValida,
   estadoWhatsappCloud,
@@ -3852,11 +3853,24 @@ async function roteasApi(
       }
       if (metodo === "PUT") {
         const corpo = (await lerJson(req)) as Record<string, unknown>;
-        const agentSlug = typeof corpo.agent_slug === "string" ? corpo.agent_slug : "";
+        const agentSlug = typeof corpo.agent_slug === "string" ? corpo.agent_slug : undefined;
         if (agentSlug && !(await getAgentInOrg(chave.org_id, agentSlug))) {
           throw erro(400, "invalid_request", `Não achei o agente "${agentSlug}".`);
         }
-        return ok(res, instagramParaOPainel(await comErroDaConexao(() => escolherAgenteDoInstagram(venue.id, agentSlug || null))));
+        const modo = corpo.comentarios === undefined ? undefined : modoDeComentariosValido(corpo.comentarios);
+        if (corpo.comentarios !== undefined && !modo) throw erro(400, "invalid_request", "Modo de comentários desconhecido.");
+        return ok(
+          res,
+          instagramParaOPainel(
+            await comErroDaConexao(() =>
+              salvarAjustesDoInstagram(venue.id, {
+                agent_slug: agentSlug === undefined ? undefined : agentSlug || null,
+                comentarios: modo ?? undefined,
+                comentarios_aviso: typeof corpo.comentarios_aviso === "string" ? corpo.comentarios_aviso.slice(0, 200) : undefined,
+              }),
+            ),
+          ),
+        );
       }
       if (metodo === "DELETE") {
         await comErroDaConexao(() => desconectarInstagram(venue.id));

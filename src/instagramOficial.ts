@@ -50,6 +50,10 @@ export interface ConexaoInstagram {
   expira_em: string | null;
   renovado_em: string | null;
   agent_slug: string | null;
+  /** O que fazer com comentários nos posts: desligado | privado | publico_e_privado. */
+  comentarios: string;
+  /** A frase fixa que vai no post quando o modo é publico_e_privado. Vazio = padrão. */
+  comentarios_aviso: string | null;
   conectado_em: string | null;
 }
 
@@ -82,6 +86,8 @@ export function paraOPainel(c: ConexaoInstagram | null): Record<string, unknown>
     usuario: c.usuario,
     nome: c.nome,
     agent_slug: c.agent_slug,
+    comentarios: c.comentarios,
+    comentarios_aviso: c.comentarios_aviso,
     expira_em: c.expira_em,
     renovado_em: c.renovado_em,
     conectado_em: c.conectado_em,
@@ -169,6 +175,8 @@ function daVariaveisDeAmbiente(): (ConexaoInstagram & { venue_slug: string }) | 
     expira_em: null,
     renovado_em: null,
     agent_slug: process.env.INSTAGRAM_AGENT || null,
+    comentarios: "desligado",
+    comentarios_aviso: null,
     conectado_em: null,
   };
 }
@@ -187,6 +195,8 @@ function daLinha(linha: Record<string, unknown>): ConexaoInstagram {
     expira_em: (linha.expira_em as string | null) ?? null,
     renovado_em: (linha.renovado_em as string | null) ?? null,
     agent_slug: (linha.agent_slug as string | null) ?? null,
+    comentarios: (linha.comentarios as string | null) ?? "privado",
+    comentarios_aviso: (linha.comentarios_aviso as string | null) ?? null,
     conectado_em: (linha.conectado_em as string | null) ?? null,
   };
 }
@@ -256,11 +266,31 @@ async function gravar(linha: Record<string, unknown>): Promise<void> {
   }
 }
 
-export async function escolherAgente(venueId: string, agentSlug: string | null): Promise<ConexaoInstagram> {
+export interface AjustesDoInstagram {
+  agent_slug?: string | null;
+  comentarios?: string;
+  comentarios_aviso?: string | null;
+}
+
+/** O que a casa escolhe depois de conectar: quem responde e o que fazer com comentários. */
+export async function salvarAjustes(venueId: string, ajustes: AjustesDoInstagram): Promise<ConexaoInstagram> {
   const atual = await conexaoDaCasa({ id: venueId });
-  if (!atual || !atual.venue_id) throw new ErroDoInstagram(400, "Conecte o Instagram antes de escolher quem responde.");
-  await gravar({ venue_id: venueId, ig_user_id: atual.ig_user_id, token: atual.token, agent_slug: agentSlug?.trim() || null });
-  return { ...atual, agent_slug: agentSlug?.trim() || null };
+  if (!atual || !atual.venue_id) throw new ErroDoInstagram(400, "Conecte o Instagram antes de ajustar quem responde.");
+  const proxima: ConexaoInstagram = {
+    ...atual,
+    agent_slug: ajustes.agent_slug === undefined ? atual.agent_slug : ajustes.agent_slug?.trim() || null,
+    comentarios: ajustes.comentarios ?? atual.comentarios,
+    comentarios_aviso: ajustes.comentarios_aviso === undefined ? atual.comentarios_aviso : ajustes.comentarios_aviso?.trim() || null,
+  };
+  await gravar({
+    venue_id: venueId,
+    ig_user_id: atual.ig_user_id,
+    token: atual.token,
+    agent_slug: proxima.agent_slug,
+    comentarios: proxima.comentarios,
+    comentarios_aviso: proxima.comentarios_aviso,
+  });
+  return proxima;
 }
 
 export async function apagarConexao(venueId: string): Promise<void> {
@@ -397,7 +427,7 @@ export async function concluirLogin(params: {
 
   // Inscreve a conta no app: é o que faz os DMs chegarem pelo webhook.
   const inscricao = await graph<{ success?: boolean }>(
-    `${GRAPH}/${app.versao}/${igUserId}/subscribed_apps?${new URLSearchParams({ subscribed_fields: "messages", access_token: token })}`,
+    `${GRAPH}/${app.versao}/${igUserId}/subscribed_apps?${new URLSearchParams({ subscribed_fields: "messages,comments", access_token: token })}`,
     { method: "POST" },
   );
   if (inscricao.error) {
@@ -416,6 +446,8 @@ export async function concluirLogin(params: {
     expira_em: expiraEm,
     renovado_em: null,
     agent_slug: anterior?.venue_id ? anterior.agent_slug : null,
+    comentarios: anterior?.venue_id ? anterior.comentarios : "privado",
+    comentarios_aviso: anterior?.venue_id ? anterior.comentarios_aviso : null,
     conectado_em: agora.toISOString(),
   };
   await gravar({
@@ -427,6 +459,8 @@ export async function concluirLogin(params: {
     expira_em: conexao.expira_em,
     renovado_em: null,
     agent_slug: conexao.agent_slug,
+    comentarios: conexao.comentarios,
+    comentarios_aviso: conexao.comentarios_aviso,
     conectado_em: conexao.conectado_em,
   });
   return conexao;

@@ -30,6 +30,8 @@ const TAREFAS = {
   lerProgramacao: "MODELO_LER_PROGRAMACAO",
   /** Transcrever material de treinamento do agente. */
   treinamento: "MODELO_TREINAMENTO",
+  /** Decidir se um comentário no Instagram merece o direct do agente. */
+  comentarios: "MODELO_COMENTARIOS",
 } as const;
 
 export type TarefaDeIA = keyof typeof TAREFAS;
