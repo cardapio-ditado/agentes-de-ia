@@ -23,7 +23,7 @@ test("a URL de login pede as permissões de mensagens e força a escolha da cont
   assert.equal(url.origin + url.pathname, "https://www.instagram.com/oauth/authorize");
   assert.equal(url.searchParams.get("client_id"), "123");
   assert.equal(url.searchParams.get("redirect_uri"), "https://brasafood.app/v1/instagram/oauth/callback");
-  assert.equal(url.searchParams.get("scope"), "instagram_business_basic,instagram_business_manage_messages");
+  assert.equal(url.searchParams.get("scope"), "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments");
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("state"), "abc");
   assert.equal(url.searchParams.get("force_reauth"), "true");

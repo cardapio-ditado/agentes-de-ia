@@ -24,8 +24,8 @@ const cliente = () => db() as any;
 
 const VERSAO_PADRAO = "v23.0";
 const GRAPH = "https://graph.instagram.com";
-/** As permissões que o login pede: ler a conta e responder os DMs. */
-export const PERMISSOES = ["instagram_business_basic", "instagram_business_manage_messages"];
+/** As permissões que o login pede: ler a conta, responder os DMs e os comentários. */
+export const PERMISSOES = ["instagram_business_basic", "instagram_business_manage_messages", "instagram_business_manage_comments"];
 /** Renova quando faltam menos que isto para vencer. */
 export const DIAS_PARA_RENOVAR = 30;
 /** O `state` do login vale isto; depois é só um link velho. */
