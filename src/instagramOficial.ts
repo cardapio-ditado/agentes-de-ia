@@ -326,7 +326,8 @@ export async function concluirLogin(params: {
     console.error(`[instagram] a troca do código falhou; a Meta devolveu as chaves ${Object.keys(curto).join(",")}`);
     throw new ErroDoInstagram(400, `Não deu para concluir o login: ${curto.error?.error_message ?? explicarErro(curto.error)}`);
   }
-  console.log(`[instagram] código trocado (chaves: ${Object.keys(curto).join(",")}; user_id: ${primeiro.user_id ?? "?"}; permissões: ${primeiro.permissions ?? "?"})`);
+  // O id do app não é segredo; o prefixo do token diz de que família ele é.
+  console.log(`[instagram] código trocado pelo app ${app.appId} (chaves: ${Object.keys(curto).join(",")}; user_id: ${primeiro.user_id ?? "?"}; permissões: ${primeiro.permissions ?? "?"}; token ${tokenCurto.slice(0, 4)}…, ${tokenCurto.length} caracteres)`);
 
   // O curto vira longo (60 dias). A Meta documenta o endereço sem versão;
   // na dúvida, a versão também é tentada — custa um pedido e evita que um
