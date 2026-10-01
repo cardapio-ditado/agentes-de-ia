@@ -5581,6 +5581,10 @@ async function roteasApi(
   // resultado no endereço para a tela contar o que houve.
   if (metodo === "GET" && p[0] === "instagram" && p[1] === "oauth" && p[2] === "callback" && p.length === 3) {
     const voltar = (resultado: string, motivo?: string) => {
+      // No log TAMBÉM: o motivo vai para a tela, mas a tela pode nem o
+      // mostrar — e foi assim que três logins falharam sem rastro.
+      if (resultado !== "ok") console.error(`[instagram] login não concluído: ${motivo ?? "sem motivo"}`);
+      else console.log(`[instagram] conta conectada: ${motivo ?? ""}`);
       const q = new URLSearchParams({ instagram: resultado });
       if (motivo) q.set("motivo", motivo);
       // O resultado vai ANTES do #: o roteador do painel lê o hash inteiro

@@ -976,9 +976,17 @@ async function iniciar() {
   // - já passou pelo hub nesta sessão e só deu F5 dentro do módulo.
   // A âncora (#reservas etc.) sozinha NÃO pula: o navegador guarda a da
   // última visita, e o hub sumia pra sempre depois do primeiro uso.
-  const direto =
-    new URLSearchParams(location.search).has("direto") ||
-    sessionStorage.getItem("brasa.hub.visto") === "1";
+  const busca = new URLSearchParams(location.search);
+  // A volta do login do Instagram: o dono saiu do painel para autorizar a
+  // conta e o Instagram o devolve aqui com o resultado. Vai DIRETO para a
+  // tela de onde saiu — cair no saguão, ou numa tela de outro módulo,
+  // engolia o aviso e parecia que nada tinha acontecido.
+  if (busca.has("instagram")) {
+    location.hash = "#canais-casa";
+    entrarNoModulo("ajustes");
+    return;
+  }
+  const direto = busca.has("direto") || sessionStorage.getItem("brasa.hub.visto") === "1";
   if (direto) entrarNoModulo(sessionStorage.getItem("brasa.modulo") ?? "agentes-ia");
   else mostrarHub();
 }
