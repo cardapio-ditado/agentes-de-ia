@@ -333,13 +333,28 @@ export async function concluirLogin(params: {
   // detalhe de roteamento deles deixe a casa sem conexão.
   type TokenLongo = { access_token?: string; expires_in?: number };
   const troca = new URLSearchParams({ grant_type: "ig_exchange_token", client_secret: app.appSecret, access_token: tokenCurto });
-  let longo = await graph<TokenLongo>(`${GRAPH}/access_token?${troca}`);
-  if (longo.error || !longo.access_token) {
-    console.error(`[instagram] troca pelo token longo (sem versão) falhou: ${JSON.stringify(longo.error ?? longo)}`);
-    longo = await graph<TokenLongo>(`${GRAPH}/${app.versao}/access_token?${troca}`);
+  const comClientId = new URLSearchParams({ ...Object.fromEntries(troca), client_id: app.appId });
+  // As variantes que a Meta já aceitou em alguma versão da plataforma. A
+  // documentada é a primeira; as outras existem porque a Meta respondeu
+  // "Unsupported request" à documentada, e um pedido a mais custa menos
+  // que uma casa sem Instagram.
+  const tentativas: Array<[string, () => Promise<RespostaDaMeta<TokenLongo>>]> = [
+    ["GET /access_token", () => graph<TokenLongo>(`${GRAPH}/access_token?${troca}`)],
+    ["GET /access_token + client_id", () => graph<TokenLongo>(`${GRAPH}/access_token?${comClientId}`)],
+    [`GET /${app.versao}/access_token`, () => graph<TokenLongo>(`${GRAPH}/${app.versao}/access_token?${troca}`)],
+    ["POST /access_token", () => graph<TokenLongo>(`${GRAPH}/access_token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: troca })],
+    ["GET /oauth/access_token", () => graph<TokenLongo>(`${GRAPH}/oauth/access_token?${comClientId}`)],
+  ];
+  let longo: RespostaDaMeta<TokenLongo> = { error: { message: "nenhuma tentativa" } } as RespostaDaMeta<TokenLongo>;
+  for (const [nome, tentar] of tentativas) {
+    longo = await tentar();
+    if (!longo.error && longo.access_token) {
+      console.log(`[instagram] token longo obtido por ${nome}`);
+      break;
+    }
+    console.error(`[instagram] troca pelo token longo (${nome}) falhou: ${JSON.stringify(longo.error ?? longo)}`);
   }
   if (longo.error || !longo.access_token) {
-    console.error(`[instagram] troca pelo token longo (${app.versao}) falhou: ${JSON.stringify(longo.error ?? longo)}`);
     throw new ErroDoInstagram(
       400,
       `Não deu para guardar a autorização: ${explicarErro(longo.error)} ` +
