@@ -354,15 +354,34 @@ export async function concluirLogin(params: {
     }
     console.error(`[instagram] troca pelo token longo (${nome}) falhou: ${JSON.stringify(longo.error ?? longo)}`);
   }
-  if (longo.error || !longo.access_token) {
-    throw new ErroDoInstagram(
-      400,
-      `Não deu para guardar a autorização: ${explicarErro(longo.error)} ` +
-        `Confira se o INSTAGRAM_APP_SECRET na Vercel é o "segredo do app do Instagram" (na tela do produto Instagram), e não o segredo do app do Facebook.`,
+
+  let token: string;
+  let expiraEm: string;
+  if (!longo.error && longo.access_token) {
+    token = longo.access_token;
+    expiraEm = new Date(agora.getTime() + (longo.expires_in ?? 60 * 86_400) * 1000).toISOString();
+  } else {
+    // A Meta recusou a troca de todos os jeitos. Antes de desistir: o token
+    // curto serve em graph.instagram.com? Se serve, a conta fica conectada
+    // por uma hora — o bastante para testar os DMs hoje e para o log dizer
+    // de que lado está o problema. Se nem o /me responde, o token não é
+    // desta API, e a mensagem diz isso.
+    const prova = await graph<{ user_id?: string | number; id?: string; username?: string }>(
+      `${GRAPH}/${app.versao}/me?${new URLSearchParams({ fields: "user_id,username", access_token: tokenCurto })}`,
     );
+    console.error(`[instagram] prova do token curto em graph.instagram.com/me: ${JSON.stringify(prova)}`);
+    if (prova.error) {
+      throw new ErroDoInstagram(
+        400,
+        `Não deu para guardar a autorização: ${explicarErro(longo.error)} ` +
+          `O token que o Instagram deu não é aceito pela API de mensagens (${explicarErro(prova.error)}). ` +
+          `No app da Meta, confira se o produto é "API do Instagram com login do Instagram" e se a conta foi adicionada em "Gerar tokens de acesso".`,
+      );
+    }
+    console.warn(`[instagram] ficando com o token curto (1 h) de @${prova.username ?? "?"}; a troca pelo longo precisa ser resolvida.`);
+    token = tokenCurto;
+    expiraEm = new Date(agora.getTime() + 3_600_000).toISOString();
   }
-  const token = longo.access_token;
-  const expiraEm = new Date(agora.getTime() + (longo.expires_in ?? 60 * 86_400) * 1000).toISOString();
 
   const eu = await graph<{ user_id?: string | number; id?: string; username?: string; name?: string }>(
     `${GRAPH}/${app.versao}/me?${new URLSearchParams({ fields: "user_id,username,name", access_token: token })}`,
