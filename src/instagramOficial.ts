@@ -305,7 +305,8 @@ export async function concluirLogin(params: {
   if (!app.appId || !app.appSecret) throw new ErroDoInstagram(503, "O login do Instagram não está configurado neste sistema.");
   const agora = params.agora ?? new Date();
 
-  const curto = await graph<{ access_token?: string; user_id?: string | number }>("https://api.instagram.com/oauth/access_token", {
+  type TokenCurto = { access_token?: string; user_id?: string | number; permissions?: string };
+  const curto = await graph<TokenCurto & { data?: TokenCurto[] }>("https://api.instagram.com/oauth/access_token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -316,15 +317,34 @@ export async function concluirLogin(params: {
       code: params.code,
     }),
   });
-  if (curto.error || !curto.access_token) {
+  // O login da empresa devolve o token embrulhado em `data[0]`; o antigo,
+  // solto. Os dois existem na documentação da Meta, e o que chega depende
+  // de como o app foi montado.
+  const primeiro = curto.data?.[0] ?? curto;
+  const tokenCurto = primeiro.access_token;
+  if (curto.error || !tokenCurto) {
+    console.error(`[instagram] a troca do código falhou; a Meta devolveu as chaves ${Object.keys(curto).join(",")}`);
     throw new ErroDoInstagram(400, `Não deu para concluir o login: ${curto.error?.error_message ?? explicarErro(curto.error)}`);
   }
+  console.log(`[instagram] código trocado (chaves: ${Object.keys(curto).join(",")}; user_id: ${primeiro.user_id ?? "?"}; permissões: ${primeiro.permissions ?? "?"})`);
 
-  const longo = await graph<{ access_token?: string; expires_in?: number }>(
-    `${GRAPH}/access_token?${new URLSearchParams({ grant_type: "ig_exchange_token", client_secret: app.appSecret, access_token: curto.access_token })}`,
-  );
+  // O curto vira longo (60 dias). A Meta documenta o endereço sem versão;
+  // na dúvida, a versão também é tentada — custa um pedido e evita que um
+  // detalhe de roteamento deles deixe a casa sem conexão.
+  type TokenLongo = { access_token?: string; expires_in?: number };
+  const troca = new URLSearchParams({ grant_type: "ig_exchange_token", client_secret: app.appSecret, access_token: tokenCurto });
+  let longo = await graph<TokenLongo>(`${GRAPH}/access_token?${troca}`);
   if (longo.error || !longo.access_token) {
-    throw new ErroDoInstagram(400, `Não deu para guardar a autorização: ${explicarErro(longo.error)}`);
+    console.error(`[instagram] troca pelo token longo (sem versão) falhou: ${JSON.stringify(longo.error ?? longo)}`);
+    longo = await graph<TokenLongo>(`${GRAPH}/${app.versao}/access_token?${troca}`);
+  }
+  if (longo.error || !longo.access_token) {
+    console.error(`[instagram] troca pelo token longo (${app.versao}) falhou: ${JSON.stringify(longo.error ?? longo)}`);
+    throw new ErroDoInstagram(
+      400,
+      `Não deu para guardar a autorização: ${explicarErro(longo.error)} ` +
+        `Confira se o INSTAGRAM_APP_SECRET na Vercel é o "segredo do app do Instagram" (na tela do produto Instagram), e não o segredo do app do Facebook.`,
+    );
   }
   const token = longo.access_token;
   const expiraEm = new Date(agora.getTime() + (longo.expires_in ?? 60 * 86_400) * 1000).toISOString();
@@ -333,7 +353,7 @@ export async function concluirLogin(params: {
     `${GRAPH}/${app.versao}/me?${new URLSearchParams({ fields: "user_id,username,name", access_token: token })}`,
   );
   if (eu.error) throw new ErroDoInstagram(400, `Não deu para ler a conta: ${explicarErro(eu.error)}`);
-  const igUserId = String(eu.user_id ?? eu.id ?? curto.user_id ?? "");
+  const igUserId = String(eu.user_id ?? eu.id ?? primeiro.user_id ?? "");
   if (!igUserId) throw new ErroDoInstagram(400, "O Instagram não disse qual conta é esta.");
 
   // Inscreve a conta no app: é o que faz os DMs chegarem pelo webhook.
