@@ -195,6 +195,18 @@ import {
   verificarWebhook,
 } from "./channels/instagram.js";
 import {
+  apagarConexao as desconectarInstagram,
+  appDoInstagram,
+  assinarState,
+  concluirLogin as concluirLoginDoInstagram,
+  conexaoDaCasa as instagramDaCasa,
+  ErroDoInstagram,
+  escolherAgente as escolherAgenteDoInstagram,
+  lerState,
+  paraOPainel as instagramParaOPainel,
+  urlDeLogin as urlDeLoginDoInstagram,
+} from "./instagramOficial.js";
+import {
   assinaturaWhatsappValida,
   estadoWhatsappCloud,
   processarWebhookWhatsapp,
@@ -848,7 +860,7 @@ async function comErroDaConexao<T>(acao: () => Promise<T>): Promise<T> {
   try {
     return await acao();
   } catch (e) {
-    if (e instanceof ErroDaConexao) {
+    if (e instanceof ErroDaConexao || e instanceof ErroDoInstagram) {
       const codigo =
         e.status === 404 ? "not_found" : e.status === 409 ? "conflito" : e.status >= 500 ? "internal" : "invalid_request";
       throw erro(e.status, codigo, e.message);
@@ -3827,6 +3839,50 @@ async function roteasApi(
       }
     }
 
+    // ---- O Instagram da casa, por login ----
+    //
+    // GET /v1/venues/:slug/instagram — a conexão (nunca o token).
+    // PUT /v1/venues/:slug/instagram — quem responde os DMs.
+    // DELETE /v1/venues/:slug/instagram — desconecta.
+    if (recurso === "instagram" && p.length === 3) {
+      const chave = await exigirChave(req, metodo === "GET" ? "reservations:read" : "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      if (metodo === "GET") {
+        return ok(res, instagramParaOPainel(await comErroDaConexao(() => instagramDaCasa(venue))));
+      }
+      if (metodo === "PUT") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        const agentSlug = typeof corpo.agent_slug === "string" ? corpo.agent_slug : "";
+        if (agentSlug && !(await getAgentInOrg(chave.org_id, agentSlug))) {
+          throw erro(400, "invalid_request", `Não achei o agente "${agentSlug}".`);
+        }
+        return ok(res, instagramParaOPainel(await comErroDaConexao(() => escolherAgenteDoInstagram(venue.id, agentSlug || null))));
+      }
+      if (metodo === "DELETE") {
+        await comErroDaConexao(() => desconectarInstagram(venue.id));
+        return ok(res, { removida: true });
+      }
+    }
+
+    // POST /v1/venues/:slug/instagram/login — a URL para onde o botão
+    // "Conectar Instagram" manda o dono. O `state` leva a casa, assinado:
+    // é por ele que o callback sabe onde guardar o token.
+    if (metodo === "POST" && recurso === "instagram" && p[3] === "login" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const app = appDoInstagram();
+      if (!app.appId || !app.appSecret) {
+        throw erro(503, "nao_configurado", "O login do Instagram não está configurado neste sistema (INSTAGRAM_APP_ID e INSTAGRAM_APP_SECRET).");
+      }
+      return ok(res, {
+        url: urlDeLoginDoInstagram({
+          appId: app.appId,
+          redirectUri: `${enderecoBase()}/v1/instagram/oauth/callback`,
+          state: assinarState(venue.slug, app.appSecret),
+        }),
+      });
+    }
+
     // POST /v1/venues/:slug/whatsapp-oficial/testar — pergunta à Meta quem é
     // o telefone e inscreve a conta no app. É o que liga a conexão de fato.
     if (metodo === "POST" && recurso === "whatsapp-oficial" && p[3] === "testar" && p.length === 4) {
@@ -5515,6 +5571,40 @@ async function roteasApi(
   if (metodo === "GET" && p[0] === "instagram" && p[1] === "status" && p.length === 2) {
     await exigirChave(req, "reservations:write");
     return ok(res, estadoInstagram());
+  }
+
+  // GET /v1/instagram/oauth/callback?code&state — a volta do login.
+  //
+  // Sem chave de API: quem chega aqui é o navegador do dono, redirecionado
+  // pelo Instagram. A casa vem no `state`, assinado por nós na ida; um
+  // `state` forjado ou velho é recusado. No fim, de volta ao painel, com o
+  // resultado no endereço para a tela contar o que houve.
+  if (metodo === "GET" && p[0] === "instagram" && p[1] === "oauth" && p[2] === "callback" && p.length === 3) {
+    const voltar = (resultado: string, motivo?: string) => {
+      const q = new URLSearchParams({ instagram: resultado });
+      if (motivo) q.set("motivo", motivo);
+      // O resultado vai ANTES do #: o roteador do painel lê o hash inteiro
+      // como nome de página, e "canais-casa?x" não é página nenhuma.
+      res.writeHead(302, { location: `${enderecoBase()}/?${q}#canais-casa` });
+      res.end();
+    };
+    const app = appDoInstagram();
+    const slugDaCasa = app.appSecret ? lerState(url.searchParams.get("state"), app.appSecret) : null;
+    if (!slugDaCasa) return voltar("erro", "O link de login venceu ou não é válido. Clique em Conectar de novo.");
+    const code = url.searchParams.get("code");
+    if (!code) {
+      const razao = url.searchParams.get("error_description") ?? url.searchParams.get("error_reason") ?? "A autorização foi cancelada.";
+      return voltar("erro", razao);
+    }
+    try {
+      const venue = await findVenueBySlug(slugDaCasa);
+      const c = await concluirLoginDoInstagram({ venue, code, redirectUri: `${enderecoBase()}/v1/instagram/oauth/callback` });
+      return voltar("ok", c.usuario ? `@${c.usuario}` : "");
+    } catch (e) {
+      const msg = e instanceof ErroDoInstagram ? e.message : "Não deu para concluir a conexão. Tente de novo.";
+      if (!(e instanceof ErroDoInstagram)) console.error("[instagram] callback do login falhou:", e);
+      return voltar("erro", msg);
+    }
   }
 
   // ---- WhatsApp oficial (Cloud API da Meta) ----

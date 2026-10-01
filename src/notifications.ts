@@ -3,6 +3,7 @@ import type { Tables } from "./database.types.js";
 import type { Reservation, Venue } from "./venues.js";
 import type { PapelWhatsapp } from "./ponteWhatsapp.js";
 import { conexaoDaCasa, prontaParaEnviar, type ConexaoOficial } from "./whatsappOficial.js";
+import { conexaoDaCasa as conexaoInstagramDaCasa } from "./instagramOficial.js";
 
 export type Notification = Tables<"notifications">;
 
@@ -339,9 +340,11 @@ export function instagramConfigurado(): boolean {
 export async function enviarPorInstagram(
   igsid: string,
   corpo: string,
+  /** O token da casa (conexão por login). Sem ele, vale o das variáveis. */
+  tokenDaCasa?: string | null,
 ): Promise<ResultadoEnvio> {
-  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
-  if (!token) return { enviado: false, erro: "INSTAGRAM_ACCESS_TOKEN não configurado." };
+  const token = tokenDaCasa || process.env.INSTAGRAM_ACCESS_TOKEN;
+  if (!token) return { enviado: false, erro: "O Instagram desta casa não está conectado." };
   const versao = process.env.INSTAGRAM_API_VERSION ?? "v23.0";
 
   try {
@@ -646,7 +649,11 @@ export async function tentarEnviar(notificacao: Notification): Promise<Notificat
           (notificacao as Notification & { modelo?: ModeloDeMensagem | null }).modelo ?? null,
         )
       : notificacao.channel === "instagram"
-        ? await enviarPorInstagram(notificacao.destination, notificacao.body)
+        ? await enviarPorInstagram(
+            notificacao.destination,
+            notificacao.body,
+            (await conexaoInstagramDaCasa({ id: notificacao.venue_id }).catch(() => null))?.token ?? null,
+          )
         : await enviarPorConsole(notificacao.destination, notificacao.body);
 
   const { data, error } = await db()

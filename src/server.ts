@@ -12,6 +12,7 @@ import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
 import { cuidarDosDisparos } from "./disparos.js";
 import { enviarPendentesPeloOficial } from "./filaOficial.js";
+import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
@@ -268,6 +269,10 @@ setInterval(() => {
   // chegou ao cliente vira mensagem para o dono. A casa já perdeu uma
   // confirmação de reserva que ficou trinta dias parada sem ninguém saber.
   varrerAvisosEncalhados().catch((e) => console.error("[encalhados] varredura:", e));
+  // E os tokens do Instagram conectado por login: a Meta dá 60 dias, e o
+  // relógio renova quando faltam 30. Token vencido é agente mudo sem
+  // ninguém saber — e o dono só descobre pela reclamação do cliente.
+  renovarTokensDoInstagram().catch((e) => console.error("[instagram] renovação de tokens:", e));
 }, 60 * 60_000);
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
 void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));

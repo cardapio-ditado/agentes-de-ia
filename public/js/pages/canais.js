@@ -103,6 +103,9 @@ export async function canais(raiz, ctx) {
       return; // API antiga sem a rota: o cartão simplesmente não aparece.
     }
 
+    // O cartão aqui é o do APP (um para o sistema). A conexão de cada casa
+    // — a conta, o agente — fica em Ajustes → WhatsApp e Instagram da casa.
+    const pronto = Boolean(estado.webhook_pronto && estado.login_disponivel);
     limpar(areaInstagram).append(
       el("section", { classe: "cartao" }, [
         el("div", { classe: "cabecalho-secao" }, [
@@ -110,32 +113,32 @@ export async function canais(raiz, ctx) {
             el("h2", { texto: "Instagram" }),
             el("p", {
               classe: "muted",
-              texto: estado.configurado
-                ? `DMs atendidos por "${estado.agente}" · canal oficial da Meta, direto na nuvem — nenhum computador precisa ficar ligado.`
+              texto: pronto
+                ? "Canal oficial da Meta, direto na nuvem. Cada casa conecta a própria conta em Ajustes → WhatsApp e Instagram da casa, com o botão “Conectar Instagram”."
                 : "Canal oficial da Meta: o cliente manda DM e o agente responde. Roda direto na nuvem, sem QR e sem computador ligado.",
             }),
           ]),
-          etiqueta(
-            estado.configurado ? "Ativo" : "Não configurado",
-            estado.configurado ? "etiqueta-ok" : "",
-          ),
+          etiqueta(pronto ? "Pronto para as casas" : "Não configurado", pronto ? "etiqueta-ok" : ""),
         ]),
-        estado.configurado
+        estado.casa_das_variaveis
+          ? el("p", { classe: "muted", texto: `A casa “${estado.casa_das_variaveis}” ainda usa o jeito antigo (token nas variáveis${estado.agente_das_variaveis ? `, atendido por “${estado.agente_das_variaveis}”` : ""}). Conectar pelo botão na tela da casa substitui isso.` })
+          : null,
+        pronto
           ? null
           : el("div", {}, [
               el("p", { classe: "muted", texto: "Para ativar, falta configurar no servidor:" }),
               el(
                 "ul",
                 { classe: "muted", style: "padding-left:18px;line-height:1.8" },
-                estado.faltando.map((v) => el("li", { texto: v })),
+                (estado.faltando ?? []).map((v) => el("li", { texto: v })),
               ),
               el("p", {
                 classe: "muted",
                 texto:
-                  "Essas chaves vêm do app em developers.facebook.com (produto Instagram > mensagens). Configure-as nas variáveis de ambiente da Vercel e o cartão vira \"Ativo\" sozinho.",
+                  "Essas chaves vêm do app em developers.facebook.com (produto Instagram → API com login do Instagram). Configure-as nas variáveis de ambiente da Vercel e o cartão muda sozinho.",
               }),
             ]),
-      ]),
+      ].filter(Boolean)),
     );
   }
 

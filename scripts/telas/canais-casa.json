@@ -17,6 +17,19 @@
       "situacao": "ativa",
       "falta": []
     },
+    "GET /instagram": {
+      "conectado": true,
+      "login_disponivel": true,
+      "ig_user_id": "17841400000000000",
+      "usuario": "ditadopopular",
+      "nome": "Ditado Popular",
+      "agent_slug": "fernanda",
+      "expira_em": "2026-11-28T12:00:00.000Z",
+      "renovado_em": null,
+      "conectado_em": "2026-09-29T12:00:00.000Z",
+      "precisa_renovar": false,
+      "vencido": false
+    },
     "GET /v1/agents": [
       {
         "slug": "fernanda",
@@ -44,7 +57,7 @@
   },
   "variacoes": {
     "nao-configurada": {
-      "rotulo": "casa que ainda não conectou o número oficial",
+      "rotulo": "casa que ainda não conectou o número oficial nem o Instagram",
       "rotas": {
         "GET /whatsapp-oficial": {
           "phone_number_id": null,
@@ -62,6 +75,46 @@
             "o ID do telefone",
             "o ID da conta"
           ]
+        },
+        "GET /instagram": {
+          "conectado": false,
+          "login_disponivel": true
+        }
+      }
+    },
+    "instagram-sem-agente": {
+      "rotulo": "Instagram conectado, ninguém escolhido para responder",
+      "rotas": {
+        "GET /instagram": {
+          "conectado": true,
+          "login_disponivel": true,
+          "ig_user_id": "17841400000000000",
+          "usuario": "ditadopopular",
+          "nome": "Ditado Popular",
+          "agent_slug": null,
+          "expira_em": "2026-11-28T12:00:00.000Z",
+          "renovado_em": null,
+          "conectado_em": "2026-09-29T12:00:00.000Z",
+          "precisa_renovar": false,
+          "vencido": false
+        }
+      }
+    },
+    "instagram-vencido": {
+      "rotulo": "a autorização do Instagram venceu — o agente está mudo",
+      "rotas": {
+        "GET /instagram": {
+          "conectado": true,
+          "login_disponivel": true,
+          "ig_user_id": "17841400000000000",
+          "usuario": "ditadopopular",
+          "nome": "Ditado Popular",
+          "agent_slug": "fernanda",
+          "expira_em": "2026-09-01T00:00:00.000Z",
+          "renovado_em": null,
+          "conectado_em": "2026-09-29T12:00:00.000Z",
+          "precisa_renovar": true,
+          "vencido": true
         }
       }
     },

@@ -1,22 +1,28 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { runAgent } from "../agent.js";
 import { conversaAtendidaPorHumano, registrarRecebidoSemResposta } from "../inbox.js";
-import { enviarPorInstagram, instagramConfigurado } from "../notifications.js";
+import { enviarPorInstagram } from "../notifications.js";
+import { conexaoPelaConta, loginDisponivel, type ConexaoInstagram } from "../instagramOficial.js";
 
 /**
  * Canal Instagram — API oficial de mensagens da Meta (login pelo Instagram).
  *
  * Ao contrário do WhatsApp/Baileys, aqui não há processo persistente nem QR:
  * a Meta entrega cada DM por webhook (HTTPS puro, roda na Vercel) e a
- * resposta sai pela Graph API com um token. Sem risco de banimento — é o
- * caminho sancionado.
+ * resposta sai pela Graph API com o token da casa. Sem risco de banimento —
+ * é o caminho sancionado.
  *
- * Configuração (.env / variáveis na Vercel):
- *   INSTAGRAM_ACCESS_TOKEN  — token da conta profissional (gerado no app da Meta)
- *   INSTAGRAM_APP_SECRET    — valida a assinatura dos webhooks
+ * O webhook é UM para todas as casas. Cada evento diz de qual conta
+ * profissional ele é (`entry.id`), e é por ela que se acha a casa, o token
+ * e o agente — na tabela `instagram_oficial`, preenchida pelo botão
+ * "Conectar Instagram". As variáveis de ambiente (token, agente, casa)
+ * seguem valendo como a conexão da casa que elas nomeiam, enquanto a linha
+ * dela não existe no banco.
+ *
+ * Configuração do APP (uma vez, na Vercel):
+ *   INSTAGRAM_APP_ID        — o "ID do app do Instagram" (produto Instagram)
+ *   INSTAGRAM_APP_SECRET    — o segredo dele: valida os webhooks e troca o código do login
  *   INSTAGRAM_VERIFY_TOKEN  — string qualquer, a mesma colada no painel da Meta
- *   INSTAGRAM_AGENT         — slug do agente que atende este canal
- *   INSTAGRAM_VENUE         — slug do estabelecimento
  *
  * A janela de 24h da Meta se aplica: o agente responde quem escreveu por
  * último em até 24 horas — exatamente o caso de uso de atendimento.
@@ -24,6 +30,7 @@ import { enviarPorInstagram, instagramConfigurado } from "../notifications.js";
 
 interface EventoMensagem {
   sender?: { id?: string };
+  recipient?: { id?: string };
   message?: {
     mid?: string;
     text?: string;
@@ -34,45 +41,43 @@ interface EventoMensagem {
 
 interface CorpoWebhook {
   object?: string;
-  entry?: Array<{ messaging?: EventoMensagem[] }>;
+  entry?: Array<{ id?: string; messaging?: EventoMensagem[] }>;
 }
 
 function config() {
   return {
-    token: process.env.INSTAGRAM_ACCESS_TOKEN,
     appSecret: process.env.INSTAGRAM_APP_SECRET,
     verifyToken: process.env.INSTAGRAM_VERIFY_TOKEN,
-    agent: process.env.INSTAGRAM_AGENT,
-    venue: process.env.INSTAGRAM_VENUE,
     versao: process.env.INSTAGRAM_API_VERSION ?? "v23.0",
   };
 }
 
-/** Para a aba Canais: o que está (ou não) configurado, sem expor segredos. */
+/** Para a aba Canais: o que o APP tem (ou não), sem expor segredos. */
 export function estadoInstagram(): {
-  configurado: boolean;
+  webhook_pronto: boolean;
+  login_disponivel: boolean;
   faltando: string[];
-  agente: string | null;
-  venue: string | null;
+  /** O jeito antigo (uma casa só pelas variáveis), se ainda estiver em uso. */
+  casa_das_variaveis: string | null;
+  agente_das_variaveis: string | null;
 } {
   const cfg = config();
   const faltando = (
     [
-      ["INSTAGRAM_ACCESS_TOKEN", cfg.token],
+      ["INSTAGRAM_APP_ID", process.env.INSTAGRAM_APP_ID],
       ["INSTAGRAM_APP_SECRET", cfg.appSecret],
       ["INSTAGRAM_VERIFY_TOKEN", cfg.verifyToken],
-      ["INSTAGRAM_AGENT", cfg.agent],
-      ["INSTAGRAM_VENUE", cfg.venue],
     ] as const
   )
     .filter(([, valor]) => !valor)
     .map(([nome]) => nome);
 
   return {
-    configurado: faltando.length === 0,
+    webhook_pronto: Boolean(cfg.appSecret && cfg.verifyToken),
+    login_disponivel: loginDisponivel(),
     faltando,
-    agente: cfg.agent ?? null,
-    venue: cfg.venue ?? null,
+    casa_das_variaveis: process.env.INSTAGRAM_ACCESS_TOKEN ? process.env.INSTAGRAM_VENUE ?? null : null,
+    agente_das_variaveis: process.env.INSTAGRAM_ACCESS_TOKEN ? process.env.INSTAGRAM_AGENT ?? null : null,
   };
 }
 
@@ -101,13 +106,14 @@ export function assinaturaValida(corpoBruto: Buffer, cabecalho: string | undefin
 /** Nome e @usuário do interlocutor, para a inbox. Falha vira null, nunca erro. */
 async function buscarPerfil(
   igsid: string,
+  token: string,
 ): Promise<{ nome: string | null; usuario: string | null }> {
   const cfg = config();
   try {
     const resposta = await fetch(
       `https://graph.instagram.com/${cfg.versao}/${igsid}?fields=name,username`,
       {
-        headers: { authorization: `Bearer ${cfg.token}` },
+        headers: { authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(8_000),
       },
     );
@@ -120,7 +126,8 @@ async function buscarPerfil(
 }
 
 /**
- * Processa um lote de eventos do webhook: roda o agente e responde o DM.
+ * Processa um lote de eventos do webhook: acha a casa pela conta, roda o
+ * agente dela e responde o DM.
  *
  * Sempre resolve — erros são logados, nunca propagados: devolver 5xx à Meta
  * dispara tempestade de reentregas, e a mensagem duplicada é pior que a
@@ -128,16 +135,23 @@ async function buscarPerfil(
  */
 export async function processarWebhookInstagram(corpo: CorpoWebhook): Promise<void> {
   if (corpo.object !== "instagram") return;
-  const cfg = config();
-  if (!cfg.agent || !cfg.venue || !instagramConfigurado()) {
-    console.error("[instagram] webhook recebido, mas o canal não está totalmente configurado.");
-    return;
-  }
 
   for (const entry of corpo.entry ?? []) {
+    const conexao = await conexaoPelaConta(entry.id).catch((e) => {
+      console.error(`[instagram] não achei a casa da conta ${entry.id}: ${(e as Error).message}`);
+      return null;
+    });
+    if (!conexao) {
+      console.error(`[instagram] DM para a conta ${entry.id ?? "?"}, que nenhuma casa conectou. Ignorado.`);
+      continue;
+    }
+    if (!conexao.agent_slug) {
+      console.log(`[instagram] @${conexao.usuario ?? entry.id}: conta conectada sem agente — ninguém responde.`);
+      continue;
+    }
     for (const evento of entry.messaging ?? []) {
       try {
-        await processarEvento(evento, cfg.agent, cfg.venue);
+        await processarEvento(evento, conexao as ConexaoInstagram & { venue_slug: string; agent_slug: string });
       } catch (e) {
         console.error("[instagram] falha ao processar evento:", e);
       }
@@ -147,14 +161,19 @@ export async function processarWebhookInstagram(corpo: CorpoWebhook): Promise<vo
 
 async function processarEvento(
   evento: EventoMensagem,
-  agentSlug: string,
-  venueSlug: string,
+  conexao: ConexaoInstagram & { venue_slug: string; agent_slug: string },
 ): Promise<void> {
   const igsid = evento.sender?.id;
   const mensagem = evento.message;
   // Ecos (mensagens enviadas por nós), reações e confirmações de leitura
   // chegam pelo mesmo webhook — só DM de cliente interessa.
   if (!igsid || !mensagem || mensagem.is_echo) return;
+  // A própria conta falando (pelo app do Instagram) também não é cliente.
+  if (conexao.ig_user_id && igsid === conexao.ig_user_id) return;
+
+  const agentSlug = conexao.agent_slug;
+  const venueSlug = conexao.venue_slug;
+  const token = conexao.token;
 
   const texto = mensagem.text?.trim();
   if (!texto) {
@@ -170,13 +189,14 @@ async function processarEvento(
       await enviarPorInstagram(
         igsid,
         "Recebi sua mídia! Consigo te ajudar melhor por texto — me conta o que você precisa?",
+        token,
       );
     }
     return;
   }
 
-  const perfil = await buscarPerfil(igsid);
-  console.log(`[instagram] ${perfil.usuario ?? igsid}: ${texto.slice(0, 80)}`);
+  const perfil = await buscarPerfil(igsid, token);
+  console.log(`[instagram] @${conexao.usuario ?? venueSlug} ← ${perfil.usuario ?? igsid}: ${texto.slice(0, 80)}`);
 
   const resultado = await runAgent({
     agentSlug,
@@ -199,6 +219,7 @@ async function processarEvento(
   const envio = await enviarPorInstagram(
     igsid,
     resultado.text || "Desculpe, não consegui responder agora. Pode tentar de novo?",
+    token,
   );
   if (!envio.enviado) {
     console.error(`[instagram] falha ao responder ${igsid}: ${envio.erro}`);

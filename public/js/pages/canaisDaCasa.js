@@ -40,17 +40,177 @@ const SITUACOES = {
 
 export async function canaisDaCasa(raiz, ctx) {
   const areaOficial = el("div", {});
+  const areaInstagram = el("div", {});
   const areaConector = el("div", {});
-  raiz.append(el("div", { classe: "pilha" }, [areaOficial, areaConector]));
+  raiz.append(el("div", { classe: "pilha" }, [areaOficial, areaInstagram, areaConector]));
 
   areaOficial.append(el("p", { classe: "muted", texto: "Consultando a conexão oficial…" }));
+  areaInstagram.append(el("p", { classe: "muted", texto: "Consultando o Instagram…" }));
   areaConector.append(el("p", { classe: "muted", texto: "Consultando o conector…" }));
 
   let timer = null;
   ctx.aoSair(() => clearInterval(timer));
 
-  await Promise.all([desenharOficial(), atualizarConector()]);
+  // A volta do login do Instagram chega com o resultado no endereço.
+  contarAVoltaDoLogin();
+
+  await Promise.all([desenharOficial(), desenharInstagram(), atualizarConector()]);
   timer = setInterval(atualizarConector, 4000);
+
+  // ============================================================
+  // O Instagram (login da Meta)
+  // ============================================================
+
+  /**
+   * O dono volta do Instagram para cá, com `?instagram=ok` ou `?instagram=
+   * erro&motivo=…` no endereço. Conta o que houve e limpa o endereço, para
+   * um F5 não repetir o aviso.
+   */
+  function contarAVoltaDoLogin() {
+    const q = new URLSearchParams(location.search);
+    const resultado = q.get("instagram");
+    if (!resultado) return;
+    const motivo = q.get("motivo") ?? "";
+    if (resultado === "ok") avisar(`Instagram conectado${motivo ? ` como ${motivo}` : ""}. Agora escolha quem responde os DMs.`, "ok");
+    else avisar(motivo || "Não deu para conectar o Instagram.", "erro");
+    q.delete("instagram");
+    q.delete("motivo");
+    const resto = q.toString();
+    history.replaceState(null, "", `${location.pathname}${resto ? `?${resto}` : ""}${location.hash}`);
+  }
+
+  async function desenharInstagram() {
+    let conexao;
+    let agentes = [];
+    try {
+      [conexao, agentes] = await Promise.all([
+        get(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram`),
+        get("/v1/agents?all=1").catch(() => []),
+      ]);
+    } catch (e) {
+      if (e instanceof ErroApi && e.status === 404) {
+        limpar(areaInstagram);
+        return; // API antiga sem a rota: o cartão não aparece.
+      }
+      limpar(areaInstagram).append(el("section", { classe: "cartao" }, [el("h2", { texto: "Instagram" }), el("p", { classe: "muted", texto: e.message })]));
+      return;
+    }
+
+    const conectado = Boolean(conexao.conectado);
+    const agenteAtual = agentes.find((a) => a.slug === conexao.agent_slug);
+    const [rotulo, variante] = !conectado
+      ? ["Não conectado", ""]
+      : conexao.vencido
+        ? ["Autorização vencida", "etiqueta-perigo"]
+        : conexao.agent_slug
+          ? ["Ativo", "etiqueta-ok"]
+          : ["Conectado, sem agente", "etiqueta-alerta"];
+
+    const seletorAgente = el("select", { classe: "select" }, [
+      el("option", { value: "", texto: "Ninguém — os DMs ficam sem resposta automática" }),
+      ...agentes.map((a) => el("option", { value: a.slug, texto: a.name, selected: a.slug === conexao.agent_slug })),
+    ]);
+
+    const conectar = async (e) => {
+      e.target.disabled = true;
+      try {
+        const r = await post(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram/login`, {});
+        // Sai do painel: o Instagram pede a conta do bar e devolve para cá.
+        location.href = r.url;
+      } catch (err) {
+        avisar(err.message, "erro");
+        e.target.disabled = false;
+      }
+    };
+
+    const descricao = conectado
+      ? `Conectado como @${conexao.usuario ?? conexao.ig_user_id}${conexao.nome ? ` (${conexao.nome})` : ""} · ${agenteAtual ? `DMs atendidos por ${agenteAtual.name}` : "ninguém responde ainda"}`
+      : "Os DMs do Instagram do bar atendidos pelo agente, direto na nuvem: sem QR, sem computador ligado, sem risco de banimento. Clique em conectar e entre com a conta do bar.";
+
+    limpar(areaInstagram).append(
+      el("section", { classe: "cartao" }, [
+        el("div", { classe: "cabecalho-secao" }, [
+          el("div", {}, [
+            el("h2", { texto: "Instagram" }),
+            el("p", { classe: "muted", texto: descricao }),
+          ]),
+          etiqueta(rotulo, variante),
+        ]),
+
+        conectado && conexao.vencido
+          ? el("p", { classe: "aviso aviso-perigo", texto: "A autorização do Instagram venceu e os DMs não estão sendo respondidos. Clique em “Conectar de novo”." })
+          : conectado && !conexao.agent_slug
+            ? el("p", { classe: "aviso aviso-alerta", texto: "Quem mandar DM fala com o vazio. Escolha um agente abaixo e salve." })
+            : null,
+
+        conectado
+          ? el("div", { classe: "grade", style: "margin-top:12px" }, [campo("Quem responde os DMs", seletorAgente)])
+          : null,
+
+        !conectado && !conexao.login_disponivel
+          ? el("p", { classe: "muted", style: "margin-top:10px", texto: "O login do Instagram ainda não está ligado neste sistema. Fale com a equipe Brasa Food." })
+          : null,
+
+        el("div", { classe: "linha-campos", style: "margin-top:12px" }, [
+          conectado
+            ? el("button", {
+                classe: "btn btn-primario",
+                type: "button",
+                texto: "Salvar",
+                onclick: async (e) => {
+                  e.target.disabled = true;
+                  try {
+                    await put(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram`, { agent_slug: seletorAgente.value });
+                    avisar(seletorAgente.value ? "Pronto: os DMs passam a ser atendidos." : "Salvo. Ninguém responde os DMs por enquanto.", "ok");
+                    await desenharInstagram();
+                  } catch (err) {
+                    avisar(err.message, "erro");
+                    e.target.disabled = false;
+                  }
+                },
+              })
+            : null,
+          conexao.login_disponivel
+            ? el("button", {
+                classe: conectado ? "btn" : "btn btn-primario",
+                type: "button",
+                texto: conectado ? "Conectar de novo" : "Conectar Instagram",
+                title: conectado ? "Refaz a autorização com a conta do bar, sem perder o agente escolhido." : "Abre o Instagram para você entrar com a conta do bar e autorizar.",
+                onclick: conectar,
+              })
+            : null,
+          conectado
+            ? el("button", {
+                classe: "btn btn-perigo",
+                type: "button",
+                texto: "Desconectar",
+                style: "margin-left:auto",
+                onclick: async (e) => {
+                  if (!confirm("Desconectar o Instagram desta casa? A conta continua sua; só paramos de atender os DMs.")) return;
+                  e.target.disabled = true;
+                  try {
+                    await del(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram`);
+                    avisar("Instagram desconectado.", "ok");
+                    await desenharInstagram();
+                  } catch (err) {
+                    avisar(err.message, "erro");
+                    e.target.disabled = false;
+                  }
+                },
+              })
+            : null,
+        ].filter(Boolean)),
+
+        el("p", {
+          classe: "muted",
+          style: "margin-top:10px",
+          texto: conectado
+            ? `A autorização vale 60 dias e é renovada sozinha toda semana${conexao.expira_em ? ` (vence ${new Date(conexao.expira_em).toLocaleDateString("pt-BR")})` : ""}.`
+            : "Antes de conectar: no app do Instagram do bar, em Configurações → Mensagens → Ferramentas conectadas, ligue “Permitir acesso às mensagens”. A conta precisa ser profissional (comercial ou criador de conteúdo).",
+        }),
+      ].filter(Boolean)),
+    );
+  }
 
   // ============================================================
   // O oficial (Meta)
