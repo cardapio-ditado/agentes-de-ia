@@ -15,6 +15,17 @@ import { db } from "../src/supabase.js";
 async function confirmarRisco(): Promise<boolean> {
   console.log("AVISO: o Google sinalizou esta automação com CAPTCHA em 18/08/2026.");
   console.log("Insistir pode restringir a conta gerente. Recomendado: aguardar a API oficial.");
+  // Agendado (Agendador de Tarefas, cron) não tem quem digite: o consentimento
+  // vira a variável GOOGLE_ACEITO_RISCO=1, posta por quem agendou — que é a
+  // mesma pessoa que leu o aviso acima no dia em que agendou.
+  if (process.env.GOOGLE_ACEITO_RISCO === "1") {
+    console.log("GOOGLE_ACEITO_RISCO=1: seguindo sem perguntar.");
+    return true;
+  }
+  if (!stdin.isTTY) {
+    console.log("Sem terminal para confirmar e sem GOOGLE_ACEITO_RISCO=1. Cancelado.");
+    return false;
+  }
   const rl = createInterface({ input: stdin, output: stdout });
   const resposta = await rl.question('Digite "ENTENDO O RISCO" para rodar mesmo assim: ');
   rl.close();

@@ -47,14 +47,18 @@ const MAXIMO_PUBLICACOES_POR_VEZ = 5;
  * valores devem ser corrigidos — não de memória.
  */
 export const SELETORES = {
+  /** A aba/botão que abre a lista de avaliações (no Maps ela não vem aberta). */
+  abaAvaliacoes: '[role="tab"]:has-text("Avaliações"), [role="tab"]:has-text("Reviews"), button:has-text("Avaliações"), a:has-text("Avaliações")',
+  /** O painel que rola, no Maps, para carregar mais avaliações. */
+  painel: '[role="main"], .m6QErb[aria-label]',
   /** Cada bloco de avaliação na lista. */
   cartao: '[data-review-id], div[jsname][data-review-id]',
   /** Nome de quem avaliou, dentro do cartão. */
-  autor: '[class*="reviewer"], [data-reviewer-name]',
+  autor: '[class*="reviewer"], [data-reviewer-name], .d4r55, button[aria-label][data-href*="/maps/contrib/"]',
   /** Elemento cujo aria-label carrega a nota ("Classificado como 4 de 5"). */
   nota: '[aria-label*="strela"], [aria-label*="star"], [role="img"][aria-label]',
   /** Texto escrito pelo cliente. */
-  comentario: '[data-review-text], [class*="review-text"]',
+  comentario: '[data-review-text], [class*="review-text"], .wiI7pd',
   /** Abre a caixa de resposta. */
   botaoResponder: 'button:has-text("Responder"), button:has-text("Reply")',
   /** Onde a resposta é digitada. */
@@ -82,7 +86,28 @@ export function notaDoRotulo(rotulo: string | null): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 }
 
+/**
+ * No Maps a lista de avaliações não vem aberta: é uma aba. E vem curta —
+ * as mais antigas só aparecem rolando o painel. Tenta a aba, rola três
+ * vezes, e só então desiste.
+ */
+async function abrirListaDeAvaliacoes(pagina: Page): Promise<void> {
+  const cartoes = pagina.locator(SELETORES.cartao);
+  if ((await cartoes.count()) === 0) {
+    const aba = pagina.locator(SELETORES.abaAvaliacoes).first();
+    if ((await aba.count()) > 0) {
+      await aba.click({ timeout: 8_000 }).catch(() => undefined);
+      await pausaHumana(2000, 3500);
+    }
+  }
+  for (let i = 0; i < 3; i += 1) {
+    await pagina.mouse.wheel(0, 1800).catch(() => undefined);
+    await pausaHumana(900, 1800);
+  }
+}
+
 async function lerAvaliacoesDaPagina(pagina: Page): Promise<AvaliacaoRecebida[]> {
+  await abrirListaDeAvaliacoes(pagina);
   const cartoes = pagina.locator(SELETORES.cartao);
   const total = await cartoes.count();
   if (total === 0) throw new InterfaceMudouError("nenhum cartão de avaliação");

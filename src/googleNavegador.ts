@@ -72,8 +72,12 @@ export async function abrirNavegador(
   const { chromium } = await carregarPlaywright();
   await mkdir(DIRETORIO_SESSAO, { recursive: true });
 
+  // GOOGLE_NAVEGADOR_VISIVEL=1: a janela aparece de verdade. Num computador
+  // com tela (o do bar), é o modo que menos parece robô — o Chromium sem
+  // janela se denuncia de outros jeitos além do navigator.webdriver.
+  const visivel = opcoes.visivel || process.env.GOOGLE_NAVEGADOR_VISIVEL === "1";
   const contexto = await chromium.launchPersistentContext(DIRETORIO_SESSAO, {
-    headless: !opcoes.visivel,
+    headless: !visivel,
     locale: "pt-BR",
     timezoneId: process.env.TZ ?? "America/Cuiaba",
     viewport: { width: 1366, height: 900 },
