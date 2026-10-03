@@ -4318,7 +4318,9 @@ async function roteasApi(
         filaDeAprovacao(venue.id),
         historicoDeAvaliacoes(venue.id),
       ]);
-      return ok(res, { perfil, fila, historico });
+      // O segredo do Make nunca vai para o navegador.
+      const { webhook_segredo: _segredo, ...perfilSemSegredo } = (perfil ?? {}) as Record<string, unknown>;
+      return ok(res, { perfil: perfil ? perfilSemSegredo : null, fila, historico });
     }
 
     // POST /v1/venues/:slug/avaliacoes — lança uma avaliação na mão e já redige

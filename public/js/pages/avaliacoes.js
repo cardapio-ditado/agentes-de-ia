@@ -4,25 +4,26 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 /**
  * Avaliações do Google.
  *
- * O fluxo de hoje é colar-e-copiar, e a tela é desenhada em volta dele: o
- * cliente cola a avaliação, a IA redige, ele copia a resposta e cola no
- * Google. Nada toca o Google sozinho — a automação por navegador foi
- * aposentada depois que o Google a sinalizou com CAPTCHA na primeira visita,
- * e a automação de verdade chega com a API oficial (pedido protocolado,
- * previsão setembro/2026). Quando ela chegar, esta tela ganha o botão
- * "Conectar com Google" e o colar-e-copiar se aposenta.
+ * As avaliações chegam pela API oficial do Google, via Make: o dono entrou
+ * com a conta Google do perfil, e o cenário do Make traz cada avaliação
+ * nova e publica a resposta que o Brasa Food escreveu. A regra de nota
+ * decide o que sai sozinho e o que espera uma pessoa aqui na fila. Aprovar
+ * publica em segundos.
+ *
+ * O colar-e-copiar continua existindo para a casa que ainda não ligou o
+ * Google: a resposta aprovada fica aqui para copiar.
  *
  * A regra que não muda: 1 e 2 estrelas nunca são respondidas sem alguém ler.
  * O servidor decide isso — a tela só mostra o que foi decidido.
  */
 
-/** A conta usada pela equipe na configuração técnica; o cliente não a vê. */
+/** A conta que a equipe registra no perfil; o cliente não a vê. */
 const CONTA_GERENTE_PADRAO = "agente@brasafood.app";
 
 const SITUACOES = {
   pendente: ["aguardando redação", ""],
   rascunho: ["esperando você", "etiqueta-alerta"],
-  aprovada: ["pronta para colar", "etiqueta-info"],
+  aprovada: ["publicando no Google", "etiqueta-info"],
   publicada: ["respondida no Google", "etiqueta-ok"],
   descartada: ["sem resposta", ""],
   erro: ["falhou", "etiqueta-perigo"],
@@ -42,27 +43,18 @@ function classeDaNota(nota) {
 export async function avaliacoes(raiz, ctx) {
   const fila = el("div", { classe: "lista" });
   const prontas = el("div", { classe: "lista" });
+  const aviso = el("div", { classe: "cartao alerta" });
   const regras = el("div", { classe: "cartao" });
   const historico = el("div", { classe: "lista" });
 
   raiz.append(
     el("section", { classe: "pilha" }, [
-      // O recado que explica a fase atual — e o que vem aí.
-      el("div", { classe: "cartao alerta" }, [
-        el("p", {}, [
-          el("strong", { texto: "Respostas automáticas chegam em setembro. " }),
-          document.createTextNode(
-            "Estamos ligando o Brasa Food direto ao Google: as avaliações boas serão " +
-              "respondidas sozinhas e as de nota baixa vão esperar o seu OK. " +
-              "Até lá funciona assim: cole a avaliação abaixo, a IA escreve, você copia e cola no Google.",
-          ),
-        ]),
-      ]),
+      aviso,
 
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: "Responder uma avaliação" }),
-          el("p", { classe: "muted", texto: "Cole o que o cliente escreveu no Google. A IA responde no tom da casa." }),
+          el("h2", { texto: "Responder uma avaliação à mão" }),
+          el("p", { classe: "muted", texto: "Para uma avaliação que não veio pelo Google (ou para testar o tom): cole o texto, a IA responde, você copia." }),
         ]),
       ]),
       formularioResponder(),
@@ -78,8 +70,8 @@ export async function avaliacoes(raiz, ctx) {
 
       el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
         el("div", {}, [
-          el("h2", { texto: "Prontas para colar no Google" }),
-          el("p", { classe: "muted", texto: "Copie a resposta, cole no Google e marque como feita." }),
+          el("h2", { texto: "Aprovadas" }),
+          el("p", { classe: "muted", texto: "Com o Google ligado, o Make publica em segundos e a avaliação vai para o histórico. Sem ele, copie e cole no Google." }),
         ]),
       ]),
       prontas,
@@ -125,6 +117,7 @@ export async function avaliacoes(raiz, ctx) {
     }
 
     limpar(regras).append(...formularioDeRegras(dados.perfil));
+    desenharAviso(dados.perfil);
 
     const resto = dados.historico.filter(
       (a) => a.resposta_status !== "aprovada" && a.resposta_status !== "rascunho",
@@ -134,6 +127,23 @@ export async function avaliacoes(raiz, ctx) {
     } else {
       for (const a of resto) historico.append(cartaoDoHistorico(a));
     }
+  }
+
+  /** O recado do topo: ligado ao Google, ou ainda no colar-e-copiar. */
+  function desenharAviso(perfil) {
+    const ligado = Boolean(perfil?.make_webhook_url);
+    limpar(aviso).append(
+      el("p", {}, [
+        el("strong", { texto: ligado ? "Ligado ao Google. " : "Ainda não ligado ao Google. " }),
+        document.createTextNode(
+          ligado
+            ? "Avaliação nova entra aqui em até 15 minutos. As de nota alta são respondidas sozinhas, conforme a regra abaixo; as de nota baixa esperam o seu OK — ao aprovar, a resposta é publicada em segundos."
+            : "Por enquanto: cole a avaliação, a IA escreve, você copia e cola no Google. Para ligar o Google, fale com a equipe Brasa Food.",
+        ),
+      ]),
+    );
+    aviso.classList.toggle("alerta", !ligado);
+    aviso.classList.toggle("aviso-ok", ligado);
   }
 
   // ---------- Colar uma avaliação ----------
@@ -221,10 +231,7 @@ export async function avaliacoes(raiz, ctx) {
           `/v1/avaliacoes/${a.id}/${acao}`,
           acao === "aprovar" ? { texto: texto.value.trim() } : {},
         );
-        avisar(
-          acao === "aprovar" ? "Aprovada — agora copie e cole no Google." : "Avaliação sem resposta.",
-          "ok",
-        );
+        avisar(acao === "aprovar" ? "Aprovada. Publicando no Google." : "Avaliação sem resposta.", "ok");
         await carregar();
       } catch (err) {
         avisar(err.message, "erro");
@@ -250,6 +257,7 @@ export async function avaliacoes(raiz, ctx) {
     const jaColei = el("button", {
       classe: "btn btn-peq",
       type: "button",
+      title: "Use só se você mesmo colou a resposta no Google",
       texto: "Já colei no Google",
       onclick: async () => {
         jaColei.disabled = true;
@@ -268,11 +276,12 @@ export async function avaliacoes(raiz, ctx) {
       cabecalhoDaAvaliacao(a),
       a.comentario ? el("p", { classe: "muted", texto: `"${a.comentario}"` }) : null,
       el("p", { style: "margin-top:10px", texto: a.resposta }),
+      el("p", { classe: "muted", texto: "Aguardando o Make publicar. Se demorar mais de alguns minutos, a equipe Brasa Food confere o cenário." }),
       el("div", { classe: "reserva-acoes" }, [botaoCopiar(a.resposta), jaColei]),
     ]);
   }
 
-  /** Copiar para colar no Google — é assim que a resposta chega lá hoje. */
+  /** Copiar para colar no Google — o caminho de quem ainda não ligou o Google. */
   function botaoCopiar(pegarTexto) {
     return el("button", {
       classe: "btn btn-primario btn-peq",
@@ -371,8 +380,7 @@ export async function avaliacoes(raiz, ctx) {
       el("p", {
         classe: "muted",
         texto:
-          "Hoje isso decide o que pula a fila e já sai pronto para colar. Em setembro, com a " +
-          "automática ligada, decide o que é publicado sozinho. Nota 1 e 2 sempre passam por você — não há como desligar.",
+          "Decide o que é publicado sozinho, sem passar por você. Nota 1 e 2 sempre passam por você — não há como desligar.",
       }),
       campo("Assinatura", assinatura),
       campo("Tom da casa", tom),
@@ -383,11 +391,12 @@ export async function avaliacoes(raiz, ctx) {
 
   /** O que só a equipe Brasa Food mexe. Nada aqui é pedido ao cliente. */
   function blocoTecnico(perfil, conta) {
-    const contaGerente = el("input", { value: conta });
+    const contaGerente = el("input", { value: conta, placeholder: "Conta Google que autorizou no Make" });
     const localId = el("input", {
-      placeholder: "https://…",
-      value: perfil?.local_id ?? "",
+      placeholder: "accounts/…/locations/…",
+      value: perfil?.local_nome ?? perfil?.local_id ?? "",
     });
+    const makeWebhook = el("input", { placeholder: "https://hook.us2.make.com/…", value: perfil?.make_webhook_url ?? "" });
 
     const salvar = el("button", {
       classe: "btn btn-peq",
@@ -396,11 +405,12 @@ export async function avaliacoes(raiz, ctx) {
       onclick: async () => {
         salvar.disabled = true;
         try {
-          await put(`/v1/venues/${ctx.venue}/avaliacoes-perfil`, {
+          const r = await put(`/v1/venues/${ctx.venue}/avaliacoes-perfil`, {
             conta_gerente: contaGerente.value.trim() || conta,
             local_id: localId.value.trim(),
+            make_webhook_url: makeWebhook.value.trim(),
           });
-          avisar("Configuração salva.", "ok");
+          avisar(r.webhook_segredo ? "Configuração salva. O segredo da casa está no banco; a equipe põe o mesmo no cenário do Make." : "Configuração salva.", "ok");
           await carregar();
         } catch (err) {
           avisar(err.message, "erro");
@@ -411,8 +421,13 @@ export async function avaliacoes(raiz, ctx) {
 
     return el("details", { style: "margin-top:16px" }, [
       el("summary", { texto: "Configuração técnica (equipe Brasa Food)" }),
-      campo("Conta gerente", contaGerente),
-      campo("Endereço do perfil (local_id)", localId),
+      el("p", { classe: "muted", texto: "O Google entra pelo Make: a conta do dono autoriza lá, e os dois cenários (ler avaliações, publicar aprovadas) chamam este painel com o segredo da casa." }),
+      campo("Conta Google que autorizou", contaGerente),
+      campo("Local no Google (accounts/…/locations/…)", localId),
+      campo("Webhook do Make que publica as aprovadas", makeWebhook),
+      perfil?.ultima_sincronizacao
+        ? el("p", { classe: "muted", texto: `Última avaliação recebida pelo Make: ${dataHora(perfil.ultima_sincronizacao)}` })
+        : null,
       perfil?.ultimo_erro
         ? el("p", { classe: "muted", texto: `Último erro: ${perfil.ultimo_erro}` })
         : null,

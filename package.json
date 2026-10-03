@@ -22,11 +22,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json",
-    "google:login": "tsx scripts/google-sessao.ts login",
-    "google:estado": "tsx scripts/google-sessao.ts estado",
-    "google:diagnostico": "tsx scripts/google-sessao.ts diagnostico",
-    "google:sincronizar": "tsx scripts/google-sincronizar.ts"
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
