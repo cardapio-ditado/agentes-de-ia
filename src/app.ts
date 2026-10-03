@@ -189,6 +189,15 @@ import {
   removeTraining,
 } from "./training.js";
 import {
+  confirmarPublicadaPeloMake,
+  ErroDoMake,
+  lerAvaliacaoDoMake,
+  ligarAoMake,
+  publicarPeloMake,
+  receberAvaliacaoDoMake,
+  segredoConfere,
+} from "./avaliacoesMake.js";
+import {
   assinaturaValida,
   estadoInstagram,
   processarWebhookInstagram,
@@ -4349,15 +4358,23 @@ async function roteasApi(
       if ("assinatura" in corpo) configuracao.assinatura = textoOpcional(corpo, "assinatura") ?? "";
       if ("tom" in corpo) configuracao.tom = textoOpcional(corpo, "tom") ?? "";
 
-      return ok(
-        res,
-        await salvarPerfil({
-          venueId: venue.id,
-          contaGerente: texto(corpo, "conta_gerente"),
-          ...("local_id" in corpo ? { localId: textoOpcional(corpo, "local_id") ?? null } : {}),
-          configuracao,
-        }),
-      );
+      const salvo = await salvarPerfil({
+        venueId: venue.id,
+        contaGerente: texto(corpo, "conta_gerente"),
+        ...("local_id" in corpo ? { localId: textoOpcional(corpo, "local_id") ?? null } : {}),
+        configuracao,
+      });
+      // O webhook do Make, quando veio: liga a casa e gera o segredo que o
+      // cenário manda no cabeçalho.
+      if ("make_webhook_url" in corpo) {
+        const url = textoOpcional(corpo, "make_webhook_url") ?? null;
+        if (url && !/^https:\/\/hook\.[a-z0-9.-]*make\.com\//.test(url)) {
+          throw erro(400, "invalid_request", "O webhook do Make começa com https://hook.…make.com/");
+        }
+        const { segredo } = await ligarAoMake(venue.id, url);
+        return ok(res, { ...salvo, make_webhook_url: url, webhook_segredo: segredo });
+      }
+      return ok(res, salvo);
     }
 
     if (metodo === "GET" && recurso === "events" && p.length === 3) {
@@ -4893,6 +4910,39 @@ async function roteasApi(
   }
 
   // POST /v1/reservations/:id/approve | /reject | /cancel
+  // ---- Avaliações do Google via Make (API oficial) ----
+  //
+  // Sem chave de API: quem chama é o cenário do Make, e ele se identifica
+  // pelo segredo da casa no cabeçalho x-brasa-segredo. A casa vem no slug.
+  //
+  // POST /v1/integracoes/make/google/:slug/avaliacao  — uma avaliação (nova ou editada)
+  // POST /v1/integracoes/make/google/:slug/publicada  — o Make publicou a resposta
+  if (metodo === "POST" && p[0] === "integracoes" && p[1] === "make" && p[2] === "google" && p.length === 5) {
+    const venue = await findVenueBySlug(p[3]!);
+    const perfil = await perfilDoVenue(venue.id);
+    const segredo = (perfil as { webhook_segredo?: string | null } | null)?.webhook_segredo;
+    if (!perfil || !segredoConfere(req.headers["x-brasa-segredo"], segredo)) {
+      throw erro(403, "forbidden", "Segredo do Make inválido para esta casa.");
+    }
+    const corpo = (await lerJson(req)) as Record<string, unknown>;
+    try {
+      if (p[4] === "avaliacao") {
+        const r = await receberAvaliacaoDoMake(venue, perfil, lerAvaliacaoDoMake(corpo));
+        console.log(`[google-make] ${venue.slug}: ${r.situacao} (${r.name})`);
+        return ok(res, r);
+      }
+      if (p[4] === "publicada") {
+        const name = typeof corpo.name === "string" ? corpo.name.trim() : "";
+        if (!name) throw erro(400, "invalid_request", 'Faltou o "name" da avaliação.');
+        const a = await confirmarPublicadaPeloMake(venue.id, name);
+        return ok(res, { publicada: Boolean(a), name });
+      }
+    } catch (e) {
+      if (e instanceof ErroDoMake) throw erro(e.status, "invalid_request", e.message);
+      throw e;
+    }
+  }
+
   // POST /v1/avaliacoes/:id/aprovar|descartar
   if (metodo === "POST" && p[0] === "avaliacoes" && p.length === 3) {
     const chave = await exigirChave(req, "reservations:write");
@@ -4925,13 +4975,17 @@ async function roteasApi(
     if (editado !== undefined && editado.trim() === "") {
       throw erro(400, "invalid_request", "A resposta não pode ficar vazia.");
     }
-    return ok(
-      res,
-      await aprovarResposta({
-        id: encontrado.avaliacao.id,
-        ...(editado ? { texto: editado.trim() } : {}),
-      }),
-    );
+    const aprovada = await aprovarResposta({
+      id: encontrado.avaliacao.id,
+      ...(editado ? { texto: editado.trim() } : {}),
+    });
+    // Com o Make ligado, a aprovação já vira publicação: o Make recebe e
+    // posta no Google. Sem ele, fica "aprovada" para colar à mão, como antes.
+    const envio = await publicarPeloMake(aprovada.venue_id, aprovada);
+    if (!envio.enviado && envio.motivo && !/não tem o webhook/.test(envio.motivo)) {
+      console.error(`[google-make] aprovação ${aprovada.id} não chegou ao Make: ${envio.motivo}`);
+    }
+    return ok(res, { ...aprovada, publicando_pelo_make: envio.enviado });
   }
 
   if (metodo === "POST" && p[0] === "reservations" && p.length === 3) {
