@@ -274,36 +274,54 @@ export type Database = {
           configuracao: Json
           created_at: string
           id: string
+          importado_em: string | null
           local_id: string | null
+          local_nome: string | null
+          make_webhook_url: string | null
+          nota_media: number | null
           status: string
+          total_avaliacoes: number | null
           ultima_sincronizacao: string | null
           ultimo_erro: string | null
           updated_at: string
           venue_id: string
+          webhook_segredo: string | null
         }
         Insert: {
           conta_gerente: string
           configuracao?: Json
           created_at?: string
           id?: string
+          importado_em?: string | null
           local_id?: string | null
+          local_nome?: string | null
+          make_webhook_url?: string | null
+          nota_media?: number | null
           status?: string
+          total_avaliacoes?: number | null
           ultima_sincronizacao?: string | null
           ultimo_erro?: string | null
           updated_at?: string
           venue_id: string
+          webhook_segredo?: string | null
         }
         Update: {
           conta_gerente?: string
           configuracao?: Json
           created_at?: string
           id?: string
+          importado_em?: string | null
           local_id?: string | null
+          local_nome?: string | null
+          make_webhook_url?: string | null
+          nota_media?: number | null
           status?: string
+          total_avaliacoes?: number | null
           ultima_sincronizacao?: string | null
           ultimo_erro?: string | null
           updated_at?: string
           venue_id?: string
+          webhook_segredo?: string | null
         }
         Relationships: [
           {

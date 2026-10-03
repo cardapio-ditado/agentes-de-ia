@@ -167,9 +167,14 @@ import {
   avaliacaoComOrg,
   descartarResposta,
   filaDeAprovacao,
+  filtroValido,
   historicoDeAvaliacoes,
+  lerConfiguracao as lerConfiguracaoDoGoogle,
   marcarPublicada,
   perfilDoVenue,
+  prontasParaPublicar,
+  redigirParaAntiga,
+  resumoDasAvaliacoes,
   salvarPerfil,
 } from "./avaliacoes.js";
 import { extratoDePontos, PlanoBloqueadoError } from "./pontos.js";
@@ -192,9 +197,12 @@ import {
   confirmarPublicadaPeloMake,
   ErroDoMake,
   lerAvaliacaoDoMake,
+  lerPaginaDoGoogle,
   ligarAoMake,
+  pedirPaginaAoMake,
   publicarPeloMake,
   receberAvaliacaoDoMake,
+  receberPaginaDoGoogle,
   segredoConfere,
 } from "./avaliacoesMake.js";
 import {
@@ -288,6 +296,7 @@ import {
   findVenueBySlug,
   findVenueBySlugInOrg,
   getReservationWithVenue,
+  getVenue,
   listAllEvents,
   listPendingReservations,
   listUpcomingApproved,
@@ -4313,14 +4322,38 @@ async function roteasApi(
     if (metodo === "GET" && recurso === "avaliacoes" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      const [perfil, fila, historico] = await Promise.all([
+      const [perfil, fila, aprovadas, historico, resumo] = await Promise.all([
         perfilDoVenue(venue.id),
         filaDeAprovacao(venue.id),
-        historicoDeAvaliacoes(venue.id),
+        prontasParaPublicar(venue.id),
+        historicoDeAvaliacoes(venue.id, { filtro: filtroValido(url.searchParams.get("filtro")) }),
+        resumoDasAvaliacoes(venue.id),
       ]);
       // O segredo do Make nunca vai para o navegador.
-      const { webhook_segredo: _segredo, ...perfilSemSegredo } = (perfil ?? {}) as Record<string, unknown>;
-      return ok(res, { perfil: perfil ? perfilSemSegredo : null, fila, historico });
+      const perfilSemSegredo = perfil ? { ...perfil, webhook_segredo: undefined } : null;
+      return ok(res, { perfil: perfilSemSegredo, fila, aprovadas, historico, resumo });
+    }
+
+    // GET /v1/venues/:slug/avaliacoes/historico?filtro=&antes= — a página seguinte
+    if (metodo === "GET" && recurso === "avaliacoes" && p[3] === "historico" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await historicoDeAvaliacoes(venue.id, {
+          filtro: filtroValido(url.searchParams.get("filtro")),
+          antes: url.searchParams.get("antes"),
+        }),
+      );
+    }
+
+    // POST /v1/venues/:slug/avaliacoes/importar — traz o histórico inteiro do Google pelo Make
+    if (metodo === "POST" && recurso === "avaliacoes" && p[3] === "importar" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const r = await pedirPaginaAoMake(venue.id, null, 1);
+      if (!r.pedido) throw erro(409, "conflict", `Não deu para pedir o histórico ao Make: ${r.motivo}.`);
+      return ok(res, { importando: true }, 202);
     }
 
     // POST /v1/venues/:slug/avaliacoes — lança uma avaliação na mão e já redige
@@ -4939,6 +4972,19 @@ async function roteasApi(
         const a = await confirmarPublicadaPeloMake(venue.id, name);
         return ok(res, { publicada: Boolean(a), name });
       }
+      // Uma página do histórico (50 avaliações). Se houver próxima, o servidor
+      // pede ao Make — o laço anda daqui, uma página de cada vez.
+      if (p[4] === "importar") {
+        const r = await receberPaginaDoGoogle(venue.id, perfil, lerPaginaDoGoogle(corpo));
+        // O corpo é a página do Google tal qual; o número vem na query.
+        const numero = Number(url.searchParams.get("pagina") ?? corpo.pagina) || 1;
+        console.log(`[google-make] ${venue.slug}: página ${numero} do histórico — ${r.recebidas} recebidas, ${r.novas} novas, ${r.atualizadas} atualizadas${r.concluida ? ", concluída" : ""}`);
+        if (r.proxima_pagina) {
+          const pedido = await pedirPaginaAoMake(venue.id, r.proxima_pagina, numero + 1);
+          if (!pedido.pedido) console.error(`[google-make] ${venue.slug}: não pediu a página ${numero + 1}: ${pedido.motivo}`);
+        }
+        return ok(res, { ...r, pagina: numero });
+      }
     } catch (e) {
       if (e instanceof ErroDoMake) throw erro(e.status, "invalid_request", e.message);
       throw e;
@@ -4949,7 +4995,7 @@ async function roteasApi(
   if (metodo === "POST" && p[0] === "avaliacoes" && p.length === 3) {
     const chave = await exigirChave(req, "reservations:write");
     const acao = p[2]!;
-    if (acao !== "aprovar" && acao !== "descartar" && acao !== "colada") {
+    if (acao !== "aprovar" && acao !== "descartar" && acao !== "colada" && acao !== "redigir") {
       throw erro(404, "not_found", `Ação "${acao}" não existe.`);
     }
 
@@ -4961,6 +5007,29 @@ async function roteasApi(
 
     if (acao === "descartar") {
       return ok(res, await descartarResposta(encontrado.avaliacao.id));
+    }
+
+    // Uma avaliação antiga, sem resposta: a IA redige e ela vai para a fila,
+    // sempre esperando o dono — ninguém publica sozinho em avaliação velha.
+    if (acao === "redigir") {
+      const [venue, perfil] = await Promise.all([
+        getVenue(encontrado.avaliacao.venue_id),
+        perfilDoVenue(encontrado.avaliacao.venue_id),
+      ]);
+      try {
+        const pronta = await redigirParaAntiga({
+          avaliacao: encontrado.avaliacao,
+          venue,
+          config: lerConfiguracaoDoGoogle(perfil ?? { configuracao: {} }),
+        });
+        if (pronta.resposta_status === "erro") {
+          throw erro(502, "upstream_error", `A IA não conseguiu redigir: ${pronta.ultimo_erro ?? "erro desconhecido"}.`);
+        }
+        return ok(res, pronta);
+      } catch (e) {
+        if (e instanceof Error && /já tem resposta/.test(e.message)) throw erro(409, "conflict", e.message);
+        throw e;
+      }
     }
 
     // Enquanto a publicação é manual, quem confirma que a resposta chegou ao

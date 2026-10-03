@@ -3593,3 +3593,21 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   .crm-numeros { justify-content: flex-start; gap: 12px; }
   .crm-numero { text-align: left; min-width: 54px; }
 }
+
+/* ---------- Avaliações do Google: o histórico como está lá ---------- */
+.avaliacao-texto { white-space: pre-wrap; }
+.avaliacao-aberta { border-left: 3px solid var(--alerta); }
+.avaliacao-resposta {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--marca);
+  background: var(--marca-suave);
+  border-radius: 0 var(--raio) var(--raio) 0;
+}
+.avaliacao-resposta p { margin: 0; white-space: pre-wrap; }
+.avaliacao-resposta-de {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--marca-forte);
+  margin-bottom: 4px !important;
+}

@@ -24,10 +24,22 @@ const SITUACOES = {
   pendente: ["aguardando redação", ""],
   rascunho: ["esperando você", "etiqueta-alerta"],
   aprovada: ["publicando no Google", "etiqueta-info"],
-  publicada: ["respondida no Google", "etiqueta-ok"],
-  descartada: ["sem resposta", ""],
+  publicada: ["respondida", "etiqueta-ok"],
+  sem_resposta: ["sem resposta", "etiqueta-alerta"],
+  descartada: ["sem resposta (decidido)", ""],
   erro: ["falhou", "etiqueta-perigo"],
 };
+
+/** Os recortes do histórico, na ordem em que aparecem. */
+const FILTROS = [
+  ["todas", "Todas"],
+  ["respondidas", "Respondidas"],
+  ["sem_resposta", "Sem resposta"],
+  ["baixas", "Nota 1 e 2"],
+];
+
+const NUMERO = new Intl.NumberFormat("pt-BR");
+const NOTA = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 function estrelas(nota) {
   return "★".repeat(nota) + "☆".repeat(5 - nota);
@@ -45,7 +57,11 @@ export async function avaliacoes(raiz, ctx) {
   const prontas = el("div", { classe: "lista" });
   const aviso = el("div", { classe: "cartao alerta" });
   const regras = el("div", { classe: "cartao" });
+  const resumo = el("p", { classe: "muted" });
+  const filtros = el("div", { classe: "abas" });
   const historico = el("div", { classe: "lista" });
+  const verMais = el("div", { classe: "reserva-acoes" });
+  let filtroAtivo = "todas";
 
   raiz.append(
     el("section", { classe: "pilha" }, [
@@ -85,9 +101,14 @@ export async function avaliacoes(raiz, ctx) {
       regras,
 
       el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
-        el("div", {}, [el("h2", { texto: "Histórico" })]),
+        el("div", {}, [
+          el("h2", { texto: "Avaliações no Google" }),
+          resumo,
+        ]),
       ]),
+      filtros,
       historico,
+      verMais,
     ]),
   );
 
@@ -97,8 +118,9 @@ export async function avaliacoes(raiz, ctx) {
     limpar(fila).append(el("p", { classe: "muted", texto: "Carregando…" }));
     limpar(prontas);
     limpar(historico);
+    limpar(verMais);
 
-    const dados = await get(`/v1/venues/${ctx.venue}/avaliacoes`);
+    const dados = await get(`/v1/venues/${ctx.venue}/avaliacoes?filtro=${filtroAtivo}`);
 
     limpar(fila);
     if (dados.fila.length === 0) {
@@ -109,23 +131,93 @@ export async function avaliacoes(raiz, ctx) {
       for (const a of dados.fila) fila.append(cartaoDaFila(a));
     }
 
-    const liberadas = dados.historico.filter((a) => a.resposta_status === "aprovada" && a.resposta);
+    const liberadas = (dados.aprovadas ?? []).filter((a) => a.resposta);
     if (liberadas.length === 0) {
-      prontas.append(vazio("Nenhuma resposta esperando ser colada"));
+      prontas.append(vazio("Nenhuma resposta esperando ser publicada"));
     } else {
       for (const a of liberadas) prontas.append(cartaoPronta(a));
     }
 
     limpar(regras).append(...formularioDeRegras(dados.perfil));
     desenharAviso(dados.perfil);
+    desenharResumo(dados.perfil, dados.resumo);
+    desenharFiltros();
+    mostrarPagina(dados.historico, true);
+  }
 
-    const resto = dados.historico.filter(
-      (a) => a.resposta_status !== "aprovada" && a.resposta_status !== "rascunho",
+  // ---------- Histórico: igual ao Google ----------
+
+  /** "★ 4,6 · 1.234 avaliações · 980 respondidas · 254 sem resposta". */
+  function desenharResumo(perfil, r) {
+    const partes = [];
+    if (perfil?.nota_media) partes.push(`★ ${NOTA.format(perfil.nota_media)} no Google`);
+    const total = perfil?.total_avaliacoes ?? r?.conhecidas ?? 0;
+    partes.push(`${NUMERO.format(total)} ${total === 1 ? "avaliação" : "avaliações"}`);
+    if (r) {
+      partes.push(`${NUMERO.format(r.respondidas)} respondidas`);
+      partes.push(`${NUMERO.format(r.sem_resposta)} sem resposta`);
+      if (perfil?.total_avaliacoes && r.conhecidas < perfil.total_avaliacoes) {
+        partes.push(`${NUMERO.format(perfil.total_avaliacoes - r.conhecidas)} ainda não importadas`);
+      }
+    }
+    resumo.textContent = partes.join(" · ");
+  }
+
+  function desenharFiltros() {
+    limpar(filtros).append(
+      ...FILTROS.map(([valor, rotulo]) =>
+        el("button", {
+          classe: `aba ${valor === filtroAtivo ? "aba-ativa" : ""}`.trim(),
+          type: "button",
+          texto: rotulo,
+          onclick: async () => {
+            if (filtroAtivo === valor) return;
+            filtroAtivo = valor;
+            desenharFiltros();
+            limpar(historico).append(el("p", { classe: "muted", texto: "Carregando…" }));
+            limpar(verMais);
+            const pagina = await get(`/v1/venues/${ctx.venue}/avaliacoes/historico?filtro=${filtroAtivo}`);
+            mostrarPagina(pagina, true);
+          },
+        }),
+      ),
     );
-    if (resto.length === 0) {
-      historico.append(vazio("Nenhuma avaliação concluída ainda"));
-    } else {
-      for (const a of resto) historico.append(cartaoDoHistorico(a));
+  }
+
+  /** Mostra uma página e, se ela veio cheia, oferece a próxima. */
+  function mostrarPagina(itens, primeira) {
+    if (primeira) limpar(historico);
+    limpar(verMais);
+    if (itens.length === 0 && primeira) {
+      historico.append(
+        vazio(
+          filtroAtivo === "todas" ? "Nenhuma avaliação ainda" : "Nada neste recorte",
+          filtroAtivo === "todas" ? "Com o Google ligado, use \"Importar histórico do Google\" na configuração técnica para trazer tudo o que já está lá." : "",
+        ),
+      );
+      return;
+    }
+    for (const a of itens) historico.append(cartaoDoHistorico(a));
+    const ultima = itens[itens.length - 1];
+    if (itens.length >= 50 && ultima?.avaliada_em) {
+      const botao = el("button", {
+        classe: "btn btn-peq",
+        type: "button",
+        texto: "Ver mais antigas",
+        onclick: async () => {
+          botao.disabled = true;
+          try {
+            const pagina = await get(
+              `/v1/venues/${ctx.venue}/avaliacoes/historico?filtro=${filtroAtivo}&antes=${encodeURIComponent(ultima.avaliada_em)}`,
+            );
+            mostrarPagina(pagina, false);
+          } catch (err) {
+            avisar(err.message, "erro");
+            botao.disabled = false;
+          }
+        },
+      });
+      verMais.append(botao);
     }
   }
 
@@ -312,23 +404,62 @@ export async function avaliacoes(raiz, ctx) {
 
   // ---------- Histórico ----------
 
+  /**
+   * Um cartão por avaliação, como no Google: quem, quando, a nota, o que
+   * escreveu — e embaixo a resposta da casa (ou o botão para a IA redigir).
+   */
   function cartaoDoHistorico(a) {
     const [rotulo, variante] = SITUACOES[a.resposta_status] ?? [a.resposta_status, ""];
-    return el("article", { classe: "cartao" }, [
+    const respondida = a.resposta_status === "publicada" && a.resposta;
+    const podeRedigir = ["sem_resposta", "descartada", "pendente", "erro"].includes(a.resposta_status);
+
+    return el("article", { classe: `cartao avaliacao ${respondida ? "" : "avaliacao-aberta"}`.trim() }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h3", { texto: a.autor || "Cliente do Google" }),
-          el("p", { classe: "muted", texto: a.avaliada_em ? dataHora(a.avaliada_em) : "" }),
+          el("p", { classe: "muted", texto: a.avaliada_em ? dataCurta(a.avaliada_em) : "" }),
         ]),
         el("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, [
           etiqueta(`${estrelas(a.nota)} ${a.nota}`, classeDaNota(a.nota)),
           etiqueta(rotulo, variante),
         ]),
       ]),
-      a.comentario ? el("p", { texto: `"${a.comentario}"` }) : null,
-      a.resposta ? el("p", { classe: "muted", texto: `Resposta: ${a.resposta}` }) : null,
+      a.comentario
+        ? el("p", { classe: "avaliacao-texto", texto: a.comentario })
+        : el("p", { classe: "muted", texto: "Só a nota, sem comentário." }),
+      respondida
+        ? el("div", { classe: "avaliacao-resposta" }, [
+            el("p", { classe: "avaliacao-resposta-de", texto: `Resposta da casa${a.publicada_em ? ` · ${dataCurta(a.publicada_em)}` : ""}` }),
+            el("p", { texto: a.resposta }),
+          ])
+        : null,
       a.ultimo_erro ? el("p", { classe: "muted", texto: `Erro: ${a.ultimo_erro}` }) : null,
+      podeRedigir ? el("div", { classe: "reserva-acoes" }, [botaoRedigir(a)]) : null,
     ]);
+  }
+
+  /** A IA escreve, e a avaliação vai para "Esperando você" — nunca sai sozinha. */
+  function botaoRedigir(a) {
+    const botao = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Responder com a IA",
+      title: "A IA redige e a resposta espera o seu OK na fila de cima",
+      onclick: async () => {
+        botao.disabled = true;
+        botao.textContent = "Redigindo…";
+        try {
+          await post(`/v1/avaliacoes/${a.id}/redigir`, {});
+          avisar("Resposta redigida — está em \"Esperando você\", no alto da tela.", "ok");
+          await carregar();
+        } catch (err) {
+          avisar(err.message, "erro");
+          botao.disabled = false;
+          botao.textContent = "Responder com a IA";
+        }
+      },
+    });
+    return botao;
   }
 
   // ---------- Regras ----------
@@ -428,11 +559,43 @@ export async function avaliacoes(raiz, ctx) {
       perfil?.ultima_sincronizacao
         ? el("p", { classe: "muted", texto: `Última avaliação recebida pelo Make: ${dataHora(perfil.ultima_sincronizacao)}` })
         : null,
+      perfil?.importado_em
+        ? el("p", { classe: "muted", texto: `Histórico do Google importado em ${dataHora(perfil.importado_em)}.` })
+        : el("p", { classe: "muted", texto: "O histórico do Google ainda não foi importado: só as avaliações novas estão aqui." }),
       perfil?.ultimo_erro
         ? el("p", { classe: "muted", texto: `Último erro: ${perfil.ultimo_erro}` })
         : null,
-      el("div", { classe: "reserva-acoes" }, [salvar]),
+      el("div", { classe: "reserva-acoes" }, [salvar, perfil?.make_webhook_url ? botaoImportar() : null]),
     ]);
+  }
+
+  /** Pede ao Make o histórico inteiro, página a página. Pode repetir: nada duplica. */
+  function botaoImportar() {
+    const botao = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Importar histórico do Google",
+      onclick: async () => {
+        botao.disabled = true;
+        try {
+          await post(`/v1/venues/${ctx.venue}/avaliacoes/importar`, {});
+          avisar("Importando. Cada página de 50 leva alguns segundos — recarregue daqui a pouco.", "ok");
+        } catch (err) {
+          avisar(err.message, "erro");
+        } finally {
+          botao.disabled = false;
+        }
+      },
+    });
+    return botao;
+  }
+
+  /** Dia e mês, como o Google mostra; o ano só quando não é o atual. */
+  function dataCurta(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const mesmoAno = d.getFullYear() === new Date().getFullYear();
+    return d.toLocaleDateString("pt-BR", mesmoAno ? { day: "2-digit", month: "short" } : { day: "2-digit", month: "short", year: "numeric" });
   }
 
   function campo(rotulo, controle) {

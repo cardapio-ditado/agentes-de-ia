@@ -6,6 +6,7 @@ import {
   promptDeResposta,
   traduzirFalha,
   NOTA_MINIMA_PARA_AUTOMATICO,
+  filtroValido,
 } from "./avaliacoes.js";
 
 const PADRAO = lerConfiguracao({ configuracao: {} });
@@ -85,10 +86,14 @@ test("tabela faltando vira instrução, não 'erro interno'", () => {
   for (const m of mensagens) {
     assert.throws(
       () => traduzirFalha(m, "Falha ao carregar"),
-      (e) =>
-        e.status === 503 &&
-        e.code === "modulo_nao_instalado" &&
-        /20260818000000_create_avaliacoes_google\.sql/.test(e.message),
+      (erro: unknown) => {
+        const e = erro as { status?: number; code?: string; message?: string };
+        return (
+          e.status === 503 &&
+          e.code === "modulo_nao_instalado" &&
+          /20260818000000_create_avaliacoes_google\.sql/.test(e.message ?? "")
+        );
+      },
       `não traduziu: ${m}`,
     );
   }
@@ -99,4 +104,13 @@ test("falha de verdade continua sendo erro de verdade", () => {
     () => traduzirFalha("connection refused", "Falha ao carregar"),
     (e) => e instanceof Error && /Falha ao carregar: connection refused/.test(e.message),
   );
+});
+
+test("o filtro do histórico só aceita os recortes da tela", () => {
+  assert.equal(filtroValido("respondidas"), "respondidas");
+  assert.equal(filtroValido("sem_resposta"), "sem_resposta");
+  assert.equal(filtroValido("baixas"), "baixas");
+  assert.equal(filtroValido("todas"), "todas");
+  assert.equal(filtroValido(null), "todas");
+  assert.equal(filtroValido("drop table"), "todas");
 });

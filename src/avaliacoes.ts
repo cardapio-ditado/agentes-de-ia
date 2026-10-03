@@ -323,9 +323,11 @@ export async function prepararResposta(params: {
   avaliacao: Avaliacao;
   venue: Pick<Venue, "name">;
   config: ConfiguracaoPerfil;
+  /** Força a liberação (ex.: "humana" para avaliação antiga pedida à mão). */
+  liberacao?: Liberacao;
 }): Promise<Avaliacao> {
   const { avaliacao, config } = params;
-  const liberacao = politicaDeResposta(avaliacao.nota, config);
+  const liberacao = params.liberacao ?? politicaDeResposta(avaliacao.nota, config);
 
   try {
     const { texto, modelo } = await gerarResposta(params);
@@ -402,17 +404,79 @@ export async function avaliacaoComOrg(
   return { avaliacao, orgId: venues.org_id };
 }
 
-/** Tudo que já passou por aqui, do mais recente para o mais antigo. */
-export async function historicoDeAvaliacoes(venueId: string, limite = 50): Promise<Avaliacao[]> {
-  const { data, error } = await db()
+/** Os recortes do histórico que a tela oferece. */
+export type FiltroDoHistorico = "todas" | "respondidas" | "sem_resposta" | "baixas";
+
+export function filtroValido(valor: unknown): FiltroDoHistorico {
+  return valor === "respondidas" || valor === "sem_resposta" || valor === "baixas" ? valor : "todas";
+}
+
+/**
+ * O histórico como está no Google: do mais recente para o mais antigo, com
+ * o que já foi respondido e o que não foi.
+ *
+ * O que ainda está em andamento (rascunho, aprovada) não entra — tem seção
+ * própria na tela. `antes` é o cursor da página seguinte: a data da última
+ * avaliação que a tela já mostrou.
+ */
+export async function historicoDeAvaliacoes(
+  venueId: string,
+  opcoes: { limite?: number; antes?: string | null; filtro?: FiltroDoHistorico } = {},
+): Promise<Avaliacao[]> {
+  const limite = Math.min(200, Math.max(1, opcoes.limite ?? 50));
+  let consulta = db()
     .from("google_avaliacoes")
     .select("*")
     .eq("venue_id", venueId)
+    .not("resposta_status", "in", "(rascunho,aprovada)");
+
+  if (opcoes.filtro === "respondidas") consulta = consulta.eq("resposta_status", "publicada");
+  if (opcoes.filtro === "sem_resposta") consulta = consulta.neq("resposta_status", "publicada");
+  if (opcoes.filtro === "baixas") consulta = consulta.lte("nota", 2);
+  if (opcoes.antes) consulta = consulta.lt("avaliada_em", opcoes.antes);
+
+  const { data, error } = await consulta
     .order("avaliada_em", { ascending: false, nullsFirst: false })
     .limit(limite);
 
   if (error) traduzirFalha(error.message, "Falha ao carregar o histórico de avaliações");
   return data ?? [];
+}
+
+export interface ResumoDasAvaliacoes {
+  /** Quantas o painel conhece. */
+  conhecidas: number;
+  respondidas: number;
+  sem_resposta: number;
+}
+
+/** Os números do topo da lista: quantas, quantas respondidas, quantas não. */
+export async function resumoDasAvaliacoes(venueId: string): Promise<ResumoDasAvaliacoes> {
+  const base = () => db().from("google_avaliacoes").select("id", { count: "exact", head: true }).eq("venue_id", venueId);
+  const [todas, respondidas] = await Promise.all([base(), base().eq("resposta_status", "publicada")]);
+  if (todas.error) traduzirFalha(todas.error.message, "Falha ao contar as avaliações");
+  if (respondidas.error) traduzirFalha(respondidas.error.message, "Falha ao contar as avaliações respondidas");
+  const conhecidas = todas.count ?? 0;
+  const comResposta = respondidas.count ?? 0;
+  return { conhecidas, respondidas: comResposta, sem_resposta: conhecidas - comResposta };
+}
+
+/**
+ * Uma avaliação antiga, que entrou sem resposta, ganha uma resposta da IA —
+ * sempre esperando o dono ler, por mais alta que seja a nota: ele pediu de
+ * propósito, e responder sozinho uma avaliação de meses atrás seria
+ * surpreender quem está olhando.
+ */
+export async function redigirParaAntiga(params: {
+  avaliacao: Avaliacao;
+  venue: Pick<Venue, "name">;
+  config: ConfiguracaoPerfil;
+}): Promise<Avaliacao> {
+  const { avaliacao } = params;
+  if (!["sem_resposta", "descartada", "pendente", "erro"].includes(avaliacao.resposta_status)) {
+    throw new Error("Esta avaliação já tem resposta ou já está sendo respondida.");
+  }
+  return await prepararResposta({ ...params, liberacao: "humana" });
 }
 
 /**
@@ -475,10 +539,19 @@ export async function descartarResposta(id: string, usuarioId?: string): Promise
   });
 }
 
-export async function marcarPublicada(id: string): Promise<Avaliacao> {
+/**
+ * Marca como publicada. Quando a resposta veio do próprio Google (alguém
+ * respondeu lá, ou é o histórico entrando), o texto e a data vêm junto —
+ * o painel passa a mostrar exatamente o que está no Google.
+ */
+export async function marcarPublicada(
+  id: string,
+  doGoogle?: { resposta: string; em: string | null },
+): Promise<Avaliacao> {
   return await atualizar(id, {
     resposta_status: "publicada",
-    publicada_em: new Date().toISOString(),
+    publicada_em: doGoogle?.em ?? new Date().toISOString(),
+    ...(doGoogle ? { resposta: doGoogle.resposta, liberacao: null } : {}),
     ultimo_erro: null,
   });
 }
