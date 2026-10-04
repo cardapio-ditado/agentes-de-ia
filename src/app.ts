@@ -4349,6 +4349,15 @@ async function roteasApi(
       );
     }
 
+    // POST /v1/venues/:slug/avaliacoes/sincronizar — busca agora as avaliações novas (primeira página)
+    if (metodo === "POST" && recurso === "avaliacoes" && p[3] === "sincronizar" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const r = await pedirPaginaAoMake(venue.id, null, PAGINA_UNICA);
+      if (!r.pedido) throw erro(409, "conflict", `Não deu para pedir as avaliações ao Make: ${r.motivo}.`);
+      return ok(res, { sincronizando: true }, 202);
+    }
+
     // POST /v1/venues/:slug/avaliacoes/importar — traz o histórico inteiro do Google pelo Make
     if (metodo === "POST" && recurso === "avaliacoes" && p[3] === "importar" && p.length === 4) {
       const chave = await exigirChave(req, "reservations:write");

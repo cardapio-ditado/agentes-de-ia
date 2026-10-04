@@ -80,7 +80,10 @@ export async function avaliacoes(raiz, ctx) {
           el("h2", { texto: "Esperando você" }),
           el("p", { classe: "muted", texto: "Nota baixa para aqui, sempre: leia, ajuste se quiser e aprove." }),
         ]),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
+        el("div", { classe: "reserva-acoes", style: "margin:0" }, [
+          botaoBuscarNovas(),
+          el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
+        ]),
       ]),
       fila,
 
@@ -567,6 +570,28 @@ export async function avaliacoes(raiz, ctx) {
         : null,
       el("div", { classe: "reserva-acoes" }, [salvar, perfil?.make_webhook_url ? botaoImportar() : null]),
     ]);
+  }
+
+  /** Pede ao Make só as 50 mais novas, agora. Avaliação nova entra e a regra responde. */
+  function botaoBuscarNovas() {
+    const botao = el("button", {
+      classe: "btn btn-peq",
+      type: "button",
+      texto: "Buscar novas no Google",
+      title: "O servidor faz isso sozinho de tempos em tempos; aqui é para não esperar",
+      onclick: async () => {
+        botao.disabled = true;
+        try {
+          await post(`/v1/venues/${ctx.venue}/avaliacoes/sincronizar`, {});
+          avisar("Pedido ao Google. Em meio minuto, recarregue: a nova aparece aqui já com a resposta.", "ok");
+        } catch (err) {
+          avisar(err.message, "erro");
+        } finally {
+          botao.disabled = false;
+        }
+      },
+    });
+    return botao;
   }
 
   /** Pede ao Make o histórico inteiro, página a página. Pode repetir: nada duplica. */
