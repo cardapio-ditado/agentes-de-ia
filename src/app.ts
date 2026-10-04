@@ -196,6 +196,7 @@ import {
 import {
   confirmarPublicadaPeloMake,
   ErroDoMake,
+  corpoDoMake,
   lerAvaliacaoDoMake,
   lerPaginaDoGoogle,
   ligarAoMake,
@@ -4959,7 +4960,8 @@ async function roteasApi(
     if (!perfil || !segredoConfere(req.headers["x-brasa-segredo"], segredo)) {
       throw erro(403, "forbidden", "Segredo do Make inválido para esta casa.");
     }
-    const corpo = (await lerJson(req)) as Record<string, unknown>;
+    const bruto = await lerBinario(req, 1_000_000);
+    const corpo = corpoDoMake(bruto, req.headers["content-type"]);
     try {
       if (p[4] === "avaliacao") {
         const r = await receberAvaliacaoDoMake(venue, perfil, lerAvaliacaoDoMake(corpo));
@@ -4986,7 +4988,12 @@ async function roteasApi(
         return ok(res, { ...r, pagina: numero });
       }
     } catch (e) {
-      if (e instanceof ErroDoMake) throw erro(e.status, "invalid_request", e.message);
+      if (e instanceof ErroDoMake) {
+        // O que o Make mandou fica no log: é a única forma de descobrir por
+        // que uma avaliação específica não entrou.
+        console.error(`[google-make] ${venue.slug}: ${p[4]} recusado (${e.status}) — ${e.message} — corpo: ${bruto.toString("utf8").slice(0, 600)}`);
+        throw erro(e.status, "invalid_request", e.message);
+      }
       throw e;
     }
   }

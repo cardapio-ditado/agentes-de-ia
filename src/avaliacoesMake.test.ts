@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { lerAvaliacaoDoMake, lerPaginaDoGoogle, limparComentario, notaDaEstrela, segredoConfere } from "./avaliacoesMake.js";
+import { corpoDoMake, ErroDoMake, lerAvaliacaoDoMake, lerPaginaDoGoogle, limparComentario, notaDaEstrela, segredoConfere } from "./avaliacoesMake.js";
 
 test("a nota vem como o Google escreve (FIVE) ou como número", () => {
   assert.equal(notaDaEstrela("FIVE"), 5);
@@ -93,4 +93,31 @@ test("uma página do Google vira lista, nota média, total e cursor da próxima"
   const ultima = lerPaginaDoGoogle({ reviews: [], averageRating: "x", totalReviewCount: -1 });
   assert.deepEqual(ultima, { avaliacoes: [], nota_media: null, total: null, proxima_pagina: null });
   assert.deepEqual(lerPaginaDoGoogle({}).avaliacoes, []);
+});
+
+test("o Make pode mandar a avaliação como formulário: vira a forma do Google", () => {
+  const campos = new URLSearchParams({
+    name: "accounts/1/locations/2/reviews/3",
+    starRating: "FIVE",
+    displayName: "Ana \"Aninha\" Souza",
+    comment: "Linha 1\r\n\tLinha 2 — ótimo!",
+    createTime: "2026-10-03T20:00:00Z",
+    replyComment: "",
+    replyUpdateTime: "",
+  });
+  const corpo = corpoDoMake(campos.toString(), "application/x-www-form-urlencoded; charset=utf-8");
+  const a = lerAvaliacaoDoMake(corpo);
+  assert.equal(a.name, "accounts/1/locations/2/reviews/3");
+  assert.equal(a.nota, 5);
+  assert.equal(a.autor, 'Ana "Aninha" Souza');
+  assert.equal(a.comentario, "Linha 1\r\n\tLinha 2 — ótimo!");
+  assert.equal(a.ja_respondida, false);
+  assert.equal(a.resposta_google, null);
+});
+
+test("o corpo em JSON continua valendo, e JSON quebrado dá 400 com mensagem", () => {
+  assert.deepEqual(corpoDoMake('{"name": "x"}', "application/json"), { name: "x" });
+  assert.deepEqual(corpoDoMake(Buffer.from(""), "application/json"), {});
+  assert.throws(() => corpoDoMake('{"name": accounts/1}', "application/json"), (e: unknown) => e instanceof ErroDoMake && e.status === 400);
+  assert.throws(() => corpoDoMake("[1,2]", undefined), (e: unknown) => e instanceof ErroDoMake && e.status === 400);
 });

@@ -112,6 +112,52 @@ export function limparComentario(valor: unknown): string | null {
   return texto.replace(/^\(Translated by Google\)\s*/i, "").trim() || null;
 }
 
+/**
+ * O corpo que o Make mandou, em JSON ou em formulário (x-www-form-urlencoded).
+ *
+ * O formulário existe porque montar JSON à mão dentro do Make quebra em
+ * qualquer comentário com caractere fora do comum (tab, retorno de carro,
+ * aspas curvas…) — e foi exatamente isso que travou o vigia: a mesma
+ * avaliação tomando 400 três vezes seguidas até o Make desligar o cenário.
+ * No formulário cada campo vai cru e o Make escapa sozinho. Os campos
+ * planos viram a forma que a API do Google usa, para o resto do código não
+ * saber a diferença.
+ */
+export function corpoDoMake(bruto: Buffer | string, contentType: string | string[] | undefined): Record<string, unknown> {
+  const texto = typeof bruto === "string" ? bruto : bruto.toString("utf8");
+  const tipo = (Array.isArray(contentType) ? contentType[0] : contentType) ?? "";
+  if (!texto.trim()) return {};
+
+  if (/application\/x-www-form-urlencoded/i.test(tipo)) {
+    const campos = new URLSearchParams(texto);
+    const pegar = (chave: string): string | undefined => {
+      const v = campos.get(chave);
+      return v === null || v.trim() === "" ? undefined : v;
+    };
+    const corpo: Record<string, unknown> = {
+      name: pegar("name"),
+      starRating: pegar("starRating"),
+      comment: pegar("comment"),
+      createTime: pegar("createTime"),
+      reviewer: { displayName: pegar("displayName") },
+      reviewReply: { comment: pegar("replyComment"), updateTime: pegar("replyUpdateTime") },
+      pagina: pegar("pagina"),
+    };
+    return corpo;
+  }
+
+  try {
+    const corpo: unknown = JSON.parse(texto);
+    if (typeof corpo !== "object" || corpo === null || Array.isArray(corpo)) {
+      throw new ErroDoMake(400, "O corpo precisa ser um objeto JSON.");
+    }
+    return corpo as Record<string, unknown>;
+  } catch (e) {
+    if (e instanceof ErroDoMake) throw e;
+    throw new ErroDoMake(400, "JSON inválido.");
+  }
+}
+
 /** Uma página da lista de avaliações do Google, como a API devolve. */
 export interface PaginaDoGoogle {
   avaliacoes: AvaliacaoDoMake[];
