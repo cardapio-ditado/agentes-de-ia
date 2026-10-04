@@ -200,6 +200,7 @@ import {
   lerAvaliacaoDoMake,
   lerPaginaDoGoogle,
   ligarAoMake,
+  PAGINA_UNICA,
   pedirPaginaAoMake,
   publicarPeloMake,
   receberAvaliacaoDoMake,
@@ -4977,11 +4978,16 @@ async function roteasApi(
       // Uma página do histórico (50 avaliações). Se houver próxima, o servidor
       // pede ao Make — o laço anda daqui, uma página de cada vez.
       if (p[4] === "importar") {
-        const r = await receberPaginaDoGoogle(venue.id, perfil, lerPaginaDoGoogle(corpo));
+        const r = await receberPaginaDoGoogle(venue, perfil, lerPaginaDoGoogle(corpo));
         // O corpo é a página do Google tal qual; o número vem na query.
-        const numero = Number(url.searchParams.get("pagina") ?? corpo.pagina) || 1;
-        console.log(`[google-make] ${venue.slug}: página ${numero} do histórico — ${r.recebidas} recebidas, ${r.novas} novas, ${r.atualizadas} atualizadas${r.concluida ? ", concluída" : ""}`);
-        if (r.proxima_pagina) {
+        // Página 0 é a sincronização das recentes: só a primeira, sem laço.
+        const bruto_ = url.searchParams.get("pagina") ?? corpo.pagina;
+        const numero = bruto_ === null || bruto_ === undefined || bruto_ === "" ? 1 : Number(bruto_);
+        const unica = numero === PAGINA_UNICA;
+        console.log(
+          `[google-make] ${venue.slug}: ${unica ? "recentes" : `página ${numero} do histórico`} — ${r.recebidas} recebidas, ${r.novas} novas, ${r.atualizadas} atualizadas, ${r.respondidas} respondidas pela regra, ${r.para_aprovacao} para aprovação${!unica && r.concluida ? ", concluída" : ""}`,
+        );
+        if (r.proxima_pagina && !unica) {
           const pedido = await pedirPaginaAoMake(venue.id, r.proxima_pagina, numero + 1);
           if (!pedido.pedido) console.error(`[google-make] ${venue.slug}: não pediu a página ${numero + 1}: ${pedido.motivo}`);
         }

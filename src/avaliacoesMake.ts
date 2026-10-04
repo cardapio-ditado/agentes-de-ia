@@ -252,49 +252,104 @@ export async function receberAvaliacaoDoMake(
 /** Quantas páginas de 50 o Make busca, no máximo, numa importação. */
 export const MAXIMO_DE_PAGINAS = 80;
 
+/**
+ * "Pagina 0" é o pedido de só a primeira página, sem laço: a sincronização
+ * das recentes. O servidor pede de tanto em tanto tempo, e o que for novo
+ * dos últimos dias entra como avaliação nova (respondida pela regra).
+ */
+export const PAGINA_UNICA = 0;
+
+/** Até quantos dias atrás uma avaliação que acabou de aparecer conta como nova. */
+export const DIAS_PARA_CONTAR_COMO_NOVA = 14;
+
+/** Nova de verdade (postada há poucos dias) ou histórico antigo? Puro. */
+export function eRecente(avaliadaEm: string | null, agora: Date, dias = DIAS_PARA_CONTAR_COMO_NOVA): boolean {
+  if (!avaliadaEm) return false;
+  const quando = new Date(avaliadaEm).getTime();
+  if (Number.isNaN(quando)) return false;
+  return agora.getTime() - quando <= dias * 24 * 60 * 60 * 1000;
+}
+
 export interface ResultadoDaPagina {
   recebidas: number;
   novas: number;
   /** Já conhecidas que ganharam a resposta que está no Google. */
   atualizadas: number;
+  /** Novas dos últimos dias que a regra respondeu sozinha (e mandou publicar). */
+  respondidas: number;
+  /** Novas dos últimos dias que foram para a fila esperando uma pessoa. */
+  para_aprovacao: number;
   proxima_pagina: string | null;
   concluida: boolean;
 }
 
 /**
- * Uma página do histórico chegou pelo Make. Cada avaliação entra como está
- * no Google: respondida (com o texto de lá) ou sem resposta. Nada é redigido
- * aqui — responder sozinho uma avaliação de meses atrás surpreenderia o dono;
- * ele manda redigir pelo painel, uma a uma, se quiser.
+ * Uma página do Google chegou pelo Make.
+ *
+ * Avaliação antiga entra como está no Google: respondida (com o texto de
+ * lá) ou sem resposta — responder sozinho uma avaliação de meses atrás
+ * surpreenderia o dono; ele manda redigir pelo painel, uma a uma.
+ *
+ * Avaliação dos últimos dias, sem resposta, é nova de verdade: passa pela
+ * regra da casa como se tivesse acabado de chegar — nota alta sai sozinha e
+ * é mandada ao Make para publicar; nota baixa espera o OK.
  */
 export async function receberPaginaDoGoogle(
-  venueId: string,
-  perfil: Pick<GooglePerfil, "id">,
+  venue: { id: string; name: string },
+  perfil: GooglePerfil,
   pagina: PaginaDoGoogle,
+  agora = new Date(),
 ): Promise<ResultadoDaPagina> {
-  const resultado = await gravarComoNoGoogle(venueId, pagina.avaliacoes);
+  const gravadas = await gravarComoNoGoogle(venue.id, pagina.avaliacoes, agora);
   const primeira = pagina.avaliacoes[0];
-  const agora = new Date().toISOString();
+  const agoraISO = agora.toISOString();
   const { error } = await db()
     .from("google_perfis")
     .update({
       status: "conectado",
       ultimo_erro: null,
-      ultima_sincronizacao: agora,
+      ultima_sincronizacao: agoraISO,
       ...(primeira ? { local_nome: primeira.name.replace(/\/reviews\/[^/]+$/, "") } : {}),
       ...(pagina.nota_media !== null ? { nota_media: pagina.nota_media } : {}),
       ...(pagina.total !== null ? { total_avaliacoes: pagina.total } : {}),
-      ...(pagina.proxima_pagina ? {} : { importado_em: agora }),
-      updated_at: agora,
+      ...(pagina.proxima_pagina ? {} : { importado_em: agoraISO }),
+      updated_at: agoraISO,
     })
     .eq("id", perfil.id);
   if (error) throw new ErroDoMake(500, `Falha ao anotar a importação no perfil: ${error.message}`);
 
-  return { ...resultado, recebidas: pagina.avaliacoes.length, proxima_pagina: pagina.proxima_pagina, concluida: !pagina.proxima_pagina };
+  // As novas de verdade: redige e aplica a regra, uma a uma.
+  let respondidas = 0;
+  let paraAprovacao = 0;
+  const config = lerConfiguracao(perfil);
+  for (const nova of gravadas.recentes) {
+    const pronta = await prepararResposta({ avaliacao: nova, venue, config });
+    if (pronta.resposta_status === "aprovada" && pronta.resposta) {
+      respondidas += 1;
+      const envio = await publicarPeloMake(venue.id, pronta);
+      if (!envio.enviado) console.error(`[google-make] ${venue.name}: resposta automática de ${nova.avaliacao_id} não chegou ao Make: ${envio.motivo}`);
+    } else if (pronta.resposta_status === "rascunho") {
+      paraAprovacao += 1;
+    }
+  }
+
+  return {
+    recebidas: pagina.avaliacoes.length,
+    novas: gravadas.novas,
+    atualizadas: gravadas.atualizadas,
+    respondidas,
+    para_aprovacao: paraAprovacao,
+    proxima_pagina: pagina.proxima_pagina,
+    concluida: !pagina.proxima_pagina,
+  };
 }
 
-async function gravarComoNoGoogle(venueId: string, entradas: AvaliacaoDoMake[]): Promise<{ novas: number; atualizadas: number }> {
-  if (entradas.length === 0) return { novas: 0, atualizadas: 0 };
+async function gravarComoNoGoogle(
+  venueId: string,
+  entradas: AvaliacaoDoMake[],
+  agora: Date,
+): Promise<{ novas: number; atualizadas: number; recentes: Avaliacao[] }> {
+  if (entradas.length === 0) return { novas: 0, atualizadas: 0, recentes: [] };
 
   const { data: existentes, error } = await db()
     .from("google_avaliacoes")
@@ -305,21 +360,28 @@ async function gravarComoNoGoogle(venueId: string, entradas: AvaliacaoDoMake[]):
   const conhecidas = new Map((existentes ?? []).map((e) => [e.avaliacao_id, e]));
 
   const novas = entradas.filter((e) => !conhecidas.has(e.name));
+  let recentes: Avaliacao[] = [];
   if (novas.length > 0) {
-    const { error: erroInsert } = await db().from("google_avaliacoes").insert(
-      novas.map((e) => ({
-        venue_id: venueId,
-        avaliacao_id: e.name,
-        autor: e.autor,
-        nota: e.nota,
-        comentario: e.comentario,
-        avaliada_em: e.avaliada_em,
-        resposta: e.resposta_google,
-        resposta_status: e.resposta_google ? "publicada" : "sem_resposta",
-        publicada_em: e.resposta_google ? e.respondida_em ?? e.avaliada_em : null,
-      })),
-    );
+    const { data: inseridas, error: erroInsert } = await db()
+      .from("google_avaliacoes")
+      .insert(
+        novas.map((e) => ({
+          venue_id: venueId,
+          avaliacao_id: e.name,
+          autor: e.autor,
+          nota: e.nota,
+          comentario: e.comentario,
+          avaliada_em: e.avaliada_em,
+          resposta: e.resposta_google,
+          // Respondida no Google → publicada. Nova de verdade → pendente (a
+          // regra decide logo abaixo). Antiga sem resposta → sem_resposta.
+          resposta_status: e.resposta_google ? "publicada" : eRecente(e.avaliada_em, agora) ? "pendente" : "sem_resposta",
+          publicada_em: e.resposta_google ? e.respondida_em ?? e.avaliada_em : null,
+        })),
+      )
+      .select();
     if (erroInsert) throw new ErroDoMake(500, `Falha ao gravar o histórico: ${erroInsert.message}`);
+    recentes = ((inseridas ?? []) as Avaliacao[]).filter((a) => a.resposta_status === "pendente");
   }
 
   // Já conhecida e sem resposta aqui, mas respondida no Google: o Google manda.
@@ -330,7 +392,32 @@ async function gravarComoNoGoogle(venueId: string, entradas: AvaliacaoDoMake[]):
     await marcarPublicada(atual.id, { resposta: e.resposta_google, em: e.respondida_em });
     atualizadas += 1;
   }
-  return { novas: novas.length, atualizadas };
+  return { novas: novas.length, atualizadas, recentes };
+}
+
+/**
+ * A sincronização das recentes: pede ao Make só a primeira página (as 50
+ * mais novas) de cada casa ligada. É o vigia — o gatilho de "vigiar
+ * avaliações" do Make percorre o histórico inteiro desde o começo e come a
+ * cota do plano; pedir a primeira página de tanto em tanto tempo custa 4
+ * operações e enxerga tudo que entrou. Idempotente: o que já está gravado
+ * não vira nada.
+ */
+export async function sincronizarRecentes(): Promise<{ pedidas: number; falhas: string[] }> {
+  const { data, error } = await db()
+    .from("google_perfis")
+    .select("venue_id, make_webhook_url, local_nome")
+    .not("make_webhook_url", "is", null)
+    .not("local_nome", "is", null);
+  if (error) throw new Error(`Falha ao listar as casas ligadas ao Google: ${error.message}`);
+  let pedidas = 0;
+  const falhas: string[] = [];
+  for (const perfil of data ?? []) {
+    const r = await pedirPaginaAoMake(perfil.venue_id, null, PAGINA_UNICA);
+    if (r.pedido) pedidas += 1;
+    else falhas.push(`${perfil.venue_id}: ${r.motivo}`);
+  }
+  return { pedidas, falhas };
 }
 
 /**

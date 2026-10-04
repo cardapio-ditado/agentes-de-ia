@@ -13,6 +13,7 @@ import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
 import { cuidarDosDisparos } from "./disparos.js";
 import { enviarPendentesPeloOficial } from "./filaOficial.js";
 import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
+import { sincronizarRecentes as sincronizarAvaliacoesDoGoogle } from "./avaliacoesMake.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
@@ -273,7 +274,24 @@ setInterval(() => {
   // relógio renova quando faltam 30. Token vencido é agente mudo sem
   // ninguém saber — e o dono só descobre pela reclamação do cliente.
   renovarTokensDoInstagram().catch((e) => console.error("[instagram] renovação de tokens:", e));
+  // E as avaliações do Google: a cada tantas horas, pede ao Make a primeira
+  // página de cada casa ligada. Avaliação nova entra e é respondida pela
+  // regra. O gatilho "vigiar" do Make não serve: percorre o histórico
+  // inteiro desde 2014 e come a cota do plano antes de chegar na de hoje.
+  cicloDasAvaliacoesDoGoogle().catch((e) => console.error("[google] sincronização das recentes:", e));
 }, 60 * 60_000);
+
+const HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE = Math.max(1, Number(process.env.GOOGLE_SINCRONIZAR_CADA_HORAS) || 4);
+let ultimaSincronizacaoDoGoogle = 0;
+async function cicloDasAvaliacoesDoGoogle(): Promise<void> {
+  const agora = Date.now();
+  if (agora - ultimaSincronizacaoDoGoogle < HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE * 60 * 60_000 - 60_000) return;
+  ultimaSincronizacaoDoGoogle = agora;
+  const r = await sincronizarAvaliacoesDoGoogle();
+  if (r.pedidas) console.log(`[google] pedi as avaliações recentes de ${r.pedidas} casa(s) ao Make.`);
+  for (const f of r.falhas) console.error(`[google] sincronização não pedida — ${f}`);
+}
+void cicloDasAvaliacoesDoGoogle().catch((e) => console.error("[google] sincronização das recentes:", e));
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
 void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
 void varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));

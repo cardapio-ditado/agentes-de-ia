@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { corpoDoMake, ErroDoMake, lerAvaliacaoDoMake, lerPaginaDoGoogle, limparComentario, notaDaEstrela, segredoConfere } from "./avaliacoesMake.js";
+import { corpoDoMake, eRecente, ErroDoMake, lerAvaliacaoDoMake, lerPaginaDoGoogle, limparComentario, notaDaEstrela, segredoConfere } from "./avaliacoesMake.js";
 
 test("a nota vem como o Google escreve (FIVE) ou como número", () => {
   assert.equal(notaDaEstrela("FIVE"), 5);
@@ -120,4 +120,13 @@ test("o corpo em JSON continua valendo, e JSON quebrado dá 400 com mensagem", (
   assert.deepEqual(corpoDoMake(Buffer.from(""), "application/json"), {});
   assert.throws(() => corpoDoMake('{"name": accounts/1}', "application/json"), (e: unknown) => e instanceof ErroDoMake && e.status === 400);
   assert.throws(() => corpoDoMake("[1,2]", undefined), (e: unknown) => e instanceof ErroDoMake && e.status === 400);
+});
+
+test("avaliação dos últimos 14 dias é nova de verdade; mais velha é histórico", () => {
+  const agora = new Date("2026-10-04T12:00:00Z");
+  assert.equal(eRecente("2026-10-03T22:00:00Z", agora), true);
+  assert.equal(eRecente("2026-09-19T12:00:00Z", agora), false);
+  assert.equal(eRecente("2026-09-20T12:00:01Z", agora), true);
+  assert.equal(eRecente(null, agora), false);
+  assert.equal(eRecente("não é data", agora), false);
 });

@@ -229,7 +229,7 @@ export async function avaliacoes(raiz, ctx) {
         el("strong", { texto: ligado ? "Ligado ao Google. " : "Ainda não ligado ao Google. " }),
         document.createTextNode(
           ligado
-            ? "Avaliação nova entra aqui em até 15 minutos. As de nota alta são respondidas sozinhas, conforme a regra abaixo; as de nota baixa esperam o seu OK — ao aprovar, a resposta é publicada em segundos."
+            ? "Avaliação nova entra aqui em algumas horas (o servidor confere o Google a cada 4 horas). As de nota alta são respondidas sozinhas, conforme a regra abaixo; as de nota baixa esperam o seu OK — ao aprovar, a resposta é publicada em segundos."
             : "Por enquanto: cole a avaliação, a IA escreve, você copia e cola no Google. Para ligar o Google, fale com a equipe Brasa Food.",
         ),
       ]),
