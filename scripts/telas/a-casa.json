@@ -8,6 +8,147 @@
       "agora": "2026-09-12T23:40:00.000Z",
       "desde": "2026-09-11T23:40:00.000Z",
       "timezone": "America/Cuiaba",
+      "ao_vivo": {
+        "atualizado_em": "2026-09-12T23:40:00.000Z",
+        "evento": {
+          "id": "ev",
+          "nome": "sexta do ditado",
+          "inicio": "2026-09-12T18:40:00.000Z",
+          "capacidade": 500
+        },
+        "pessoas_na_casa": 12,
+        "consumindo_agora": 5,
+        "checkins_hoje": 15,
+        "sairam": 1,
+        "vendas_hoje_centavos": 101645,
+        "transacoes_hoje": 10,
+        "pessoas_que_compraram": 10,
+        "ticket_medio_centavos": 10165,
+        "vendas_15min_centavos": 46490,
+        "garcons": [
+          {
+            "nome": "Tiago Menezes",
+            "vendas_centavos": 55155,
+            "itens": 5
+          },
+          {
+            "nome": "Juliana Barbosa",
+            "vendas_centavos": 46490,
+            "itens": 5
+          }
+        ],
+        "clientes": [
+          {
+            "id": "ck0",
+            "nome": "Ana Souza",
+            "telefone": "65990100000",
+            "chegou_em": "2026-09-12T23:20:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+            "gasto_centavos": 2500,
+            "consumindo": true
+          },
+          {
+            "id": "ck9",
+            "nome": "Jú Freitas",
+            "telefone": "65990100333",
+            "chegou_em": "2026-09-12T21:23:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+            "gasto_centavos": 18097,
+            "consumindo": true
+          },
+          {
+            "id": "ck3",
+            "nome": "Duda Reis",
+            "telefone": "65990100111",
+            "chegou_em": "2026-09-12T22:41:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+            "gasto_centavos": 7699,
+            "consumindo": true
+          },
+          {
+            "id": "ck12",
+            "nome": "Mateus Cruz",
+            "telefone": "65990100444",
+            "chegou_em": "2026-09-12T20:44:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+            "gasto_centavos": 5296,
+            "consumindo": true
+          },
+          {
+            "id": "ck6",
+            "nome": "Gui Rocha",
+            "telefone": "65990100222",
+            "chegou_em": "2026-09-12T22:02:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+            "gasto_centavos": 12898,
+            "consumindo": true
+          },
+          {
+            "id": "ck1",
+            "nome": "Bruno Lima",
+            "telefone": "65990100037",
+            "chegou_em": "2026-09-12T23:07:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+            "gasto_centavos": 4233,
+            "consumindo": false
+          },
+          {
+            "id": "ck4",
+            "nome": "Edu Castro",
+            "telefone": "65990100148",
+            "chegou_em": "2026-09-12T22:28:00.000Z",
+            "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+            "gasto_centavos": 9432,
+            "consumindo": false
+          },
+          {
+            "id": "ck7",
+            "nome": "Helena Paz",
+            "telefone": "65990100259",
+            "chegou_em": "2026-09-12T21:49:00.000Z",
+            "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+            "gasto_centavos": 14631,
+            "consumindo": false
+          },
+          {
+            "id": "ck10",
+            "nome": "Kaio Melo",
+            "telefone": "65990100370",
+            "chegou_em": "2026-09-12T21:10:00.000Z",
+            "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+            "gasto_centavos": 19830,
+            "consumindo": false
+          },
+          {
+            "id": "ck2",
+            "nome": "Carla Dias",
+            "telefone": "65990100074",
+            "chegou_em": "2026-09-12T22:54:00.000Z",
+            "ultima_compra_em": null,
+            "gasto_centavos": 0,
+            "consumindo": false
+          },
+          {
+            "id": "ck13",
+            "nome": "Nina Lopes",
+            "telefone": "65990100481",
+            "chegou_em": "2026-09-12T20:31:00.000Z",
+            "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+            "gasto_centavos": 7029,
+            "consumindo": false
+          },
+          {
+            "id": "ck5",
+            "nome": "Fabi Mota",
+            "telefone": "65990100185",
+            "chegou_em": "2026-09-12T22:15:00.000Z",
+            "ultima_compra_em": null,
+            "gasto_centavos": 0,
+            "consumindo": false
+          }
+        ],
+        "clientes_a_mais": 0
+      },
       "setores": [
         {
           "id": "recepcao",
@@ -679,6 +820,669 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 70,
+            "consumindo_agora": 30,
+            "checkins_hoje": 91,
+            "sairam": 1,
+            "vendas_hoje_centavos": 657120,
+            "transacoes_hoje": 60,
+            "pessoas_que_compraram": 60,
+            "ticket_medio_centavos": 10952,
+            "vendas_15min_centavos": 320565,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 336555,
+                "itens": 30
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 320565,
+                "itens": 30
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck18",
+                "nome": "Carla Dias",
+                "telefone": "65990100666",
+                "chegou_em": "2026-09-12T19:26:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 15694,
+                "consumindo": true
+              },
+              {
+                "id": "ck27",
+                "nome": "Lia Prado",
+                "telefone": "65990100999",
+                "chegou_em": "2026-09-12T21:29:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 13291,
+                "consumindo": true
+              },
+              {
+                "id": "ck36",
+                "nome": "Edu Castro",
+                "telefone": "65990101332",
+                "chegou_em": "2026-09-12T19:32:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 10888,
+                "consumindo": true
+              },
+              {
+                "id": "ck45",
+                "nome": "Nina Lopes",
+                "telefone": "65990101665",
+                "chegou_em": "2026-09-12T21:35:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 8485,
+                "consumindo": true
+              },
+              {
+                "id": "ck54",
+                "nome": "Gui Rocha",
+                "telefone": "65990101998",
+                "chegou_em": "2026-09-12T19:38:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 6082,
+                "consumindo": true
+              },
+              {
+                "id": "ck63",
+                "nome": "Paula Vaz",
+                "telefone": "65990102331",
+                "chegou_em": "2026-09-12T21:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 3679,
+                "consumindo": true
+              },
+              {
+                "id": "ck72",
+                "nome": "Igor Nunes",
+                "telefone": "65990102664",
+                "chegou_em": "2026-09-12T19:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 19276,
+                "consumindo": true
+              },
+              {
+                "id": "ck81",
+                "nome": "Bruno Lima",
+                "telefone": "65990102997",
+                "chegou_em": "2026-09-12T21:47:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 16873,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck21",
+                "nome": "Fabi Mota",
+                "telefone": "65990100777",
+                "chegou_em": "2026-09-12T22:47:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 2893,
+                "consumindo": true
+              },
+              {
+                "id": "ck30",
+                "nome": "Otto Braga",
+                "telefone": "65990101110",
+                "chegou_em": "2026-09-12T20:50:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 18490,
+                "consumindo": true
+              },
+              {
+                "id": "ck39",
+                "nome": "Helena Paz",
+                "telefone": "65990101443",
+                "chegou_em": "2026-09-12T22:53:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 16087,
+                "consumindo": true
+              },
+              {
+                "id": "ck48",
+                "nome": "Ana Souza",
+                "telefone": "65990101776",
+                "chegou_em": "2026-09-12T20:56:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 13684,
+                "consumindo": true
+              },
+              {
+                "id": "ck57",
+                "nome": "Jú Freitas",
+                "telefone": "65990102109",
+                "chegou_em": "2026-09-12T22:59:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 11281,
+                "consumindo": true
+              },
+              {
+                "id": "ck66",
+                "nome": "Carla Dias",
+                "telefone": "65990102442",
+                "chegou_em": "2026-09-12T21:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 8878,
+                "consumindo": true
+              },
+              {
+                "id": "ck75",
+                "nome": "Lia Prado",
+                "telefone": "65990102775",
+                "chegou_em": "2026-09-12T23:05:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 6475,
+                "consumindo": true
+              },
+              {
+                "id": "ck84",
+                "nome": "Edu Castro",
+                "telefone": "65990103108",
+                "chegou_em": "2026-09-12T21:08:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 4072,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck15",
+                "nome": "Paula Vaz",
+                "telefone": "65990100555",
+                "chegou_em": "2026-09-12T20:05:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 10495,
+                "consumindo": true
+              },
+              {
+                "id": "ck24",
+                "nome": "Igor Nunes",
+                "telefone": "65990100888",
+                "chegou_em": "2026-09-12T22:08:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 8092,
+                "consumindo": true
+              },
+              {
+                "id": "ck33",
+                "nome": "Bruno Lima",
+                "telefone": "65990101221",
+                "chegou_em": "2026-09-12T20:11:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 5689,
+                "consumindo": true
+              },
+              {
+                "id": "ck42",
+                "nome": "Kaio Melo",
+                "telefone": "65990101554",
+                "chegou_em": "2026-09-12T22:14:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 3286,
+                "consumindo": true
+              },
+              {
+                "id": "ck51",
+                "nome": "Duda Reis",
+                "telefone": "65990101887",
+                "chegou_em": "2026-09-12T20:17:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 18883,
+                "consumindo": true
+              },
+              {
+                "id": "ck60",
+                "nome": "Mateus Cruz",
+                "telefone": "65990102220",
+                "chegou_em": "2026-09-12T22:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 16480,
+                "consumindo": true
+              },
+              {
+                "id": "ck69",
+                "nome": "Fabi Mota",
+                "telefone": "65990102553",
+                "chegou_em": "2026-09-12T20:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 14077,
+                "consumindo": true
+              },
+              {
+                "id": "ck78",
+                "nome": "Otto Braga",
+                "telefone": "65990102886",
+                "chegou_em": "2026-09-12T22:26:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 11674,
+                "consumindo": true
+              },
+              {
+                "id": "ck87",
+                "nome": "Helena Paz",
+                "telefone": "65990103219",
+                "chegou_em": "2026-09-12T20:29:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 9271,
+                "consumindo": true
+              },
+              {
+                "id": "ck74",
+                "nome": "Kaio Melo",
+                "telefone": "65990102738",
+                "chegou_em": "2026-09-12T23:18:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck56",
+                "nome": "Igor Nunes",
+                "telefone": "65990102072",
+                "chegou_em": "2026-09-12T23:12:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck38",
+                "nome": "Gui Rocha",
+                "telefone": "65990101406",
+                "chegou_em": "2026-09-12T23:06:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck40",
+                "nome": "Igor Nunes",
+                "telefone": "65990101480",
+                "chegou_em": "2026-09-12T22:40:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:05:00.000Z",
+                "gasto_centavos": 17820,
+                "consumindo": false
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck82",
+                "nome": "Carla Dias",
+                "telefone": "65990103034",
+                "chegou_em": "2026-09-12T21:34:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:03:00.000Z",
+                "gasto_centavos": 18606,
+                "consumindo": false
+              },
+              {
+                "id": "ck43",
+                "nome": "Lia Prado",
+                "telefone": "65990101591",
+                "chegou_em": "2026-09-12T22:01:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:02:00.000Z",
+                "gasto_centavos": 5019,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck20",
+                "nome": "Edu Castro",
+                "telefone": "65990100740",
+                "chegou_em": "2026-09-12T23:00:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck85",
+                "nome": "Fabi Mota",
+                "telefone": "65990103145",
+                "chegou_em": "2026-09-12T20:55:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:00:00.000Z",
+                "gasto_centavos": 5805,
+                "consumindo": false
+              },
+              {
+                "id": "ck46",
+                "nome": "Otto Braga",
+                "telefone": "65990101702",
+                "chegou_em": "2026-09-12T21:22:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:59:00.000Z",
+                "gasto_centavos": 10218,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck88",
+                "nome": "Igor Nunes",
+                "telefone": "65990103256",
+                "chegou_em": "2026-09-12T20:16:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:57:00.000Z",
+                "gasto_centavos": 11004,
+                "consumindo": false
+              },
+              {
+                "id": "ck49",
+                "nome": "Bruno Lima",
+                "telefone": "65990101813",
+                "chegou_em": "2026-09-12T20:43:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:56:00.000Z",
+                "gasto_centavos": 15417,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck52",
+                "nome": "Edu Castro",
+                "telefone": "65990101924",
+                "chegou_em": "2026-09-12T20:04:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:53:00.000Z",
+                "gasto_centavos": 2616,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck55",
+                "nome": "Helena Paz",
+                "telefone": "65990102035",
+                "chegou_em": "2026-09-12T19:25:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:50:00.000Z",
+                "gasto_centavos": 7815,
+                "consumindo": false
+              },
+              {
+                "id": "ck16",
+                "nome": "Ana Souza",
+                "telefone": "65990100592",
+                "chegou_em": "2026-09-12T19:52:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:49:00.000Z",
+                "gasto_centavos": 12228,
+                "consumindo": false
+              },
+              {
+                "id": "ck58",
+                "nome": "Kaio Melo",
+                "telefone": "65990102146",
+                "chegou_em": "2026-09-12T22:46:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:47:00.000Z",
+                "gasto_centavos": 13014,
+                "consumindo": false
+              },
+              {
+                "id": "ck19",
+                "nome": "Duda Reis",
+                "telefone": "65990100703",
+                "chegou_em": "2026-09-12T23:13:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:46:00.000Z",
+                "gasto_centavos": 17427,
+                "consumindo": false
+              },
+              {
+                "id": "ck61",
+                "nome": "Nina Lopes",
+                "telefone": "65990102257",
+                "chegou_em": "2026-09-12T22:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:44:00.000Z",
+                "gasto_centavos": 18213,
+                "consumindo": false
+              },
+              {
+                "id": "ck22",
+                "nome": "Gui Rocha",
+                "telefone": "65990100814",
+                "chegou_em": "2026-09-12T22:34:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:43:00.000Z",
+                "gasto_centavos": 4626,
+                "consumindo": false
+              },
+              {
+                "id": "ck64",
+                "nome": "Ana Souza",
+                "telefone": "65990102368",
+                "chegou_em": "2026-09-12T21:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:41:00.000Z",
+                "gasto_centavos": 5412,
+                "consumindo": false
+              },
+              {
+                "id": "ck25",
+                "nome": "Jú Freitas",
+                "telefone": "65990100925",
+                "chegou_em": "2026-09-12T21:55:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:40:00.000Z",
+                "gasto_centavos": 9825,
+                "consumindo": false
+              },
+              {
+                "id": "ck77",
+                "nome": "Nina Lopes",
+                "telefone": "65990102849",
+                "chegou_em": "2026-09-12T22:39:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck67",
+                "nome": "Duda Reis",
+                "telefone": "65990102479",
+                "chegou_em": "2026-09-12T20:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:38:00.000Z",
+                "gasto_centavos": 10611,
+                "consumindo": false
+              },
+              {
+                "id": "ck28",
+                "nome": "Mateus Cruz",
+                "telefone": "65990101036",
+                "chegou_em": "2026-09-12T21:16:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:37:00.000Z",
+                "gasto_centavos": 15024,
+                "consumindo": false
+              },
+              {
+                "id": "ck70",
+                "nome": "Gui Rocha",
+                "telefone": "65990102590",
+                "chegou_em": "2026-09-12T20:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:35:00.000Z",
+                "gasto_centavos": 15810,
+                "consumindo": false
+              },
+              {
+                "id": "ck31",
+                "nome": "Paula Vaz",
+                "telefone": "65990101147",
+                "chegou_em": "2026-09-12T20:37:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:34:00.000Z",
+                "gasto_centavos": 20223,
+                "consumindo": false
+              },
+              {
+                "id": "ck59",
+                "nome": "Lia Prado",
+                "telefone": "65990102183",
+                "chegou_em": "2026-09-12T22:33:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck73",
+                "nome": "Jú Freitas",
+                "telefone": "65990102701",
+                "chegou_em": "2026-09-12T19:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:32:00.000Z",
+                "gasto_centavos": 3009,
+                "consumindo": false
+              },
+              {
+                "id": "ck34",
+                "nome": "Carla Dias",
+                "telefone": "65990101258",
+                "chegou_em": "2026-09-12T19:58:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:31:00.000Z",
+                "gasto_centavos": 7422,
+                "consumindo": false
+              },
+              {
+                "id": "ck76",
+                "nome": "Mateus Cruz",
+                "telefone": "65990102812",
+                "chegou_em": "2026-09-12T22:52:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:29:00.000Z",
+                "gasto_centavos": 8208,
+                "consumindo": false
+              },
+              {
+                "id": "ck37",
+                "nome": "Fabi Mota",
+                "telefone": "65990101369",
+                "chegou_em": "2026-09-12T23:19:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:28:00.000Z",
+                "gasto_centavos": 12621,
+                "consumindo": false
+              },
+              {
+                "id": "ck41",
+                "nome": "Jú Freitas",
+                "telefone": "65990101517",
+                "chegou_em": "2026-09-12T22:27:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck79",
+                "nome": "Paula Vaz",
+                "telefone": "65990102923",
+                "chegou_em": "2026-09-12T22:13:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:26:00.000Z",
+                "gasto_centavos": 13407,
+                "consumindo": false
+              },
+              {
+                "id": "ck23",
+                "nome": "Helena Paz",
+                "telefone": "65990100851",
+                "chegou_em": "2026-09-12T22:21:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -1350,6 +2154,22 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": null,
+            "pessoas_na_casa": 0,
+            "consumindo_agora": 0,
+            "checkins_hoje": 0,
+            "sairam": 0,
+            "vendas_hoje_centavos": 0,
+            "transacoes_hoje": 0,
+            "pessoas_que_compraram": 0,
+            "ticket_medio_centavos": 0,
+            "vendas_15min_centavos": 0,
+            "garcons": [],
+            "clientes": [],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -1867,6 +2687,147 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 12,
+            "consumindo_agora": 5,
+            "checkins_hoje": 15,
+            "sairam": 1,
+            "vendas_hoje_centavos": 101645,
+            "transacoes_hoje": 10,
+            "pessoas_que_compraram": 10,
+            "ticket_medio_centavos": 10165,
+            "vendas_15min_centavos": 46490,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 55155,
+                "itens": 5
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 46490,
+                "itens": 5
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -2032,6 +2993,147 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 12,
+            "consumindo_agora": 5,
+            "checkins_hoje": 15,
+            "sairam": 1,
+            "vendas_hoje_centavos": 101645,
+            "transacoes_hoje": 10,
+            "pessoas_que_compraram": 10,
+            "ticket_medio_centavos": 10165,
+            "vendas_15min_centavos": 46490,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 55155,
+                "itens": 5
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 46490,
+                "itens": 5
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -2706,6 +3808,147 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 12,
+            "consumindo_agora": 5,
+            "checkins_hoje": 15,
+            "sairam": 1,
+            "vendas_hoje_centavos": 101645,
+            "transacoes_hoje": 10,
+            "pessoas_que_compraram": 10,
+            "ticket_medio_centavos": 10165,
+            "vendas_15min_centavos": 46490,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 55155,
+                "itens": 5
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 46490,
+                "itens": 5
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -3380,6 +4623,147 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 12,
+            "consumindo_agora": 5,
+            "checkins_hoje": 15,
+            "sairam": 1,
+            "vendas_hoje_centavos": 101645,
+            "transacoes_hoje": 10,
+            "pessoas_que_compraram": 10,
+            "ticket_medio_centavos": 10165,
+            "vendas_15min_centavos": 46490,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 55155,
+                "itens": 5
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 46490,
+                "itens": 5
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -4054,6 +5438,147 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 12,
+            "consumindo_agora": 5,
+            "checkins_hoje": 15,
+            "sairam": 1,
+            "vendas_hoje_centavos": 101645,
+            "transacoes_hoje": 10,
+            "pessoas_que_compraram": 10,
+            "ticket_medio_centavos": 10165,
+            "vendas_15min_centavos": 46490,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 55155,
+                "itens": 5
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 46490,
+                "itens": 5
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",
@@ -4216,6 +5741,147 @@
           "agora": "2026-09-12T23:40:00.000Z",
           "desde": "2026-09-11T23:40:00.000Z",
           "timezone": "America/Cuiaba",
+          "ao_vivo": {
+            "atualizado_em": "2026-09-12T23:40:00.000Z",
+            "evento": {
+              "id": "ev",
+              "nome": "sexta do ditado",
+              "inicio": "2026-09-12T18:40:00.000Z",
+              "capacidade": 500
+            },
+            "pessoas_na_casa": 12,
+            "consumindo_agora": 5,
+            "checkins_hoje": 15,
+            "sairam": 1,
+            "vendas_hoje_centavos": 101645,
+            "transacoes_hoje": 10,
+            "pessoas_que_compraram": 10,
+            "ticket_medio_centavos": 10165,
+            "vendas_15min_centavos": 46490,
+            "garcons": [
+              {
+                "nome": "Tiago Menezes",
+                "vendas_centavos": 55155,
+                "itens": 5
+              },
+              {
+                "nome": "Juliana Barbosa",
+                "vendas_centavos": 46490,
+                "itens": 5
+              }
+            ],
+            "clientes": [
+              {
+                "id": "ck0",
+                "nome": "Ana Souza",
+                "telefone": "65990100000",
+                "chegou_em": "2026-09-12T23:20:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 2500,
+                "consumindo": true
+              },
+              {
+                "id": "ck9",
+                "nome": "Jú Freitas",
+                "telefone": "65990100333",
+                "chegou_em": "2026-09-12T21:23:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:39:00.000Z",
+                "gasto_centavos": 18097,
+                "consumindo": true
+              },
+              {
+                "id": "ck3",
+                "nome": "Duda Reis",
+                "telefone": "65990100111",
+                "chegou_em": "2026-09-12T22:41:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 7699,
+                "consumindo": true
+              },
+              {
+                "id": "ck12",
+                "nome": "Mateus Cruz",
+                "telefone": "65990100444",
+                "chegou_em": "2026-09-12T20:44:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:36:00.000Z",
+                "gasto_centavos": 5296,
+                "consumindo": true
+              },
+              {
+                "id": "ck6",
+                "nome": "Gui Rocha",
+                "telefone": "65990100222",
+                "chegou_em": "2026-09-12T22:02:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:33:00.000Z",
+                "gasto_centavos": 12898,
+                "consumindo": true
+              },
+              {
+                "id": "ck1",
+                "nome": "Bruno Lima",
+                "telefone": "65990100037",
+                "chegou_em": "2026-09-12T23:07:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:04:00.000Z",
+                "gasto_centavos": 4233,
+                "consumindo": false
+              },
+              {
+                "id": "ck4",
+                "nome": "Edu Castro",
+                "telefone": "65990100148",
+                "chegou_em": "2026-09-12T22:28:00.000Z",
+                "ultima_compra_em": "2026-09-12T23:01:00.000Z",
+                "gasto_centavos": 9432,
+                "consumindo": false
+              },
+              {
+                "id": "ck7",
+                "nome": "Helena Paz",
+                "telefone": "65990100259",
+                "chegou_em": "2026-09-12T21:49:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:58:00.000Z",
+                "gasto_centavos": 14631,
+                "consumindo": false
+              },
+              {
+                "id": "ck10",
+                "nome": "Kaio Melo",
+                "telefone": "65990100370",
+                "chegou_em": "2026-09-12T21:10:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:55:00.000Z",
+                "gasto_centavos": 19830,
+                "consumindo": false
+              },
+              {
+                "id": "ck2",
+                "nome": "Carla Dias",
+                "telefone": "65990100074",
+                "chegou_em": "2026-09-12T22:54:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              },
+              {
+                "id": "ck13",
+                "nome": "Nina Lopes",
+                "telefone": "65990100481",
+                "chegou_em": "2026-09-12T20:31:00.000Z",
+                "ultima_compra_em": "2026-09-12T22:52:00.000Z",
+                "gasto_centavos": 7029,
+                "consumindo": false
+              },
+              {
+                "id": "ck5",
+                "nome": "Fabi Mota",
+                "telefone": "65990100185",
+                "chegou_em": "2026-09-12T22:15:00.000Z",
+                "ultima_compra_em": null,
+                "gasto_centavos": 0,
+                "consumindo": false
+              }
+            ],
+            "clientes_a_mais": 0
+          },
           "setores": [
             {
               "id": "recepcao",

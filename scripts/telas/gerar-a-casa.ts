@@ -18,6 +18,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { filaDoCarteiro, montarMesas, montarSetores, type Fato, type Trabalhador } from "../../src/aCasa.js";
+import { montarRetrato, type CheckinAoVivo, type CompradorAoVivo, type SaidaDaZig } from "../../src/zigAoVivo.js";
 
 const AGORA = "2026-09-12T23:40:00.000Z";
 const DESDE = "2026-09-11T23:40:00.000Z";
@@ -116,11 +117,14 @@ function situacao(params: {
   sessoes: Array<{ mesa: number; cliente: string | null; olhando: string | null; ultimoEm: string }>;
   chamados: number[];
   mesas?: number[];
+  /** Clientes na casa pela Zig; 0 = casa fechada; ausente = uma noite comum. */
+  clientes?: number;
 }) {
   return {
     agora: AGORA,
     desde: DESDE,
     timezone: FUSO,
+    ao_vivo: params.clientes === undefined ? retratoDaZig(14) : params.clientes === 0 ? retratoDaZig(0) : retratoDaZig(params.clientes),
     setores: montarSetores({ fatos: params.fatos, contratados: params.contratados, agora: AGORA }),
     fatos: params.fatos,
     trabalhadores: params.equipe,
@@ -133,6 +137,39 @@ function situacao(params: {
     }),
     setoresMudos: [],
   };
+}
+
+/**
+ * A casa pela Zig, de mentira: `n` clientes presentes, um terço consumindo
+ * agora, com nomes e gastos variados. Zero = casa fechada (sem evento).
+ */
+const NOMES = ["Ana Souza", "Bruno Lima", "Carla Dias", "Duda Reis", "Edu Castro", "Fabi Mota", "Gui Rocha", "Helena Paz",
+  "Igor Nunes", "Jú Freitas", "Kaio Melo", "Lia Prado", "Mateus Cruz", "Nina Lopes", "Otto Braga", "Paula Vaz"];
+function retratoDaZig(n: number) {
+  const agora = new Date(AGORA);
+  if (n === 0) return montarRetrato({ eventos: [], saidas: [], checkins: [], compradores: [], agora });
+  const inicio = new Date(agora.getTime() - 5 * 3600_000).toISOString().replace("Z", "");
+  const checkins: CheckinAoVivo[] = [];
+  const compradores: CompradorAoVivo[] = [];
+  const saidas: SaidaDaZig[] = [];
+  const garcons = ["Juliana Barbosa", "Tiago Menezes", "Rose da Silva"];
+  for (let i = 0; i < n; i++) {
+    const tel = `6599${String(100000 + i * 37).padStart(7, "0")}`;
+    const chegou = faz(20 + (i * 13) % 240).replace("Z", "");
+    const ultima = i % 3 === 0 ? faz(1 + (i % 9)) : i % 3 === 1 ? faz(35 + (i % 40)) : null;
+    checkins.push({ id: `ck${i}`, checkinTime: chegou, phone: tel, name: NOMES[i % NOMES.length], lastTransactionTime: ultima?.replace("Z", "") ?? null });
+    if (ultima) {
+      const valor = 2500 + ((i * 1733) % 18000);
+      compradores.push({ transactionId: `t${i}`, date: ultima.replace("Z", ""), userPhone: `55${tel}`, userName: NOMES[i % NOMES.length], productsValue: valor });
+      saidas.push({ transactionId: `t${i}`, transactionDate: ultima.replace("Z", ""), unitValue: valor, count: 1, employeeName: garcons[i % garcons.length], type: "Normal" });
+    }
+  }
+  // Quem já foi embora pela porta: entra na conta de "saíram", não na planta.
+  checkins.push({ id: "ck-saiu", checkinTime: faz(300).replace("Z", ""), checkoutTime: faz(60).replace("Z", ""), phone: "65990000000", name: "Zé Partiu" });
+  return montarRetrato({
+    eventos: [{ id: "ev", name: "sexta do ditado", beginAt: inicio, peopleCapacity: 500 }],
+    saidas, checkins, compradores, agora,
+  });
 }
 
 const ficha = {
@@ -159,6 +196,7 @@ const ficha = {
           contratados: TODOS_OS_MODULOS,
           sessoes: MOVIMENTO_CHEIO,
           chamados: [5, 12, 19, 31],
+          clientes: 90,
         }),
       },
     },
@@ -171,6 +209,7 @@ const ficha = {
           contratados: TODOS_OS_MODULOS,
           sessoes: [],
           chamados: [],
+          clientes: 0,
         }),
       },
     },

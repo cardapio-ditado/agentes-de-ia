@@ -108,7 +108,7 @@ export async function salvarConfigZig(
 // O cliente HTTP da Zig
 // ============================================================
 
-async function chamarZig<T>(caminho: string, token: string): Promise<T> {
+export async function chamarZig<T>(caminho: string, token: string): Promise<T> {
   let resposta: Response;
   try {
     resposta = await fetch(`${BASE_ZIG}${caminho}`, {

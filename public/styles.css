@@ -3611,3 +3611,42 @@ button.linha-tabela:hover { background: var(--marca-suave); }
   color: var(--marca-forte);
   margin-bottom: 4px !important;
 }
+
+/* ---------- A casa ao vivo: os clientes no salão (Zig) ---------- */
+.boneco-cliente .boneco-cabeca { background: var(--info); border-radius: 50%; }
+.boneco-cliente .boneco-tronco { background: var(--info-suave); }
+.boneco-cliente .boneco-etiqueta { background: var(--superficie); color: var(--texto-2); border: 1px solid var(--borda); }
+.boneco-cliente.boneco-consumindo .boneco-cabeca { background: var(--marca); }
+.boneco-cliente.boneco-consumindo .boneco-etiqueta { background: var(--marca); color: var(--cta-texto); border-color: var(--marca); }
+.boneco-cliente.boneco-quieto .boneco-corpo { opacity: 0.75; }
+.iso-mais-gente {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--texto);
+  color: var(--fundo);
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+  z-index: 5;
+}
+/* Salão lotado: a plaquinha e o nome só no mouse ou no foco. */
+.boneco-discreto .boneco-etiqueta,
+.boneco-discreto .boneco-nome { display: none; }
+.boneco-discreto:hover .boneco-etiqueta,
+.boneco-discreto:focus-visible .boneco-etiqueta,
+.boneco-discreto:hover .boneco-nome,
+.boneco-discreto:focus-visible .boneco-nome { display: block; }
+.casa-zig {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--info-suave);
+  color: var(--info);
+}
+.casa-zig-velho { background: var(--alerta-suave); color: var(--alerta); }

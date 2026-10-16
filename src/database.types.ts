@@ -268,6 +268,32 @@ export type Database = {
         }
         Relationships: []
       }
+      casa_ao_vivo: {
+        Row: {
+          atualizado_em: string
+          retrato: Json
+          venue_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          retrato?: Json
+          venue_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          retrato?: Json
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "casa_ao_vivo_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: true
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_perfis: {
         Row: {
           conta_gerente: string

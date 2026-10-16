@@ -39,6 +39,9 @@ const MINUTOS_ATE_ESFRIAR = 45;
 const PASSO_TRABALHANDO = [2600, 4200];
 const PASSO_OCIOSO = [7000, 12_000];
 
+/** Acima disto, os clientes na planta perdem a plaquinha (só no mouse). */
+const LOTADO = 18;
+
 /** O lado do ladrilho na camada do chão, antes de ela ser girada. */
 const LADRILHO = 20;
 /** O que a rotação faz com o ladrilho: 2 de largura para 1 de altura. */
@@ -261,7 +264,9 @@ export async function aCasa(raiz, ctx) {
       ? gavetaDoSetor(aberto.id)
       : aberto.tipo === "mesa"
         ? gavetaDaMesa(aberto.id)
-        : gavetaDeQuem(aberto.id);
+        : aberto.tipo === "cliente"
+          ? gavetaDoCliente(aberto.id)
+          : gavetaDeQuem(aberto.id);
     if (!corpo) {
       aberto = null;
       return;
@@ -297,6 +302,7 @@ export async function aCasa(raiz, ctx) {
             ? "Este módulo ainda está sendo construído. Quando ficar pronto, ele acende aqui sozinho."
             : "A casa não contratou este módulo. O setor aparece apagado para você saber que ele existe.")
           : null,
+        ...(id === "salao" ? blocosAoVivoDoSalao() : []),
         gente.length
           ? bloco("Quem está aqui", gente.map((t) => linha({
             titulo: t.nome,
@@ -447,6 +453,9 @@ export async function aCasa(raiz, ctx) {
     const ocupadas = (dados.mesas ?? []).filter((m) => m.estado !== "livre").length;
     const chamando = (dados.mesas ?? []).filter((m) => m.estado === "chamando").length;
 
+    const vivo = dados.ao_vivo;
+    const aberta = Boolean(vivo?.evento);
+
     limpar(cabecalho).append(
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
@@ -454,7 +463,10 @@ export async function aCasa(raiz, ctx) {
           el("p", {
             classe: "muted",
             texto: [
-              gente.length ? `${gente.length} na casa` : "ninguém na casa",
+              aberta ? `${vivo.pessoas_na_casa} cliente(s) na casa` : null,
+              aberta && vivo.consumindo_agora ? `${vivo.consumindo_agora} consumindo agora` : null,
+              aberta ? `${dinheiro(vivo.vendas_hoje_centavos)} hoje` : null,
+              gente.length ? `${gente.length} da equipe` : "ninguém da equipe",
               ociosos ? `${ociosos} ocioso(s)` : null,
               ocupadas ? `${ocupadas} mesa(s) com cliente` : null,
               atencao ? `${atencao} pedindo atenção` : null,
@@ -462,6 +474,7 @@ export async function aCasa(raiz, ctx) {
           }),
         ]),
         el("div", { classe: "reserva-acoes" }, [
+          vivo ? seloDaZig(vivo) : null,
           chamando ? el("span", { classe: "iso-chamando", texto: `${chamando} chamando o garçom` }) : null,
           el("span", { classe: `casa-pulso ${pausado ? "casa-pulso-parado" : ""}`.trim() }),
           el("span", { classe: "muted", texto: pausado ? "parado" : "ao vivo" }),
@@ -478,6 +491,22 @@ export async function aCasa(raiz, ctx) {
         ]),
       ]),
     );
+  }
+
+  /** "Zig há 1 min": a idade do retrato. Velho demais, fica amarelo — o relógio do servidor parou. */
+  function seloDaZig(vivo) {
+    const minutos = Math.round((new Date(dados.agora) - new Date(vivo.atualizado_em)) / 60_000);
+    const velho = minutos > 10;
+    const texto = vivo.evento
+      ? `Zig ${minutos < 1 ? "agora" : `há ${minutos} min`}`
+      : "Zig: casa fechada";
+    return el("span", {
+      classe: `casa-zig ${velho ? "casa-zig-velho" : ""}`.trim(),
+      texto: velho ? `${texto} — retrato parado` : texto,
+      title: vivo.evento
+        ? `Evento "${vivo.evento.nome ?? ""}" desde ${quandoFoi(vivo.evento.inicio, dados.agora)} · ${vivo.checkins_hoje} check-ins · ${vivo.sairam} já saíram`
+        : "Nenhum evento aberto na Zig agora",
+    });
   }
 
   function desenharPlanta() {
@@ -502,6 +531,7 @@ export async function aCasa(raiz, ctx) {
     }
 
     desenharBonecos();
+    desenharClientes();
 
     if (!menosAnimacao()) {
       for (const node of placas.querySelectorAll(".boneco")) passear(node);
@@ -670,6 +700,132 @@ export async function aCasa(raiz, ctx) {
       const lugares = lugaresDaEquipe(setor, area, gente.length);
       gente.forEach((t, i) => placas.append(boneco(t, lugares[i], area)));
     }
+  }
+
+  /* ---- Os clientes, pela Zig ---- */
+
+  /**
+   * Um boneco por cliente na casa, espalhado pelo salão entre as mesas.
+   *
+   * O salão não sabe em que mesa cada um está — a Zig sabe quem entrou e
+   * quem comprou, não onde sentou — então o espalhamento é por ordem de
+   * chegada, em filas, e cada boneco passeia um pouco em torno do lugar.
+   * Quem comprou há pouco fica aceso; quem está quieto, apagado.
+   */
+  function desenharClientes() {
+    const vivo = dados.ao_vivo;
+    if (!vivo?.evento) return;
+    const area = AREAS_NA_PLANTA.salao;
+    const clientes = vivo.clientes ?? [];
+    if (clientes.length === 0) return;
+
+    const util = area.h - 2 - CORREDOR;
+    const colunas = Math.max(4, Math.ceil(Math.sqrt(clientes.length * (area.w / util))));
+    const passoX = (area.w - 2) / colunas;
+    const passoY = util / Math.max(1, Math.ceil(clientes.length / colunas));
+
+    // Salão lotado: as plaquinhas viram um borrão. Acima de tanta gente,
+    // elas só aparecem ao passar o mouse — o retrato continua no cabeçalho
+    // e na gaveta do salão.
+    const discreto = clientes.length > LOTADO;
+    clientes.forEach((c, i) => {
+      const fila = Math.floor(i / colunas);
+      // Filas alternadas, como num favo: duas plaquinhas de filas vizinhas
+      // deixam de cair uma em cima da outra na tela. E meio passo fora da
+      // grade das mesas, para o boneco ficar ENTRE as mesas e não em cima
+      // do número de uma.
+      const lugar = dentroDaArea(area, {
+        tx: area.x + 1 + (i % colunas) * passoX + passoX * (fila % 2 ? 0.75 : 0.25),
+        ty: area.y + 1 + fila * passoY + passoY * 0.75,
+      });
+      placas.append(bonecoDoCliente(c, lugar, area, discreto));
+    });
+
+    if (vivo.clientes_a_mais > 0) {
+      const onde = projetar(area.x + area.w - 2, area.y + area.h - CORREDOR - 1);
+      placas.append(el("div", {
+        classe: "iso-mais-gente",
+        style: `left:${onde.x}px;top:${onde.y}px`,
+        texto: `+${vivo.clientes_a_mais} na casa`,
+      }));
+    }
+  }
+
+  function bonecoDoCliente(c, lugar, area, discreto) {
+    const gasto = c.gasto_centavos ? dinheiro(c.gasto_centavos) : "sem compra";
+    // A plaquinha é curta de propósito: vinte clientes com "R$ 146,31 · há
+    // 42 min" cada um viram um borrão. O resto fica no título e na gaveta.
+    const dizer = c.gasto_centavos ? dinheiroCurto(c.gasto_centavos) : "—";
+    const onde = projetar(lugar.tx, lugar.ty);
+    const node = el("div", {
+      classe: [
+        "boneco",
+        "boneco-cliente",
+        c.consumindo ? "boneco-consumindo" : "boneco-quieto",
+        discreto ? "boneco-discreto" : "",
+        aberto?.tipo === "cliente" && aberto.id === c.id ? "iso-escolhido" : "",
+      ].filter(Boolean).join(" "),
+      style: `left:${onde.x}px;top:${onde.y}px;z-index:${Math.round((lugar.tx + lugar.ty) * 10) + 2}`,
+      title: `${[c.nome ?? "Cliente", gasto, `chegou ${comoFazTempo(minutosDesde(c.chegou_em))}`].join(" · ")} — clique para ver`,
+      role: "button",
+      tabindex: "0",
+      onclick: () => abrir("cliente", c.id),
+    }, [
+      el("span", { classe: "boneco-etiqueta", texto: dizer }),
+      el("span", { classe: "boneco-corpo" }, [
+        el("span", { classe: "boneco-cabeca", texto: iniciais(c.nome ?? "") }),
+        el("span", { classe: "boneco-tronco" }),
+      ]),
+      el("span", { classe: "boneco-nome", texto: primeiroNome(c.nome) || "cliente" }),
+    ]);
+    node.dataset.casa = [lugar.tx, lugar.ty, area.x, area.y, area.w, area.h].join(",");
+    return node;
+  }
+
+  function minutosDesde(iso) {
+    return Math.max(0, Math.round((new Date(dados.agora) - new Date(iso)) / 60_000));
+  }
+
+  /** O cliente clicado: quanto gastou, quando chegou, quando comprou por último. */
+  function gavetaDoCliente(id) {
+    const c = (dados.ao_vivo?.clientes ?? []).find((x) => x.id === id);
+    if (!c) return null;
+    return {
+      titulo: c.nome ?? "Cliente",
+      legenda: [
+        c.consumindo ? "consumindo agora" : "na casa",
+        `chegou ${comoFazTempo(minutosDesde(c.chegou_em))}`,
+        c.telefone ? `tel. ${c.telefone}` : null,
+      ].filter(Boolean).join(" · "),
+      blocos: [
+        bloco("Esta noite", [
+          linha({ titulo: c.gasto_centavos ? dinheiro(c.gasto_centavos) : "Ainda não comprou", detalhe: "gasto até agora, segundo a Zig" }),
+          linha({ titulo: quandoFoi(c.chegou_em, dados.agora), detalhe: "entrou na casa" }),
+          c.ultima_compra_em
+            ? linha({ titulo: quandoFoi(c.ultima_compra_em, dados.agora), detalhe: "última compra" })
+            : null,
+        ].filter(Boolean)),
+      ],
+    };
+  }
+
+  /** O salão pela Zig: os números da noite e a venda por garçom. */
+  function blocosAoVivoDoSalao() {
+    const vivo = dados.ao_vivo;
+    if (!vivo) return [];
+    if (!vivo.evento) return [aviso("A Zig não tem evento aberto agora: a casa está fechada.")];
+    return [
+      bloco("A noite, pela Zig", [
+        linha({ titulo: `${vivo.pessoas_na_casa} na casa`, detalhe: `${vivo.consumindo_agora} consumindo agora · ${vivo.checkins_hoje} entraram · ${vivo.sairam} já saíram` }),
+        linha({ titulo: dinheiro(vivo.vendas_hoje_centavos), detalhe: `${vivo.transacoes_hoje} transações · ticket médio ${dinheiro(vivo.ticket_medio_centavos)} · ${dinheiro(vivo.vendas_15min_centavos)} nos últimos 15 min` }),
+      ]),
+      vivo.garcons?.length
+        ? bloco("Venda por garçom", vivo.garcons.map((g) => linha({
+          titulo: g.nome,
+          detalhe: `${dinheiro(g.vendas_centavos)} · ${g.itens} itens`,
+        })))
+        : null,
+    ].filter(Boolean);
   }
 
   /** A área onde este setor fica — o administrativo, se ele for desconhecido. */
@@ -851,6 +1007,15 @@ function comoFazTempo(minutos) {
 
 function primeiroNome(nome) {
   return String(nome ?? "").trim().split(/\s+/)[0] ?? "";
+}
+
+function dinheiro(centavos) {
+  return (Number(centavos || 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/** "R$ 146", sem centavos: é o que cabe na plaquinha do boneco. */
+function dinheiroCurto(centavos) {
+  return `R$ ${Math.round(Number(centavos || 0) / 100).toLocaleString("pt-BR")}`;
 }
 
 /** Duas letras cabem na cabeça do boneco; três já viram borrão. */

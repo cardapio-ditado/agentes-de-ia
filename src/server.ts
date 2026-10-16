@@ -14,6 +14,7 @@ import { cuidarDosDisparos } from "./disparos.js";
 import { enviarPendentesPeloOficial } from "./filaOficial.js";
 import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
 import { sincronizarRecentes as sincronizarAvaliacoesDoGoogle } from "./avaliacoesMake.js";
+import { cicloAoVivo as retratoDaCasaPelaZig } from "./zigAoVivo.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
@@ -292,6 +293,27 @@ async function cicloDasAvaliacoesDoGoogle(): Promise<void> {
   for (const f of r.falhas) console.error(`[google] sincronização não pedida — ${f}`);
 }
 void cicloDasAvaliacoesDoGoogle().catch((e) => console.error("[google] sincronização das recentes:", e));
+
+// A casa ao vivo: a cada dois minutos, o retrato de cada casa ligada à Zig
+// (quem está lá, quem consome, quanto entrou, por garçom). A planta lê o
+// retrato gravado — consultar a Zig a cada quinze segundos, por tela aberta,
+// seria martelar a API dela. Com a casa fechada custa uma chamada só.
+const MINUTOS_ENTRE_RETRATOS = Math.max(1, Number(process.env.ZIG_RETRATO_CADA_MINUTOS) || 2);
+let retratoEmAndamento = false;
+async function cicloDoRetrato(): Promise<void> {
+  if (retratoEmAndamento) return;
+  retratoEmAndamento = true;
+  try {
+    const r = await retratoDaCasaPelaZig();
+    for (const f of r.falhas) console.error(`[ao-vivo] retrato falhou — ${f}`);
+  } catch (e) {
+    console.error("[ao-vivo] relógio falhou:", e instanceof Error ? e.message : e);
+  } finally {
+    retratoEmAndamento = false;
+  }
+}
+setInterval(() => void cicloDoRetrato(), MINUTOS_ENTRE_RETRATOS * 60_000);
+setTimeout(() => void cicloDoRetrato(), 5_000);
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
 void cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
 void varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));

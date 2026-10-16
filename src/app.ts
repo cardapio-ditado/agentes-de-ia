@@ -122,6 +122,7 @@ import {
 } from "./rhAcerto.js";
 import { comoCsv, comoTexto, resumoDoMes } from "./rhResumo.js";
 import { oQueEstaAcontecendo } from "./aCasa.js";
+import { retratoGravado } from "./zigAoVivo.js";
 import {
   SITUACOES_DE_FERIAS,
   apagarFerias,
@@ -1580,14 +1581,19 @@ async function roteasApi(
       const modulos = await listarModulos(venue.id);
       const desde = url.searchParams.get("desde") ?? undefined;
       const fuso = venue.timezone ?? "America/Cuiaba";
-      const casa = await oQueEstaAcontecendo({
-        venueId: venue.id,
-        contratados: modulos.filter((m) => m.ativo).map((m) => m.modulo),
-        desde,
-        limite: Number(url.searchParams.get("limite")) || undefined,
-        dia: hojeNaCasa(fuso),
-      });
-      return ok(res, { ...casa, timezone: fuso });
+      const [casa, aoVivo] = await Promise.all([
+        oQueEstaAcontecendo({
+          venueId: venue.id,
+          contratados: modulos.filter((m) => m.ativo).map((m) => m.modulo),
+          desde,
+          limite: Number(url.searchParams.get("limite")) || undefined,
+          dia: hojeNaCasa(fuso),
+        }),
+        // O retrato da Zig: quem está na casa agora. Gravado pelo relógio do
+        // servidor; aqui só se lê.
+        retratoGravado(venue.id),
+      ]);
+      return ok(res, { ...casa, timezone: fuso, ao_vivo: aoVivo });
     }
 
 
