@@ -294,15 +294,25 @@ export async function atualizarContatoConversa(
 }
 
 /** Histórico da conversa em ordem cronológica. */
-export async function listMessages(conversationId: string): Promise<Message[]> {
-  const { data, error } = await db()
+/**
+ * O histórico da conversa, do mais antigo para o mais novo.
+ *
+ * Com `limite`, só as últimas N: é o que o agente lê a cada turno. Uma
+ * conversa de um mês com 300 mensagens não precisa vir inteira para
+ * responder "tem mesa hoje?" — e foi o que fez cada resposta custar 49 mil
+ * tokens numa manhã.
+ */
+export async function listMessages(conversationId: string, limite?: number): Promise<Message[]> {
+  let consulta = db()
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: limite === undefined });
+  if (limite !== undefined) consulta = consulta.limit(Math.max(1, limite));
 
+  const { data, error } = await consulta;
   if (error) throw new Error(`Falha ao carregar o histórico: ${error.message}`);
-  return data ?? [];
+  return limite === undefined ? data ?? [] : (data ?? []).reverse();
 }
 
 export async function insertMessage(

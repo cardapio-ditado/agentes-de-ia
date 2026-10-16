@@ -13,6 +13,7 @@ import {
   type Message,
 } from "./repository.js";
 import { agenteDeveResponder, definirAtendimento } from "./inbox.js";
+import { MAXIMO_DE_MENSAGENS_NO_CONTEXTO, pareceLoop, recortarHistorico } from "./freioDoAgente.js";
 import { estadoDoPlano, PlanoBloqueadoError } from "./pontos.js";
 import { resolveTools, type AgentTool, type ToolContext } from "./tools/index.js";
 import { findVenueBySlug } from "./venues.js";
@@ -101,8 +102,11 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     channel,
   };
 
-  const historico = await listMessages(conversation.id);
-  const messages: Anthropic.MessageParam[] = historico.map(toMessageParam);
+  // As últimas mensagens, e não a conversa inteira: o custo de cada resposta
+  // deixa de crescer com a idade da conversa. Carrega um pouco mais do que
+  // vai para o modelo porque o freio abaixo olha a rajada recente.
+  const historico = await listMessages(conversation.id, MAXIMO_DE_MENSAGENS_NO_CONTEXTO * 3);
+  const messages: Anthropic.MessageParam[] = recortarHistorico(historico).map(toMessageParam);
 
   // A mensagem GRAVADA é a do cliente, limpa: é ela que aparece na inbox e no
   // histórico das próximas chamadas. A ENVIADA leva a data grudada no fim.
@@ -126,6 +130,26 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     role: "user",
     content: userMessage,
   });
+
+  // O FREIO: rajada de respostas ou a mesma mensagem chegando repetida é robô
+  // do outro lado (o atendimento automático de um banco já conversou uma hora
+  // com a Fernanda, sozinhos, a 49 mil tokens por resposta). O agente para e
+  // a conversa vai para atendimento humano: aparece na inbox esperando gente,
+  // e nada mais é gasto até alguém devolvê-la ao agente.
+  const freio = pareceLoop({ historico, novaMensagem: userMessage, agora: new Date() });
+  if (freio.freia) {
+    console.warn(`[agente] ${agent.slug}: freio acionado na conversa ${conversation.id} — ${freio.motivo}`);
+    await definirAtendimento({ conversationId: conversation.id, por: "humano", quem: `freio automático: ${freio.motivo}` }).catch(() => undefined);
+    await logEvent({
+      agentId: agent.id,
+      conversationId: conversation.id,
+      level: "warn",
+      event: "freio_de_loop",
+      payload: { canal: channel, motivo: freio.motivo },
+    }).catch(() => undefined);
+    onEvent?.({ type: "done", conversationId: conversation.id, text: "" });
+    return { conversationId: conversation.id, text: "", stopReason: "freio_de_loop", respondeu: false };
+  }
 
   // Uma pessoa assumiu esta conversa: o agente cala a boca.
   //
