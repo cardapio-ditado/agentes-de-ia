@@ -49,7 +49,7 @@ export async function integracoes(raiz, ctx) {
       cabecalho("Zig", zig.conectada ? etiqueta("conectada", "etiqueta-ok") : etiqueta("não conectada", "")),
       el("p", {
         classe: "muted",
-        texto: "O sistema de comanda e pagamento do bar. Conectada, ela conta quem está na casa, o que foi vendido e quem é cada cliente.",
+        texto: "O sistema de comanda e pagamento do bar. Conectada, ela traz o que foi vendido e quem é cada cliente.",
       }),
       zig.conectada ? conexaoFeita(zig) : formularioDeConexao(zig),
       zig.conectada ? usosDaZig(zig) : null,
@@ -120,7 +120,7 @@ export async function integracoes(raiz, ctx) {
       type: "button",
       texto: "Desconectar",
       onclick: async () => {
-        if (!confirm("Desconectar a Zig? A planta deixa de mostrar clientes, as vendas param de entrar sozinhas e o convite automático da pesquisa é desligado.")) return;
+        if (!confirm("Desconectar a Zig? As vendas param de entrar sozinhas e o convite automático da pesquisa é desligado.")) return;
         desconectar.disabled = true;
         try {
           await put(`/v1/venues/${ctx.venue}/integracoes/zig`, { token: "" });
@@ -159,13 +159,7 @@ export async function integracoes(raiz, ctx) {
     const temCmv = ctx.temModulo("cmv");
     const temPesquisa = ctx.temModulo("pesquisa");
     return el("div", { classe: "pilha", style: "margin-top:6px" }, [
-      el("h4", { classe: "casa-gaveta-titulo", texto: "O que a Zig liga aqui" }),
-      chave({
-        titulo: "Clientes na planta",
-        texto: "Quem está na casa agora, quem está consumindo e quanto já entrou, em Ajustes → A casa agora. Só leitura.",
-        ligado: zig.casa_ao_vivo,
-        campo: "casa_ao_vivo",
-      }),
+      el("h4", { classe: "integracao-titulo", texto: "O que a Zig liga aqui" }),
       temCmv
         ? chave({
           titulo: "Vendas no estoque",

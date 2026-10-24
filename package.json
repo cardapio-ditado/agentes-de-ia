@@ -18,7 +18,6 @@
     "reenviar-notificacoes": "tsx scripts/reenviar-notificacoes.ts",
     "telas": "tsx scripts/telas.ts",
     "clientes:historico": "tsx scripts/historico-clientes.ts",
-    "zig:agora": "tsx scripts/zig-agora.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

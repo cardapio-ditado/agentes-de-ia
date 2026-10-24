@@ -121,8 +121,6 @@ import {
   verRegra,
 } from "./rhAcerto.js";
 import { comoCsv, comoTexto, resumoDoMes } from "./rhResumo.js";
-import { oQueEstaAcontecendo } from "./aCasa.js";
-import { apagarRetrato, retratoFresco } from "./zigAoVivo.js";
 import { importarOntemSeFaltar } from "./cmv/vendasZig.js";
 import {
   SITUACOES_DE_FERIAS,
@@ -1237,12 +1235,10 @@ function zigParaOPainel(config: {
   teto_por_dia: number;
   nao_repetir_dias: number;
   ultimo_dia: string | null;
-  casa_ao_vivo: boolean;
   vendas_no_estoque: boolean;
 }): Record<string, unknown> {
   return {
     conectada: Boolean(config.token?.trim() && config.loja?.trim()),
-    casa_ao_vivo: config.casa_ao_vivo,
     vendas_no_estoque: config.vendas_no_estoque,
     loja: config.loja,
     ativo: config.ativo,
@@ -1577,9 +1573,9 @@ async function roteasApi(
 
     // ---- Integrações da casa ----
     //
-    // Fora do MODULO_DO_RECURSO de propósito, como a planta: conectar o PDV é
-    // da casa, e não de um módulo. A Zig alimenta vários (a planta, o estoque,
-    // a base de clientes, a pesquisa); cada uso tem a sua chave.
+    // Fora do MODULO_DO_RECURSO de propósito: conectar o PDV é da casa, e não
+    // de um módulo. A Zig alimenta vários (o estoque, a base de clientes, a
+    // pesquisa); cada uso tem a sua chave.
 
     // GET /v1/venues/:slug/integracoes — o que está ligado
     if (metodo === "GET" && recurso === "integracoes" && p.length === 3) {
@@ -1601,15 +1597,12 @@ async function roteasApi(
           // undefined = não mexe; "" = apaga.
           token,
           loja: typeof corpo.loja === "string" ? corpo.loja.trim() : undefined,
-          casa_ao_vivo: typeof corpo.casa_ao_vivo === "boolean" ? corpo.casa_ao_vivo : undefined,
           vendas_no_estoque: typeof corpo.vendas_no_estoque === "boolean" ? corpo.vendas_no_estoque : undefined,
           // Desconectar desliga tudo o que dependia dela, inclusive o convite
           // automático da pesquisa.
           ...(desconectar ? { ativo: false, vendas_no_estoque: false } : {}),
         }),
       );
-      // A planta não pode continuar mostrando clientes de uma Zig desligada.
-      if (desconectar || !config.casa_ao_vivo) await apagarRetrato(venue.id);
       return ok(res, zigParaOPainel(config));
     }
 
@@ -1630,32 +1623,6 @@ async function roteasApi(
       );
     }
 
-    // GET /v1/venues/:slug/a-casa?desde= — a planta do bar ao vivo.
-    //
-    // Fora do MODULO_DO_RECURSO de propósito: a planta é de toda casa, e é
-    // cada SETOR que se acende pelo contrato. Exigir um módulo aqui deixaria
-    // sem panorama justamente quem tem poucos módulos e mais precisa ver que
-    // existe mais coisa.
-    if (metodo === "GET" && recurso === "a-casa" && p.length === 3) {
-      const chave = await exigirChave(req, "reservations:read");
-      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      const modulos = await listarModulos(venue.id);
-      const desde = url.searchParams.get("desde") ?? undefined;
-      const fuso = venue.timezone ?? "America/Cuiaba";
-      const [casa, aoVivo] = await Promise.all([
-        oQueEstaAcontecendo({
-          venueId: venue.id,
-          contratados: modulos.filter((m) => m.ativo).map((m) => m.modulo),
-          desde,
-          limite: Number(url.searchParams.get("limite")) || undefined,
-          dia: hojeNaCasa(fuso),
-        }),
-        // O retrato da Zig: quem está na casa agora. Fresco: a planta aberta
-        // é quem puxa, e o relógio do VPS só adianta o trabalho.
-        retratoFresco({ id: venue.id, name: venue.name, timezone: fuso }),
-      ]);
-      return ok(res, { ...casa, timezone: fuso, ao_vivo: aoVivo });
-    }
 
 
     // ---- CMV: estoque, compras e recebimento ----

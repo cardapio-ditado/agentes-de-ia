@@ -13,7 +13,6 @@ import { integracoes } from "./pages/integracoes.js";
 import { pessoas } from "./pages/pessoas.js";
 import { agentes } from "./pages/agentes.js";
 import { agente } from "./pages/agente.js";
-import { aCasa } from "./pages/aCasa.js";
 import { empresa } from "./pages/empresa.js";
 import { agenteSabe } from "./pages/agenteSabe.js";
 import { organizacao } from "./pages/organizacao.js";
@@ -67,10 +66,6 @@ const PAGINAS = [
   // tem. Moravam dentro de "Agentes de IA" por acidente histórico (o agente
   // foi o primeiro módulo), e por causa disso um cliente que comprasse só o
   // CMV não tinha onde cadastrar a própria casa nem criar login de gerente.
-  // A planta do bar ao vivo. Mora em "ajustes" porque é de TODA casa: cada
-  // setor é que se acende pelo módulo contratado, e o setor apagado mostra
-  // ao dono o que existe e ele ainda não tem.
-  { id: "a-casa", modulo: "ajustes", rotulo: "A casa agora", icone: ICONES.painel, render: aCasa, subtitulo: "A planta do bar com o que está acontecendo em cada setor" },
   { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Nome, contato e o fuso horário que todos os módulos usam" },
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
   { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp e Instagram da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número oficial da Meta, o Instagram do bar e o número do conector, que envia checklist, avisos e confirmações" },

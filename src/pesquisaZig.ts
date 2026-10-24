@@ -39,8 +39,6 @@ export interface ConfigZig {
   teto_por_dia: number;
   nao_repetir_dias: number;
   ultimo_dia: string | null;
-  /** Os clientes na planta "A casa agora". */
-  casa_ao_vivo: boolean;
   /** A noite de ontem entra sozinha em Vendas e baixa o estoque. */
   vendas_no_estoque: boolean;
 }
@@ -58,7 +56,6 @@ export const CONFIG_ZIG_PADRAO: ConfigZig = {
   teto_por_dia: 80,
   nao_repetir_dias: 30,
   ultimo_dia: null,
-  casa_ao_vivo: true,
   vendas_no_estoque: false,
 };
 
@@ -78,8 +75,6 @@ export async function configZig(venueId: string): Promise<ConfigZig> {
     teto_por_dia: Number(data.teto_por_dia ?? CONFIG_ZIG_PADRAO.teto_por_dia),
     nao_repetir_dias: Number(data.nao_repetir_dias ?? CONFIG_ZIG_PADRAO.nao_repetir_dias),
     ultimo_dia: data.ultimo_dia ?? null,
-    // Banco sem a migração destas colunas: o padrão de cada uma.
-    casa_ao_vivo: data.casa_ao_vivo === undefined ? CONFIG_ZIG_PADRAO.casa_ao_vivo : data.casa_ao_vivo === true,
     vendas_no_estoque: data.vendas_no_estoque === true,
   };
 }
@@ -110,7 +105,6 @@ export async function salvarConfigZig(
         teto_por_dia: misturado.teto_por_dia,
         nao_repetir_dias: misturado.nao_repetir_dias,
         ultimo_dia: misturado.ultimo_dia,
-        casa_ao_vivo: misturado.casa_ao_vivo,
         vendas_no_estoque: misturado.vendas_no_estoque,
         updated_at: new Date().toISOString(),
       } as never,

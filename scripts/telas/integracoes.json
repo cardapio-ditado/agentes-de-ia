@@ -7,7 +7,6 @@
     "GET /integracoes": {
       "zig": {
         "conectada": true,
-        "casa_ao_vivo": true,
         "vendas_no_estoque": false,
         "loja": "eefa43ae-af7c-4421-aa2a-df8435cc0de3",
         "ativo": true,
@@ -27,7 +26,6 @@
         "GET /integracoes": {
           "zig": {
             "conectada": false,
-            "casa_ao_vivo": true,
             "vendas_no_estoque": false,
             "loja": null,
             "ativo": false,

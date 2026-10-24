@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { db, ehMigracaoPendente } from "../supabase.js";
 import { hojeNaCasa, horaNaCasa } from "../fuso.js";
 import { chamarZig, configZig, diaAnterior } from "../pesquisaZig.js";
-import { horaDaZig, type SaidaDaZig } from "../zigAoVivo.js";
 import { lancarFaturamento } from "./estoque.js";
 import { type LinhaDeVenda } from "./lerVendas.js";
 import { baixarVendas, registrarImportacao } from "./vendas.js";
@@ -28,6 +27,27 @@ const cliente = () => db() as any;
  * Trazido do Gorjeta Pro (a sincronização da Zig das 06:00), no vocabulário
  * do Brasa Food.
  */
+
+/** Um item vendido, como a Zig devolve em /erp/saida-produtos (só o que lemos). */
+export interface SaidaDaZig {
+  transactionId: string;
+  transactionDate: string;
+  unitValue?: number | null;
+  count?: number | null;
+  discountValue?: number | null;
+  employeeName?: string | null;
+  type?: string | null;
+  productName?: string | null;
+  eventId?: string | null;
+}
+
+/** A Zig escreve as horas em UTC sem o "Z". Sem isto, a hora seria lida como local. */
+export function horaDaZig(valor: string | null | undefined): Date | null {
+  if (!valor) return null;
+  const texto = /Z$|[+-]\d\d:?\d\d$/.test(valor) ? valor : `${valor}Z`;
+  const d = new Date(texto);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 /** A partir desta hora da casa, a noite de ontem já acabou e pode ser buscada. */
 export const HORA_DE_BUSCAR = 6;
