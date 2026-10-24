@@ -1,6 +1,7 @@
 import { del, get, patch, post } from "../api.js";
 import { avisar, buscador, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 import { abrirKardex } from "./kardex.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * Posição do estoque: o que há, onde, e quanto vale.
@@ -143,6 +144,31 @@ export async function estoque(raiz, ctx) {
           el("button", { classe: "btn", type: "button", texto: "⇄ Transferir", onclick: () => movimentar("transferir") }),
           el("button", { classe: "btn", type: "button", texto: "🗑 Registrar perda", onclick: () => movimentar("perda") }),
           el("button", { classe: "btn", type: "button", texto: "🏬 Locais de estoque", onclick: gerenciarLocais }),
+          // O PDF sai com o filtro da tela: escolhido "Câmara fria", é a
+          // posição da câmara — que é o papel que o gerente quer na mão.
+          botaoDePdf(() => {
+            const norm = (t) => (t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            const alvo = norm(busca.value.trim());
+            const local = seletorLocal.value;
+            const linhas = posicao.filter((p) => (!local || p.local_nome === local) && (!alvo || norm(p.insumo).includes(alvo)));
+            const total = linhas.reduce((t, p) => t + Number(p.valor), 0);
+            imprimirRelatorio({
+              tipo: "Custos e estoque",
+              titulo: "Posição do estoque",
+              periodo: `${local || "Todos os estoques"} · ${new Date().toLocaleDateString("pt-BR")}`,
+              selos: [
+                { valor: dinheiro(total), rotulo: "parado em estoque" },
+                { valor: String(linhas.length), rotulo: "itens" },
+              ],
+              secoes: [{
+                titulo: "Do mais valioso para o menos",
+                colunas: [{ rotulo: "Item" }, { rotulo: "Estoque" }, { rotulo: "Quantidade", num: true }, { rotulo: "Custo médio", num: true }, { rotulo: "Valor", num: true }],
+                linhas: linhas.map((p) => [p.insumo, p.local_nome, `${p.quantidade} ${p.unidade}`, dinheiro(Number(p.custo_medio)), dinheiro(Number(p.valor))]),
+                total: ["Total", "", "", "", dinheiro(total)],
+              }],
+              arquivo: `estoque-${new Date().toISOString().slice(0, 10)}`,
+            });
+          }, "Posição em PDF"),
         ]),
         el("div", { classe: "linha-campos" }, [
           el("label", { classe: "campo-rotulado", style: "min-width:200px" }, [

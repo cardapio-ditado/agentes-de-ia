@@ -1,5 +1,6 @@
 import { get } from "../api.js";
 import { dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * O painel da pesquisa: o que os clientes acham, num relance.
@@ -37,11 +38,17 @@ export async function pesquisa(raiz, ctx) {
           el("h2", { texto: "O que os clientes acham" }),
           el("p", { classe: "muted", texto: "Respostas do QR code da mesa e dos links enviados." }),
         ]),
-        el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Período" }), seletor]),
+        el("div", { classe: "linha-campos", style: "align-items:flex-end" }, [
+          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Período" }), seletor]),
+          botaoDePdf(() => ultimos && relatorioDaPesquisa(ultimos, seletor.selectedOptions[0].textContent), "Relatório"),
+        ]),
       ]),
       conteudo,
     ]),
   );
+
+  /** O que está na tela agora — é o que vai para o papel. */
+  let ultimos = null;
 
   await carregar();
 
@@ -56,6 +63,7 @@ export async function pesquisa(raiz, ctx) {
     }
 
     limpar(conteudo);
+    ultimos = dados;
 
     if (dados.resumo.respostas === 0) {
       conteudo.append(
@@ -537,4 +545,69 @@ function cartaoRanking(postos) {
         })
       : null,
   ]);
+}
+
+/* ---------- o relatório em PDF ---------- */
+
+/**
+ * O mês da pesquisa numa folha: os números, o que pesa por assunto, o que
+ * agradou e incomodou, o ranking da equipe e quem precisa de um telefonema.
+ * É o papel da reunião com a equipe.
+ */
+function relatorioDaPesquisa(dados, periodo) {
+  const { resumo } = dados;
+  imprimirRelatorio({
+    tipo: "Clientes",
+    titulo: "Pesquisa de satisfação",
+    periodo: `Últimos ${periodo}`,
+    selos: [
+      { valor: String(resumo.nps), rotulo: "NPS", ruim: resumo.nps < 50 },
+      { valor: String(resumo.respostas), rotulo: "respostas" },
+      { valor: `${percentual(resumo.promotores, resumo.respostas)}%`, rotulo: "promotores" },
+      { valor: `${percentual(resumo.detratores, resumo.respostas)}%`, rotulo: "detratores", ruim: resumo.detratores > 0 },
+    ],
+    secoes: [
+      dados.categorias?.length
+        ? {
+            titulo: "Notas por assunto",
+            colunas: [{ rotulo: "Assunto" }, { rotulo: "Nota", num: true }, { rotulo: "Antes", num: true }],
+            linhas: dados.categorias.map((c) => ({
+              destaque: c.media < 7,
+              celulas: [c.categoria, virgula(c.media), c.antes === null || c.antes === undefined ? "—" : virgula(c.antes)],
+            })),
+          }
+        : null,
+      {
+        titulo: "O que agradou",
+        colunas: [{ rotulo: "Elogio" }, { rotulo: "Vezes", num: true }],
+        linhas: (dados.elogios ?? []).slice(0, 10).map((e) => [e.etiqueta, String(e.vezes)]),
+        vazio: "Nenhum elogio marcado no período.",
+      },
+      {
+        titulo: "O que incomodou",
+        colunas: [{ rotulo: "Crítica" }, { rotulo: "Vezes", num: true }],
+        linhas: (dados.criticas ?? []).slice(0, 10).map((e) => [e.etiqueta, String(e.vezes)]),
+        vazio: "Nenhuma crítica marcada no período.",
+      },
+      dados.ranking?.length
+        ? {
+            titulo: "Ranking da equipe",
+            nota: "Média das estrelas dadas pelos clientes. Menos de 5 avaliações ainda não entra na disputa.",
+            colunas: [{ rotulo: "Pessoa" }, { rotulo: "Média", num: true }, { rotulo: "Avaliações", num: true }, { rotulo: "5 estrelas", num: true }],
+            linhas: dados.ranking.map((p) => [p.nome + (p.classificado ? "" : " (ainda não classificado)"), virgula(p.media), String(p.avaliacoes), String(p.cincoEstrelas)]),
+          }
+        : null,
+      dados.aBater?.length
+        ? {
+            titulo: "Quem precisa de um telefonema",
+            colunas: [{ rotulo: "Quando" }, { rotulo: "Nota", num: true }, { rotulo: "Cliente" }, { rotulo: "O que disse" }],
+            linhas: dados.aBater.map((r) => ({
+              destaque: true,
+              celulas: [dataHora(r.created_at), String(r.nota), [r.cliente_nome || "Anônimo", r.cliente_contato].filter(Boolean).join(" · "), r.comentario ?? ""],
+            })),
+          }
+        : null,
+    ],
+    arquivo: `pesquisa-${periodo}`,
+  });
 }

@@ -1,5 +1,6 @@
 import { del, get, post, put } from "../api.js";
 import { avisar, dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * RH — a gorjeta, semana a semana.
@@ -434,6 +435,7 @@ export function criarFechamento(corpo, ctx) {
             },
           }),
           el("button", { classe: "btn btn-peq", type: "button", texto: "Próxima →", onclick: () => andar(1) }),
+          botaoDePdf(acertoEmPdf, "Acerto em PDF"),
         ]),
       ]),
       el("div", { classe: "grade", style: "margin-top:14px" }, [
@@ -475,6 +477,49 @@ export function criarFechamento(corpo, ctx) {
   // linha, e um const aqui nunca chegaria a ser inicializado.
   function somaComandas() {
     return dados.linhas.reduce((s, l) => s + l.comandas, 0);
+  }
+
+  /**
+   * O acerto da semana no papel, com uma linha de assinatura por pessoa: é
+   * o recibo que a casa guarda de que cada um conferiu e recebeu.
+   */
+  function acertoEmPdf() {
+    const cols = colunas();
+    const t = dados.totais;
+    imprimirRelatorio({
+      tipo: "RH",
+      titulo: "Acerto da gorjeta",
+      periodo: `Semana ${dados.semana}/${dados.ano} · ${diaBr(dados.inicio)} a ${diaBr(dados.fim)}`,
+      selos: [
+        { valor: dinheiro(t.vendas), rotulo: "vendas da semana" },
+        { valor: dinheiro(t.arrecadado), rotulo: `serviço (${numeroCurto(dados.regra.percentual_servico)}%)` },
+        { valor: dinheiro(t.retido), rotulo: "fica com a casa" },
+        { valor: dinheiro(t.a_receber), rotulo: "a receber pela equipe" },
+      ],
+      secoes: [
+        {
+          nota: [
+            dados.regra.metodo === "individual" ? "Comissão sobre a venda de cada um." : "Bolo da casa repartido entre a equipe.",
+            dados.regra.metas?.length
+              ? `Metas da semana: ${dados.regra.metas.map((m) => `a partir de ${dinheiro(m.a_partir_de)} +${numeroCurto(m.bonus)}%`).join(" · ")}.`
+              : null,
+          ].filter(Boolean).join(" "),
+          colunas: [...cols.map((c) => ({ rotulo: c.rotulo, num: c.num })), { rotulo: "Assinatura" }],
+          linhas: dados.linhas.map((l) => [
+            ...cols.map((c) => (c.valor ? dinheiroDaColuna(c, c.valor(l)) : c.texto(l))),
+            "_______________________",
+          ]),
+          total: [
+            ...cols.map((c, i) => (i === 0 ? "Total" : c.valor ? dinheiroDaColuna(c, dados.linhas.reduce((s, l) => s + c.valor(l), 0)) : "")),
+            "",
+          ],
+          vazio: "Ninguém no acerto desta semana.",
+        },
+      ],
+      assinaturas: ["Gerente"],
+      arquivo: `acerto-gorjeta-semana-${dados.semana}-${dados.ano}`,
+      paisagem: true,
+    });
   }
 
   /* ================= A tabela ================= */

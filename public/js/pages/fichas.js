@@ -1,5 +1,6 @@
 import { del, get, post } from "../api.js";
 import { avisar, buscador, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * Fichas técnicas: o que cada prato consome.
@@ -38,6 +39,7 @@ export async function fichas(raiz, ctx) {
             el("p", { classe: "muted", texto: "O que cada prato consome — e quanto custa cada porção." }),
           ]),
           el("div", { classe: "linha-campos" }, [
+            lista.length ? botaoDePdf(() => imprimirFichas(lista, "Livro de receitas"), "Livro de receitas") : null,
             el("button", {
               classe: "btn",
               type: "button",
@@ -59,6 +61,40 @@ export async function fichas(raiz, ctx) {
         ),
       ]),
     );
+
+    /**
+     * A receita no papel, para a parede da cozinha: o que vai, quanto, e o
+     * custo da porção. Uma ficha por bloco; o livro inteiro sai de uma vez.
+     */
+    function imprimirFichas(fichas, titulo) {
+      imprimirRelatorio({
+        tipo: "Receitas e custo do prato",
+        titulo,
+        periodo: `${fichas.length} receita(s)`,
+        secoes: fichas.map((f) => {
+          const custo = f.custo_porcao;
+          const margem = custo !== null && f.preco_venda ? Math.round((1 - custo / Number(f.preco_venda)) * 100) : null;
+          const rendimento = Number(f.rendimento) || 1;
+          return {
+            titulo: f.nome,
+            nota: [
+              `Rende ${rendimento} porção(ões)`,
+              custo !== null ? `custo por porção ${dinheiro(custo)}` : "custo: conferir os ingredientes",
+              f.preco_venda ? `vende a ${dinheiro(Number(f.preco_venda))}` : null,
+              margem !== null ? `margem ${margem}%` : null,
+            ].filter(Boolean).join(" · "),
+            colunas: [{ rotulo: "Ingrediente" }, { rotulo: "Quantidade", num: true }, { rotulo: "Custo", num: true }],
+            linhas: (f.ficha_insumos ?? []).map((fi) => [
+              fi.insumos?.nome ?? "—",
+              `${Number(fi.quantidade)} ${fi.insumos?.unidade ?? ""}`,
+              dinheiro(Number(fi.quantidade) * Number(fi.insumos?.custo_medio ?? 0)),
+            ]),
+            vazio: "Sem ingredientes cadastrados.",
+          };
+        }),
+        arquivo: fichas.length === 1 ? `receita-${fichas[0].nome}` : "livro-de-receitas",
+      });
+    }
 
     function cartaoFicha(f) {
       const custo = f.custo_porcao;
@@ -83,6 +119,7 @@ export async function fichas(raiz, ctx) {
           el("div", {}, [
             f.confirmada_em ? etiqueta("conferida", "etiqueta-ok") : etiqueta("conferir", "etiqueta-alerta"),
             el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formulario(f) }),
+            botaoDePdf(() => imprimirFichas([f], f.nome), "PDF"),
           ]),
         ]),
       ]);

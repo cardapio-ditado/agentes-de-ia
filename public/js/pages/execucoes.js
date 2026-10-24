@@ -1,5 +1,6 @@
 import { get } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 const STATUS = {
   pendente: ["Aguardando", ""],
@@ -16,6 +17,92 @@ const STATUS = {
 export async function execucoes(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
   const detalhe = el("div", {});
+  let runs = [];
+
+  /**
+   * A semana dos checklists no papel: o que saiu, quem fez, o que ficou
+   * pendente e os alertas da IA. É a folha da reunião de segunda.
+   */
+  function relatorioDaSemana() {
+    const corte = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const daSemana = runs.filter((r) => String(r.scheduled_for).slice(0, 10) >= corte);
+    const feitos = daSemana.filter((r) => r.status === "concluida").length;
+    const comAlerta = daSemana.filter((r) => Array.isArray(r.alertas_ia) && r.alertas_ia.length);
+    imprimirRelatorio({
+      tipo: "Checklist",
+      titulo: "Checklists da semana",
+      periodo: `${dataCurta(corte)} a ${new Date().toLocaleDateString("pt-BR")}`,
+      selos: [
+        { valor: String(daSemana.length), rotulo: "disparados" },
+        { valor: String(feitos), rotulo: "concluídos" },
+        { valor: String(daSemana.length - feitos), rotulo: "não terminados", ruim: daSemana.length - feitos > 0 },
+        { valor: String(comAlerta.length), rotulo: "com alerta da IA", ruim: comAlerta.length > 0 },
+      ],
+      secoes: [
+        {
+          titulo: "Cada checklist",
+          colunas: [{ rotulo: "Dia" }, { rotulo: "Checklist" }, { rotulo: "Quem fez" }, { rotulo: "Situação" }, { rotulo: "Alertas", num: true }],
+          linhas: daSemana.map((r) => ({
+            destaque: r.status !== "concluida" || (r.rodadas_previstas && r.rodadas_feitas < r.rodadas_previstas),
+            celulas: [
+              dataCurta(r.scheduled_for),
+              r.checklist_nome,
+              r.executor_nome ?? "—",
+              (STATUS[r.status]?.[0] ?? r.status) + (r.rodadas_previstas ? ` · ${r.rodadas_feitas} de ${r.rodadas_previstas} rodadas` : ""),
+              String(Array.isArray(r.alertas_ia) ? r.alertas_ia.length : 0),
+            ],
+          })),
+          vazio: "Nenhum checklist nos últimos 7 dias.",
+        },
+        comAlerta.length
+          ? {
+              titulo: "O que a IA apontou",
+              colunas: [{ rotulo: "Dia" }, { rotulo: "Checklist" }, { rotulo: "Alerta" }],
+              linhas: comAlerta.flatMap((r) => r.alertas_ia.map((a) => [dataCurta(r.scheduled_for), r.checklist_nome, String(a)])),
+            }
+          : null,
+      ],
+      assinaturas: ["Gerente"],
+      arquivo: `checklists-semana-${corte}`,
+    });
+  }
+
+  /** Uma execução, pergunta por pergunta — o comprovante de que foi feito. */
+  function relatorioDaExecucao(r, itens, respostas, alertas) {
+    const valorDe = (item, resposta) =>
+      item.tipo === "foto"
+        ? resposta?.foto_url ? "📷 foto enviada" : "sem foto"
+        : item.tipo === "sim_nao"
+          ? resposta?.valor === "sim" ? "Sim" : resposta?.valor === "nao" ? "Não" : "sem resposta"
+          : resposta?.valor ?? "—";
+    const tabelaDe = (titulo, mapa) => ({
+      titulo,
+      colunas: [{ rotulo: "Pergunta" }, { rotulo: "Resposta" }, { rotulo: "Observação" }],
+      linhas: itens.map((item) => ({
+        destaque: item.tipo === "sim_nao" && mapa.get(item.id)?.valor === "nao",
+        celulas: [item.pergunta, valorDe(item, mapa.get(item.id)), mapa.get(item.id)?.observacao ?? ""],
+      })),
+    });
+    const rodadas = Array.isArray(r.rodadas) ? r.rodadas : [];
+    imprimirRelatorio({
+      tipo: "Checklist",
+      titulo: r.checklist?.name ?? "Checklist",
+      periodo: [dataCurta(r.scheduled_for), r.executor_nome ? `por ${r.executor_nome}` : null, r.completed_at ? `concluído ${dataHora(r.completed_at)}` : null].filter(Boolean).join(" · "),
+      secoes: [
+        r.resumo_ia || alertas.length
+          ? { titulo: "O que a IA achou", paragrafos: [r.resumo_ia, ...alertas.map((a) => `⚠ ${a}`)].filter(Boolean) }
+          : null,
+        ...(rodadas.length
+          ? rodadas.map((rod) =>
+              rod.concluida_em
+                ? tabelaDe(`Rodada ${rod.numero} · ${rod.prevista} — feita ${new Date(rod.concluida_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${rod.executor_nome ? ` por ${rod.executor_nome}` : ""}`, new Map((rod.respostas ?? []).map((a) => [a.item, a])))
+                : { titulo: `Rodada ${rod.numero} · ${rod.prevista}`, paragrafos: ["Ninguém fez esta rodada."] })
+          : [tabelaDe("Respostas", respostas)]),
+      ],
+      assinaturas: ["Quem fez", "Gerente"],
+      arquivo: `checklist-${r.checklist?.name ?? ""}-${String(r.scheduled_for).slice(0, 10)}`,
+    });
+  }
 
   raiz.append(
     el("div", { classe: "pilha" }, [
@@ -24,7 +111,10 @@ export async function execucoes(raiz, ctx) {
           el("h2", { texto: "Checklists feitos" }),
           el("p", { classe: "muted", texto: "Cada linha é um checklist disparado — clique para abrir." }),
         ]),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
+        el("div", { classe: "linha-campos" }, [
+          botaoDePdf(relatorioDaSemana, "Semana em PDF"),
+          el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
+        ]),
       ]),
       lista,
       detalhe,
@@ -36,7 +126,7 @@ export async function execucoes(raiz, ctx) {
   async function carregar() {
     limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
     limpar(detalhe);
-    const runs = await get(`/v1/venues/${ctx.venue}/checklist-runs`);
+    runs = await get(`/v1/venues/${ctx.venue}/checklist-runs`);
     limpar(lista);
 
     if (runs.length === 0) {
@@ -117,7 +207,10 @@ export async function execucoes(raiz, ctx) {
                 .join(" · "),
             }),
           ]),
-          etiqueta(...(STATUS[r.status] ?? [r.status, ""])),
+          el("div", { classe: "linha-campos" }, [
+            botaoDePdf(() => relatorioDaExecucao(r, itens, respostas, alertas), "PDF"),
+            etiqueta(...(STATUS[r.status] ?? [r.status, ""])),
+          ]),
         ]),
 
         r.resumo_ia

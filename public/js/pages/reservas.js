@@ -1,5 +1,6 @@
 import { del, get, patch, post } from "../api.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * Fila de aprovação.
@@ -14,6 +15,46 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 export async function reservas(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
   const listaConfirmadas = el("div", { classe: "lista" });
+  let confirmadasAgora = [];
+
+  /**
+   * A lista da recepção: quem vem, a que horas, quantos, onde quer sentar.
+   * Um papel na porta resolve o que o celular no bolso não resolve na hora
+   * do aperto. Agrupada por dia, na ordem do horário.
+   */
+  function listaDaRecepcao() {
+    const diaDe = (iso) => new Date(iso).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" });
+    const hora = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const ordenadas = [...confirmadasAgora].sort((a, b) => a.reserved_for.localeCompare(b.reserved_for));
+    const dias = [...new Set(ordenadas.map((r) => diaDe(r.reserved_for)))];
+    imprimirRelatorio({
+      tipo: "Atendente virtual",
+      titulo: "Reservas confirmadas",
+      periodo: `impresso em ${new Date().toLocaleDateString("pt-BR")}`,
+      selos: [
+        { valor: String(ordenadas.length), rotulo: "reservas" },
+        { valor: String(ordenadas.reduce((t, r) => t + Number(r.party_size || 0), 0)), rotulo: "pessoas" },
+      ],
+      secoes: dias.length
+        ? dias.map((dia) => {
+            const doDia = ordenadas.filter((r) => diaDe(r.reserved_for) === dia);
+            return {
+              titulo: `${dia} — ${doDia.reduce((t, r) => t + Number(r.party_size || 0), 0)} pessoas`,
+              colunas: [{ rotulo: "Hora" }, { rotulo: "Nome" }, { rotulo: "Pessoas", num: true }, { rotulo: "Telefone" }, { rotulo: "Área / ocasião / obs." }, { rotulo: "Chegou" }],
+              linhas: doDia.map((r) => [
+                hora(r.reserved_for),
+                r.customer_name,
+                String(r.party_size),
+                r.customer_phone ?? "",
+                [r.area_preference, r.occasion, r.notes].filter(Boolean).join(" · "),
+                "☐",
+              ]),
+            };
+          })
+        : [{ titulo: "Reservas", paragrafos: ["Nenhuma reserva confirmada por vir."] }],
+      arquivo: `reservas-${new Date().toISOString().slice(0, 10)}`,
+    });
+  }
 
   raiz.append(
     el("section", { classe: "pilha" }, [
@@ -40,6 +81,7 @@ export async function reservas(raiz, ctx) {
             texto: "O que a casa tem para receber: reservas aprovadas que ainda vão acontecer.",
           }),
         ]),
+        botaoDePdf(listaDaRecepcao, "Lista da recepção"),
       ]),
       listaConfirmadas,
     ]),
@@ -56,6 +98,7 @@ export async function reservas(raiz, ctx) {
       get(`/v1/venues/${ctx.venue}/reservations?status=approved`),
     ]);
 
+    confirmadasAgora = confirmadas;
     limpar(lista);
     if (pendentes.length === 0) {
       lista.append(vazio("Nenhuma reserva na fila", "Tudo decidido por aqui."));

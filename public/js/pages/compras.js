@@ -33,6 +33,7 @@ function dataCurta(iso) {
 }
 
 import { recebimento } from "./recebimento.js";
+import { imprimirRelatorio } from "../relatorio.js";
 
 /**
  * Compras e recebimento na MESMA tela, em abas.
@@ -223,6 +224,59 @@ async function paginaPedidos(raiz, ctx) {
 
     /* ---------- a linha da tabela, com as ações ---------- */
 
+    /**
+     * A compra no papel. Antes de chegar, é o PEDIDO que vai para o
+     * fornecedor no WhatsApp (sem custo, que é conversa da casa); depois, é o
+     * comprovante do recebimento, com o que divergiu e o motivo.
+     */
+    async function compraEmPdf(compraId) {
+      let c;
+      try {
+        c = await get(`/v1/venues/${ctx.venue}/compras/${compraId}`);
+      } catch (e) {
+        avisar(e.message, "erro");
+        return;
+      }
+      const recebida = c.status === "recebida";
+      const itens = c.compra_itens ?? [];
+      const nome = (it) => it.insumos?.nome ?? it.descricao_nota ?? "?";
+      const un = (it) => it.insumos?.unidade ?? "";
+      const total = itens.reduce((t, it) => t + Number(it.quantidade_recebida ?? 0) * Number(it.custo_unitario_recebido ?? it.custo_unitario_pedido ?? 0), 0);
+      imprimirRelatorio({
+        tipo: "Custos e estoque",
+        titulo: recebida ? `Recebimento — ${c.fornecedor || "compra avulsa"}` : `Pedido de compra — ${c.fornecedor || ""}`,
+        periodo: [
+          `pedido em ${dataCurta(c.data_compra)}`,
+          c.data_prevista ? `entrega prevista ${dataCurta(c.data_prevista)}` : null,
+          c.recebida_em ? `recebido em ${dataCurta(c.recebida_em.slice(0, 10))}` : null,
+          c.documento ? `nota ${c.documento}` : null,
+        ].filter(Boolean).join(" · "),
+        secoes: [
+          recebida
+            ? {
+                colunas: [{ rotulo: "Item" }, { rotulo: "Pedido", num: true }, { rotulo: "Recebido", num: true }, { rotulo: "Custo unit.", num: true }, { rotulo: "Total", num: true }, { rotulo: "Motivo da diferença" }],
+                linhas: itens.map((it) => {
+                  const pedida = it.quantidade_pedida === null ? null : Number(it.quantidade_pedida);
+                  const recebidaQtd = Number(it.quantidade_recebida ?? 0);
+                  const custo = Number(it.custo_unitario_recebido ?? it.custo_unitario_pedido ?? 0);
+                  return {
+                    destaque: pedida !== null && pedida !== recebidaQtd,
+                    celulas: [nome(it), pedida === null ? "—" : `${pedida} ${un(it)}`, `${recebidaQtd} ${un(it)}`, dinheiro(custo), dinheiro(recebidaQtd * custo), it.divergencia_motivo ?? ""],
+                  };
+                }),
+                total: ["Total", "", "", "", dinheiro(total), ""],
+              }
+            : {
+                nota: `Entregar em: ${c.estoque_locais?.nome ?? "—"}`,
+                colunas: [{ rotulo: "Item" }, { rotulo: "Quantidade", num: true }, { rotulo: "Unidade" }],
+                linhas: itens.map((it) => [nome(it), String(Number(it.quantidade_pedida ?? 0)), un(it)]),
+              },
+        ],
+        assinaturas: recebida ? ["Quem recebeu", "Gerente"] : [],
+        arquivo: `${recebida ? "recebimento" : "pedido"}-${c.fornecedor || "compra"}-${c.data_compra}`,
+      });
+    }
+
     function linhaCompra(c) {
       const [rotulo, variante] = SITUACAO[c.status] ?? [c.status, ""];
       const nItens = (c.compra_itens ?? []).length;
@@ -236,6 +290,13 @@ async function paginaPedidos(raiz, ctx) {
           title: "Ver os itens desta nota",
           texto: "👁",
           onclick: () => detalheCompra(c.id),
+        }),
+        el("button", {
+          classe: "btn-icone",
+          type: "button",
+          title: c.status === "recebida" ? "Recebimento em PDF" : "Pedido em PDF, para mandar ao fornecedor",
+          texto: "⤓",
+          onclick: () => compraEmPdf(c.id),
         }),
       ];
       if (c.status === "pedido" || c.status === "rascunho") {

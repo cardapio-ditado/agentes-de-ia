@@ -1,5 +1,6 @@
 import { get, post, put } from "../api.js";
 import { avisar, dinheiro, el, limpar, vazio } from "../ui.js";
+import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * O painel do CMV — o número que justifica o módulo inteiro.
@@ -61,6 +62,53 @@ export async function cmvPainel(raiz, ctx) {
     campoInicio.addEventListener("change", aplicar);
     campoFim.addEventListener("change", aplicar);
 
+    // O relatório do mês para o dono e o contador: o número, a conta aberta,
+    // onde escapa e o faturamento dia a dia.
+    const pdf = botaoDePdf(() => {
+      const escapes = consumo.filter((c) => Math.abs(Number(c.diferenca_valor)) >= 1).slice(0, 25);
+      imprimirRelatorio({
+        tipo: "Custos e estoque",
+        titulo: "CMV do período",
+        periodo: `${dataBr(inicio)} a ${dataBr(fim)}`,
+        selos: [
+          { valor: percentual !== null && percentual !== undefined ? `${Number(percentual).toFixed(1).replace(".", ",")}%` : "—", rotulo: "CMV", ruim: Number(percentual) > 38 },
+          { valor: dinheiro(Number(p.cmv ?? 0)), rotulo: "custo da mercadoria" },
+          { valor: dinheiro(Number(p.faturamento ?? 0)), rotulo: "faturamento" },
+        ],
+        secoes: [
+          {
+            titulo: "A conta, aberta",
+            pares: [
+              ["Estoque inicial", dinheiro(Number(p.estoque_inicial ?? 0))],
+              ["+ Compras", dinheiro(Number(p.compras ?? 0))],
+              ["− Estoque final", dinheiro(Number(p.estoque_final ?? 0))],
+              ["= CMV (o que foi consumido)", dinheiro(Number(p.cmv ?? 0)), true],
+              ["÷ Faturamento líquido", dinheiro(Number(p.faturamento ?? 0))],
+            ],
+          },
+          escapes.length
+            ? {
+                titulo: "Onde o dinheiro está escapando",
+                nota: "O que as receitas dizem que os pratos vendidos consumiram, contra o que de fato sumiu do estoque.",
+                colunas: [{ rotulo: "Item" }, { rotulo: "Receitas dizem", num: true }, { rotulo: "Sumiu", num: true }, { rotulo: "Diferença", num: true }, { rotulo: "Em reais", num: true }],
+                linhas: escapes.map((c) => ({
+                  destaque: Number(c.diferenca_valor) > 0,
+                  celulas: [c.insumo, `${Number(c.teorico)} ${c.unidade}`, `${Number(c.real_consumido)} ${c.unidade}`, `${Number(c.diferenca) > 0 ? "+" : ""}${Number(c.diferenca)}`, dinheiro(Number(c.diferenca_valor))],
+                })),
+              }
+            : null,
+          {
+            titulo: "Faturamento lançado",
+            colunas: [{ rotulo: "Dia" }, { rotulo: "Valor", num: true }],
+            linhas: dados.faturamentos.map((f) => [dataBr(f.data_referencia), dinheiro(Number(f.valor))]),
+            total: ["Total", dinheiro(dados.faturamentos.reduce((t, f) => t + Number(f.valor), 0))],
+            vazio: "Nenhum faturamento lançado no período.",
+          },
+        ],
+        arquivo: `cmv-${inicio}-a-${fim}`,
+      });
+    }, "Relatório do CMV");
+
     const linhaDado = (rotulo, valor, ajuda) =>
       el("div", { classe: "cabecalho-secao" }, [
         el("span", {}, [
@@ -82,9 +130,10 @@ export async function cmvPainel(raiz, ctx) {
 
     conteudo.append(
       el("section", { classe: "pilha" }, [
-        el("div", { classe: "linha-campos" }, [
+        el("div", { classe: "linha-campos", style: "align-items:flex-end" }, [
           el("label", { classe: "campo-rotulado", style: "flex:1" }, [el("span", { texto: "De" }), campoInicio]),
           el("label", { classe: "campo-rotulado", style: "flex:1" }, [el("span", { texto: "Até" }), campoFim]),
+          pdf,
         ]),
 
         // O número. Grande, e honesto: sem faturamento não há percentual, e

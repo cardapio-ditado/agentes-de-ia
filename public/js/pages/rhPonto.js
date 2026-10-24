@@ -1,5 +1,6 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * RH — Fase 3: o ponto do dia, do lado do gestor.
@@ -76,6 +77,48 @@ export function criarPonto(corpo, ctx) {
     if (abertaId) corpo.append(detalhe());
   }
 
+  async function resumoDoMesEmPdf(mes) {
+    let r;
+    try {
+      r = await get(`/v1/venues/${ctx.venue}/rh/resumo?mes=${mes}`);
+    } catch (e) {
+      avisar(e.message, "erro");
+      return;
+    }
+    const horas = (min) => `${Math.floor(min / 60)}h${String(Math.round(min % 60)).padStart(2, "0")}`;
+    const nomeDoMes = new Date(`${mes}-15T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    imprimirRelatorio({
+      tipo: "RH",
+      titulo: "Resumo do mês para a contabilidade",
+      periodo: r.de ? `${nomeDoMes} (${diaBr(r.de)} a ${diaBr(r.ate)})` : nomeDoMes,
+      selos: [
+        { valor: String(r.linhas.length), rotulo: "pessoas" },
+        { valor: String(r.linhas.reduce((t, l) => t + l.faltas, 0)), rotulo: "faltas", ruim: r.linhas.some((l) => l.faltas > 0) },
+        { valor: dinheiro(r.linhas.reduce((t, l) => t + l.gorjeta, 0)), rotulo: "gorjeta no mês" },
+      ],
+      secoes: [{
+        nota: "Dias, horas, faltas e atrasos saem do ponto do tablet; a gorjeta, do acerto semanal. O cálculo da folha continua com a contabilidade.",
+        colunas: [
+          { rotulo: "Pessoa" }, { rotulo: "Cargo" }, { rotulo: "Dias", num: true }, { rotulo: "Horas", num: true },
+          { rotulo: "Noturnas", num: true }, { rotulo: "Faltas", num: true }, { rotulo: "Atrasos", num: true },
+          { rotulo: "Férias", num: true }, { rotulo: "Gorjeta", num: true },
+        ],
+        linhas: r.linhas.map((l) => ({
+          destaque: l.faltas > 0,
+          celulas: [
+            l.nome, [l.cargo, l.vinculo].filter(Boolean).join(" · "), String(l.dias_trabalhados), horas(l.minutos_trabalhados),
+            horas(l.minutos_noturnos), String(l.faltas), l.atrasos ? `${l.atrasos} (${l.minutos_de_atraso} min)` : "0",
+            l.dias_de_ferias ? `${l.dias_de_ferias} d` : "—", dinheiro(l.gorjeta),
+          ],
+        })),
+        vazio: "Ninguém com movimento no mês.",
+      }],
+      assinaturas: ["Responsável pela casa"],
+      arquivo: `rh-resumo-${mes}`,
+      paisagem: true,
+    });
+  }
+
   /* ================= Cabeçalho ================= */
 
   function cabecalho() {
@@ -99,6 +142,10 @@ export function criarPonto(corpo, ctx) {
         ]),
       ]),
       el("div", { classe: "reserva-acoes" }, [
+        // O mês do contador: o mesmo resumo que já existia para colar no
+        // WhatsApp, agora em PDF — e do mês deste dia, para o fechamento do
+        // mês passado sair navegando até ele.
+        botaoDePdf(() => resumoDoMesEmPdf(String(dados.dia).slice(0, 7)), "Resumo do mês"),
         el("button", {
           classe: "btn",
           type: "button",

@@ -1,5 +1,6 @@
 import { get, post } from "../api.js";
 import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * Contagem de estoque.
@@ -75,6 +76,12 @@ export async function contagem(raiz, ctx) {
             classe: "muted",
             texto: "Pode contar só uma parte: o que ficar em branco não muda.",
           }),
+          // Em muita casa a contagem é no papel, com a prancheta na câmara
+          // fria, e só depois alguém digita. A folha já sai na ordem da
+          // prateleira (por categoria) e com espaço para escrever.
+          el("div", { classe: "linha-campos", style: "margin-top:8px" }, [
+            botaoDePdf(() => folhaDeContagem(locais.find((l) => l.id === seletorLocal.value)), "Folha para contar no papel"),
+          ]),
         ]),
 
         historico.length > 0
@@ -349,7 +356,7 @@ export async function contagem(raiz, ctx) {
               el("h3", { texto: `Contagem — ${c.local}` }),
               el("p", { classe: "muted", texto: `${dataHora(c.processada_em ?? c.created_at)}${c.observacoes ? " · " + c.observacoes : ""}` }),
             ]),
-            el("div", { classe: "linha-campos" }, [corrigir, voltar]),
+            el("div", { classe: "linha-campos" }, [botaoDePdf(() => relatorioDaContagem(c)), corrigir, voltar]),
           ]),
 
           el("div", { classe: "grade", style: "margin-top:10px" }, [
@@ -374,6 +381,60 @@ export async function contagem(raiz, ctx) {
         ].filter(Boolean)),
       );
     }
+  }
+
+  function folhaDeContagem(local) {
+    const ordenados = [...insumos].sort((a, b) =>
+      (a.categoria ?? "").localeCompare(b.categoria ?? "", "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
+    const categorias = [...new Set(ordenados.map((i) => i.categoria || "Sem categoria"))];
+    imprimirRelatorio({
+      tipo: "Custos e estoque",
+      titulo: "Folha de contagem",
+      periodo: `${local?.nome ?? ""} · data: ____/____/______`,
+      secoes: categorias.map((cat) => ({
+        titulo: cat,
+        colunas: [{ rotulo: "Item" }, { rotulo: "Unidade" }, { rotulo: "Contado", num: true }, { rotulo: "Observação" }],
+        linhas: ordenados
+          .filter((i) => (i.categoria || "Sem categoria") === cat)
+          .map((i) => [i.nome, i.unidade, "______________", "__________________________"]),
+      })),
+      assinaturas: ["Quem contou", "Quem conferiu"],
+      arquivo: `folha-de-contagem-${local?.nome ?? ""}`,
+    });
+  }
+
+  function relatorioDaContagem(c) {
+    const comDiferenca = c.itens.filter((i) => i.diferenca !== 0);
+    imprimirRelatorio({
+      tipo: "Custos e estoque",
+      titulo: `Contagem — ${c.local}`,
+      periodo: dataHora(c.processada_em ?? c.created_at),
+      selos: [
+        { valor: dinheiro(c.faltou_reais), rotulo: "faltou", ruim: c.faltou_reais < 0 },
+        { valor: dinheiro(c.sobrou_reais), rotulo: "sobrou" },
+        { valor: dinheiro(c.liquido_reais), rotulo: "efeito no estoque", ruim: c.liquido_reais < 0 },
+      ],
+      secoes: [
+        {
+          titulo: "Itens com diferença",
+          nota: c.observacoes ?? null,
+          colunas: [{ rotulo: "Item" }, { rotulo: "Contado", num: true }, { rotulo: "Sistema na hora", num: true }, { rotulo: "Diferença", num: true }, { rotulo: "Em reais", num: true }],
+          linhas: comDiferenca.map((i) => ({
+            destaque: i.valor < 0,
+            celulas: [i.insumo, `${i.contado} ${i.unidade}`, `${i.sistema} ${i.unidade}`, `${i.diferenca > 0 ? "+" : ""}${i.diferenca}`, dinheiro(i.valor)],
+          })),
+          vazio: "Tudo bateu: nenhum item com diferença.",
+        },
+        {
+          titulo: "Itens que bateram",
+          colunas: [{ rotulo: "Item" }, { rotulo: "Contado", num: true }],
+          linhas: c.itens.filter((i) => i.diferenca === 0).map((i) => [i.insumo, `${i.contado} ${i.unidade}`]),
+          vazio: "—",
+        },
+      ],
+      assinaturas: ["Quem contou", "Gerente"],
+      arquivo: `contagem-${c.local}-${String(c.processada_em ?? c.created_at).slice(0, 10)}`,
+    });
   }
 
   function resuminho(rotulo, valor, ajuda) {

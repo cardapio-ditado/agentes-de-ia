@@ -3368,3 +3368,48 @@ a.btn { text-decoration: none; }
 /* Faixa de meta semanal, no RH. */
 .meta-faixa { align-items: center; flex-wrap: wrap; }
 .meta-faixa .input { width: 120px; }
+
+/* ============================================================
+   RELATÓRIO EM PDF — a folha genérica (public/js/relatorio.js)
+   ============================================================
+   Herda a .folha da avaliação (só aparece na impressão) e acrescenta o
+   que um relatório precisa: tabela que repete o cabeçalho a cada página,
+   linha que não se parte, total em negrito e linhas de assinatura. */
+.relatorio-titulo { font-size: 12pt; font-weight: 600; margin-top: 2pt; }
+.relatorio-periodo { font-size: 9.5pt; color: #6b5d55; margin-top: 2pt; }
+.relatorio-selos { flex-wrap: wrap; }
+.relatorio-selos .folha-selo b { font-size: 18pt; }
+.relatorio-bloco { margin-top: 14pt; }
+.relatorio-secao {
+  font-family: var(--fonte-titulo, Georgia), serif;
+  font-size: 11.5pt;
+  margin: 0 0 5pt;
+  padding-bottom: 2pt;
+  border-bottom: 0.8pt solid #d8cbbf;
+}
+.relatorio-nota { margin: 0 0 6pt; color: #6b5d55; font-size: 9pt; }
+.relatorio-paragrafo { margin: 0 0 5pt; }
+.relatorio-tabela { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.relatorio-tabela th {
+  text-align: left;
+  font-size: 7.5pt;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b5d55;
+  border-bottom: 1.2pt solid #14100e;
+  padding: 3pt 4pt;
+}
+.relatorio-tabela td { padding: 3.5pt 4pt; border-bottom: 0.5pt solid #e6dcd2; vertical-align: top; }
+.relatorio-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.relatorio-tabela tfoot td { font-weight: 700; border-top: 1.2pt solid #14100e; border-bottom: 0; }
+.relatorio-tabela tr { break-inside: avoid; }
+.relatorio-tabela thead { display: table-header-group; }
+.relatorio-destaque td { color: #c1121f; font-weight: 600; }
+.relatorio-forte td { font-weight: 700; border-top: 1pt solid #14100e; }
+.relatorio-pares { max-width: 320pt; }
+.relatorio-assinaturas { display: flex; gap: 28pt; margin-top: 36pt; break-inside: avoid; }
+.relatorio-assinatura { flex: 1; border-top: 0.8pt solid #14100e; padding-top: 3pt; font-size: 8.5pt; color: #6b5d55; text-align: center; }
+.relatorio-rodape { margin-top: 18pt; font-size: 7.5pt; color: #9a8b80; text-align: right; }
+.folha-relatorio .relatorio-bloco:first-of-type { margin-top: 12pt; }
+/* O total aparece uma vez, no fim — e não no pé de cada página. */
+.relatorio-tabela tfoot { display: table-row-group; }
