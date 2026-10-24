@@ -15,6 +15,7 @@ import {
   type DadosAgente,
 } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
+import { hojeDaCasa } from "./hoje.js";
 import { enviarPelaCloudApi, inserirAvisos, listNotificationsForReservation, normalizarTelefone } from "./notifications.js";
 import {
   ErroDoCardapio,
@@ -817,6 +818,29 @@ const MODULOS_DA_CASA = new Set(["clientes"]);
  * tranca a porta: o endereço da API é o mesmo, e o painel inteiro é JS aberto
  * que qualquer um lê. Agora a portaria confere as duas.
  */
+/**
+ * Papéis que só usam o dia a dia: não mexem na configuração da casa.
+ *
+ * O perfil Equipe (member) confere a nota, conta o estoque e faz o
+ * checklist — e não troca o número do WhatsApp nem desliga a Zig. No
+ * painel essas telas nem aparecem para ele; aqui é a trava de verdade.
+ */
+const SO_DIA_A_DIA = new Set(["member", "viewer"]);
+
+export function podeConfigurar(acesso: Pick<Acesso, "papel" | "plataformaAdmin">): boolean {
+  // Chave de máquina (papel null) já nasce com escopos próprios.
+  return acesso.plataformaAdmin || acesso.papel === null || !SO_DIA_A_DIA.has(acesso.papel);
+}
+
+function exigirQuemConfigura(acesso: Acesso): void {
+  if (!podeConfigurar(acesso)) {
+    throw erro(403, "forbidden", "Seu perfil é de dia a dia. Peça ao dono ou ao gerente para mudar esta configuração.");
+  }
+}
+
+/** Recursos da casa cuja escrita é configuração, e não operação. */
+const RECURSOS_DE_CONFIGURAR = new Set(["whatsapp-oficial", "instagram", "integracoes", "canais"]);
+
 async function exigirModulo(acesso: Acesso, modulo: string, venueId: string): Promise<void> {
   // Suporte da Brasa Food enxerga o que o cliente enxerga — é como se
   // descobre por telefone que o favo apagado era um módulo não contratado.
@@ -1494,6 +1518,7 @@ async function roteasApi(
     if (metodo === "GET") {
       return ok(res, dadosDaCasaParaOPainel(venue));
     }
+    exigirQuemConfigura(chave);
 
     if (metodo === "PATCH") {
       const corpo = await lerJson(req);
@@ -1554,6 +1579,10 @@ async function roteasApi(
       cardapio: "cardapio-digital",
       rh: "rh",
     };
+    if (metodo !== "GET" && RECURSOS_DE_CONFIGURAR.has(recurso ?? "")) {
+      exigirQuemConfigura(await exigirChave(req, "reservations:write"));
+    }
+
     const moduloExigido = MODULO_DO_RECURSO[recurso];
     if (moduloExigido) {
       const quem = await exigirChave(req, "reservations:read");
@@ -4696,6 +4725,19 @@ async function roteasApi(
       return ok(res, await metricasDoVenue(venue.id, venue.timezone));
     }
 
+    // GET /v1/venues/:slug/hoje — está tudo ligado, e o que espera alguém
+    // hoje. Cada pedaço respeita o contrato da casa E o acesso da pessoa:
+    // o conferente de doca não vê a fila do Google.
+    if (metodo === "GET" && recurso === "hoje" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const contratados = new Set((await listarModulos(venue.id)).filter((m) => m.ativo).map((m) => m.modulo));
+      const podeVer = (modulo: string) =>
+        chave.plataformaAdmin ||
+        ((chave.modulos === null || chave.modulos.includes(modulo)) && (MODULOS_DA_CASA.has(modulo) || contratados.has(modulo)));
+      return ok(res, await hojeDaCasa({ venue, podeVer }));
+    }
+
     // GET /v1/venues/:slug/pontos — saldo do plano, consumo por motor e
     // quanto tempo a sobra dura em cada um deles
     if (metodo === "GET" && recurso === "pontos") {
@@ -4767,6 +4809,9 @@ async function roteasApi(
         org_id: acesso.org_id,
         plataforma_admin: acesso.plataformaAdmin,
         escopos: acesso.scopes,
+        // O painel esconde as telas de configurar de quem é do dia a dia.
+        papel: acesso.papel,
+        pode_configurar: podeConfigurar(acesso),
         // Null = sem restrição. O painel usa para apagar da colmeia os favos
         // que esta pessoa não pode abrir — esconder é conveniência; a trava
         // de verdade é conferida em cada rota.
@@ -5919,6 +5964,8 @@ async function roteasApi(
   // enfileira comandos que ele consome em ~5s. Ver src/ponteWhatsapp.ts.
   if (p[0] === "whatsapp" && p.length === 2) {
     const chave = await exigirChave(req, "reservations:write");
+    // Ligar e desligar um número é configuração da casa.
+    if (metodo === "POST") exigirQuemConfigura(chave);
 
     if (metodo === "GET" && p[1] === "status") {
       if (conectorWhatsapp) {

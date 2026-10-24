@@ -3259,3 +3259,44 @@ label.integracao-uso { cursor: pointer; }
 
 /* Abas de uma página que junta duas ou três telas. */
 .abas-pagina { margin-bottom: 14px; }
+
+/* ============ Hoje ============ */
+.ponto-problema { background: var(--perigo); }
+.hoje-topo { display: grid; gap: 4px; }
+.hoje-topo-ok { border-color: color-mix(in srgb, var(--ok) 35%, var(--borda)); }
+.hoje-topo-atencao { border-color: color-mix(in srgb, var(--perigo) 35%, var(--borda)); }
+.hoje-dia {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+.hoje-frase { margin: 0; font-size: 1.5rem; text-wrap: balance; }
+.hoje-linha { color: inherit; text-decoration: none; }
+.hoje-linha:hover { background: var(--marca-suave); }
+.hoje-numero {
+  min-width: 34px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.hoje-numero-urgente { background: var(--perigo-suave); color: var(--perigo); }
+.hoje-seta { font-size: 1.4rem; color: var(--texto-suave); }
+
+/* Os perfis prontos, em Pessoas e acessos. */
+.perfis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.perfil {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--superficie);
+  font-size: 0.9rem;
+}

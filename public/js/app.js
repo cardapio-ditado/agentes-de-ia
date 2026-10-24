@@ -1,6 +1,7 @@
 import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessao } from "./api.js";
 import { ICONES, avisar, el, icone, limpar } from "./ui.js";
 import { painel } from "./pages/painel.js";
+import { hoje } from "./pages/hoje.js";
 import { clientes } from "./pages/clientes.js";
 import { plataforma } from "./pages/plataforma.js";
 import { conversas } from "./pages/conversas.js";
@@ -112,6 +113,10 @@ const APELIDOS = {
   kardex: "estoque:historico",
 };
 
+/** O ícone do Hoje — o mesmo do botão no rodapé da lateral. */
+const SOL =
+  "M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6L4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 17a5 5 0 100-10 5 5 0 000 10z";
+
 /** Os grupos do menu lateral, na ordem em que aparecem. */
 const GRUPOS = { dia: "Dia a dia", analise: "Análise", configurar: "Configurar" };
 
@@ -119,6 +124,10 @@ const GRUPOS = { dia: "Dia a dia", analise: "Análise", configurar: "Configurar"
 // em que o usuário entrou. `grupo` separa o que se usa todo dia do que se
 // configura uma vez (sem grupo = dia a dia).
 const PAGINAS = [
+  // A primeira tela de quem entra: o que precisa de mim, e está tudo ligado.
+  // Fora de qualquer módulo, como os Ajustes — junta todos eles.
+  { id: "hoje", modulo: "hoje", rotulo: "Hoje", icone: SOL, render: hoje, subtitulo: "O que precisa de você e se está tudo funcionando" },
+
   { id: "painel", modulo: "agentes-ia", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
   { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente conversou com cada cliente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
@@ -216,6 +225,14 @@ const PAGINAS = [
 
 /** Preenchido no login por /v1/auth/me. */
 let souPlataforma = false;
+
+/**
+ * Falso para o perfil Equipe (e o Só leitura): a lateral esconde o grupo
+ * "Configurar" e os Ajustes da casa. O servidor recusa a escrita do mesmo
+ * jeito — aqui é para não mostrar a quem só usa o dia a dia um botão que
+ * não é para ele.
+ */
+let podeConfigurar = true;
 
 /**
  * A pessoa entrou com a senha que alguém ditou para ela e ainda não escolheu
@@ -325,6 +342,14 @@ const MODULOS = [
   // casa — que existe para todo cliente, tenha comprado o que tiver
   // comprado. Ambos vivem em botões no cabeçalho.
   {
+    id: "hoje",
+    nome: "Hoje",
+    descricao: "O que precisa de você hoje, e se os números estão ligados.",
+    icone: SOL,
+    // Não é módulo contratado: junta o que a casa tem.
+    interno: true,
+  },
+  {
     id: "ajustes",
     nome: "Ajustes da casa",
     descricao: "Dados da casa, pessoas com acesso, canais de WhatsApp e chaves.",
@@ -371,6 +396,8 @@ const ctx = {
   agente: null,
   /** A aba pedida no endereço (#pagina:aba), para a tela abrir nela. */
   aba: null,
+  /** Esta pessoa mexe na configuração da casa? (falso = perfil Equipe) */
+  podeConfigurar: true,
   definirAgente(slug) {
     ctx.agente = slug;
   },
@@ -445,7 +472,7 @@ function montarNav() {
   seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
 
   limpar(nav);
-  const atalhos = (MODULOS.find((m) => m.id === moduloAtual)?.atalhos ?? []).map((a) => ({
+  const atalhos = (MODULOS.find((m) => m.id === moduloAtual)?.atalhos ?? []).filter((a) => podeConfigurar || a.grupo !== "configurar").map((a) => ({
     id: a.destino,
     rotulo: a.rotulo,
     icone: a.icone,
@@ -522,6 +549,9 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   }
 
   const pagina = doModulo.find((p) => p.id === id) ?? doModulo[0];
+  // Módulo sem nenhuma tela para esta pessoa (tudo nele é de configurar):
+  // volta para a colmeia em vez de quebrar.
+  if (!pagina) return mostrarHub();
   ctx.aba = pagina.id === id ? (aba ?? null) : null;
 
   // A tela anterior pode ter deixado timers rodando.
@@ -616,6 +646,8 @@ const DICA_PADRAO = "Toque num favo aceso para entrar.";
  */
 function moduloAceso(m) {
   if (m.somentePlataforma) return true;
+  // Os Ajustes são só configuração: o perfil Equipe não tem o que fazer lá.
+  if (m.id === "ajustes" && !podeConfigurar) return false;
   // Ajustes da casa não se compra: toda casa tem a sua configuração, e sem
   // ela um cliente que só comprou Checklist não teria como conectar o
   // WhatsApp nem criar o login do gerente.
@@ -645,6 +677,7 @@ function paginasVisiveis() {
   return PAGINAS.filter((p) => {
     if (p.modulo !== moduloAtual) return false;
     if (p.plataforma && !souPlataforma) return false;
+    if (p.grupo === "configurar" && !podeConfigurar) return false;
     if (p.requer) {
       if (modulosDoCliente.get(p.requer)?.ativo !== true) return false;
       if (meusModulos !== null && !meusModulos.includes(p.requer)) return false;
@@ -810,6 +843,8 @@ document.getElementById("btn-sair-hub").addEventListener("click", () => {
 });
 // Os dois que não são favo: configuração da casa e a mesa da equipe.
 document.getElementById("btn-ajustes").addEventListener("click", () => entrarNoModulo("ajustes"));
+document.getElementById("btn-hoje").addEventListener("click", () => entrarNoModulo("hoje"));
+document.getElementById("btn-hoje-lateral").addEventListener("click", () => entrarNoModulo("hoje"));
 document.getElementById("btn-plataforma").addEventListener("click", () => entrarNoModulo("plataforma"));
 
 // ---------- Entrada por e-mail e senha ----------
@@ -1092,6 +1127,7 @@ async function iniciar() {
     const eu = await get("/v1/auth/me");
     souPlataforma = eu.plataforma_admin === true;
     meusModulos = Array.isArray(eu.modulos) ? eu.modulos : null;
+    podeConfigurar = eu.pode_configurar !== false;
 
     // Senha ditada é senha que outra pessoa sabe. Enquanto ela não trocar, o
     // painel inteiro fica fechado — não adianta pedir depois, porque "depois"
@@ -1101,7 +1137,9 @@ async function iniciar() {
     souPlataforma = false;
     meusModulos = null;
   }
+  ctx.podeConfigurar = podeConfigurar;
   document.getElementById("btn-plataforma").hidden = !souPlataforma;
+  document.getElementById("btn-ajustes").hidden = !podeConfigurar;
 
   await carregarModulos();
 
@@ -1132,9 +1170,12 @@ async function iniciar() {
     entrarNoModulo("ajustes");
     return;
   }
+  // Entrada nova abre o Hoje: é a pergunta de quem chega de manhã, e a
+  // colmeia continua a um clique ("Módulos"). F5 dentro de um módulo e o
+  // atalho ?direto=1 voltam para onde estavam.
   const direto = busca.has("direto") || sessionStorage.getItem("brasa.hub.visto") === "1";
   if (direto) entrarNoModulo(sessionStorage.getItem("brasa.modulo") ?? "agentes-ia");
-  else mostrarHub();
+  else entrarNoModulo("hoje");
 }
 
 /**

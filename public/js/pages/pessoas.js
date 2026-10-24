@@ -66,6 +66,14 @@ export async function pessoas(raiz, ctx) {
           ? el("p", { classe: "aviso aviso-alerta", texto: "Só o dono e o gerente podem criar ou alterar acessos." })
           : null,
 
+        // Os perfis prontos, lado a lado: a pergunta "que acesso eu dou para
+        // o cozinheiro?" se responde olhando, sem precisar de mentor.
+        el("div", { classe: "perfis" }, dados.papeis.map((papel) =>
+          el("div", { classe: "perfil" }, [
+            el("strong", { texto: papel.nome }),
+            el("span", { classe: "muted", texto: papel.descricao }),
+          ]))),
+
         el("div", { classe: "rolagem-x" }, [
           el("table", { classe: "planilha" }, [
             el("thead", {}, [
@@ -221,7 +229,7 @@ export async function pessoas(raiz, ctx) {
 
       // Módulos: null = todos. A caixa "todos" ligada esconde a lista, porque
       // é o caso comum e ninguém quer marcar cinco caixas para o gerente.
-      const todos = el("input", { type: "checkbox", checked: existente ? existente.modulos === null : true });
+      const todos = el("input", { type: "checkbox", checked: existente ? existente.modulos === null : escolhido.value !== "member" });
       const caixas = contratados.map((id) =>
         el("label", { classe: "campo-caixa" }, [
           el("input", {
@@ -236,6 +244,15 @@ export async function pessoas(raiz, ctx) {
       todos.addEventListener("change", () => {
         listaModulos.hidden = todos.checked;
       });
+      // Perfil pronto: gerente enxerga tudo; a equipe começa sem nada
+      // marcado, para o dono escolher o que aquela pessoa usa (o cozinheiro,
+      // o checklist e a contagem; o garçom, as reservas).
+      if (!existente) {
+        escolhido.addEventListener("change", () => {
+          todos.checked = escolhido.value !== "member";
+          listaModulos.hidden = todos.checked;
+        });
+      }
 
       conteudo.append(
         el("section", { classe: "pilha" }, [

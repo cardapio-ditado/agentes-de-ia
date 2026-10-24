@@ -24,12 +24,12 @@ export const PAPEIS = [
   {
     id: "admin",
     nome: "Gerente",
-    descricao: "Tudo no dia a dia; também cria acessos da equipe.",
+    descricao: "Tudo da casa, inclusive configurar e criar acessos da equipe.",
   },
   {
     id: "member",
-    nome: "Operação",
-    descricao: "Usa os módulos liberados. Não mexe em acessos nem em cadastro da casa.",
+    nome: "Equipe",
+    descricao: "O dia a dia dos módulos liberados: checklist, contagem, recebimento, reservas. Não vê as telas de configurar.",
   },
   {
     id: "viewer",
