@@ -115,6 +115,15 @@ export function semanaVizinha(ano: number, numero: number, passo: number): { ano
 // A regra da casa
 // ============================================================
 
+/**
+ * Uma faixa de meta: vendeu `a_partir_de` ou mais NA SEMANA, ganha `bonus`
+ * pontos percentuais a mais sobre a venda.
+ */
+export interface FaixaDeMeta {
+  a_partir_de: number;
+  bonus: number;
+}
+
 export interface RegraDaCasa {
   metodo: "individual" | "global";
   percentual_servico: number;
@@ -122,6 +131,18 @@ export interface RegraDaCasa {
   criterio_rateio: "igual" | "peso" | "horas";
   /** Fatia do repasse separada para quem não vende. Zero desliga. */
   percentual_da_casa_para_apoio: number;
+  /**
+   * As metas semanais, da menor para a maior. Vale a MAIOR faixa atingida —
+   * as faixas não se somam: quem passa de R$ 15 mil não leva o bônus de
+   * R$ 10 mil mais o de R$ 15 mil.
+   */
+  metas: FaixaDeMeta[];
+  /**
+   * Sobre o que o bônus incide. "tudo": a venda inteira da semana (o mais
+   * comum, e o mais fácil de explicar). "excedente": só o que passou da
+   * faixa atingida.
+   */
+  meta_sobre: "tudo" | "excedente";
   /** Falso enquanto a casa não escolheu: a tela pede a escolha antes de tudo. */
   configurada: boolean;
 }
@@ -132,11 +153,62 @@ const REGRA_PADRAO: RegraDaCasa = {
   percentual_repasse: 100,
   criterio_rateio: "igual",
   percentual_da_casa_para_apoio: 0,
+  metas: [],
+  meta_sobre: "tudo",
   configurada: false,
 };
 
 const COLUNAS_DA_REGRA =
-  "metodo, percentual_servico, percentual_repasse, criterio_rateio, percentual_da_casa_para_apoio";
+  "metodo, percentual_servico, percentual_repasse, criterio_rateio, percentual_da_casa_para_apoio, metas, meta_sobre";
+
+/** Faixas válidas, em ordem, sem limiar repetido. O que vier torto é recusado. */
+export function lerMetas(valor: unknown): FaixaDeMeta[] {
+  if (valor === undefined || valor === null || valor === "") return [];
+  if (!Array.isArray(valor)) throw new ErroDoRh(400, "As metas precisam vir numa lista.");
+  if (valor.length > 10) throw new ErroDoRh(400, "No máximo 10 faixas de meta.");
+  const faixas = valor.map((f) => {
+    const linha = (f ?? {}) as Record<string, unknown>;
+    const aPartirDe = Number(linha.a_partir_de);
+    const bonus = Number(linha.bonus);
+    if (!Number.isFinite(aPartirDe) || aPartirDe <= 0) {
+      throw new ErroDoRh(400, "Cada meta precisa de um valor de venda maior que zero.");
+    }
+    if (!Number.isFinite(bonus) || bonus <= 0 || bonus > 100) {
+      throw new ErroDoRh(400, "O bônus de cada meta precisa ficar entre 0 e 100%.");
+    }
+    return { a_partir_de: Math.round(aPartirDe * 100) / 100, bonus: Math.round(bonus * 100) / 100 };
+  });
+  faixas.sort((a, b) => a.a_partir_de - b.a_partir_de);
+  for (let i = 1; i < faixas.length; i++) {
+    if (faixas[i]!.a_partir_de === faixas[i - 1]!.a_partir_de) {
+      throw new ErroDoRh(400, "Duas metas com o mesmo valor de venda. Deixe uma só.");
+    }
+  }
+  return faixas;
+}
+
+export interface ResultadoDaMeta {
+  /** O dinheiro a mais, em reais. */
+  bonus: number;
+  /** A faixa atingida (null = nenhuma). */
+  faixa: FaixaDeMeta | null;
+  /** A próxima faixa e quanto falta vender para chegar nela. */
+  proxima: (FaixaDeMeta & { falta: number }) | null;
+}
+
+/** O bônus de meta de uma pessoa, pela venda da semana. Pura. */
+export function bonusDaMeta(venda: number, metas: FaixaDeMeta[], sobre: RegraDaCasa["meta_sobre"]): ResultadoDaMeta {
+  const ordenadas = [...metas].sort((a, b) => a.a_partir_de - b.a_partir_de);
+  const atingidas = ordenadas.filter((f) => venda >= f.a_partir_de);
+  const faixa = atingidas[atingidas.length - 1] ?? null;
+  const seguinte = ordenadas.find((f) => venda < f.a_partir_de) ?? null;
+  const base = !faixa ? 0 : sobre === "excedente" ? venda - faixa.a_partir_de : venda;
+  return {
+    bonus: faixa ? reais(Math.round(centavos(base) * (faixa.bonus / 100))) : 0,
+    faixa,
+    proxima: seguinte ? { ...seguinte, falta: reais(centavos(seguinte.a_partir_de) - centavos(venda)) } : null,
+  };
+}
 
 export async function verRegra(venueId: string): Promise<RegraDaCasa> {
   const { data, error } = await cliente()
@@ -154,6 +226,8 @@ export async function verRegra(venueId: string): Promise<RegraDaCasa> {
     percentual_repasse: Number(linha.percentual_repasse),
     criterio_rateio: String(linha.criterio_rateio) as RegraDaCasa["criterio_rateio"],
     percentual_da_casa_para_apoio: Number(linha.percentual_da_casa_para_apoio),
+    metas: Array.isArray(linha.metas) ? (linha.metas as FaixaDeMeta[]) : [],
+    meta_sobre: linha.meta_sobre === "excedente" ? "excedente" : "tudo",
     configurada: true,
   };
 }
@@ -174,6 +248,8 @@ export async function salvarRegra(params: {
   percentualRepasse?: unknown;
   criterioRateio?: unknown;
   percentualParaApoio?: unknown;
+  metas?: unknown;
+  metaSobre?: unknown;
   quem: string;
 }): Promise<RegraDaCasa> {
   const atual = await verRegra(params.venueId);
@@ -190,6 +266,11 @@ export async function salvarRegra(params: {
     : String(params.criterioRateio);
   if (!IDS_DE_CRITERIO.has(criterio)) throw new ErroDoRh(400, "Critério de rateio desconhecido.");
 
+  // Sem `metas` no corpo, as que já existiam ficam: salvar o percentual não
+  // pode apagar a meta que ninguém mexeu.
+  const metas = params.metas === undefined ? atual.metas : lerMetas(params.metas);
+  const metaSobre = params.metaSobre === undefined ? atual.meta_sobre : params.metaSobre === "excedente" ? "excedente" : "tudo";
+
   const linha = {
     venue_id: params.venueId,
     metodo,
@@ -201,6 +282,8 @@ export async function salvarRegra(params: {
       "O percentual separado para o apoio",
       atual.percentual_da_casa_para_apoio,
     ),
+    metas,
+    meta_sobre: metaSobre,
     atualizado_em: new Date().toISOString(),
     atualizado_por: params.quem,
   };
@@ -216,6 +299,8 @@ export async function salvarRegra(params: {
     percentual_repasse: linha.percentual_repasse,
     criterio_rateio: criterio as RegraDaCasa["criterio_rateio"],
     percentual_da_casa_para_apoio: linha.percentual_da_casa_para_apoio,
+    metas,
+    meta_sobre: metaSobre,
     configurada: true,
   };
 }
@@ -373,6 +458,12 @@ export interface LinhaDoAcerto {
   comissao: number;
   /** O que veio do bolo repartido (método global, ou a fatia do apoio). */
   rateio: number;
+  /** O a mais da meta semanal. Sai do caixa da casa, não da gorjeta. */
+  bonus_meta: number;
+  /** O bônus (em %) da faixa atingida, ou null. */
+  meta_atingida: number | null;
+  /** A próxima faixa e quanto falta — o que motiva no meio da semana. */
+  meta_proxima: (FaixaDeMeta & { falta: number }) | null;
   adicionais: number;
   descontos: number;
   a_receber: number;
@@ -385,6 +476,7 @@ export interface TotaisDoAcerto {
   retido: number;
   comissoes: number;
   rateio: number;
+  bonus_meta: number;
   adicionais: number;
   descontos: number;
   a_receber: number;
@@ -464,6 +556,11 @@ export function montarAcerto(params: {
     const rateio = rateioDe.get(p.atendente_id) ?? 0;
     const adicionais = somaExtras(p.atendente_id, "adicional");
     const descontos = somaExtras(p.atendente_id, "desconto");
+    // A meta é da SEMANA: a venda somada de segunda a domingo, e não a de
+    // um dia bom. Quem não vendeu nada não tem meta a bater.
+    const meta = p.venda > 0 && regra.metas.length
+      ? bonusDaMeta(p.venda, regra.metas, regra.meta_sobre)
+      : { bonus: 0, faixa: null, proxima: null };
     return {
       atendente_id: p.atendente_id,
       nome: p.nome,
@@ -474,11 +571,17 @@ export function montarAcerto(params: {
       comandas: p.comandas,
       comissao,
       rateio,
+      bonus_meta: meta.bonus,
+      meta_atingida: meta.faixa?.bonus ?? null,
+      meta_proxima: meta.proxima,
       adicionais,
       descontos,
       // Nunca negativo: consumo maior que a gorjeta da semana é conversa de
       // desconto em folha, não gorjeta a pagar com sinal trocado.
-      a_receber: Math.max(0, reais(centavos(comissao) + centavos(rateio) + centavos(adicionais) - centavos(descontos))),
+      a_receber: Math.max(
+        0,
+        reais(centavos(comissao) + centavos(rateio) + centavos(meta.bonus) + centavos(adicionais) - centavos(descontos)),
+      ),
     };
   });
 
@@ -496,6 +599,7 @@ export function montarAcerto(params: {
       retido: reais(centavos(arrecadado) - centavos(repassado)),
       comissoes: soma("comissao"),
       rateio: soma("rateio"),
+      bonus_meta: soma("bonus_meta"),
       adicionais: soma("adicionais"),
       descontos: soma("descontos"),
       a_receber: soma("a_receber"),

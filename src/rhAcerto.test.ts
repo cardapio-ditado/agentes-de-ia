@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ErroDoRh } from "./rh.js";
 import {
+  bonusDaMeta,
   bordasDaSemana,
+  lerMetas,
   montarAcerto,
   semanaDoDia,
   semanaVizinha,
@@ -24,6 +26,8 @@ const REGRA: RegraDaCasa = {
   percentual_repasse: 100,
   criterio_rateio: "igual",
   percentual_da_casa_para_apoio: 0,
+  metas: [],
+  meta_sobre: "tudo",
   configurada: true,
 };
 
@@ -265,4 +269,61 @@ test("a lista sai por quem recebe mais, com desempate pelo nome", () => {
     extras: [],
   });
   assert.deepEqual(r.linhas.map((l) => l.nome), ["Ana", "Bia", "Zeca"]);
+});
+
+// ============================================================
+// Metas semanais
+// ============================================================
+
+const METAS = [
+  { a_partir_de: 10000, bonus: 1 },
+  { a_partir_de: 15000, bonus: 2 },
+];
+
+test("meta: vale a maior faixa atingida, sobre a venda inteira da semana", () => {
+  assert.deepEqual(bonusDaMeta(9999.99, METAS, "tudo").bonus, 0);
+  assert.equal(bonusDaMeta(12000, METAS, "tudo").bonus, 120);
+  // Passou das duas: leva só os 2%, não 1% + 2%.
+  assert.equal(bonusDaMeta(16000, METAS, "tudo").bonus, 320);
+  assert.equal(bonusDaMeta(16000, METAS, "tudo").faixa?.bonus, 2);
+});
+
+test("meta: no modo excedente, o bônus é só sobre o que passou da faixa", () => {
+  assert.equal(bonusDaMeta(12000, METAS, "excedente").bonus, 20);
+});
+
+test("meta: diz quanto falta para a próxima faixa", () => {
+  const r = bonusDaMeta(12345.6, METAS, "tudo");
+  assert.deepEqual(r.proxima, { a_partir_de: 15000, bonus: 2, falta: 2654.4 });
+  assert.equal(bonusDaMeta(20000, METAS, "tudo").proxima, null);
+});
+
+test("meta: entra no a receber, separada da comissão", () => {
+  const r = montarAcerto({
+    regra: { ...REGRA, metas: METAS },
+    pessoas: [pessoa("a", "Ana", "Garçom"), pessoa("b", "Beto", "Garçom")],
+    vendas: new Map([
+      ["a", { valor: 12000, comandas: 40 }],
+      ["b", { valor: 8000, comandas: 30 }],
+    ]),
+    cotas: new Map(),
+    extras: [],
+  });
+  const ana = r.linhas.find((l) => l.atendente_id === "a")!;
+  const beto = r.linhas.find((l) => l.atendente_id === "b")!;
+  assert.equal(ana.comissao, 1200);
+  assert.equal(ana.bonus_meta, 120);
+  assert.equal(ana.a_receber, 1320);
+  assert.equal(beto.bonus_meta, 0);
+  assert.equal(beto.meta_proxima?.falta, 2000);
+  assert.equal(r.totais.bonus_meta, 120);
+  // O bônus não sai do serviço: o que a casa retém continua igual.
+  assert.equal(r.totais.retido, 0);
+});
+
+test("meta: faixa torta é recusada, e a lista sai em ordem", () => {
+  assert.deepEqual(lerMetas([{ a_partir_de: 15000, bonus: 2 }, { a_partir_de: 10000, bonus: 1 }]).map((f) => f.a_partir_de), [10000, 15000]);
+  assert.throws(() => lerMetas([{ a_partir_de: 0, bonus: 1 }]), ErroDoRh);
+  assert.throws(() => lerMetas([{ a_partir_de: 100, bonus: 0 }]), ErroDoRh);
+  assert.throws(() => lerMetas([{ a_partir_de: 100, bonus: 1 }, { a_partir_de: 100, bonus: 2 }]), ErroDoRh);
 });

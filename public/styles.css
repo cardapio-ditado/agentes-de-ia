@@ -3364,3 +3364,7 @@ a.btn { text-decoration: none; }
 .ajuda::backdrop { background: rgba(20, 12, 8, 0.45); }
 .ajuda p { margin: 0; line-height: 1.5; }
 .ajuda .btn-primario { justify-self: start; text-decoration: none; }
+
+/* Faixa de meta semanal, no RH. */
+.meta-faixa { align-items: center; flex-wrap: wrap; }
+.meta-faixa .input { width: 120px; }

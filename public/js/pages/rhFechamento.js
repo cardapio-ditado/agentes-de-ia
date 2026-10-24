@@ -91,6 +91,9 @@ export function criarFechamento(corpo, ctx) {
           + (r.percentual_da_casa_para_apoio > 0 ? ` · ${numeroCurto(r.percentual_da_casa_para_apoio)}% separados para o apoio` : "")
         : `Bolo de ${numeroCurto(r.percentual_servico)}% sobre a venda da casa, repartido ${NOME_DO_CRITERIO[r.criterio_rateio]}`
           + (r.percentual_repasse < 100 ? ` · ${numeroCurto(r.percentual_repasse)}% repassados à equipe` : "");
+    const fraseDasMetas = r.configurada && r.metas?.length
+      ? `Metas da semana: ${r.metas.map((m) => `a partir de ${dinheiro(m.a_partir_de)} +${numeroCurto(m.bonus)}%`).join(" · ")}`
+      : null;
 
     const botao = (id, rotulo, primario = false) =>
       el("button", {
@@ -108,9 +111,11 @@ export function criarFechamento(corpo, ctx) {
         el("div", {}, [
           el("h2", { texto: "Gorjeta" }),
           el("p", { classe: "muted", texto: frase }),
+          fraseDasMetas ? el("p", { classe: "muted", texto: fraseDasMetas }) : null,
         ]),
         el("div", { classe: "reserva-acoes", style: "flex-wrap:wrap" }, [
-          dados.regra.configurada && dados.regra.metodo === "individual"
+          // A meta precisa da venda de cada um, nos dois métodos.
+          dados.regra.configurada && (dados.regra.metodo === "individual" || dados.regra.metas?.length)
             ? botao("venda", "Lançar venda", true)
             : null,
           dados.regra.configurada ? botao("adicional", "Adicional") : null,
@@ -182,6 +187,8 @@ export function criarFechamento(corpo, ctx) {
     apoio.addEventListener("input", atualizarVisibilidade);
     atualizarVisibilidade();
 
+    const metas = editorDeMetas(r);
+
     return el("section", { classe: "cartao" }, [
       el("h3", { texto: "Como esta casa paga a gorjeta" }),
       el("p", {
@@ -203,6 +210,7 @@ export function criarFechamento(corpo, ctx) {
         campoCriterio,
         campoApoio,
       ]),
+      metas.elemento,
       el("div", { classe: "reserva-acoes" }, [
         el("button", {
           classe: "btn btn-primario",
@@ -217,6 +225,8 @@ export function criarFechamento(corpo, ctx) {
                 percentual_repasse: Number(repasse.value),
                 criterio_rateio: criterio.value,
                 percentual_da_casa_para_apoio: Number(apoio.value) || 0,
+                metas: metas.valor(),
+                meta_sobre: metas.sobre(),
               });
               avisar("Regra salva. A tela já está falando essa língua.", "ok");
               painel = null;
@@ -230,6 +240,107 @@ export function criarFechamento(corpo, ctx) {
       ]),
       tabelaDePesos(),
     ]);
+  }
+
+  /**
+   * As metas da semana: "vendeu a partir de R$ X na semana, ganha +Y%".
+   *
+   * A semana é a mesma do acerto (segunda a domingo) — meta de garçom em bar
+   * é semanal, porque um sábado cheio não pode decidir sozinho. As linhas
+   * vivem num array local: adicionar ou tirar faixa não pode apagar o que a
+   * pessoa já digitou nos outros campos da regra.
+   */
+  function editorDeMetas(r) {
+    const faixas = (r.metas ?? []).map((m) => ({ a_partir_de: String(m.a_partir_de), bonus: String(m.bonus) }));
+    const sobre = el("select", { classe: "input" }, [
+      el("option", { value: "tudo", texto: "Sobre toda a venda da semana", selected: r.meta_sobre !== "excedente" }),
+      el("option", { value: "excedente", texto: "Só sobre o que passou da meta", selected: r.meta_sobre === "excedente" }),
+    ]);
+    const lista = el("div", { classe: "pilha-fina" });
+    const exemplo = el("p", { classe: "muted" });
+
+    function desenharLinhas() {
+      limpar(lista);
+      faixas.forEach((f, i) => {
+        const valor = el("input", { classe: "input", type: "number", min: "0", step: "100", value: f.a_partir_de, placeholder: "10000", oninput: (e) => { f.a_partir_de = e.target.value; atualizarExemplo(); } });
+        const bonus = el("input", { classe: "input", type: "number", min: "0", max: "100", step: "0.1", value: f.bonus, placeholder: "1", oninput: (e) => { f.bonus = e.target.value; atualizarExemplo(); } });
+        lista.append(
+          el("div", { classe: "linha-campos meta-faixa" }, [
+            el("span", { classe: "muted", texto: "Vendeu a partir de R$" }),
+            valor,
+            el("span", { classe: "muted", texto: "na semana → ganha +" }),
+            bonus,
+            el("span", { classe: "muted", texto: "%" }),
+            el("button", {
+              classe: "btn btn-peq btn-perigo",
+              type: "button",
+              texto: "Tirar",
+              onclick: () => {
+                faixas.splice(i, 1);
+                desenharLinhas();
+              },
+            }),
+          ]),
+        );
+      });
+      if (!faixas.length) lista.append(el("p", { classe: "muted", texto: "Nenhuma meta. Sem meta, a comissão é só o percentual de sempre." }));
+      atualizarExemplo();
+    }
+
+    // O exemplo em reais é o que faz a regra ser entendida na primeira leitura.
+    function atualizarExemplo() {
+      const validas = faixas
+        .map((f) => ({ a: Number(f.a_partir_de), b: Number(f.bonus) }))
+        .filter((f) => f.a > 0 && f.b > 0)
+        .sort((x, y) => x.a - y.a);
+      if (!validas.length) {
+        exemplo.textContent = "";
+        return;
+      }
+      const f = validas[0];
+      const venda = Math.round(f.a * 1.2);
+      const base = sobre.value === "excedente" ? venda - f.a : venda;
+      exemplo.textContent = `Exemplo: quem vendeu ${dinheiro(venda)} de segunda a domingo ganha ${dinheiro((base * f.b) / 100)} a mais nessa semana.`;
+    }
+    sobre.addEventListener("change", atualizarExemplo);
+    desenharLinhas();
+
+    const elemento = el("div", { classe: "pilha", style: "margin-top:18px" }, [
+      el("h4", { texto: "Metas da semana", style: "margin:0" }),
+      el("p", {
+        classe: "muted",
+        texto:
+          "Conta a venda de cada pessoa de segunda a domingo. Vale a maior faixa atingida (as faixas não se somam). "
+          + "O bônus sai do caixa da casa, não do serviço: a gorjeta dos outros não diminui.",
+      }),
+      lista,
+      el("div", { classe: "linha-campos", style: "align-items:center" }, [
+        el("button", {
+          classe: "btn btn-peq",
+          type: "button",
+          texto: "+ Adicionar faixa",
+          onclick: () => {
+            const ultima = faixas[faixas.length - 1];
+            faixas.push({
+              a_partir_de: ultima ? String(Number(ultima.a_partir_de || 0) + 5000) : "10000",
+              bonus: ultima ? String(Number(ultima.bonus || 0) + 1) : "1",
+            });
+            desenharLinhas();
+          },
+        }),
+        sobre,
+      ]),
+      exemplo,
+    ]);
+
+    return {
+      elemento,
+      sobre: () => sobre.value,
+      valor: () =>
+        faixas
+          .filter((f) => f.a_partir_de !== "" || f.bonus !== "")
+          .map((f) => ({ a_partir_de: Number(f.a_partir_de), bonus: Number(f.bonus) })),
+    };
   }
 
   /** A pontuação por função: só aparece onde ela manda na conta. */
@@ -354,6 +465,7 @@ export function criarFechamento(corpo, ctx) {
     const partes = [];
     if (t.comissoes > 0) partes.push(`${dinheiro(t.comissoes)} de comissão`);
     if (t.rateio > 0) partes.push(`${dinheiro(t.rateio)} de rateio`);
+    if (t.bonus_meta > 0) partes.push(`${dinheiro(t.bonus_meta)} de meta`);
     if (t.adicionais > 0) partes.push(`+ ${dinheiro(t.adicionais)}`);
     if (t.descontos > 0) partes.push(`− ${dinheiro(t.descontos)}`);
     return partes.join(" · ") || "nada lançado ainda";
@@ -379,6 +491,7 @@ export function criarFechamento(corpo, ctx) {
     const temRateio = dados.linhas.some((l) => l.rateio > 0);
     const temAdicional = dados.linhas.some((l) => l.adicionais > 0);
     const temDesconto = dados.linhas.some((l) => l.descontos > 0);
+    const temMeta = (dados.regra.metas ?? []).length > 0;
 
     return [
       { chave: "nome", rotulo: "Pessoa", texto: (l) => l.nome, forte: true },
@@ -389,6 +502,22 @@ export function criarFechamento(corpo, ctx) {
         : null,
       temRateio || !individual
         ? { chave: "rateio", rotulo: individual ? "Rateio à parte" : "Rateio do bolo", num: true, valor: (l) => l.rateio }
+        : null,
+      temMeta
+        ? {
+            chave: "bonus_meta",
+            rotulo: "Bônus da meta",
+            num: true,
+            valor: (l) => l.bonus_meta ?? 0,
+            // Atingiu: qual faixa. Não atingiu: quanto falta — é o que o gerente
+            // fala para o garçom na quinta-feira.
+            nota: (l) =>
+              l.meta_atingida
+                ? `bateu +${numeroCurto(l.meta_atingida)}%${l.meta_proxima ? ` · faltam ${dinheiro(l.meta_proxima.falta)} p/ +${numeroCurto(l.meta_proxima.bonus)}%` : ""}`
+                : l.meta_proxima && l.vendas > 0
+                  ? `faltam ${dinheiro(l.meta_proxima.falta)} p/ +${numeroCurto(l.meta_proxima.bonus)}%`
+                  : null,
+          }
         : null,
       temAdicional ? { chave: "adicionais", rotulo: "Adicionais", num: true, valor: (l) => l.adicionais } : null,
       temDesconto ? { chave: "descontos", rotulo: "Descontos", num: true, valor: (l) => l.descontos, negativo: true } : null,
@@ -485,9 +614,11 @@ export function criarFechamento(corpo, ctx) {
       const bruto = (v * r.percentual_servico) / 100;
       const liquido = (bruto * r.percentual_repasse) / 100;
       const daPessoa = (liquido * (100 - r.percentual_da_casa_para_apoio)) / 100;
-      previa.textContent = v > 0
-        ? `Vende ${dinheiro(v)} → serviço de ${dinheiro(bruto)} → ${dinheiro(daPessoa)} para esta pessoa.`
-        : "Digite a venda para ver quanto vira gorjeta.";
+      previa.textContent = r.metodo === "global"
+        ? "A venda de cada um aqui serve para a meta da semana; a gorjeta continua saindo do bolo."
+        : v > 0
+          ? `Vende ${dinheiro(v)} → serviço de ${dinheiro(bruto)} → ${dinheiro(daPessoa)} para esta pessoa.`
+          : "Digite a venda para ver quanto vira gorjeta.";
     }
     atualizarPrevia();
 

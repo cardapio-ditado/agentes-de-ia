@@ -1719,6 +1719,256 @@
           ]
         }
       }
+    },
+    "gorjeta-metas": {
+      "rotulo": "comissão com metas semanais",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "rotas": {
+        "GET /rh/acerto": {
+          "ano": 2026,
+          "semana": 37,
+          "inicio": "2026-09-07",
+          "fim": "2026-09-13",
+          "regra": {
+            "metodo": "individual",
+            "percentual_servico": 10,
+            "percentual_repasse": 90,
+            "criterio_rateio": "peso",
+            "percentual_da_casa_para_apoio": 20,
+            "configurada": true,
+            "metas": [
+              {
+                "a_partir_de": 8000,
+                "bonus": 1
+              },
+              {
+                "a_partir_de": 12000,
+                "bonus": 2
+              }
+            ],
+            "meta_sobre": "tudo"
+          },
+          "linhas": [
+            {
+              "atendente_id": "p1",
+              "nome": "Ju",
+              "funcao": "Garçonete",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 20600,
+              "comandas": 140,
+              "comissao": 1483.2,
+              "rateio": 0,
+              "adicionais": 180,
+              "descontos": 0,
+              "a_receber": 2075.2,
+              "bonus_meta": 412.0,
+              "meta_atingida": 2,
+              "meta_proxima": null
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "peso": 3,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 409.05,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 409.05,
+              "bonus_meta": 0.0,
+              "meta_atingida": null,
+              "meta_proxima": null
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago",
+              "funcao": "Barman",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 9700,
+              "comandas": 61,
+              "comissao": 698.4,
+              "rateio": 0,
+              "adicionais": 0,
+              "descontos": 64.5,
+              "a_receber": 730.9,
+              "bonus_meta": 97.0,
+              "meta_atingida": 1,
+              "meta_proxima": {
+                "a_partir_de": 12000,
+                "bonus": 2,
+                "falta": 2300
+              }
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 136.35,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 136.35,
+              "bonus_meta": 0.0,
+              "meta_atingida": null,
+              "meta_proxima": null
+            }
+          ],
+          "totais": {
+            "vendas": 30300,
+            "arrecadado": 3030,
+            "repassado": 2727,
+            "retido": 303,
+            "comissoes": 2181.6,
+            "rateio": 545.4,
+            "adicionais": 180,
+            "descontos": 64.5,
+            "a_receber": 3351.5,
+            "bonus_meta": 509.0
+          },
+          "vendas": [
+            {
+              "id": "v1",
+              "dia": "2026-09-08",
+              "turno_id": null,
+              "atendente_id": "p1",
+              "valor": 12400,
+              "comandas": 86,
+              "observacao": null
+            },
+            {
+              "id": "v2",
+              "dia": "2026-09-10",
+              "turno_id": "t1",
+              "atendente_id": "p1",
+              "valor": 8200,
+              "comandas": 54,
+              "observacao": null
+            },
+            {
+              "id": "v3",
+              "dia": "2026-09-09",
+              "turno_id": null,
+              "atendente_id": "p5",
+              "valor": 9700,
+              "comandas": 61,
+              "observacao": null
+            }
+          ],
+          "extras": [
+            {
+              "id": "x1",
+              "dia": "2026-09-12",
+              "atendente_id": "p1",
+              "tipo": "adicional",
+              "descricao": "Evento fechado",
+              "valor": 180
+            },
+            {
+              "id": "x2",
+              "dia": "2026-09-11",
+              "atendente_id": "p5",
+              "tipo": "desconto",
+              "descricao": "Consumo no bar",
+              "valor": 64.5
+            }
+          ],
+          "fechamentos": [],
+          "pesos": [
+            {
+              "id": "w1",
+              "funcao": "Cozinha",
+              "peso": 3
+            },
+            {
+              "id": "w2",
+              "funcao": "Copa",
+              "peso": 1
+            }
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "equipe": [
+            {
+              "atendente_id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete"
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha"
+            },
+            {
+              "atendente_id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança"
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa"
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman"
+            }
+          ],
+          "metodos": [
+            {
+              "id": "individual",
+              "nome": "Comissão individual",
+              "explicacao": "Cada um recebe um percentual sobre o que ele mesmo vendeu."
+            },
+            {
+              "id": "global",
+              "nome": "Bolo da casa",
+              "explicacao": "O serviço da casa inteira é repartido entre a equipe pelo critério escolhido."
+            }
+          ],
+          "criterios": [
+            {
+              "id": "igual",
+              "nome": "Igual para todos"
+            },
+            {
+              "id": "peso",
+              "nome": "Por peso da função (pontuação)"
+            },
+            {
+              "id": "horas",
+              "nome": "Pelas horas trabalhadas"
+            }
+          ]
+        }
+      }
     }
   }
 }

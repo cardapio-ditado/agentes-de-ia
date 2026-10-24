@@ -2805,6 +2805,8 @@ async function roteasApi(
                 percentualRepasse: corpo.percentual_repasse,
                 criterioRateio: corpo.criterio_rateio,
                 percentualParaApoio: corpo.percentual_da_casa_para_apoio,
+                metas: corpo.metas,
+                metaSobre: corpo.meta_sobre,
                 quem: chave.name,
               }),
             ),
