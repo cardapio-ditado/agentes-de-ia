@@ -171,6 +171,30 @@ export async function importarVendasDaZig(
   return { situacao: "importada", importacaoId: r.importacaoId, total: r.total, casados: r.casados, pendentes: r.pendentes, baixada, faturamento: vendas.faturamento };
 }
 
+/**
+ * Importa ontem se ainda não entrou — chamado quando a tela de Vendas abre.
+ * É o que faz a importação aparecer no servidor da Vercel sem esperar o
+ * relógio do VPS. Nunca lança: a tela tem de abrir mesmo com a Zig fora.
+ */
+export async function importarOntemSeFaltar(
+  venue: { id: string; name: string; timezone: string },
+  agora = new Date(),
+): Promise<ResultadoDaZig | null> {
+  if (horaNaCasa(venue.timezone, agora) < HORA_DE_BUSCAR) return null;
+  try {
+    const config = await configZig(venue.id);
+    if (!config.token || !config.loja) return null;
+    const r = await importarVendasDaZig(venue, diaAnterior(hojeNaCasa(venue.timezone, agora)));
+    if (r.situacao === "importada") {
+      console.log(`[vendas-zig] ${venue.name}: ontem importado pela tela — ${r.total} produto(s), ${r.pendentes} para decidir${r.baixada ? ", baixada" : ""}`);
+    }
+    return r;
+  } catch (e) {
+    console.error(`[vendas-zig] ${venue.name}: importação de ontem falhou: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 function diaSeguinte(diaISO: string): string {
   const d = new Date(`${diaISO}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);

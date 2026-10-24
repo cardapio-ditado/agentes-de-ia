@@ -122,7 +122,8 @@ import {
 } from "./rhAcerto.js";
 import { comoCsv, comoTexto, resumoDoMes } from "./rhResumo.js";
 import { oQueEstaAcontecendo } from "./aCasa.js";
-import { retratoGravado } from "./zigAoVivo.js";
+import { retratoFresco } from "./zigAoVivo.js";
+import { importarOntemSeFaltar } from "./cmv/vendasZig.js";
 import {
   SITUACOES_DE_FERIAS,
   apagarFerias,
@@ -1589,9 +1590,9 @@ async function roteasApi(
           limite: Number(url.searchParams.get("limite")) || undefined,
           dia: hojeNaCasa(fuso),
         }),
-        // O retrato da Zig: quem está na casa agora. Gravado pelo relógio do
-        // servidor; aqui só se lê.
-        retratoGravado(venue.id),
+        // O retrato da Zig: quem está na casa agora. Fresco: a planta aberta
+        // é quem puxa, e o relógio do VPS só adianta o trabalho.
+        retratoFresco({ id: venue.id, name: venue.name, timezone: fuso }),
       ]);
       return ok(res, { ...casa, timezone: fuso, ao_vivo: aoVivo });
     }
@@ -4118,7 +4119,10 @@ async function roteasApi(
     if (metodo === "GET" && recurso === "vendas" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-      return ok(res, await comErroDeEstoque(() => listarImportacoes(venue.id)));
+      // A noite de ontem, pela Zig, entra aqui se ainda não entrou: abrir a
+      // tela já traz a importação do dia, sem esperar o relógio do VPS.
+      const zig = await importarOntemSeFaltar({ id: venue.id, name: venue.name, timezone: venue.timezone ?? "America/Cuiaba" });
+      return ok(res, { importacoes: await comErroDeEstoque(() => listarImportacoes(venue.id)), zig });
     }
 
     // GET /v1/venues/:slug/vendas/:id — a importação com as linhas

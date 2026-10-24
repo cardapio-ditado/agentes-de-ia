@@ -33,6 +33,26 @@ function dataCurta(iso) {
   return iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—";
 }
 
+/** O que a Zig acabou de fazer ao abrir a tela — ou por que não fez. */
+function avisoDaZig(zig) {
+  if (zig.situacao === "importada") {
+    return el("div", { classe: `cartao ${zig.pendentes ? "alerta" : "aviso-ok"}` }, [
+      el("p", {}, [
+        el("strong", { texto: "Vendas de ontem importadas da Zig. " }),
+        document.createTextNode(
+          zig.pendentes
+            ? `${zig.total} produto(s); ${zig.pendentes} ainda sem vínculo com ficha ou insumo — abra a importação abaixo e ensine cada um. O estoque só baixa depois disso.`
+            : `${zig.total} produto(s), todos com vínculo: o estoque já baixou e o faturamento do dia foi lançado.`,
+        ),
+      ]),
+    ]);
+  }
+  if (zig.situacao === "sem_vendas") {
+    return el("p", { classe: "muted", texto: "A Zig não tem vendas de ontem para esta casa." });
+  }
+  return null;
+}
+
 export async function vendas(raiz, ctx) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
@@ -41,8 +61,12 @@ export async function vendas(raiz, ctx) {
   async function desenhar() {
     limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
     let lista;
+    let zig = null;
     try {
-      lista = await get(`/v1/venues/${ctx.venue}/vendas`);
+      const r = await get(`/v1/venues/${ctx.venue}/vendas`);
+      // A rota devolve a lista e o que a Zig fez agora, se fez.
+      lista = Array.isArray(r) ? r : r.importacoes ?? [];
+      zig = Array.isArray(r) ? null : r.zig ?? null;
     } catch (e) {
       limpar(conteudo).append(vazio("Vendas indisponíveis", e.message));
       return;
@@ -64,8 +88,9 @@ export async function vendas(raiz, ctx) {
       el("section", { classe: "pilha" }, [
         el("div", {}, [
           el("h2", { texto: "Vendas" }),
-          el("p", { classe: "muted", texto: "Mande o relatório do seu sistema; a IA lê e baixa o estoque pelas fichas." }),
+          el("p", { classe: "muted", texto: "Com a Zig ligada, a noite de ontem entra sozinha aqui todo dia. De outro sistema, mande o relatório; a IA lê e baixa o estoque pelas fichas." }),
         ]),
+        zig ? avisoDaZig(zig) : null,
 
         el("div", { classe: "cartao pilha" }, [
           el("h3", { texto: "Importar relatório" }),

@@ -341,6 +341,36 @@ export async function retratoGravado(venueId: string): Promise<Retrato | null> {
   return (data as { retrato: Json }).retrato as unknown as Retrato;
 }
 
+/** Um retrato mais velho do que isto é refeito quando a planta pede. */
+export const IDADE_MAXIMA_DO_RETRATO_MS = 2 * 60_000;
+
+/**
+ * O retrato para a planta, fresco: o gravado, se tem menos de dois minutos;
+ * senão tira um agora e grava. É o que faz a casa ao vivo funcionar no
+ * servidor da Vercel, sem depender do relógio do VPS — a planta aberta é
+ * quem puxa. Nunca lança: na falha, devolve o que estava gravado.
+ */
+export async function retratoFresco(
+  venue: { id: string; name: string; timezone: string },
+  agora = new Date(),
+): Promise<Retrato | null> {
+  const { data } = await db().from("casa_ao_vivo").select("atualizado_em, retrato").eq("venue_id", venue.id).maybeSingle();
+  const gravado = data ? ((data as { retrato: Json }).retrato as unknown as Retrato) : null;
+  const idade = data ? agora.getTime() - new Date((data as { atualizado_em: string }).atualizado_em).getTime() : Infinity;
+  if (gravado && idade < IDADE_MAXIMA_DO_RETRATO_MS) return gravado;
+
+  try {
+    const config = await configZig(venue.id);
+    if (!config.token || !config.loja) return gravado;
+    const retrato = await tirarRetrato(venue, { token: config.token, loja: config.loja }, agora);
+    await gravarRetrato(venue.id, retrato);
+    return retrato;
+  } catch (e) {
+    console.error(`[ao-vivo] ${venue.name}: retrato não saiu: ${e instanceof Error ? e.message : String(e)}`);
+    return gravado;
+  }
+}
+
 /**
  * O relógio: um retrato por casa ligada à Zig. Nunca lança — uma casa com
  * token vencido não pode apagar a planta das outras.
