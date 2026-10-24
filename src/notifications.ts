@@ -489,6 +489,9 @@ const NOME_DO_AVISO: Record<string, string> = {
   mesa_chamando: "Mesa chamando",
   conector_caiu: "Aviso de conexão caída",
   teste_canal: "Mensagem de teste",
+  rh_convite_ficha: "Link da ficha do funcionário",
+  rh_elogio_cliente: "Elogio de cliente para o funcionário",
+  rh_experiencia: "Aviso do contrato de experiência",
   resposta_humana: "Resposta de gente",
 };
 

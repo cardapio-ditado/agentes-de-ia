@@ -28,6 +28,10 @@
       "destination": "/cardapio.html"
     },
     {
+      "source": "/ficha/:token",
+      "destination": "/ficha.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

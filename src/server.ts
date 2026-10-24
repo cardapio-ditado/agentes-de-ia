@@ -17,6 +17,7 @@ import { sincronizarRecentes as sincronizarAvaliacoesDoGoogle } from "./avaliaco
 import { cicloDasVendasDaZig } from "./cmv/vendasZig.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
+import { cicloDaExperiencia } from "./rhPessoa.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
 import { listAgentsInOrg } from "./repository.js";
 import {
@@ -284,6 +285,9 @@ setInterval(() => {
   // da casa, uma importação por dia, casada com o vocabulário da casa e
   // baixada sozinha quando não sobra nada para alguém decidir.
   cicloDasVendasDaZig().catch((e) => console.error("[vendas-zig] varredura:", e));
+  // E o contrato de experiência: a partir das 9h da casa, quem vence em até
+  // 7 dias vira uma mensagem para o gestor. Uma por dia, trava na fila.
+  cicloDaExperiencia().catch((e) => console.error("[rh] aviso de experiência:", e));
 }, 60 * 60_000);
 
 const HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE = Math.max(1, Number(process.env.GOOGLE_SINCRONIZAR_CADA_HORAS) || 4);
@@ -305,6 +309,7 @@ void varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura
 void varrerAvisosEncalhados().catch((e) => console.error("[encalhados] varredura:", e));
 void varrerHistorico().catch((e) => console.error("[historico-zig] varredura:", e));
 void cicloDasVendasDaZig().catch((e) => console.error("[vendas-zig] varredura:", e));
+void cicloDaExperiencia().catch((e) => console.error("[rh] aviso de experiência:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));

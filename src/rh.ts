@@ -404,6 +404,8 @@ interface CamposDaFicha {
   emergencia_nome?: unknown;
   emergencia_telefone?: unknown;
   observacoes?: unknown;
+  experiencia_primeiro?: unknown;
+  experiencia_segundo?: unknown;
 }
 
 /**
@@ -467,6 +469,10 @@ const LIMPEZA_DO_CAMPO: Record<string, (valor: unknown) => unknown> = {
     return valor;
   },
 
+  // Os dois períodos do contrato de experiência (CLT: até 90 dias somados).
+  experiencia_primeiro: (v) => diasDeExperiencia(v),
+  experiencia_segundo: (v) => diasDeExperiencia(v),
+
   forma_pagamento: (v) => {
     const forma = textoOuNulo(v);
     if (forma && !FORMAS_DE_PAGAMENTO.includes(forma as (typeof FORMAS_DE_PAGAMENTO)[number])) {
@@ -475,6 +481,13 @@ const LIMPEZA_DO_CAMPO: Record<string, (valor: unknown) => unknown> = {
     return forma;
   },
 };
+
+function diasDeExperiencia(v: unknown): number | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n < 0 || n > 90) throw new ErroDoRh(400, "O período de experiência vai de 0 a 90 dias.");
+  return n;
+}
 
 /**
  * Admite alguém: cria a pessoa no cadastro da casa e abre a ficha.

@@ -4,6 +4,7 @@ import { criarEscala } from "./rhEscala.js";
 import { criarFerias } from "./rhFerias.js";
 import { criarFechamento } from "./rhFechamento.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
+import { camposDaExperiencia, resumoDaPessoa, secaoDeOcorrencias } from "./rhPessoa.js";
 
 /**
  * RH — Fase 1: a ficha de cada pessoa da casa.
@@ -486,8 +487,14 @@ export async function rh(raiz, ctx) {
     limpar(corpo).append(el("p", { classe: "muted", texto: "Abrindo a ficha…" }));
 
     let visao;
+    let visao360 = null;
     try {
-      visao = await get(`/v1/venues/${ctx.venue}/rh/${id}`);
+      // A visão completa é bônus: se ela falhar (migração por rodar), a
+      // ficha abre do jeito de antes.
+      [visao, visao360] = await Promise.all([
+        get(`/v1/venues/${ctx.venue}/rh/${id}`),
+        get(`/v1/venues/${ctx.venue}/rh/${id}/360`).catch(() => null),
+      ]);
     } catch (e) {
       limpar(corpo).append(vazio("Não deu para abrir a ficha", e.message));
       return;
@@ -515,6 +522,7 @@ export async function rh(raiz, ctx) {
     const cargo = campo("Cargo", el("input", { classe: "input", type: "text", value: f.cargo ?? "" }));
     const admissao = campo("Admissão", el("input", { classe: "input", type: "date", value: f.admissao ?? "" }));
     const salario = campo("Salário combinado", el("input", { classe: "input", type: "number", step: "0.01", min: "0", value: f.salario ?? "" }));
+    const experiencia = camposDaExperiencia(f);
 
     const forma = campo(
       "Como recebe",
@@ -548,6 +556,11 @@ export async function rh(raiz, ctx) {
       ]),
     );
 
+    // ---- O resumo da pessoa: experiência, números, link e PDF ----
+    const aoMudar = () => abrirFicha(id);
+    const resumo = resumoDaPessoa({ ctx, id, pessoa, ficha: f, visao: visao360, documentos, aoMudar });
+    if (resumo) corpo.append(resumo);
+
     // ---- O que falta (admissão guiada) ----
     if (!desligado && pessoa.pendencias.length) {
       corpo.append(
@@ -578,6 +591,7 @@ export async function rh(raiz, ctx) {
       el("section", { classe: "cartao" }, [
         el("h3", { texto: "Trabalho" }),
         el("div", { classe: "grade grade-2" }, [vinculo.caixa, cargo.caixa, admissao.caixa, salario.caixa]),
+        vinculo.campo.value === "clt" ? experiencia.caixa : null,
         el("p", {
           classe: "muted",
           texto: "O salário fica anotado para a casa saber o que combinou. Imposto, líquido e folha continuam com a contabilidade.",
@@ -623,6 +637,7 @@ export async function rh(raiz, ctx) {
                   emergencia_nome: emergenciaNome.campo.value,
                   emergencia_telefone: emergenciaTel.campo.value,
                   observacoes: observacoes.campo.value,
+                  ...experiencia.valores(),
                 },
               });
               avisar("Ficha salva.", "ok");
@@ -657,6 +672,7 @@ export async function rh(raiz, ctx) {
               onclick: () => desligarPessoa(id, pessoa.nome),
             }),
       ]),
+      secaoDeOcorrencias({ ctx, id, pessoa, ficha: f, visao: visao360, aoMudar }) ?? el("span", {}),
       secaoDeDocumentos(id, documentos),
     );
   }

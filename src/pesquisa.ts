@@ -530,6 +530,26 @@ export async function registrarResposta(params: {
     }
   }
 
+  // O elogio do cliente vai para a linha do tempo de quem atendeu — e para
+  // o WhatsApp dele. Acessório: nada aqui pode derrubar a resposta.
+  if (temAtendente && atendenteNota !== null && atendenteNota >= 4) {
+    try {
+      const { elogioDoCliente } = await import("./rhPessoa.js");
+      await elogioDoCliente({
+        venueId: params.venueId,
+        respostaId,
+        atendenteId: params.atendenteId!,
+        estrelas: atendenteNota,
+        comentario: params.comentario ?? null,
+        elogios: etiquetasValidas(params.elogios),
+        casaNome: params.casaNome ?? "casa",
+        timezone: params.fuso,
+      });
+    } catch (e) {
+      console.error(`[pesquisa] elogio da resposta ${respostaId} não chegou no RH: ${(e as Error).message}`);
+    }
+  }
+
   // O AVISO DE NOTA BAIXA VEM ANTES DO CUPOM.
   //
   // Os dois podem falhar sem desfazer a resposta, mas a ordem importa: o cupom

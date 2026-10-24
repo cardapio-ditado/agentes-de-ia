@@ -309,6 +309,22 @@ export async function hojeDaCasa(params: {
     return { id: "vendas", modulo: "cmv", titulo: "Vendas esperando você", quantidade: n, detalhe: "Produtos vendidos que ainda não sabem o que baixar do estoque.", destino: "vendas", urgente: false };
   });
 
+  pendencia("rh", "experiencia", async () => {
+    const { experienciasEmAlerta } = await import("./rhPessoa.js");
+    const lista = await experienciasEmAlerta(venue.id, fuso);
+    return {
+      id: "experiencia",
+      modulo: "rh",
+      titulo: "Contratos de experiência para decidir",
+      quantidade: lista.length,
+      detalhe: lista.length
+        ? `${lista.map((x) => x.nome).join(", ")} — prorrogar, efetivar ou encerrar. Passar do prazo efetiva sem querer.`
+        : "",
+      destino: "rh",
+      urgente: true,
+    };
+  });
+
   pendencia("rh", "rh", async () => ({
     id: "documentos",
     modulo: "rh",

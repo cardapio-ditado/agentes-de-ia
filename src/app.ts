@@ -16,6 +16,19 @@ import {
 } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { hojeDaCasa } from "./hoje.js";
+import {
+  abrirConvite,
+  apagarOcorrencia,
+  conferirComAFicha,
+  criarConvite,
+  decidirExperiencia,
+  lerDocumento,
+  listarOcorrencias,
+  receberFichaDoConvite,
+  registrarOcorrencia,
+  TIPOS_DE_OCORRENCIA,
+  visao360,
+} from "./rhPessoa.js";
 import { salvarVideoDaAjuda, videosDaAjuda } from "./ajuda.js";
 import { marcarPasso, trilhaDaCasa } from "./trilha.js";
 import { enviarPelaCloudApi, inserirAvisos, listNotificationsForReservation, normalizarTelefone } from "./notifications.js";
@@ -932,6 +945,51 @@ async function comErroDeDisparo<T>(acao: () => Promise<T>): Promise<T> {
 }
 
 /** O mesmo tratamento para os erros do cardápio digital. */
+/**
+ * A IA lê o RG, o CPF ou a carteira e compara com a ficha. O que diverge vira
+ * uma ocorrência "conversa" na ficha, para o gerente ver — nunca uma recusa
+ * automática. Falhar aqui não pode derrubar o upload: o documento já foi
+ * guardado, e a conferência é bônus.
+ */
+async function conferirDocumento(
+  venueId: string,
+  atendenteId: string,
+  tipo: string,
+  arquivo: Buffer,
+  contentType: string | undefined,
+): Promise<string[] | null> {
+  const media = String(contentType ?? "").split(";")[0]!.trim().toLowerCase();
+  if (!["rg", "cpf", "ctps"].includes(tipo) || !["image/jpeg", "image/png", "image/webp"].includes(media)) return null;
+  try {
+    const lido = await lerDocumento(arquivo, media);
+    const { data: ficha } = await (db() as any)
+      .from("rh_fichas")
+      .select("nome_completo, cpf, rg, nascimento")
+      .eq("atendente_id", atendenteId)
+      .maybeSingle();
+    // Campo vazio na ficha é preenchido com o que o documento diz.
+    const vazios: Record<string, unknown> = {};
+    if (!ficha?.cpf && lido.cpf) vazios.cpf = lido.cpf;
+    if (!ficha?.nome_completo && lido.nome) vazios.nome_completo = lido.nome;
+    if (!ficha?.rg && lido.rg) vazios.rg = lido.rg;
+    if (!ficha?.nascimento && lido.nascimento) vazios.nascimento = lido.nascimento;
+    if (Object.keys(vazios).length) await salvarFichaDoRh({ venueId, atendenteId, campos: vazios });
+    const avisos = conferirComAFicha(lido, ficha ?? {});
+    if (avisos.length) {
+      await registrarOcorrencia({
+        venueId,
+        atendenteId,
+        campos: { tipo: "conversa", dia: new Date().toISOString().slice(0, 10), descricao: `Conferência do documento (${tipo}): ${avisos.join(" ")}` },
+        quem: "IA do Brasa Food",
+      }).catch(() => undefined);
+    }
+    return avisos;
+  } catch (e) {
+    console.warn(`[rh] não deu para conferir o documento: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 async function comErroDoRh<T>(acao: () => Promise<T>): Promise<T> {
   try {
     return await acao();
@@ -3026,6 +3084,68 @@ async function roteasApi(
         }
       }
 
+      // ---- A pessoa por inteiro (Rodada A) ----
+
+      // GET /rh/:id/360 — a ficha completa: experiência, escala, cliente, ocorrências
+      if (metodo === "GET" && p.length === 5 && !ehSecaoPropria && p[4] === "360") {
+        return ok(
+          res,
+          await comErroDoRh(async () => ({
+            ...(await visao360({ venueId: venue.id, atendenteId: p[3]!, timezone: venue.timezone ?? "America/Cuiaba" })),
+            tipos_de_ocorrencia: TIPOS_DE_OCORRENCIA,
+          })),
+        );
+      }
+
+      // GET | POST /rh/:id/ocorrencias · DELETE /rh/:id/ocorrencias/:oid
+      if (!ehSecaoPropria && p[4] === "ocorrencias") {
+        if (metodo === "GET" && p.length === 5) {
+          return ok(res, await comErroDoRh(() => listarOcorrencias(venue.id, p[3]!)));
+        }
+        if (metodo === "POST" && p.length === 5) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoRh(() => registrarOcorrencia({ venueId: venue.id, atendenteId: p[3]!, campos: corpo, quem: chave.name })), 201);
+        }
+        if (metodo === "DELETE" && p.length === 6) {
+          return ok(res, await comErroDoRh(() => apagarOcorrencia({ venueId: venue.id, id: p[5]! })));
+        }
+      }
+
+      // PUT /rh/:id/experiencia — {decisao: prorrogado | efetivado | encerrado}
+      if (metodo === "PUT" && p.length === 5 && !ehSecaoPropria && p[4] === "experiencia") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDoRh(() => decidirExperiencia({ venueId: venue.id, atendenteId: p[3]!, decisao: corpo.decisao })));
+      }
+
+      // POST /rh/:id/convite — {enviar?: boolean}. O link para a própria
+      // pessoa preencher a ficha; com `enviar`, já vai no WhatsApp dela.
+      if (metodo === "POST" && p.length === 5 && !ehSecaoPropria && p[4] === "convite") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        const convite = await comErroDoRh(() => criarConvite({ venueId: venue.id, atendenteId: p[3]!, quem: chave.name }));
+        const link = `${enderecoBase()}/ficha/${convite.token}`;
+        let enviadoPara: string | null = null;
+        if (corpo.enviar === true) {
+          const { data: ficha } = await (db() as any).from("rh_fichas").select("telefone").eq("atendente_id", p[3]!).maybeSingle();
+          const { data: pessoa } = await (db() as any).from("pesquisa_atendentes").select("nome, apelido").eq("id", p[3]!).maybeSingle();
+          const telefone = normalizarTelefone(String(ficha?.telefone ?? ""));
+          if (!telefone) throw erro(400, "sem_telefone", "Anote o telefone da pessoa na ficha antes, ou copie o link e mande você mesmo.");
+          const primeiro = String(pessoa?.apelido || pessoa?.nome || "").split(" ")[0];
+          const { error } = await inserirAvisos({
+            venue_id: venue.id,
+            channel: "whatsapp",
+            destination: telefone,
+            papel: "administrativo",
+            template: "rh_convite_ficha",
+            body:
+              `Oi${primeiro ? `, ${primeiro}` : ""}! Aqui é da ${venue.name}. ` +
+              `Para completar o seu cadastro na equipe, preencha seus dados e mande a foto dos documentos por este link (vale 7 dias):\n${link}`,
+          });
+          if (error) throw erro(500, "fila", `Não deu para mandar no WhatsApp: ${error.message}`);
+          enviadoPara = telefone;
+        }
+        return ok(res, { link, expira_em: convite.expira_em, enviado_para: enviadoPara }, 201);
+      }
+
       // POST /v1/venues/:slug/rh/:atendenteId/desligar | readmitir
       if (metodo === "POST" && p.length === 5 && !ehDocumentoSolto && p[4] !== "documentos") {
         const corpo = (await lerJson(req)) as Record<string, unknown>;
@@ -3061,7 +3181,7 @@ async function roteasApi(
             enviadoPor: chave.name,
           }),
         );
-        return ok(res, documento, 201);
+        return ok(res, { ...documento, conferencia: await conferirDocumento(venue.id, p[3]!, documento.tipo, arquivo, req.headers["content-type"]) }, 201);
       }
 
       // GET /v1/venues/:slug/rh/documentos/:id/link — endereço que expira
@@ -5506,6 +5626,47 @@ async function roteasApi(
   // Por aqui só se LÊ o cardápio, e se GRAVA o que é do cliente — curtida,
   // comentário (que entra pendente) e o chamado do garçom. Cada gravação tem
   // limite de ritmo por endereço; é o que separa "uma mesa" de "um script".
+  // ---- O link da ficha: /v1/ficha/:token ----
+  //
+  // Sem login: quem abre é o funcionário novo, no celular dele. O que
+  // autoriza é o token do endereço, que vale 7 dias e só serve para a ficha
+  // daquela pessoa. Ele não vê salário, cargo nem nada da casa.
+  if (p[0] === "ficha" && p.length >= 2) {
+    const token = p[1]!;
+    if (metodo === "GET" && p.length === 2) {
+      const c = await comErroDoRh(() => abrirConvite(token));
+      return ok(res, { casa: c.casa, nome: c.nome, ficha: c.ficha, documentos: c.documentos, enviado_em: c.enviado_em });
+    }
+    if (metodo === "POST" && p.length === 2) {
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      return ok(
+        res,
+        await comErroDoRh(() =>
+          receberFichaDoConvite({ token, campos: (corpo.ficha ?? {}) as Record<string, unknown>, consentimento: corpo.consentimento === true }),
+        ),
+      );
+    }
+    if (metodo === "POST" && p.length === 3 && p[2] === "documento") {
+      const c = await comErroDoRh(() => abrirConvite(token));
+      const arquivo = await lerBinario(req, LIMITE_DOCUMENTO_BYTES);
+      const documento = await comErroDoRh(() =>
+        guardarDocumento({
+          venueId: c.venue_id,
+          atendenteId: c.atendente_id,
+          arquivo,
+          contentType: req.headers["content-type"] ?? "image/jpeg",
+          tipo: url.searchParams.get("tipo") ?? "outro",
+          titulo: "enviado pelo próprio funcionário",
+          enviadoPor: c.nome,
+        }),
+      );
+      // A conferência vai para o gerente, na ficha; a pessoa só fica sabendo
+      // que chegou. Ela não é auditora do próprio documento.
+      await conferirDocumento(c.venue_id, c.atendente_id, documento.tipo, arquivo, req.headers["content-type"]);
+      return ok(res, { recebido: true, tipo: documento.tipo }, 201);
+    }
+  }
+
   if (p[0] === "cardapio-publico" && p.length >= 2) {
     const venue = await venueDaPesquisa(p[1]!);
     if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
@@ -6065,9 +6226,12 @@ const PAGINAS_LIMPAS: Record<string, string> = {
 async function servirEstatico(res: ServerResponse, caminho: string): Promise<void> {
   // /cardapio/<casa> é a página do cardápio: a casa vai no caminho porque é
   // o que fica bonito num QR code impresso, e a página lê o slug do endereço.
+  // /ficha/<token> é o link em que o funcionário preenche a própria ficha.
   const relativo = caminho.startsWith("/cardapio/")
     ? "cardapio.html"
-    : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
+    : caminho.startsWith("/ficha/")
+      ? "ficha.html"
+      : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
 
   // normalize resolve "..", e o prefixo é conferido depois — sem isso,
   // "/../.env" escaparia do diretório público.
