@@ -3300,3 +3300,67 @@ label.integracao-uso { cursor: pointer; }
   background: var(--superficie);
   font-size: 0.9rem;
 }
+
+/* Modelos prontos (checklist, atendente). */
+.modelos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.modelo {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 14px;
+  border: 1px dashed var(--borda-forte);
+  border-radius: 12px;
+  background: var(--superficie);
+  font-size: 0.9rem;
+}
+.modelo .btn { justify-self: start; margin-top: 4px; }
+
+/* ============ Implantação ============ */
+.trilha-pct { font-size: 1.8rem; font-variant-numeric: tabular-nums; color: var(--marca-forte); }
+.trilha-barra { height: 10px; border-radius: 999px; background: var(--superficie-2); overflow: hidden; }
+.trilha-barra > span { display: block; height: 100%; background: var(--ok); border-radius: inherit; transition: width 0.3s ease; }
+.trilha-proximo {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--marca-suave);
+  color: inherit;
+  text-decoration: none;
+}
+.trilha-proximo strong { color: var(--marca-forte); }
+.trilha-check {
+  width: 22px; height: 22px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border: 2px solid var(--borda-forte);
+  border-radius: 50%;
+  font-size: 0.8rem; font-weight: 800;
+}
+.trilha-check-ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.trilha-feito strong { color: var(--texto-suave); }
+.trilha-acoes { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
+.trilha-marcar { display: flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--texto-suave); cursor: pointer; }
+a.btn { text-decoration: none; }
+
+/* ============ Ajuda do mentor ============ */
+.btn-ajuda {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--borda-forte);
+  background: var(--superficie);
+  color: var(--marca-forte);
+  font: inherit; font-weight: 800;
+  cursor: pointer;
+}
+.btn-ajuda:hover { background: var(--marca-suave); }
+.ajuda {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--superficie);
+  color: var(--texto);
+}
+.ajuda::backdrop { background: rgba(20, 12, 8, 0.45); }
+.ajuda p { margin: 0; line-height: 1.5; }
+.ajuda .btn-primario { justify-self: start; text-decoration: none; }

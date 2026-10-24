@@ -29,8 +29,13 @@ export async function hoje(raiz, ctx) {
 
   async function desenhar() {
     let dados;
+    let implantacao = null;
     try {
-      dados = await get(`/v1/venues/${encodeURIComponent(ctx.venue)}/hoje`);
+      [dados, implantacao] = await Promise.all([
+        get(`/v1/venues/${encodeURIComponent(ctx.venue)}/hoje`),
+        // A trilha é de quem configura; para a equipe, nem pergunta.
+        ctx.podeConfigurar === false ? null : get(`/v1/venues/${encodeURIComponent(ctx.venue)}/trilha`).catch(() => null),
+      ]);
     } catch (e) {
       limpar(conteudo).append(vazio("Não deu para olhar a casa agora", e.message));
       return;
@@ -56,6 +61,15 @@ export async function hoje(raiz, ctx) {
             : "Comece pelo que está em vermelho: é o que perde cliente ou dinheiro hoje.",
         }),
       ]),
+
+      // Enquanto a implantação não termina, ela lembra o próximo passo aqui.
+      implantacao?.proximo
+        ? el("a", { classe: "cartao trilha-proximo hoje-implantacao", href: "#trilha" }, [
+            el("span", { classe: "muted", texto: `Implantação: ${implantacao.feitos} de ${implantacao.total} passos` }),
+            el("strong", { texto: `Próximo: ${implantacao.proximo.titulo}` }),
+            el("span", { classe: "muted", texto: implantacao.proximo.explicacao }),
+          ])
+        : null,
 
       el("section", { classe: "cartao pilha" }, [
         el("h3", { texto: "O que precisa de você" }),

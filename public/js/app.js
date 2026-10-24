@@ -2,6 +2,8 @@ import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessa
 import { ICONES, avisar, el, icone, limpar } from "./ui.js";
 import { painel } from "./pages/painel.js";
 import { hoje } from "./pages/hoje.js";
+import { trilha } from "./pages/trilha.js";
+import { abrirAjuda } from "./ajuda.js";
 import { clientes } from "./pages/clientes.js";
 import { plataforma } from "./pages/plataforma.js";
 import { conversas } from "./pages/conversas.js";
@@ -153,6 +155,9 @@ const PAGINAS = [
   // tem. Moravam dentro de "Agentes de IA" por acidente histórico (o agente
   // foi o primeiro módulo), e por causa disso um cliente que comprasse só o
   // CMV não tinha onde cadastrar a própria casa nem criar login de gerente.
+  // O roteiro da consultoria: primeiro dos Ajustes, porque é por ele que a
+  // implantação começa e é nele que o mentorado confere o que falta.
+  { id: "trilha", modulo: "ajustes", rotulo: "Implantação", icone: ICONES.checklist, render: trilha, subtitulo: "O passo a passo para a casa andar sozinha" },
   { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Nome, contato e o fuso horário que todos os módulos usam" },
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
   // Todos os números da casa numa tela só, organizados pela tarefa: o do
@@ -388,6 +393,9 @@ const nav = document.getElementById("nav");
 const main = document.getElementById("pagina");
 const seletorVenue = document.getElementById("seletor-venue");
 
+/** A tela aberta agora — o botão "?" abre a ajuda dela. */
+let paginaAtual = null;
+
 /** Limpezas registradas pela tela atual (timers, listeners). */
 let limpezas = [];
 
@@ -570,6 +578,7 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   }
 
   document.getElementById("titulo-pagina").textContent = pagina.rotulo;
+  paginaAtual = pagina;
   document.getElementById("subtitulo-pagina").textContent = pagina.subtitulo ?? "";
   app.removeAttribute("data-menu");
 
@@ -844,6 +853,9 @@ document.getElementById("btn-sair-hub").addEventListener("click", () => {
 // Os dois que não são favo: configuração da casa e a mesa da equipe.
 document.getElementById("btn-ajustes").addEventListener("click", () => entrarNoModulo("ajustes"));
 document.getElementById("btn-hoje").addEventListener("click", () => entrarNoModulo("hoje"));
+document.getElementById("btn-ajuda").addEventListener("click", () => {
+  if (paginaAtual) abrirAjuda({ pagina: paginaAtual.id, rotulo: paginaAtual.rotulo, admin: souPlataforma });
+});
 document.getElementById("btn-hoje-lateral").addEventListener("click", () => entrarNoModulo("hoje"));
 document.getElementById("btn-plataforma").addEventListener("click", () => entrarNoModulo("plataforma"));
 

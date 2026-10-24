@@ -16,6 +16,8 @@ import {
 } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
 import { hojeDaCasa } from "./hoje.js";
+import { salvarVideoDaAjuda, videosDaAjuda } from "./ajuda.js";
+import { marcarPasso, trilhaDaCasa } from "./trilha.js";
 import { enviarPelaCloudApi, inserirAvisos, listNotificationsForReservation, normalizarTelefone } from "./notifications.js";
 import {
   ErroDoCardapio,
@@ -839,7 +841,7 @@ function exigirQuemConfigura(acesso: Acesso): void {
 }
 
 /** Recursos da casa cuja escrita é configuração, e não operação. */
-const RECURSOS_DE_CONFIGURAR = new Set(["whatsapp-oficial", "instagram", "integracoes", "canais"]);
+const RECURSOS_DE_CONFIGURAR = new Set(["whatsapp-oficial", "instagram", "integracoes", "canais", "trilha"]);
 
 async function exigirModulo(acesso: Acesso, modulo: string, venueId: string): Promise<void> {
   // Suporte da Brasa Food enxerga o que o cliente enxerga — é como se
@@ -4738,6 +4740,31 @@ async function roteasApi(
       return ok(res, await hojeDaCasa({ venue, podeVer }));
     }
 
+    // GET /v1/venues/:slug/trilha — o roteiro da implantação, com o que o
+    // sistema já viu feito e o que o mentor marcou à mão.
+    if (metodo === "GET" && recurso === "trilha" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const contratados = new Set([
+        ...MODULOS_DA_CASA,
+        ...(await listarModulos(venue.id)).filter((m) => m.ativo).map((m) => m.modulo),
+      ]);
+      return ok(res, await trilhaDaCasa({ venue, contratados }));
+    }
+
+    // PUT /v1/venues/:slug/trilha/:passo — {feito: boolean}
+    if (metodo === "PUT" && recurso === "trilha" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      try {
+        await marcarPasso({ venueId: venue.id, passo: p[3]!, feito: corpo.feito === true, por: chave.name ?? null });
+      } catch (e) {
+        throw erro(400, "trilha", e instanceof Error ? e.message : String(e));
+      }
+      return ok(res, { ok: true });
+    }
+
     // GET /v1/venues/:slug/pontos — saldo do plano, consumo por motor e
     // quanto tempo a sobra dura em cada um deles
     if (metodo === "GET" && recurso === "pontos") {
@@ -4894,7 +4921,27 @@ async function roteasApi(
     }
   }
 
+  // GET /v1/ajuda — o link do vídeo de cada tela, para o botão "?".
+  if (metodo === "GET" && p[0] === "ajuda" && p.length === 1) {
+    await exigirChave(req, "reservations:read");
+    return ok(res, await videosDaAjuda());
+  }
+
   // ---- Administração da plataforma (equipe Brasa Food) ----
+
+  // PUT /v1/admin/ajuda/:pagina — {url}. O mentor cadastra o vídeo da tela
+  // pelo próprio botão "?"; link vazio apaga.
+  if (metodo === "PUT" && p[0] === "admin" && p[1] === "ajuda" && p.length === 3) {
+    const acesso = await exigirAdminDaPlataforma(req);
+    const corpo = await lerJson(req);
+    try {
+      await salvarVideoDaAjuda({ pagina: decodeURIComponent(p[2]!), url: String(corpo.url ?? ""), por: acesso.name ?? null });
+    } catch (e) {
+      throw erro(400, "ajuda", e instanceof Error ? e.message : String(e));
+    }
+    return ok(res, { ok: true });
+  }
+
   // GET /v1/admin/resumo — números da carteira inteira
   if (metodo === "GET" && p[0] === "admin" && p[1] === "resumo" && p.length === 2) {
     await exigirAdminDaPlataforma(req);

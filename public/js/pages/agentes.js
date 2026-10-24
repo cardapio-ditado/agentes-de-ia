@@ -1,6 +1,7 @@
 import { api, del, get, post, postArquivo } from "../api.js";
 import { avisoDeMotor, extrato } from "../pontos.js";
 import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { MODELOS_DE_ATENDENTE } from "../modelosProntos.js";
 
 const MODELOS = [
   ["claude-opus-5", "Opus 5 — o mais capaz"],
@@ -91,7 +92,8 @@ export async function agentes(raiz, ctx) {
 
     if (lista.length === 0) {
       conteudo.append(
-        vazio("Nenhum agente ainda", 'Clique em "Novo agente" para montar o primeiro.'),
+        vazio("Nenhum atendente ainda", "Comece por um modelo pronto abaixo — é só trocar o nome da casa e a cidade."),
+        modelosProntos(lista),
       );
       return;
     }
@@ -133,13 +135,46 @@ export async function agentes(raiz, ctx) {
         ]),
       );
     }
-    conteudo.append(grade);
+    conteudo.append(grade, modelosProntos(lista));
   }
 
   /** Editor: o mesmo formulário cria (slug editável) e edita (slug travado). */
-  async function editor(slug) {
+  /**
+   * Os atendentes que a consultoria leva pronto. O modelo só preenche o
+   * editor: os colchetes ([NOME DA CASA], [CIDADE]) são o que se troca.
+   */
+  function modelosProntos(lista) {
+    const usados = new Set(lista.map((a) => a.slug));
+    const slugLivre = (base) => {
+      if (!usados.has(base)) return base;
+      let n = 2;
+      while (usados.has(`${base}-${n}`)) n += 1;
+      return `${base}-${n}`;
+    };
+    return el("section", { classe: "pilha", style: "margin-top:16px" }, [
+      el("div", {}, [
+        el("h3", { texto: "Modelos prontos" }),
+        el("p", { classe: "muted", texto: "O jeito de atender que funciona em bar e restaurante. Escolha o mais parecido com a casa e ajuste." }),
+      ]),
+      el("div", { classe: "modelos" }, MODELOS_DE_ATENDENTE.map((m) =>
+        el("article", { classe: "modelo" }, [
+          el("strong", { texto: m.titulo }),
+          el("span", { classe: "muted", texto: m.resumo }),
+          el("button", {
+            classe: "btn btn-peq",
+            type: "button",
+            texto: "Usar este modelo",
+            onclick: () => editor(null, { ...m.agente, slug: slugLivre(m.agente.slug) }),
+          }),
+        ]))),
+    ]);
+  }
+
+  async function editor(slug, modelo = null) {
     const criando = slug === null;
-    const atual = criando
+    const atual = criando && modelo
+      ? { model: "claude-opus-5", effort: "high", enabled: true, ...modelo }
+      : criando
       ? {
           name: "",
           slug: "",

@@ -1,5 +1,6 @@
 import { del, get, patch, post } from "../api.js";
 import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { MODELOS_DE_CHECKLIST } from "../modelosProntos.js";
 
 const DIAS = [
   ["seg", "Seg"],
@@ -58,13 +59,39 @@ export async function checklists(raiz, ctx) {
       area.append(
         vazio(
           "Nenhum checklist ainda",
-          'Clique em "Novo checklist" — descreva a rotina e deixe a IA montar as perguntas.',
+          "Comece por um modelo pronto abaixo, ou clique em “Novo checklist” e deixe a IA montar as perguntas.",
         ),
       );
-      return;
     }
 
     for (const c of lista) area.append(cartao(c));
+    area.append(modelosProntos(lista));
+  }
+
+  /**
+   * As rotinas que toda casa tem. O modelo só preenche o editor: a pessoa
+   * ajusta as perguntas, põe o WhatsApp de quem executa e salva.
+   */
+  function modelosProntos(lista) {
+    const jaTem = new Set(lista.map((c) => c.name.trim().toLowerCase()));
+    return el("section", { classe: "pilha" }, [
+      el("div", {}, [
+        el("h3", { texto: "Modelos prontos" }),
+        el("p", { classe: "muted", texto: "Rotinas que funcionam em qualquer casa. Escolha, troque o que não serve e salve." }),
+      ]),
+      el("div", { classe: "modelos" }, MODELOS_DE_CHECKLIST.map((m) =>
+        el("article", { classe: "modelo" }, [
+          el("strong", { texto: m.titulo }),
+          el("span", { classe: "muted", texto: m.resumo }),
+          el("span", { classe: "muted", texto: `${m.modelo.items.length} perguntas` }),
+          el("button", {
+            classe: "btn btn-peq",
+            type: "button",
+            texto: jaTem.has(m.modelo.name.toLowerCase()) ? "Usar de novo" : "Usar este modelo",
+            onclick: () => mostrarEditor(structuredClone(m.modelo)),
+          }),
+        ]))),
+    ]);
   }
 
   function resumoAgenda(agenda) {
@@ -386,7 +413,7 @@ export async function checklists(raiz, ctx) {
 
     limpar(area).append(
       el("div", { classe: "cabecalho-secao" }, [
-        el("h2", { texto: existente ? `Editar: ${existente.name}` : "Novo checklist" }),
+        el("h2", { texto: existente?.id ? `Editar: ${existente.name}` : "Novo checklist" }),
         el("button", { classe: "btn btn-peq", type: "button", texto: "← Voltar", onclick: mostrarLista }),
       ]),
 
@@ -459,7 +486,7 @@ export async function checklists(raiz, ctx) {
         el("button", {
           classe: "btn btn-primario",
           type: "button",
-          texto: existente ? "Salvar alterações" : "Criar checklist",
+          texto: existente?.id ? "Salvar alterações" : "Criar checklist",
           onclick: salvar,
         }),
         el("button", { classe: "btn", type: "button", texto: "Cancelar", onclick: mostrarLista }),
@@ -490,7 +517,8 @@ export async function checklists(raiz, ctx) {
       }
       e.target.disabled = true;
       try {
-        if (existente) {
+        // Modelo pronto chega sem id: é criação, com o editor já preenchido.
+        if (existente?.id) {
           await patch(`/v1/checklists/${existente.id}?venue=${encodeURIComponent(ctx.venue)}`, corpo);
           avisar("Checklist atualizado.", "ok");
         } else {
