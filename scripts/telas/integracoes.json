@@ -1,0 +1,45 @@
+{
+  "rotulo": "Integrações — a Zig e os outros sistemas da casa",
+  "modulo": "/js/pages/integracoes.js",
+  "funcao": "integracoes",
+  "venue": "casa-de-teste",
+  "rotas": {
+    "GET /integracoes": {
+      "zig": {
+        "conectada": true,
+        "casa_ao_vivo": true,
+        "vendas_no_estoque": false,
+        "loja": "eefa43ae-af7c-4421-aa2a-df8435cc0de3",
+        "ativo": true,
+        "hora_envio": 11,
+        "teto_por_dia": 80,
+        "nao_repetir_dias": 30,
+        "ultimo_dia": null,
+        "token_salvo": true,
+        "token_final": "8841"
+      }
+    }
+  },
+  "variacoes": {
+    "sem-zig": {
+      "rotulo": "casa sem Zig: só o formulário de conexão",
+      "rotas": {
+        "GET /integracoes": {
+          "zig": {
+            "conectada": false,
+            "casa_ao_vivo": true,
+            "vendas_no_estoque": false,
+            "loja": null,
+            "ativo": false,
+            "hora_envio": 11,
+            "teto_por_dia": 80,
+            "nao_repetir_dias": 30,
+            "ultimo_dia": null,
+            "token_salvo": false,
+            "token_final": null
+          }
+        }
+      }
+    }
+  }
+}

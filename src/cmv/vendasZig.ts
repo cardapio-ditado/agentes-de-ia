@@ -183,7 +183,7 @@ export async function importarOntemSeFaltar(
   if (horaNaCasa(venue.timezone, agora) < HORA_DE_BUSCAR) return null;
   try {
     const config = await configZig(venue.id);
-    if (!config.token || !config.loja) return null;
+    if (!config.token || !config.loja || !config.vendas_no_estoque) return null;
     const r = await importarVendasDaZig(venue, diaAnterior(hojeNaCasa(venue.timezone, agora)));
     if (r.situacao === "importada") {
       console.log(`[vendas-zig] ${venue.name}: ontem importado pela tela — ${r.total} produto(s), ${r.pendentes} para decidir${r.baixada ? ", baixada" : ""}`);
@@ -227,7 +227,9 @@ export async function cicloDasVendasDaZig(agora = new Date()): Promise<{ importa
     if (horaNaCasa(fuso, agora) < HORA_DE_BUSCAR) continue;
     try {
       const config = await configZig(venue.id);
-      if (!config.token || !config.loja) continue;
+      // A casa liga isto em Ajustes → Integrações: mexe em saldo, e casa sem
+      // ficha cadastrada só encheria a tela de Vendas de linha sem vínculo.
+      if (!config.token || !config.loja || !config.vendas_no_estoque) continue;
       const dia = diaAnterior(hojeNaCasa(fuso, agora));
       const r = await importarVendasDaZig({ id: venue.id, name: venue.name, timezone: fuso }, dia);
       if (r.situacao === "importada") {

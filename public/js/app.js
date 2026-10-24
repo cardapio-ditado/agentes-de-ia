@@ -9,6 +9,7 @@ import { programacao } from "./pages/programacao.js";
 import { jogos } from "./pages/jogos.js";
 import { canais } from "./pages/canais.js";
 import { canaisDaCasa } from "./pages/canaisDaCasa.js";
+import { integracoes } from "./pages/integracoes.js";
 import { pessoas } from "./pages/pessoas.js";
 import { agentes } from "./pages/agentes.js";
 import { agente } from "./pages/agente.js";
@@ -73,6 +74,9 @@ const PAGINAS = [
   { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Nome, contato e o fuso horário que todos os módulos usam" },
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
   { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp e Instagram da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número oficial da Meta, o Instagram do bar e o número do conector, que envia checklist, avisos e confirmações" },
+  // A Zig e os outros sistemas que a casa já usa. Nada aqui é premissa: cada
+  // uso tem a sua chave, e a casa sem integração nenhuma usa o painel igual.
+  { id: "integracoes", modulo: "ajustes", rotulo: "Integrações", icone: ICONES.plugue, render: integracoes, subtitulo: "Zig e os outros sistemas que a casa já usa — ligue só o que tiver" },
   { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
 
   // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link

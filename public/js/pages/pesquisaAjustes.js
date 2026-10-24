@@ -1508,8 +1508,6 @@ async function telaConvites(ctx, recarregar) {
     /* migração ainda não rodada — o cartão explica */
   }
 
-  const zigToken = el("input", { type: "password", placeholder: zig?.token_salvo ? "Trocar o token…" : "Cole o token de integração da Zig" });
-  const zigLoja = el("input", { value: zig?.loja ?? "", placeholder: "Identificador da loja na Zig" });
   const zigAtivo = caixaDeMarcar("Modo automático: mandar sozinho todo dia, sem escolher", zig?.ativo === true);
   const zigHora = el("input", { type: "number", min: "0", max: "23", value: String(zig?.hora_envio ?? 11) });
   const zigTeto = el("input", { type: "number", min: "1", max: "500", value: String(zig?.teto_por_dia ?? 80) });
@@ -1524,17 +1522,15 @@ async function telaConvites(ctx, recarregar) {
   });
   const areaVisitantes = el("div", {});
 
+  // Só o convite mora aqui. Token e loja são da casa, e ficam em Ajustes →
+  // Integrações: a mesma conexão serve à planta, ao estoque e à base.
   const salvarZig = async () => {
-    const corpo = {
-      loja: zigLoja.value.trim(),
+    await put(`/v1/venues/${ctx.venue}/pesquisa/zig`, {
       ativo: zigAtivo.querySelector("input").checked,
       hora_envio: Number(zigHora.value),
       teto_por_dia: Number(zigTeto.value),
       nao_repetir_dias: Number(zigRepetir.value),
-    };
-    // Token só viaja quando a pessoa digitou um: campo vazio = não mexe.
-    if (zigToken.value.trim()) corpo.token = zigToken.value.trim();
-    await put(`/v1/venues/${ctx.venue}/pesquisa/zig`, corpo);
+    });
   };
 
   const cartaoZig = el("section", { classe: "cartao" }, [
@@ -1542,24 +1538,15 @@ async function telaConvites(ctx, recarregar) {
     el("p", {
       classe: "muted",
       texto:
-        "Busque quem esteve na casa, veja quanto cada um gastou e ESCOLHA quem recebe a pesquisa. " +
-        "O token fica só no nosso banco e você apaga quando quiser.",
+        "Com a Zig conectada, busque quem esteve na casa, veja quanto cada um gastou e ESCOLHA quem recebe a pesquisa — ou deixe mandar sozinho todo dia.",
     }),
     !zig
       ? el("p", { classe: "muted", style: "margin-top:10px", texto: "A tabela da Zig ainda não existe no banco — rode o SQL desta versão e recarregue." })
+      : !zig.token_salvo
+        ? el("p", { classe: "muted", style: "margin-top:10px", texto: "A casa ainda não conectou a Zig. Conecte em Ajustes → Integrações, se a casa usar a Zig; sem ela, os convites saem pelo formulário acima ou pela planilha abaixo." })
       : el("div", { classe: "pilha", style: "margin-top:12px" }, [
+          el("p", { classe: "muted", style: "margin:0", texto: `Zig conectada (loja ${zig.loja}). A conexão fica em Ajustes → Integrações.` }),
           el("div", { classe: "grade" }, [
-            campoComValorSalvo(
-              "Token de integração",
-              zigToken,
-              zig.token_salvo ? `token salvo (…${zig.token_final})` : null,
-              async () => {
-                await put(`/v1/venues/${ctx.venue}/pesquisa/zig`, { token: "", ativo: false });
-                avisar("Token apagado — o envio automático foi desligado junto.", "ok");
-                await recarregar();
-              },
-            ),
-            campo("Loja", zigLoja),
             campo("Hora do envio (da casa)", zigHora),
           ]),
           el("div", { classe: "grade" }, [
@@ -1579,7 +1566,7 @@ async function telaConvites(ctx, recarregar) {
                 e.target.disabled = true;
                 try {
                   await salvarZig();
-                  avisar("Conexão com a Zig salva.", "ok");
+                  avisar("Convite pela Zig salvo.", "ok");
                   await recarregar();
                 } catch (err) {
                   avisar(err.message, "erro");
@@ -1594,10 +1581,7 @@ async function telaConvites(ctx, recarregar) {
               onclick: async (e) => {
                 e.target.disabled = true;
                 try {
-                  const r = await post(`/v1/venues/${ctx.venue}/pesquisa/zig/testar`, {
-                    token: zigToken.value.trim() || undefined,
-                    loja: zigLoja.value.trim() || undefined,
-                  });
+                  const r = await post(`/v1/venues/${ctx.venue}/pesquisa/zig/testar`, {});
                   avisar(`A Zig respondeu: token e loja valem (${r.eventos} evento(s) recente(s)).`, "ok");
                 } catch (err) {
                   avisar(err.message, "erro");

@@ -62,11 +62,13 @@ export async function vendas(raiz, ctx) {
     limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
     let lista;
     let zig = null;
+    let estadoZig = null;
     try {
       const r = await get(`/v1/venues/${ctx.venue}/vendas`);
       // A rota devolve a lista e o que a Zig fez agora, se fez.
       lista = Array.isArray(r) ? r : r.importacoes ?? [];
       zig = Array.isArray(r) ? null : r.zig ?? null;
+      estadoZig = Array.isArray(r) ? null : r.zig_estado ?? null;
     } catch (e) {
       limpar(conteudo).append(vazio("Vendas indisponíveis", e.message));
       return;
@@ -88,7 +90,15 @@ export async function vendas(raiz, ctx) {
       el("section", { classe: "pilha" }, [
         el("div", {}, [
           el("h2", { texto: "Vendas" }),
-          el("p", { classe: "muted", texto: "Com a Zig ligada, a noite de ontem entra sozinha aqui todo dia. De outro sistema, mande o relatório; a IA lê e baixa o estoque pelas fichas." }),
+          el("p", {
+            classe: "muted",
+            texto: estadoZig?.vendas_no_estoque
+              ? "A noite de ontem entra sozinha aqui todo dia, pela Zig. Relatório de outro período ou de outro sistema: mande abaixo."
+              : "Mande o relatório do seu sistema de caixa; a IA lê e baixa o estoque pelas fichas.",
+          }),
+          estadoZig?.conectada && !estadoZig.vendas_no_estoque
+            ? el("p", { classe: "muted", texto: "A Zig está conectada. Para as vendas entrarem sozinhas todo dia, ligue \"Vendas no estoque\" em Ajustes → Integrações." })
+            : null,
         ]),
         zig ? avisoDaZig(zig) : null,
 

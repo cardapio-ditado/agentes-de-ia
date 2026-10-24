@@ -122,7 +122,7 @@ import {
 } from "./rhAcerto.js";
 import { comoCsv, comoTexto, resumoDoMes } from "./rhResumo.js";
 import { oQueEstaAcontecendo } from "./aCasa.js";
-import { retratoFresco } from "./zigAoVivo.js";
+import { apagarRetrato, retratoFresco } from "./zigAoVivo.js";
 import { importarOntemSeFaltar } from "./cmv/vendasZig.js";
 import {
   SITUACOES_DE_FERIAS,
@@ -1237,8 +1237,13 @@ function zigParaOPainel(config: {
   teto_por_dia: number;
   nao_repetir_dias: number;
   ultimo_dia: string | null;
+  casa_ao_vivo: boolean;
+  vendas_no_estoque: boolean;
 }): Record<string, unknown> {
   return {
+    conectada: Boolean(config.token?.trim() && config.loja?.trim()),
+    casa_ao_vivo: config.casa_ao_vivo,
+    vendas_no_estoque: config.vendas_no_estoque,
     loja: config.loja,
     ativo: config.ativo,
     hora_envio: config.hora_envio,
@@ -1568,6 +1573,61 @@ async function roteasApi(
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
       return ok(res, await listarModulos(venue.id));
+    }
+
+    // ---- Integrações da casa ----
+    //
+    // Fora do MODULO_DO_RECURSO de propósito, como a planta: conectar o PDV é
+    // da casa, e não de um módulo. A Zig alimenta vários (a planta, o estoque,
+    // a base de clientes, a pesquisa); cada uso tem a sua chave.
+
+    // GET /v1/venues/:slug/integracoes — o que está ligado
+    if (metodo === "GET" && recurso === "integracoes" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const zig = await comErroDePesquisa(() => configZig(venue.id)).catch(() => null);
+      return ok(res, { zig: zig ? zigParaOPainel(zig) : null });
+    }
+
+    // PUT /v1/venues/:slug/integracoes/zig — conectar, ligar e desligar cada uso
+    if (metodo === "PUT" && recurso === "integracoes" && p[3] === "zig" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const token = typeof corpo.token === "string" ? corpo.token.trim() : undefined;
+      const desconectar = token === "";
+      const config = await comErroDePesquisa(() =>
+        salvarConfigZig(venue.id, {
+          // undefined = não mexe; "" = apaga.
+          token,
+          loja: typeof corpo.loja === "string" ? corpo.loja.trim() : undefined,
+          casa_ao_vivo: typeof corpo.casa_ao_vivo === "boolean" ? corpo.casa_ao_vivo : undefined,
+          vendas_no_estoque: typeof corpo.vendas_no_estoque === "boolean" ? corpo.vendas_no_estoque : undefined,
+          // Desconectar desliga tudo o que dependia dela, inclusive o convite
+          // automático da pesquisa.
+          ...(desconectar ? { ativo: false, vendas_no_estoque: false } : {}),
+        }),
+      );
+      // A planta não pode continuar mostrando clientes de uma Zig desligada.
+      if (desconectar || !config.casa_ao_vivo) await apagarRetrato(venue.id);
+      return ok(res, zigParaOPainel(config));
+    }
+
+    // POST /v1/venues/:slug/integracoes/zig/testar — token e loja valem?
+    if (metodo === "POST" && recurso === "integracoes" && p[3] === "zig" && p[4] === "testar" && p.length === 5) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req).catch(() => ({}))) as Record<string, unknown>;
+      return ok(
+        res,
+        await comErroDePesquisa(async () => {
+          const salvo = await configZig(venue.id);
+          const token = (typeof corpo.token === "string" && corpo.token.trim()) || salvo.token;
+          const loja = (typeof corpo.loja === "string" && corpo.loja.trim()) || salvo.loja;
+          if (!token || !loja) throw new ErroDePesquisa(400, "Preencha o token e a loja antes de testar.");
+          return await testarZig({ token, loja });
+        }),
+      );
     }
 
     // GET /v1/venues/:slug/a-casa?desde= — a planta do bar ao vivo.
@@ -4122,7 +4182,15 @@ async function roteasApi(
       // A noite de ontem, pela Zig, entra aqui se ainda não entrou: abrir a
       // tela já traz a importação do dia, sem esperar o relógio do VPS.
       const zig = await importarOntemSeFaltar({ id: venue.id, name: venue.name, timezone: venue.timezone ?? "America/Cuiaba" });
-      return ok(res, { importacoes: await comErroDeEstoque(() => listarImportacoes(venue.id)), zig });
+      const conexao = await configZig(venue.id).catch(() => null);
+      return ok(res, {
+        importacoes: await comErroDeEstoque(() => listarImportacoes(venue.id)),
+        zig,
+        zig_estado: {
+          conectada: Boolean(conexao?.token && conexao?.loja),
+          vendas_no_estoque: conexao?.vendas_no_estoque === true,
+        },
+      });
     }
 
     // GET /v1/venues/:slug/vendas/:id — a importação com as linhas

@@ -361,7 +361,8 @@ export async function retratoFresco(
 
   try {
     const config = await configZig(venue.id);
-    if (!config.token || !config.loja) return gravado;
+    // Zig não conectada, ou a casa desligou a planta ao vivo: nada a mostrar.
+    if (!config.token || !config.loja || !config.casa_ao_vivo) return null;
     const retrato = await tirarRetrato(venue, { token: config.token, loja: config.loja }, agora);
     await gravarRetrato(venue.id, retrato);
     return retrato;
@@ -382,7 +383,7 @@ export async function cicloAoVivo(agora = new Date()): Promise<{ retratos: numbe
   for (const casa of casas) {
     try {
       const config = await configZig(casa.id);
-      if (!config.token || !config.loja) continue;
+      if (!config.token || !config.loja || !config.casa_ao_vivo) continue;
       const retrato = await tirarRetrato(casa, { token: config.token, loja: config.loja }, agora);
       await gravarRetrato(casa.id, retrato);
       retratos += 1;
@@ -391,4 +392,10 @@ export async function cicloAoVivo(agora = new Date()): Promise<{ retratos: numbe
     }
   }
   return { retratos, falhas };
+}
+
+/** A casa desligou a Zig ou a planta ao vivo: o retrato velho não pode ficar na tela. */
+export async function apagarRetrato(venueId: string): Promise<void> {
+  const { error } = await db().from("casa_ao_vivo").delete().eq("venue_id", venueId);
+  if (error) console.error(`[ao-vivo] não apaguei o retrato de ${venueId}: ${error.message}`);
 }
