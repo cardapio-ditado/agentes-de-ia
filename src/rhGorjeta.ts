@@ -1,6 +1,6 @@
 import { db, ehMigracaoPendente } from "./supabase.js";
 import { ErroDoRh } from "./rh.js";
-import { resumoDoDia } from "./rhPonto.js";
+import { minutosDoTurno } from "./rhJornada.js";
 
 /**
  * RH — Fase 5: a gorjeta do turno, rateada e guardada.
@@ -34,7 +34,7 @@ function falhar(status: number, contexto: string, mensagem: string): never {
 export const CRITERIOS = [
   { id: "igual", nome: "Igual para todos" },
   { id: "peso", nome: "Por peso da função" },
-  { id: "horas", nome: "Pelas horas trabalhadas" },
+  { id: "horas", nome: "Pelas horas da escala" },
   { id: "venda", nome: "Por venda individual" },
 ] as const;
 
@@ -225,18 +225,13 @@ export async function participantesDoTurno(params: {
   turnoId?: string | null;
   timezone: string;
 }): Promise<Participante[]> {
-  const [{ data: escala, error }, { data: pontos }, { data: pessoas }, pesos] = await Promise.all([
+  const [{ data: escala, error }, { data: turnos }, { data: pessoas }, pesos] = await Promise.all([
     cliente()
       .from("rh_escala")
       .select("atendente_id, turno_id, situacao, funcao")
       .eq("venue_id", params.venueId)
       .eq("data", params.dia),
-    cliente()
-      .from("rh_pontos")
-      .select("atendente_id, tipo, momento")
-      .eq("venue_id", params.venueId)
-      .eq("dia", params.dia)
-      .order("momento", { ascending: true }),
+    cliente().from("rh_turnos").select("id, inicio, fim").eq("venue_id", params.venueId),
     cliente().from("pesquisa_atendentes").select("id, nome, apelido, funcao").eq("venue_id", params.venueId),
     listarPesos(params.venueId),
   ]);
@@ -250,12 +245,9 @@ export async function participantesDoTurno(params: {
     ]),
   );
 
-  const batidasDe = new Map<string, Array<{ tipo: string; momento: string }>>();
-  for (const b of (pontos ?? []) as Array<{ atendente_id: string; tipo: string; momento: string }>) {
-    const lista = batidasDe.get(b.atendente_id) ?? [];
-    lista.push({ tipo: b.tipo, momento: b.momento });
-    batidasDe.set(b.atendente_id, lista);
-  }
+  const duracaoDo = new Map(
+    ((turnos ?? []) as Array<{ id: string; inicio: string; fim: string }>).map((t) => [t.id, minutosDoTurno(t.inicio, t.fim)]),
+  );
 
   const doTurno = ((escala ?? []) as Array<{
     atendente_id: string;
@@ -264,19 +256,23 @@ export async function participantesDoTurno(params: {
     funcao: string | null;
   }>).filter((e) => e.situacao === "trabalha" && (!params.turnoId || e.turno_id === params.turnoId));
 
-  const ids = new Set([...doTurno.map((e) => e.atendente_id), ...batidasDe.keys()]);
+  const ids = new Set(doTurno.map((e) => e.atendente_id));
   const funcaoNaEscala = new Map(doTurno.map((e) => [e.atendente_id, e.funcao]));
+  // As horas de cada um são as do turno escalado (somadas, se fez dois).
+  const minutosDe = new Map<string, number>();
+  for (const e of doTurno) {
+    minutosDe.set(e.atendente_id, (minutosDe.get(e.atendente_id) ?? 0) + (e.turno_id ? (duracaoDo.get(e.turno_id) ?? 0) : 0));
+  }
 
   const lista: Participante[] = [...ids].map((id) => {
     const pessoa = cadastro.get(id);
     const funcao = funcaoNaEscala.get(id) || pessoa?.funcao || null;
-    const minhas = batidasDe.get(id) ?? [];
     return {
       atendente_id: id,
       nome: pessoa?.apelido || pessoa?.nome || "—",
       funcao,
       peso: funcao ? (pesoDa.get(funcao.toLowerCase()) ?? 1) : 1,
-      minutos: minhas.length ? resumoDoDia(minhas, params.timezone).minutos_trabalhados : 0,
+      minutos: minutosDe.get(id) ?? 0,
     };
   });
 

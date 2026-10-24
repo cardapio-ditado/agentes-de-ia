@@ -23,7 +23,7 @@ import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 const NOME_DO_CRITERIO = {
   igual: "igual para todos",
   peso: "por pontuação da função",
-  horas: "pelas horas trabalhadas",
+  horas: "pelas horas da escala",
 };
 
 /**

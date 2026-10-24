@@ -1,7 +1,7 @@
 import { db, ehMigracaoPendente } from "./supabase.js";
 import { ErroDoRh } from "./rh.js";
 import { listarGorjetas, listarPesos, ratear, type Participante } from "./rhGorjeta.js";
-import { resumoDoDia } from "./rhPonto.js";
+import { minutosDoTurno } from "./rhJornada.js";
 
 /**
  * RH — o acerto da gorjeta, semana a semana.
@@ -17,7 +17,7 @@ import { resumoDoDia } from "./rhPonto.js";
  *
  *   GLOBAL     — a casa arrecada sobre a venda inteira e reparte entre a
  *                equipe, por um critério: igual, por peso da função (a
- *                pontuação da casa) ou pelas horas trabalhadas.
+ *                pontuação da casa) ou pelas horas da escala.
  *
  * Nos dois casos vale a mesma régua: nem tudo que é arrecadado é repassado.
  * A diferença cobre taxa de cartão e quebra, e aparece na tela — porque
@@ -48,7 +48,7 @@ export const METODOS = [
 export const CRITERIOS_DE_RATEIO = [
   { id: "igual", nome: "Igual para todos" },
   { id: "peso", nome: "Por peso da função (pontuação)" },
-  { id: "horas", nome: "Pelas horas trabalhadas" },
+  { id: "horas", nome: "Pelas horas da escala" },
 ] as const;
 
 const IDS_DE_METODO = new Set<string>(METODOS.map((m) => m.id));
@@ -614,10 +614,10 @@ export function montarAcerto(params: {
 /**
  * Quem entra no acerto da semana.
  *
- * Sai da escala (quem estava previsto) somada a quem bateu ponto — porque em
- * bar entra gente de última hora. A casa que ainda não usa escala nem ponto
- * cai na equipe ativa inteira, senão a tela abriria vazia e pareceria
- * quebrada.
+ * Sai da escala (quem estava previsto para trabalhar), e as horas de cada um
+ * são as dos turnos escalados. A casa que ainda não usa escala cai na equipe
+ * ativa inteira, senão a tela abriria vazia e pareceria quebrada. Quem entrou
+ * de última hora sem estar na escala entra pela venda ou pelo extra lançado.
  */
 async function quemTrabalhou(params: {
   venueId: string;
@@ -625,7 +625,7 @@ async function quemTrabalhou(params: {
   ate: string;
   timezone: string;
 }): Promise<Participante[]> {
-  const [{ data: pessoas, error }, { data: escala }, { data: pontos }, pesos] = await Promise.all([
+  const [{ data: pessoas, error }, { data: escala }, { data: turnos }, pesos] = await Promise.all([
     cliente()
       .from("pesquisa_atendentes")
       .select("id, nome, apelido, funcao")
@@ -634,49 +634,39 @@ async function quemTrabalhou(params: {
       .order("nome", { ascending: true }),
     cliente()
       .from("rh_escala")
-      .select("atendente_id, situacao, funcao")
+      .select("atendente_id, situacao, funcao, turno_id")
       .eq("venue_id", params.venueId)
       .gte("data", params.de)
       .lte("data", params.ate),
-    cliente()
-      .from("rh_pontos")
-      .select("atendente_id, tipo, momento")
-      .eq("venue_id", params.venueId)
-      .gte("dia", params.de)
-      .lte("dia", params.ate)
-      .order("momento", { ascending: true }),
+    cliente().from("rh_turnos").select("id, inicio, fim").eq("venue_id", params.venueId),
     listarPesos(params.venueId),
   ]);
   if (error) falhar(500, "Falha ao listar a equipe", error.message);
 
   const pesoDa = new Map(pesos.map((p) => [p.funcao.toLowerCase(), p.peso]));
 
-  const escalados = new Set<string>(
-    ((escala ?? []) as Array<{ atendente_id: string; situacao: string }>)
-      .filter((e) => e.situacao === "trabalha")
-      .map((e) => e.atendente_id),
+  const duracaoDo = new Map(
+    ((turnos ?? []) as Array<{ id: string; inicio: string; fim: string }>).map((t) => [t.id, minutosDoTurno(t.inicio, t.fim)]),
   );
 
-  const batidasDe = new Map<string, Array<{ tipo: string; momento: string }>>();
-  for (const b of (pontos ?? []) as Array<{ atendente_id: string; tipo: string; momento: string }>) {
-    const lista = batidasDe.get(b.atendente_id) ?? [];
-    lista.push({ tipo: b.tipo, momento: b.momento });
-    batidasDe.set(b.atendente_id, lista);
+  // Minutos escalados na semana, por pessoa.
+  const minutosDe = new Map<string, number>();
+  for (const e of (escala ?? []) as Array<{ atendente_id: string; situacao: string; turno_id: string | null }>) {
+    if (e.situacao !== "trabalha") continue;
+    minutosDe.set(e.atendente_id, (minutosDe.get(e.atendente_id) ?? 0) + (e.turno_id ? (duracaoDo.get(e.turno_id) ?? 0) : 0));
   }
 
   const equipe = (pessoas ?? []) as Array<{ id: string; nome: string; apelido: string | null; funcao: string | null }>;
-  const houveMovimento = escalados.size > 0 || batidasDe.size > 0;
+  const houveEscala = minutosDe.size > 0;
 
   return equipe
-    .filter((p) => !houveMovimento || escalados.has(p.id) || batidasDe.has(p.id))
+    .filter((p) => !houveEscala || minutosDe.has(p.id))
     .map((p) => ({
       atendente_id: p.id,
       nome: p.apelido || p.nome,
       funcao: p.funcao,
       peso: p.funcao ? (pesoDa.get(p.funcao.toLowerCase()) ?? 1) : 1,
-      minutos: (batidasDe.get(p.id) ?? []).length
-        ? resumoDoDia(batidasDe.get(p.id)!, params.timezone).minutos_trabalhados
-        : 0,
+      minutos: minutosDe.get(p.id) ?? 0,
     }));
 }
 

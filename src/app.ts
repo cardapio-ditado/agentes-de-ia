@@ -134,19 +134,6 @@ import {
   situacaoDaEquipe,
 } from "./rhFerias.js";
 import {
-  apagarPonto,
-  apagarTotem,
-  atualizarTotem,
-  baterPonto,
-  corrigirPonto,
-  criarTotem,
-  definirPin,
-  lancarPonto,
-  listarTotens,
-  pontoDoDia,
-  telaDoTotem,
-} from "./rhPonto.js";
-import {
   apagarConversa,
   atendimentoDe,
   definirAtendimento,
@@ -2638,8 +2625,6 @@ async function roteasApi(
       const ehSecaoPropria =
         alvo === "escala" ||
         alvo === "turnos" ||
-        alvo === "ponto" ||
-        alvo === "totens" ||
         alvo === "ferias" ||
         alvo === "gorjetas" ||
         alvo === "pesos" ||
@@ -2938,89 +2923,6 @@ async function roteasApi(
         if (metodo === "DELETE" && p.length === 5) {
           return ok(res, await comErroDoRh(() => apagarFerias({ venueId: venue.id, id: p[4]! })));
         }
-      }
-
-      // ---- Ponto: /v1/venues/:slug/rh/ponto[/:id] ----
-      if (alvo === "ponto") {
-        // A virada do dia é da casa e nasceu no CMV; aqui ela é lida como
-        // configuração do estabelecimento, não como dado de outro módulo.
-        const relogio = {
-          timezone: venue.timezone ?? "America/Cuiaba",
-          virada: Number((venue as unknown as Record<string, unknown>).virada_do_dia) || 0,
-        };
-
-        if (metodo === "GET" && p.length === 4) {
-          const dia = url.searchParams.get("dia") ?? undefined;
-          return ok(res, await comErroDoRh(() => pontoDoDia({ venueId: venue.id, ...relogio, dia })));
-        }
-
-        // POST /rh/ponto — o gestor lança uma batida que ninguém bateu
-        if (metodo === "POST" && p.length === 4) {
-          const corpo = (await lerJson(req)) as Record<string, unknown>;
-          const batida = await comErroDoRh(() =>
-            lancarPonto({
-              venueId: venue.id,
-              atendenteId: texto(corpo, "atendente_id"),
-              dia: texto(corpo, "dia"),
-              tipo: texto(corpo, "tipo"),
-              hora: texto(corpo, "hora"),
-              timezone: relogio.timezone,
-              motivo: texto(corpo, "motivo"),
-              quem: chave.name,
-            }),
-          );
-          return ok(res, batida, 201);
-        }
-
-        if (metodo === "PATCH" && p.length === 5) {
-          const corpo = (await lerJson(req)) as Record<string, unknown>;
-          return ok(
-            res,
-            await comErroDoRh(() =>
-              corrigirPonto({
-                venueId: venue.id,
-                id: p[4]!,
-                momento: corpo.momento,
-                motivo: texto(corpo, "motivo"),
-                quem: chave.name,
-              }),
-            ),
-          );
-        }
-
-        if (metodo === "DELETE" && p.length === 5) {
-          return ok(res, await comErroDoRh(() => apagarPonto({ venueId: venue.id, id: p[4]! })));
-        }
-      }
-
-      // ---- Totens: /v1/venues/:slug/rh/totens[/:id] ----
-      if (alvo === "totens") {
-        if (metodo === "GET" && p.length === 4) {
-          return ok(res, await comErroDoRh(() => listarTotens(venue.id)));
-        }
-        if (metodo === "POST" && p.length === 4) {
-          const corpo = (await lerJson(req)) as Record<string, unknown>;
-          const totem = await comErroDoRh(() =>
-            criarTotem({ venueId: venue.id, nome: textoOpcional(corpo, "nome") ?? "" }),
-          );
-          return ok(res, { ...totem, endereco: `${enderecoBase()}/ponto/${totem.token}` }, 201);
-        }
-        if (metodo === "PATCH" && p.length === 5) {
-          const corpo = (await lerJson(req)) as Record<string, unknown>;
-          return ok(res, await comErroDoRh(() => atualizarTotem({ venueId: venue.id, id: p[4]!, ...corpo })));
-        }
-        if (metodo === "DELETE" && p.length === 5) {
-          return ok(res, await comErroDoRh(() => apagarTotem({ venueId: venue.id, id: p[4]! })));
-        }
-      }
-
-      // POST /v1/venues/:slug/rh/:atendenteId/pin — a gerência cria o PIN
-      if (metodo === "POST" && p.length === 5 && p[4] === "pin" && !ehSecaoPropria) {
-        const corpo = (await lerJson(req)) as Record<string, unknown>;
-        return ok(
-          res,
-          await comErroDoRh(() => definirPin({ venueId: venue.id, atendenteId: p[3]!, pin: texto(corpo, "pin") })),
-        );
       }
 
       // ---- Escala: /v1/venues/:slug/rh/escala[...] ----
@@ -5604,39 +5506,6 @@ async function roteasApi(
   // Por aqui só se LÊ o cardápio, e se GRAVA o que é do cliente — curtida,
   // comentário (que entra pendente) e o chamado do garçom. Cada gravação tem
   // limite de ritmo por endereço; é o que separa "uma mesa" de "um script".
-  // ---- O tablet do ponto: /v1/ponto/:token ----
-  //
-  // Sem chave de API e sem login: quem bate é o garçom, no tablet preso na
-  // parede. O que autoriza é o token secreto do endereço, que só existe no
-  // tablet cadastrado pela gerência — e, por cima dele, o PIN da pessoa.
-  //
-  // A trava do módulo mora aqui também: casa que cancelou o RH não pode ter
-  // um tablet esquecido continuando a registrar ponto.
-  if (p[0] === "ponto" && p.length >= 2) {
-    const token = p[1]!;
-
-    if (metodo === "GET" && p.length === 2) {
-      const tela = await comErroDoRh(() => telaDoTotem(token));
-      return ok(res, tela);
-    }
-
-    if (metodo === "POST" && p.length === 3 && p[2] === "bater") {
-      const corpo = (await lerJson(req)) as Record<string, unknown>;
-      const r = await comErroDoRh(() =>
-        baterPonto({
-          token,
-          atendenteId: texto(corpo, "atendente_id"),
-          pin: texto(corpo, "pin"),
-          tipo: texto(corpo, "tipo"),
-          // O limite é por tablet + pessoa: um PIN errado repetido não trava
-          // o ponto de quem está do lado esperando para bater.
-          chaveDoRitmo: `${token}:${String(corpo.atendente_id ?? "")}`,
-        }),
-      );
-      return ok(res, r, 201);
-    }
-  }
-
   if (p[0] === "cardapio-publico" && p.length >= 2) {
     const venue = await venueDaPesquisa(p[1]!);
     if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
@@ -6196,13 +6065,9 @@ const PAGINAS_LIMPAS: Record<string, string> = {
 async function servirEstatico(res: ServerResponse, caminho: string): Promise<void> {
   // /cardapio/<casa> é a página do cardápio: a casa vai no caminho porque é
   // o que fica bonito num QR code impresso, e a página lê o slug do endereço.
-  // /ponto/<token> é o tablet do ponto. O token vai no caminho porque o
-  // tablet guarda o endereço uma vez e nunca mais digita nada.
   const relativo = caminho.startsWith("/cardapio/")
     ? "cardapio.html"
-    : caminho.startsWith("/ponto/")
-      ? "ponto.html"
-      : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
+    : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
 
   // normalize resolve "..", e o prefixo é conferido depois — sem isso,
   // "/../.env" escaparia do diretório público.

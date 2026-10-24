@@ -1,9 +1,9 @@
 import { del, get, patch, post, postArquivo } from "../api.js";
 import { avisar, dataHora, dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
 import { criarEscala } from "./rhEscala.js";
-import { criarPonto } from "./rhPonto.js";
 import { criarFerias } from "./rhFerias.js";
 import { criarFechamento } from "./rhFechamento.js";
+import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
  * RH — Fase 1: a ficha de cada pessoa da casa.
@@ -62,7 +62,9 @@ export async function rh(raiz, ctx) {
   let busca = "";
   let ordem = { campo: "nome", desc: false };
 
+  // A aba "ponto" saiu do produto: quem a deixou guardada cai na equipe.
   let abaAtiva = sessionStorage.getItem("brasa.rh.aba") || "equipe";
+  if (abaAtiva === "ponto") abaAtiva = "equipe";
 
   const cabecalho = el("div", { classe: "grade" });
   // `min-width:0` não é enfeite: a planilha lá dentro tem largura mínima de
@@ -73,7 +75,6 @@ export async function rh(raiz, ctx) {
   // A escala cuida do próprio estado (semana aberta, célula em edição) e
   // desenha dentro do mesmo corpo. Trocar de aba não perde o que ela sabe.
   const escala = criarEscala(corpo, ctx);
-  const ponto = criarPonto(corpo, ctx);
   const ferias = criarFerias(corpo, ctx);
   const fechamento = criarFechamento(corpo, ctx);
 
@@ -83,7 +84,6 @@ export async function rh(raiz, ctx) {
     [
       ["equipe", "Equipe"],
       ["escala", "Escala"],
-      ["ponto", "Ponto"],
       ["ferias", "Férias"],
       ["fechamento", "Gorjeta"],
     ].map(([id, rotulo]) =>
@@ -109,7 +109,6 @@ export async function rh(raiz, ctx) {
     cabecalho.hidden = id !== "equipe";
     if (id === "equipe") await recarregar();
     else if (id === "escala") await escala.recarregar();
-    else if (id === "ponto") await ponto.recarregar();
     else if (id === "ferias") await ferias.recarregar();
     else await fechamento.recarregar();
   }
@@ -186,6 +185,18 @@ export async function rh(raiz, ctx) {
     abertaId = null;
     limpar(corpo);
 
+    // O mês do contador: por padrão o anterior, que é o que se fecha.
+    const mesPassado = new Date();
+    mesPassado.setDate(1);
+    mesPassado.setMonth(mesPassado.getMonth() - 1);
+    const seletorDoMes = el("input", {
+      classe: "input",
+      type: "month",
+      value: mesPassado.toISOString().slice(0, 7),
+      title: "Mês do resumo para a contabilidade",
+      style: "max-width:160px",
+    });
+
     const campoBusca = el("input", {
       classe: "input",
       type: "search",
@@ -225,6 +236,8 @@ export async function rh(raiz, ctx) {
               await recarregar();
             },
           }),
+          seletorDoMes,
+          botaoDePdf(() => resumoDoMesEmPdf(seletorDoMes.value), "Resumo do mês"),
           el("button", {
             classe: "btn btn-primario",
             type: "button",
@@ -351,6 +364,52 @@ export async function rh(raiz, ctx) {
         ]),
       ],
     );
+  }
+
+  /**
+   * O mês para o contador: dias e horas pela escala, faltas e atrasos
+   * registrados, férias e gorjeta. Em paisagem, com uma linha de assinatura.
+   */
+  async function resumoDoMesEmPdf(mes) {
+    let r;
+    try {
+      r = await get(`/v1/venues/${ctx.venue}/rh/resumo?mes=${mes}`);
+    } catch (e) {
+      avisar(e.message, "erro");
+      return;
+    }
+    const horas = (min) => `${Math.floor(min / 60)}h${String(Math.round(min % 60)).padStart(2, "0")}`;
+    const nomeDoMes = new Date(`${mes}-15T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    imprimirRelatorio({
+      tipo: "RH",
+      titulo: "Resumo do mês para a contabilidade",
+      periodo: r.de ? `${nomeDoMes} (${diaBr(r.de)} a ${diaBr(r.ate)})` : nomeDoMes,
+      selos: [
+        { valor: String(r.linhas.length), rotulo: "pessoas" },
+        { valor: String(r.linhas.reduce((t, l) => t + l.faltas, 0)), rotulo: "faltas", ruim: r.linhas.some((l) => l.faltas > 0) },
+        { valor: dinheiro(r.linhas.reduce((t, l) => t + l.gorjeta, 0)), rotulo: "gorjeta no mês" },
+      ],
+      secoes: [{
+        nota: "Dias e horas pela escala da casa (horas previstas do turno); faltas marcadas na escala e atrasos registrados pelo gerente; gorjeta do acerto. O cálculo da folha continua com a contabilidade.",
+        colunas: [
+          { rotulo: "Pessoa" }, { rotulo: "Cargo" }, { rotulo: "Dias", num: true }, { rotulo: "Horas", num: true },
+          { rotulo: "Noturnas", num: true }, { rotulo: "Faltas", num: true }, { rotulo: "Atrasos", num: true },
+          { rotulo: "Férias", num: true }, { rotulo: "Gorjeta", num: true },
+        ],
+        linhas: r.linhas.map((l) => ({
+          destaque: l.faltas > 0,
+          celulas: [
+            l.nome, [l.cargo, NOME_DO_VINCULO[l.vinculo] ?? l.vinculo].filter(Boolean).join(" · "), String(l.dias_trabalhados), horas(l.minutos_trabalhados),
+            horas(l.minutos_noturnos), String(l.faltas), l.atrasos ? `${l.atrasos} (${l.minutos_de_atraso} min)` : "0",
+            l.dias_de_ferias ? `${l.dias_de_ferias} d` : "—", dinheiro(l.gorjeta),
+          ],
+        })),
+        vazio: "Ninguém com movimento no mês.",
+      }],
+      assinaturas: ["Responsável pela casa"],
+      arquivo: `rh-resumo-${mes}`,
+      paisagem: true,
+    });
   }
 
   /* ================= Admissão ================= */
@@ -598,56 +657,8 @@ export async function rh(raiz, ctx) {
               onclick: () => desligarPessoa(id, pessoa.nome),
             }),
       ]),
-      secaoDoPin(id, pessoa),
       secaoDeDocumentos(id, documentos),
     );
-  }
-
-  /* ================= PIN do ponto ================= */
-
-  function secaoDoPin(id, pessoa) {
-    const pin = el("input", {
-      classe: "input",
-      type: "text",
-      inputmode: "numeric",
-      maxlength: 4,
-      placeholder: "4 números",
-      style: "max-width:160px;letter-spacing:6px;font-size:1.2rem",
-    });
-
-    return el("section", { classe: "cartao" }, [
-      el("h3", { texto: "PIN do ponto" }),
-      el("p", {
-        classe: "muted",
-        texto: `São os quatro números que ${
-          pessoa.apelido || pessoa.nome
-        } digita no tablet para bater o ponto. Combine com a pessoa e diga em voz alta — não guardamos o PIN em lugar nenhum, nem nós conseguimos ver depois.`,
-      }),
-      el("div", { classe: "reserva-acoes" }, [
-        pin,
-        el("button", {
-          classe: "btn btn-primario",
-          type: "button",
-          texto: "Definir PIN",
-          onclick: async (e) => {
-            if (!/^\d{4}$/.test(pin.value)) {
-              avisar("O PIN precisa ter exatamente 4 números.", "erro");
-              return;
-            }
-            e.target.disabled = true;
-            try {
-              await post(`/v1/venues/${ctx.venue}/rh/${id}/pin`, { pin: pin.value });
-              avisar("PIN definido. Passe os números para a pessoa.", "ok");
-              pin.value = "";
-            } catch (err) {
-              avisar(err.message, "erro");
-            } finally {
-              e.target.disabled = false;
-            }
-          },
-        }),
-      ]),
-    ]);
   }
 
   function desligarPessoa(id, nomeDaPessoa) {

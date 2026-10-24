@@ -1,6 +1,7 @@
 import { db, ehMigracaoPendente } from "./supabase.js";
 import { ErroDoRh } from "./rh.js";
-import { atrasoEmMinutos, emHoras, resumoDoDia } from "./rhPonto.js";
+import { emHoras, minutosDoTurno, minutosNoturnosDoTurno } from "./rhJornada.js";
+import { hojeNaCasa } from "./fuso.js";
 
 /**
  * RH — Fase 5: o resumo do mês, pronto para a contabilidade.
@@ -10,7 +11,7 @@ import { atrasoEmMinutos, emHoras, resumoDoDia } from "./rhPonto.js";
  * atrasos, quem tirou férias. Hoje isso sai de cabeça, de caderno e de
  * WhatsApp — e é por isso que a folha atrasa.
  *
- * Este arquivo junta o que o ponto, a escala e as férias já sabem e entrega
+ * Este arquivo junta o que a escala, as ocorrências e as férias já sabem e entrega
  * em dois formatos: texto para colar no WhatsApp do contador, e CSV para
  * quem prefere planilha.
  *
@@ -28,9 +29,6 @@ function falhar(status: number, contexto: string, mensagem: string): never {
   }
   throw new ErroDoRh(status, `${contexto}: ${mensagem}`);
 }
-
-/** Tolerância de atraso: relógio de tablet não é ponto eletrônico homologado. */
-const TOLERANCIA_MIN = 5;
 
 export interface LinhaDoResumo {
   atendente_id: string;
@@ -83,24 +81,26 @@ export async function resumoDoMes(params: {
 }): Promise<ResumoDoMes> {
   const { de, ate } = bordasDoMes(params.mes);
 
-  const [{ data: pessoas, error }, { data: fichas }, { data: pontos }, { data: escala }, { data: turnos }, { data: ferias }, { data: cotas }] =
+  const [{ data: pessoas, error }, { data: fichas }, { data: atrasosRegistrados }, { data: escala }, { data: turnos }, { data: ferias }, { data: cotas }] =
     await Promise.all([
       cliente().from("pesquisa_atendentes").select("id, nome, apelido, funcao").eq("venue_id", params.venueId),
       cliente().from("rh_fichas").select("atendente_id, vinculo, cargo, salario, desligamento").eq("venue_id", params.venueId),
+      // Atraso é o que o gerente registra como ocorrência. Sem a tabela
+      // (migração por rodar), simplesmente não há atraso a contar.
       cliente()
-        .from("rh_pontos")
-        .select("atendente_id, dia, tipo, momento")
+        .from("rh_ocorrencias")
+        .select("atendente_id, minutos")
         .eq("venue_id", params.venueId)
+        .eq("tipo", "atraso")
         .gte("dia", de)
-        .lte("dia", ate)
-        .order("momento", { ascending: true }),
+        .lte("dia", ate),
       cliente()
         .from("rh_escala")
         .select("atendente_id, data, turno_id, situacao")
         .eq("venue_id", params.venueId)
         .gte("data", de)
         .lte("data", ate),
-      cliente().from("rh_turnos").select("id, inicio").eq("venue_id", params.venueId),
+      cliente().from("rh_turnos").select("id, inicio, fim").eq("venue_id", params.venueId),
       cliente()
         .from("rh_ferias")
         .select("atendente_id, inicio, fim, situacao")
@@ -134,15 +134,16 @@ export async function resumoDoMes(params: {
     }>).map((f) => [f.atendente_id, f]),
   );
 
-  const horaDoTurno = new Map(((turnos ?? []) as Array<{ id: string; inicio: string }>).map((t) => [t.id, t.inicio]));
+  const turnoDe = new Map(((turnos ?? []) as Array<{ id: string; inicio: string; fim: string }>).map((t) => [t.id, t]));
 
-  // Batidas agrupadas por pessoa e dia.
-  const porPessoaDia = new Map<string, Array<{ tipo: string; momento: string }>>();
-  for (const p of (pontos ?? []) as Array<{ atendente_id: string; dia: string; tipo: string; momento: string }>) {
-    const chave = `${p.atendente_id}|${p.dia}`;
-    const lista = porPessoaDia.get(chave) ?? [];
-    lista.push({ tipo: p.tipo, momento: p.momento });
-    porPessoaDia.set(chave, lista);
+  // O que ainda não aconteceu não conta: a escala do fim do mês já está
+  // montada no dia 20, e não é dia trabalhado.
+  const hoje = hojeNaCasa(params.timezone);
+
+  const atrasosDe = new Map<string, { vezes: number; minutos: number }>();
+  for (const a of (atrasosRegistrados ?? []) as Array<{ atendente_id: string; minutos: number | null }>) {
+    const atual = atrasosDe.get(a.atendente_id) ?? { vezes: 0, minutos: 0 };
+    atrasosDe.set(a.atendente_id, { vezes: atual.vezes + 1, minutos: atual.minutos + (Number(a.minutos) || 0) });
   }
 
   const escalados = (escala ?? []) as Array<{ atendente_id: string; data: string; turno_id: string | null; situacao: string }>;
@@ -166,43 +167,29 @@ export async function resumoDoMes(params: {
   }>).map((pessoa) => {
     const ficha = fichaDe.get(pessoa.id);
 
+    // Dias e horas pela escala: o turno de quem estava para trabalhar, nos
+    // dias que já passaram. Falta é o que o gerente marcou na escala.
     let dias = 0;
     let minutos = 0;
     let noturnos = 0;
-    for (const [chave, batidas] of porPessoaDia) {
-      if (!chave.startsWith(`${pessoa.id}|`)) continue;
-      const r = resumoDoDia(batidas, params.timezone);
-      if (r.minutos_trabalhados > 0) {
-        dias += 1;
-        minutos += r.minutos_trabalhados;
-        noturnos += r.minutos_noturnos;
-      }
-    }
-
     let faltas = 0;
-    let atrasos = 0;
-    let minutosDeAtraso = 0;
     for (const e of escalados) {
-      if (e.atendente_id !== pessoa.id) continue;
-      const batidas = porPessoaDia.get(`${pessoa.id}|${e.data}`) ?? [];
-
+      if (e.atendente_id !== pessoa.id || e.data > hoje) continue;
       if (e.situacao === "falta") {
         faltas += 1;
         continue;
       }
       if (e.situacao !== "trabalha") continue;
-      if (batidas.length === 0) {
-        faltas += 1;
-        continue;
-      }
-
-      const previsto = e.turno_id ? (horaDoTurno.get(e.turno_id) ?? null) : null;
-      const atraso = atrasoEmMinutos(previsto, resumoDoDia(batidas, params.timezone).primeira_entrada);
-      if (atraso !== null && atraso > TOLERANCIA_MIN) {
-        atrasos += 1;
-        minutosDeAtraso += atraso;
+      dias += 1;
+      const turno = e.turno_id ? turnoDe.get(e.turno_id) : null;
+      if (turno) {
+        minutos += minutosDoTurno(turno.inicio, turno.fim);
+        noturnos += minutosNoturnosDoTurno(turno.inicio, turno.fim);
       }
     }
+    const atraso = atrasosDe.get(pessoa.id) ?? { vezes: 0, minutos: 0 };
+    const atrasos = atraso.vezes;
+    const minutosDeAtraso = atraso.minutos;
 
     return {
       atendente_id: pessoa.id,
@@ -286,7 +273,7 @@ export function comoTexto(resumo: ResumoDoMes): string {
   }
 
   partes.push(
-    "Números de ponto, escala e gorjeta registrados no sistema. Cálculo de salário, encargos e adicionais permanece com a contabilidade.",
+    "Dias e horas pela escala da casa (horas previstas do turno), faltas e atrasos registrados pelo gerente, e a gorjeta lançada. Cálculo de salário, encargos e adicionais permanece com a contabilidade.",
   );
   return partes.join("\n");
 }
