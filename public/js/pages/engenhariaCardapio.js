@@ -56,7 +56,7 @@ export async function engenhariaCardapio(raiz, ctx) {
     el("div", { classe: "pilha" }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: "Engenharia de cardápio" }),
+          el("h2", { texto: "O que vende e o que dá lucro" }),
           el("p", {
             classe: "muted",
             texto: "Cada prato num quadrante: o que proteger, o que reprecificar, o que divulgar e o que tirar.",

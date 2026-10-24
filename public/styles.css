@@ -844,6 +844,7 @@ h3 {
   font: inherit;
   font-size: 14px;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .nav-item:hover {
@@ -3235,3 +3236,26 @@ label.integracao-uso { cursor: pointer; }
   border-radius: 50%;
   background: var(--texto-3);
 }
+
+/* ============ Quem faz o quê (WhatsApp e Instagram) ============ */
+.linha-tarefa { justify-content: flex-start; }
+.linha-tarefa > :last-child { margin-left: auto; flex-shrink: 0; }
+.linha-tarefa-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.linha-tarefa-texto .muted { overflow-wrap: anywhere; }
+.ponto-estado { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.ponto-ok { background: var(--ok); }
+.ponto-alerta { background: var(--alerta); }
+
+/* ============ Grupos do menu lateral ============ */
+.nav-grupo {
+  margin: 14px 12px 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+.app[data-recolhida="1"] .nav-grupo { visibility: hidden; height: 0; margin: 8px 0 0; }
+
+/* Abas de uma página que junta duas ou três telas. */
+.abas-pagina { margin-bottom: 14px; }

@@ -7,7 +7,6 @@ import { conversas } from "./pages/conversas.js";
 import { reservas } from "./pages/reservas.js";
 import { programacao } from "./pages/programacao.js";
 import { jogos } from "./pages/jogos.js";
-import { canais } from "./pages/canais.js";
 import { canaisDaCasa } from "./pages/canaisDaCasa.js";
 import { integracoes } from "./pages/integracoes.js";
 import { pessoas } from "./pages/pessoas.js";
@@ -47,18 +46,97 @@ import { rh } from "./pages/rh.js";
  * limpa o main e chama a tela — sem framework, sem build.
  */
 
+/**
+ * Uma página que junta duas ou três telas em abas.
+ *
+ * O menu tinha uma linha por tela, e uma casa com tudo contratado chegava a
+ * quarenta linhas — o mentorado se perdia antes de achar a que usava todo
+ * dia. Telas que respondem à mesma pergunta ("o atendente", "a programação",
+ * "o estoque") viram uma porta só, e a aba fica no endereço
+ * (#estoque:historico) para F5, voltar e link direto continuarem valendo.
+ *
+ * Trocar de aba é trocar de endereço: o roteador limpa os timers da aba
+ * anterior pelo mesmo caminho de sempre.
+ */
+function comAbas(paginaId, abas) {
+  return async (raiz, ctx) => {
+    const atual = abas.find((a) => a.id === ctx.aba) ?? abas[0];
+    if (atual.subtitulo) document.getElementById("subtitulo-pagina").textContent = atual.subtitulo;
+    const corpo = el("div", {});
+    raiz.append(
+      el(
+        "div",
+        { classe: "abas abas-pagina", role: "tablist" },
+        abas.map((a) =>
+          el("button", {
+            classe: `aba${a.id === atual.id ? " aba-ativa" : ""}`,
+            type: "button",
+            role: "tab",
+            "aria-selected": String(a.id === atual.id),
+            texto: a.rotulo,
+            onclick: () => {
+              location.hash = `#${paginaId}:${a.id}`;
+            },
+          }),
+        ),
+      ),
+      corpo,
+    );
+    try {
+      await atual.render(corpo, ctx);
+    } catch (e) {
+      // Sessão vencida sobe para o roteador, que pede login. O resto fica
+      // DENTRO da aba: as outras abas continuam ali para trocar.
+      if (e instanceof ErroApi && e.status === 401) throw e;
+      limpar(corpo).append(
+        el("div", { classe: "cartao" }, [
+          el("h2", { texto: "Não deu para carregar esta aba" }),
+          el("p", { classe: "muted", texto: e.message }),
+        ]),
+      );
+    }
+  };
+}
+
+/**
+ * Endereços antigos que viraram aba de outra página (ou mudaram de módulo).
+ * Link guardado, favorito e botão de outra tela continuam chegando.
+ */
+const APELIDOS = {
+  jogos: "programacao:jogos",
+  agentes: "atendente:agentes",
+  "agente-sabe": "atendente:sabe",
+  agente: "atendente:testar",
+  canais: "canais-casa",
+  "pesquisa-respostas": "pesquisa:respostas",
+  kardex: "estoque:historico",
+};
+
+/** Os grupos do menu lateral, na ordem em que aparecem. */
+const GRUPOS = { dia: "Dia a dia", analise: "Análise", configurar: "Configurar" };
+
 // Cada página pertence a um módulo do hub; a lateral só mostra as do módulo
-// em que o usuário entrou.
+// em que o usuário entrou. `grupo` separa o que se usa todo dia do que se
+// configura uma vez (sem grupo = dia a dia).
 const PAGINAS = [
   { id: "painel", modulo: "agentes-ia", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
-  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "Atendimentos do agente" },
+  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente conversou com cada cliente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
-  { id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, render: programacao, subtitulo: "Shows, jogos e promoções" },
-  { id: "jogos", modulo: "agentes-ia", rotulo: "Jogos", icone: ICONES.raio, render: jogos, subtitulo: "Escolha os jogos que a casa vai transmitir" },
-  { id: "agentes", modulo: "agentes-ia", rotulo: "Agentes", icone: ICONES.agente, render: agentes, subtitulo: "Monte a personalidade e as regras" },
-  { id: "agente-sabe", modulo: "agentes-ia", rotulo: "O que o agente sabe", icone: ICONES.organizacao, render: agenteSabe, subtitulo: "Endereço, horários e as respostas às perguntas do cliente" },
-  { id: "canais", modulo: "agentes-ia", rotulo: "Canais do agente", icone: ICONES.canais, render: canais, subtitulo: "O número que o agente atende, e o Instagram" },
-  { id: "agente", modulo: "agentes-ia", rotulo: "Testar agente", icone: ICONES.raio, render: agente, subtitulo: "Converse como se fosse um cliente" },
+  {
+    id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, subtitulo: "Shows, jogos e promoções",
+    render: comAbas("programacao", [
+      { id: "eventos", rotulo: "Shows e promoções", render: programacao, subtitulo: "Shows, jogos e promoções" },
+      { id: "jogos", rotulo: "Jogos na TV", render: jogos, subtitulo: "Escolha os jogos que a casa vai transmitir" },
+    ]),
+  },
+  {
+    id: "atendente", modulo: "agentes-ia", grupo: "configurar", rotulo: "Atendente", icone: ICONES.agente, subtitulo: "Quem ele é, o que ele sabe da casa — e um teste antes de soltar para o cliente",
+    render: comAbas("atendente", [
+      { id: "agentes", rotulo: "Jeito e regras", render: agentes, subtitulo: "A personalidade e as regras do atendente" },
+      { id: "sabe", rotulo: "O que ele sabe", render: agenteSabe, subtitulo: "Endereço, horários e as respostas às perguntas do cliente" },
+      { id: "testar", rotulo: "Testar", render: agente, subtitulo: "Converse como se fosse um cliente" },
+    ]),
+  },
 
   // ---- Ajustes da casa: fora de qualquer módulo ----
   //
@@ -68,7 +146,10 @@ const PAGINAS = [
   // CMV não tinha onde cadastrar a própria casa nem criar login de gerente.
   { id: "empresa", modulo: "ajustes", rotulo: "A casa", icone: ICONES.organizacao, render: empresa, subtitulo: "Nome, contato e o fuso horário que todos os módulos usam" },
   { id: "pessoas", modulo: "ajustes", rotulo: "Pessoas e acessos", icone: ICONES.pessoa, render: pessoas, subtitulo: "Quem entra no painel, e o que cada um pode fazer" },
-  { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp e Instagram da casa", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "O número oficial da Meta, o Instagram do bar e o número do conector, que envia checklist, avisos e confirmações" },
+  // Todos os números da casa numa tela só, organizados pela tarefa: o do
+  // atendimento ao cliente morava em "Canais do agente", dentro de outro
+  // módulo, e ninguém lembrava qual número fazia o quê.
+  { id: "canais-casa", modulo: "ajustes", rotulo: "WhatsApp e Instagram", icone: ICONES.canais, render: canaisDaCasa, subtitulo: "Qual número atende o cliente, qual avisa a equipe e qual manda o parabéns" },
   // A Zig e os outros sistemas que a casa já usa. Nada aqui é premissa: cada
   // uso tem a sua chave, e a casa sem integração nenhuma usa o painel igual.
   { id: "integracoes", modulo: "ajustes", rotulo: "Integrações", icone: ICONES.plugue, render: integracoes, subtitulo: "Zig e os outros sistemas que a casa já usa — ligue só o que tiver" },
@@ -82,8 +163,9 @@ const PAGINAS = [
   // entrega os números prontos para quem já fecha a folha da casa.
   { id: "rh", modulo: "rh", rotulo: "RH", icone: ICONES.pessoa, render: rh, subtitulo: "Ficha da equipe, documentos com validade, admissão e desligamento" },
 
-  { id: "checklists", modulo: "checklist", rotulo: "Checklists", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
-  { id: "execucoes", modulo: "checklist", rotulo: "Execuções", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
+  // O que se olha todo dia vem primeiro; o modelo se monta uma vez.
+  { id: "execucoes", modulo: "checklist", rotulo: "Checklists feitos", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
+  { id: "checklists", modulo: "checklist", grupo: "configurar", rotulo: "Modelos de checklist", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
 
   // UM FAVO SÓ: o cliente, e tudo que ele diz da casa.
   //
@@ -95,25 +177,34 @@ const PAGINAS = [
   // pesquisa e as avaliações se CONTRATAM: as telas delas trazem `requer` e
   // acendem só para quem comprou, sem favo próprio e sem 403 disfarçado de
   // tela em branco.
-  { id: "clientes-casa", modulo: "clientes", rotulo: "Clientes", icone: ICONES.pessoa, render: clientesDaCasa, subtitulo: "A base da casa: cadastro à mão, Zig, WhatsApp — e o aniversário de cada um" },
+  { id: "clientes-casa", modulo: "clientes", rotulo: "Clientes", icone: ICONES.pessoa, render: clientesDaCasa, subtitulo: "A base da casa, os aniversários e as mensagens em massa" },
+  {
+    id: "pesquisa", modulo: "clientes", requer: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje",
+    render: comAbas("pesquisa", [
+      { id: "resumo", rotulo: "Resumo", render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
+      { id: "respostas", rotulo: "Cada resposta", render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
+    ]),
+  },
   { id: "avaliacoes", modulo: "clientes", requer: "avaliacoes", rotulo: "Avaliações do Google", icone: ICONES.estrela, render: avaliacoes, subtitulo: "Fila de aprovação, tom da casa e histórico" },
-  { id: "pesquisa", modulo: "clientes", requer: "pesquisa", rotulo: "O que acham da casa", icone: ICONES.painel, render: pesquisa, subtitulo: "NPS, o que falam, e quem precisa de um telefonema hoje" },
-  { id: "pesquisa-respostas", modulo: "clientes", requer: "pesquisa", rotulo: "Respostas da pesquisa", icone: ICONES.conversas, render: pesquisaRespostas, subtitulo: "Ler cada resposta inteira: o que escreveu e onde reclamou" },
-  { id: "pesquisa-ajustes", modulo: "clientes", requer: "pesquisa", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
+  { id: "pesquisa-ajustes", modulo: "clientes", requer: "pesquisa", grupo: "configurar", rotulo: "Ajustes da pesquisa", icone: ICONES.organizacao, render: pesquisaAjustes, subtitulo: "QR code da mesa, equipe, prêmio e convites" },
 
-  // A ordem é a do dia de trabalho: o número primeiro, depois o que se faz
-  // toda manhã, depois o que se faz às vezes, por fim o que se cadastra uma
-  // vez e esquece.
-  { id: "cmv-painel", modulo: "cmv", rotulo: "Painel do CMV", icone: ICONES.painel, render: cmvPainel, subtitulo: "O percentual do período, com a conta aberta" },
-  { id: "engenharia-cardapio", modulo: "cmv", rotulo: "Engenharia de cardápio", icone: ICONES.estrela, render: engenhariaCardapio, subtitulo: "O que proteger, reprecificar, divulgar e tirar" },
-  { id: "compras", modulo: "cmv", rotulo: "Compras", icone: ICONES.caixa, render: compras, subtitulo: "Pedidos ao fornecedor e recebimento da mercadoria" },
+  // A ordem é a do dia de trabalho: o que se faz toda manhã, depois os
+  // números para analisar, por fim o que se cadastra uma vez e esquece.
+  { id: "compras", modulo: "cmv", rotulo: "Compras e recebimento", icone: ICONES.caixa, render: compras, subtitulo: "Pedidos ao fornecedor e recebimento da mercadoria" },
   { id: "producao", modulo: "cmv", rotulo: "Produção", icone: ICONES.raio, render: producao, subtitulo: "A receita foi feita — os insumos saem do estoque" },
-  { id: "vendas", modulo: "cmv", rotulo: "Vendas", icone: ICONES.raio, render: vendas, subtitulo: "O relatório do seu PDV baixa o estoque pelas fichas" },
+  { id: "vendas", modulo: "cmv", rotulo: "Vendas", icone: ICONES.raio, render: vendas, subtitulo: "O que foi vendido baixa o estoque pelas receitas" },
   { id: "contagem", modulo: "cmv", rotulo: "Contagem", icone: ICONES.atualizar, render: contagem, subtitulo: "O contado vira o saldo — e a quebra aparece em reais" },
-  { id: "estoque", modulo: "cmv", rotulo: "Estoque", icone: ICONES.painel, render: estoque, subtitulo: "Posição, transferência, perda — e os locais de estoque" },
-  { id: "kardex", modulo: "cmv", rotulo: "Kardex", icone: ICONES.relogio, render: kardex, subtitulo: "A conta corrente do estoque: tudo que aconteceu, por produto e por fornecedor" },
-  { id: "cadastros", modulo: "cmv", rotulo: "Cadastros", icone: ICONES.organizacao, render: cadastros, subtitulo: "Itens, categorias e fornecedores — a base de tudo" },
-  { id: "fichas", modulo: "cmv", rotulo: "Fichas técnicas", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
+  {
+    id: "estoque", modulo: "cmv", rotulo: "Estoque", icone: ICONES.painel, subtitulo: "Posição, transferência, perda — e os locais de estoque",
+    render: comAbas("estoque", [
+      { id: "posicao", rotulo: "Quanto tem", render: estoque, subtitulo: "Posição, transferência, perda — e os locais de estoque" },
+      { id: "historico", rotulo: "Histórico do produto", render: kardex, subtitulo: "Tudo que entrou e saiu, por produto e por fornecedor" },
+    ]),
+  },
+  { id: "cmv-painel", modulo: "cmv", grupo: "analise", rotulo: "Painel do CMV", icone: ICONES.painel, render: cmvPainel, subtitulo: "Quanto do que a casa vendeu foi custo de mercadoria, com a conta aberta" },
+  { id: "engenharia-cardapio", modulo: "cmv", grupo: "analise", rotulo: "O que vende e o que dá lucro", icone: ICONES.estrela, render: engenhariaCardapio, subtitulo: "O que proteger, reprecificar, divulgar e tirar do cardápio" },
+  { id: "cadastros", modulo: "cmv", grupo: "configurar", rotulo: "Itens e fornecedores", icone: ICONES.organizacao, render: cadastros, subtitulo: "Itens, categorias e fornecedores — a base de tudo" },
+  { id: "fichas", modulo: "cmv", grupo: "configurar", rotulo: "Receitas e custo do prato", icone: ICONES.checklist, render: fichas, subtitulo: "O que cada prato consome — e quanto custa" },
 
   // Módulo da equipe Brasa Food. Administrar a plataforma não é uma seção do
   // produto do cliente: são perguntas de negócios diferentes, e misturar as
@@ -163,9 +254,12 @@ let moduloAtual = "agentes-ia";
 const MODULOS = [
   {
     id: "agentes-ia",
-    nome: "Agentes de IA",
+    nome: "Atendente virtual",
     descricao:
       "Atendimento no WhatsApp e Instagram: reservas, programação e dúvidas respondidas na hora.",
+    // O número do atendente mora nos Ajustes da casa, junto com os outros —
+    // mas quem configura o atendente procura aqui. Um atalho, não uma cópia.
+    atalhos: [{ rotulo: "WhatsApp e Instagram", icone: ICONES.canais, destino: "canais-casa", grupo: "configurar" }],
     icone:
       "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z",
     // Posição na colmeia, em passos de favo a partir do centro (x em larguras,
@@ -201,9 +295,9 @@ const MODULOS = [
   },
   {
     id: "cmv",
-    nome: "CMV Inteligente",
+    nome: "Custos e estoque",
     descricao:
-      "Estoque, compras e fichas técnicas. Foto da nota vira entrada, e o custo de cada prato aparece sozinho.",
+      "Estoque, compras e receitas. Foto da nota vira entrada, e o custo de cada prato aparece sozinho.",
     icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
     pos: { x: -0.75, y: -0.5 },
   },
@@ -275,6 +369,8 @@ let limpezas = [];
 const ctx = {
   venue: null,
   agente: null,
+  /** A aba pedida no endereço (#pagina:aba), para a tela abrir nela. */
+  aba: null,
   definirAgente(slug) {
     ctx.agente = slug;
   },
@@ -349,23 +445,59 @@ function montarNav() {
   seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
 
   limpar(nav);
-  for (const p of paginasVisiveis()) {
-    nav.append(
-      el(
-        "a",
-        // title vira tooltip — é como se sabe o que é cada ícone na lateral recolhida.
-        { classe: "nav-item", href: `#${p.id}`, "data-pagina": p.id, title: p.rotulo },
-        [
-          icone(p.icone),
-          el("span", { classe: "nav-rotulo", texto: p.rotulo }),
-          el("span", { classe: "nav-contador", hidden: true, texto: "0" }),
-        ],
-      ),
-    );
+  const atalhos = (MODULOS.find((m) => m.id === moduloAtual)?.atalhos ?? []).map((a) => ({
+    id: a.destino,
+    rotulo: a.rotulo,
+    icone: a.icone,
+    grupo: a.grupo,
+    atalho: true,
+  }));
+  const itens = [...paginasVisiveis(), ...atalhos];
+  // Os grupos só aparecem quando há mais de um: um título "Dia a dia" em
+  // cima de uma linha só é ruído.
+  const grupos = Object.keys(GRUPOS).filter((g) => itens.some((p) => (p.grupo ?? "dia") === g));
+  for (const g of grupos) {
+    if (grupos.length > 1) nav.append(el("div", { classe: "nav-grupo", texto: GRUPOS[g] }));
+    for (const p of itens.filter((i) => (i.grupo ?? "dia") === g)) {
+      nav.append(
+        el(
+          "a",
+          // title vira tooltip — é como se sabe o que é cada ícone na lateral recolhida.
+          {
+            classe: "nav-item",
+            href: `#${p.id}`,
+            "data-pagina": p.atalho ? null : p.id,
+            title: p.rotulo,
+            // Atalho para um endereço que já é o atual não dispara hashchange.
+            onclick: p.atalho
+              ? (e) => {
+                  if (location.hash === `#${p.id}`) {
+                    e.preventDefault();
+                    irPara(p.id, { podeTrocarDeModulo: true });
+                  }
+                }
+              : null,
+          },
+          [
+            icone(p.icone),
+            el("span", { classe: "nav-rotulo", texto: p.rotulo }),
+            el("span", { classe: "nav-contador", hidden: true, texto: "0" }),
+          ],
+        ),
+      );
+    }
   }
 }
 
-async function irPara(id) {
+async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
+  // "#estoque:historico" = página estoque, aba historico. Endereço antigo
+  // passa pelo apelido antes: virou aba, ou mudou de módulo.
+  const [base, aba] = (APELIDOS[endereco.split(":")[0]] && !endereco.includes(":")
+    ? APELIDOS[endereco]
+    : endereco
+  ).split(":");
+  const id = base;
+
   // Só as páginas do módulo atual contam; hash de outro módulo cai na
   // primeira página deste — o hub é quem troca de módulo.
   //
@@ -375,7 +507,22 @@ async function irPara(id) {
   // tela que não vai funcionar é confundir sem motivo. A trava de verdade
   // continua sendo a do servidor — esta é conveniência, não segurança.
   const doModulo = paginasVisiveis();
+
+  // A exceção: um clique da própria pessoa num link para a tela de outro
+  // módulo (o atalho "WhatsApp e Instagram" do atendente). Só no clique —
+  // a âncora que o navegador guardou da última visita não pode arrastar
+  // quem acabou de entrar no CMV de volta para o atendente.
+  const deFora = podeTrocarDeModulo && !doModulo.some((p) => p.id === id) ? PAGINAS.find((p) => p.id === id) : null;
+  const moduloDeFora = deFora ? MODULOS.find((m) => m.id === deFora.modulo) : null;
+  if (moduloDeFora && moduloAceso(moduloDeFora)) {
+    moduloAtual = moduloDeFora.id;
+    sessionStorage.setItem("brasa.modulo", moduloAtual);
+    montarNav();
+    return irPara(endereco);
+  }
+
   const pagina = doModulo.find((p) => p.id === id) ?? doModulo[0];
+  ctx.aba = pagina.id === id ? (aba ?? null) : null;
 
   // A tela anterior pode ter deixado timers rodando.
   for (const fn of limpezas) {
@@ -410,14 +557,14 @@ async function irPara(id) {
           type: "button",
           texto: "Tentar de novo",
           style: "margin-top:10px",
-          onclick: () => irPara(id),
+          onclick: () => irPara(endereco),
         }),
       ]),
     );
   }
 }
 
-addEventListener("hashchange", () => irPara(location.hash.slice(1)));
+addEventListener("hashchange", () => irPara(location.hash.slice(1), { podeTrocarDeModulo: true }));
 
 // ============ Acesso ============
 

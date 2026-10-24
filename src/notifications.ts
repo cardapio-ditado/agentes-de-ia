@@ -488,6 +488,7 @@ const NOME_DO_AVISO: Record<string, string> = {
   cardapio_chamou_garcom: "Mesa chamou o garçom",
   mesa_chamando: "Mesa chamando",
   conector_caiu: "Aviso de conexão caída",
+  teste_canal: "Mensagem de teste",
   resposta_humana: "Resposta de gente",
 };
 

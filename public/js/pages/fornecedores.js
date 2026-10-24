@@ -62,7 +62,7 @@ export async function fornecedores(raiz, ctx) {
                     ]),
                     el("div", { classe: "linha-campos" }, [
                       // Atalho: pula para a página Kardex já neste fornecedor.
-                      el("button", { classe: "btn btn-peq", type: "button", texto: "Kardex", onclick: () => abrirKardex({ aba: "fornecedor", id: f.id, nome: f.nome }) }),
+                      el("button", { classe: "btn btn-peq", type: "button", texto: "Histórico", onclick: () => abrirKardex({ aba: "fornecedor", id: f.id, nome: f.nome }) }),
                       el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formulario(f) }),
                     ]),
                   ]),

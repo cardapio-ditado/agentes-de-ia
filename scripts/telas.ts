@@ -155,13 +155,22 @@ function semPrefixo(caminho: string, venue: string): string {
   return caminho.startsWith(prefixo) ? caminho.slice(prefixo.length) || "/" : caminho;
 }
 
-function respostaDaRota(tela: Tela, metodo: string, caminho: string): unknown | undefined {
+/**
+ * A chave pode trazer parâmetros ("GET /v1/whatsapp/status?papel=agente"):
+ * vale quando o pedido tem todos eles. Chave com parâmetro ganha da sem —
+ * é a mais específica.
+ */
+function respostaDaRota(tela: Tela, metodo: string, caminho: string, busca = new URLSearchParams()): unknown | undefined {
   const curto = semPrefixo(caminho, tela.venue ?? "casa-de-teste");
-  for (const [chave, valor] of Object.entries(tela.rotas)) {
+  const chaves = Object.entries(tela.rotas).sort(([a], [b]) => Number(b.includes("?")) - Number(a.includes("?")));
+  for (const [chave, valor] of chaves) {
     const [metodoDaChave, ...resto] = chave.split(" ");
     if ((metodoDaChave ?? "").toUpperCase() !== metodo) continue;
-    const caminhoDaChave = semPrefixo(resto.join(" "), tela.venue ?? "casa-de-teste");
-    if (combina(caminhoDaChave, curto)) return valor;
+    const [semBusca, buscaDaChave] = resto.join(" ").split("?");
+    const caminhoDaChave = semPrefixo(semBusca ?? "", tela.venue ?? "casa-de-teste");
+    if (!combina(caminhoDaChave, curto)) continue;
+    const exigidos = [...new URLSearchParams(buscaDaChave ?? "")];
+    if (exigidos.every(([k, v]) => busca.get(k) === v)) return valor;
   }
   return undefined;
 }
@@ -186,7 +195,7 @@ function servir(tela: Tela, porta: number) {
     }
 
     if (url.pathname.startsWith("/v1/")) {
-      const achou = respostaDaRota(tela, metodo, url.pathname);
+      const achou = respostaDaRota(tela, metodo, url.pathname, url.searchParams);
       if (achou === undefined) {
         faltando.add(`${metodo} ${semPrefixo(url.pathname, tela.venue ?? "casa-de-teste")}`);
       }

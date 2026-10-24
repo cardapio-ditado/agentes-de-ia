@@ -126,7 +126,7 @@ export async function empresa(raiz, ctx) {
       el("p", {
         classe: "muted",
         texto:
-          "Endereço, horários de funcionamento, capacidade e as informações que o agente responde ao cliente ficam em Agentes de IA → O que o agente sabe.",
+          "Endereço, horários de funcionamento, capacidade e as informações que o agente responde ao cliente ficam em Atendente virtual → Atendente → O que ele sabe.",
       }),
     ]),
   );

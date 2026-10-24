@@ -150,15 +150,15 @@ function quandoFaz(dias) {
 }
 
 export async function clientesDaCasa(raiz, ctx) {
-  let abaAtiva = "lista";
-  const corpo = el("div", {});
-
   const ABAS = [
     ["lista", "Clientes"],
     ["aniversarios", "Aniversariantes"],
-    ["parabens", "Parabéns"],
-    ["disparos", "Disparos"],
+    ["parabens", "Mensagem de parabéns"],
+    ["disparos", "Mensagens em massa"],
   ];
+  // #clientes-casa:disparos abre direto na aba — é o link que o mentor manda.
+  let abaAtiva = ABAS.some(([id]) => id === ctx.aba) ? ctx.aba : "lista";
+  const corpo = el("div", {});
   const barra = el(
     "div",
     { classe: "abas" },
@@ -1101,10 +1101,10 @@ export async function clientesDaCasa(raiz, ctx) {
       ? el("details", { classe: "detalhes-tecnicos" }, [
           el("summary", { texto: `Sai pelo número oficial com o modelo “${config.aniversario_modelo}” — ver texto` }),
           el("p", { classe: "previa-mensagem", texto: pessoas[0]?.mensagem ?? "(sem texto de exemplo)" }),
-          el("small", { classe: "muted", texto: "O texto acima é o do conector; pelo oficial vai o modelo aprovado com as mesmas lacunas. Ajuste os dois na aba Parabéns." }),
+          el("small", { classe: "muted", texto: "O texto acima é o do número de avisos; pelo oficial vai o modelo aprovado com as mesmas lacunas. Ajuste os dois na aba Mensagem de parabéns." }),
         ])
       : el("details", { classe: "detalhes-tecnicos" }, [
-          el("summary", { texto: "Sai pelo conector (WhatsApp Web) com o texto da aba Parabéns — ver texto" }),
+          el("summary", { texto: "Sai pelo número de avisos com o texto da aba Mensagem de parabéns — ver texto" }),
           el("p", { classe: "previa-mensagem", texto: pessoas[0]?.mensagem ?? "(sem texto de exemplo)" }),
         ]);
 
@@ -1556,12 +1556,12 @@ export async function clientesDaCasa(raiz, ctx) {
     function listaDeDisparos(lista) {
       if (lista.length === 0) {
         return el("section", { classe: "cartao" }, [
-          el("h2", { texto: "Disparos" }),
+          el("h2", { texto: "Mensagens em massa" }),
           el("p", { classe: "muted", texto: "Nenhum disparo ainda. O primeiro costuma ser o mais fácil: uma mensagem para quem sumiu." }),
         ]);
       }
       return el("section", { classe: "cartao pilha" }, [
-        el("h2", { texto: "Disparos" }),
+        el("h2", { texto: "Mensagens em massa" }),
         el("div", { classe: "tabela" }, lista.map((d) => linhaDoDisparo(d))),
       ]);
     }
@@ -1703,7 +1703,7 @@ export async function clientesDaCasa(raiz, ctx) {
           el("h2", { texto: "Novo disparo" }),
           el("p", {
             classe: "muted",
-            texto: "Disparo sai pelo número oficial da Meta. Conecte-o em Ajustes → WhatsApp da casa e volte aqui." + (erro ? ` (${erro})` : ""),
+            texto: "Disparo sai pelo número oficial da Meta. Conecte-o em Ajustes → WhatsApp e Instagram e volte aqui." + (erro ? ` (${erro})` : ""),
           }),
         ]);
       }
@@ -2086,7 +2086,7 @@ export async function clientesDaCasa(raiz, ctx) {
               areaLacunas,
               criadorDeModelo(modelos),
               el("details", { classe: "detalhes-tecnicos" }, [
-                el("summary", { texto: "Texto pelo conector (WhatsApp Web), quando o oficial não estiver conectado" }),
+                el("summary", { texto: "Texto pelo número de avisos, quando o oficial não estiver conectado" }),
                 linha(
                   "Texto da mensagem",
                   campos.texto,
@@ -2104,7 +2104,7 @@ export async function clientesDaCasa(raiz, ctx) {
               previa,
               el("p", {
                 classe: "muted",
-                texto: "Este texto sai pelo conector (WhatsApp Web). Para mandar pelo número oficial da Meta, conecte-o em Ajustes → WhatsApp da casa — aí o parabéns passa a usar um modelo aprovado.",
+                texto: "Este texto sai pelo número de avisos. Para mandar pelo número oficial da Meta, conecte-o em Ajustes → WhatsApp e Instagram — aí o parabéns passa a usar um modelo aprovado.",
               }),
             ]),
         el("div", { classe: "linha-campos" }, [

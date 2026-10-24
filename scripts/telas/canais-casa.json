@@ -1,5 +1,5 @@
 {
-  "rotulo": "WhatsApp da casa — o oficial da Meta e o do conector",
+  "rotulo": "WhatsApp e Instagram — quem faz o quê, por tarefa",
   "modulo": "/js/pages/canaisDaCasa.js",
   "funcao": "canaisDaCasa",
   "venue": "casa-de-teste",
@@ -51,11 +51,22 @@
         "enabled": true
       }
     ],
-    "GET /v1/whatsapp/status": {
+    "GET /v1/whatsapp/status?papel=agente": {
+      "status": "conectado",
+      "telefone": "5565981382139",
+      "agentSlug": "fernanda",
+      "versao": "2026.10.24",
+      "fonte": "ponte"
+    },
+    "GET /v1/whatsapp/status?papel=administrativo": {
       "status": "conectado",
       "telefone": "5565999990000",
       "versao": "2026.09.25",
       "fonte": "ponte"
+    },
+    "POST /canais/teste": {
+      "enviado": false,
+      "na_fila": true
     }
   },
   "variacoes": {
@@ -164,9 +175,9 @@
       }
     },
     "sem-conector": {
-      "rotulo": "o oficial ativo e o conector fora do ar",
+      "rotulo": "o oficial ativo e o número de avisos fora do ar",
       "rotas": {
-        "GET /v1/whatsapp/status": {
+        "GET /v1/whatsapp/status?papel=administrativo": {
           "status": "sem_conector",
           "telefone": null,
           "versao": null

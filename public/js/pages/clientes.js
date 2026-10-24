@@ -41,11 +41,11 @@ const PLANOS = [
 // Brasa Food, não um produto — liberá-la para um cliente daria a ele a
 // carteira inteira, com a receita e os dados dos concorrentes dele.
 const MODULOS_VENDAVEIS = [
-  ["agentes-ia", "Agentes de IA"],
+  ["agentes-ia", "Atendente virtual"],
   ["cardapio-digital", "Cardápio Digital"],
   ["checklist", "Checklist"],
   ["avaliacoes", "Avaliações"],
-  ["cmv", "CMV Inteligente"],
+  ["cmv", "Custos e estoque"],
   ["pesquisa", "Voz do Cliente"],
   ["rh", "RH"],
 ];

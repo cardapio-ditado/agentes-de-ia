@@ -22,7 +22,7 @@ export const ATALHO_KARDEX = "brasa.kardex";
 /** Usado por Estoque e Fornecedores: pula para o kardex já na visão certa. */
 export function abrirKardex(atalho) {
   sessionStorage.setItem(ATALHO_KARDEX, JSON.stringify(atalho));
-  location.hash = "#kardex";
+  location.hash = "#estoque:historico";
 }
 
 const NOME_DO_TIPO = {
@@ -52,8 +52,8 @@ export async function kardex(raiz, ctx) {
 
   const ABAS = [
     ["movimentos", "Movimentação"],
-    ["produto", "Kardex do produto"],
-    ["fornecedor", "Kardex do fornecedor"],
+    ["produto", "Por produto"],
+    ["fornecedor", "Por fornecedor"],
   ];
   const barra = el(
     "div",
@@ -199,7 +199,7 @@ export async function kardex(raiz, ctx) {
     try {
       insumos = await get(`/v1/venues/${ctx.venue}/insumos`);
     } catch (e) {
-      limpar(conteudo).append(vazio("Kardex indisponível", e.message));
+      limpar(conteudo).append(vazio("Histórico indisponível", e.message));
       return;
     }
 
@@ -207,7 +207,7 @@ export async function kardex(raiz, ctx) {
     limpar(conteudo).append(
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cartao" }, [
-          el("h2", { texto: "Kardex do produto" }),
+          el("h2", { texto: "Histórico do produto" }),
           el("p", { classe: "muted", texto: "A conta corrente de um insumo: cada entrada e saída, com o saldo depois de cada uma." }),
         ]),
         el("label", { classe: "campo-rotulado" }, [
@@ -244,7 +244,7 @@ export async function kardex(raiz, ctx) {
       }
       limpar(area).append(
         el("div", { classe: "cartao" }, [
-          el("h3", { texto: `Kardex — ${nome}` }),
+          el("h3", { texto: `Histórico — ${nome}` }),
           movimentos.length === 0
             ? el("p", { classe: "muted", style: "margin-top:8px", texto: "Nenhum movimento deste produto ainda." })
             : el("div", { classe: "rolagem-x", style: "margin-top:10px" }, [
@@ -296,7 +296,7 @@ export async function kardex(raiz, ctx) {
     try {
       fornecedores = await get(`/v1/venues/${ctx.venue}/fornecedores`);
     } catch (e) {
-      limpar(conteudo).append(vazio("Kardex indisponível", e.message));
+      limpar(conteudo).append(vazio("Histórico indisponível", e.message));
       return;
     }
 
@@ -304,7 +304,7 @@ export async function kardex(raiz, ctx) {
     limpar(conteudo).append(
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cartao" }, [
-          el("h2", { texto: "Kardex do fornecedor" }),
+          el("h2", { texto: "Histórico do fornecedor" }),
           el("p", { classe: "muted", texto: "As compras dele, o acumulado — e o preço que mais subiu, para levar na conversa." }),
         ]),
         el("label", { classe: "campo-rotulado" }, [
@@ -337,7 +337,7 @@ export async function kardex(raiz, ctx) {
       try {
         k = await get(`/v1/venues/${ctx.venue}/fornecedores/${fornecedorId}/kardex`);
       } catch (e) {
-        limpar(area).append(vazio("Kardex indisponível", e.message));
+        limpar(area).append(vazio("Histórico indisponível", e.message));
         return;
       }
 
@@ -346,7 +346,7 @@ export async function kardex(raiz, ctx) {
           el("div", { classe: "cartao" }, [
             el("div", { classe: "cabecalho-secao" }, [
               el("div", {}, [
-                el("h3", { texto: `Kardex — ${k.fornecedor ?? nome}` }),
+                el("h3", { texto: `Histórico — ${k.fornecedor ?? nome}` }),
                 el("p", { classe: "muted", texto: `${k.compras.length} compra(s) recebida(s)` }),
               ]),
               el("strong", { style: "font-size:1.3rem", texto: dinheiro(k.total_geral) }),

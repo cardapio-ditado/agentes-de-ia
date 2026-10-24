@@ -111,7 +111,7 @@ export async function estoque(raiz, ctx) {
                       el("button", {
                         classe: "btn btn-peq",
                         type: "button",
-                        texto: "Kardex",
+                        texto: "Histórico",
                         // Atalho: pula para a página Kardex já neste produto.
                         onclick: () => abrirKardex({ aba: "produto", id: p.insumo_id, nome: p.insumo }),
                       }),

@@ -224,7 +224,7 @@ export async function integracoes(raiz, ctx) {
   function cartaoDosCanais() {
     return el("section", { classe: "cartao" }, [
       cabecalho("WhatsApp e Instagram", null),
-      el("p", { classe: "muted", texto: "O número oficial da Meta, o Instagram do bar e o conector que envia avisos." }),
+      el("p", { classe: "muted", texto: "Qual número atende o cliente, qual avisa a equipe, qual manda o parabéns — e o Instagram." }),
       el("div", { classe: "reserva-acoes" }, [
         el("button", { classe: "btn btn-peq", type: "button", texto: "Abrir", onclick: () => { location.hash = "#canais-casa"; } }),
       ]),

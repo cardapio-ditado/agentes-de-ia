@@ -21,7 +21,7 @@ export async function execucoes(raiz, ctx) {
     el("div", { classe: "pilha" }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: "Execuções" }),
+          el("h2", { texto: "Checklists feitos" }),
           el("p", { classe: "muted", texto: "Cada linha é um checklist disparado — clique para abrir." }),
         ]),
         el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),

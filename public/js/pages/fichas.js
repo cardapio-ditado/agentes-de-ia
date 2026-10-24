@@ -34,7 +34,7 @@ export async function fichas(raiz, ctx) {
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
-            el("h2", { texto: "Fichas técnicas" }),
+            el("h2", { texto: "Receitas e custo do prato" }),
             el("p", { classe: "muted", texto: "O que cada prato consome — e quanto custa cada porção." }),
           ]),
           el("div", { classe: "linha-campos" }, [

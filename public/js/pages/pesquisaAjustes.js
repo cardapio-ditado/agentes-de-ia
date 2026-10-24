@@ -1372,7 +1372,7 @@ async function telaConvites(ctx, recarregar) {
   const premioNaMensagem =
     config?.premio_ativo && config.premio_titulo?.trim() ? config.premio_titulo.trim() : null;
   const previaDaMensagem = peloOficial
-    ? `Sai pelo número oficial com o modelo “${config.convite_modelo}”. O campo "Mensagem" abaixo só vale para o conector.`
+    ? `Sai pelo número oficial com o modelo “${config.convite_modelo}”. O campo "Mensagem" abaixo só vale para o número de avisos.`
     : premioNaMensagem
       ? `Sai assim: “…São 30 segundos — e quem responde ganha ${premioNaMensagem.charAt(0).toLowerCase() + premioNaMensagem.slice(1)}.”`
       : "O prêmio está desligado, então a mensagem não promete nada. Ligue em “O prêmio” para citá-lo aqui.";
@@ -1385,7 +1385,7 @@ async function telaConvites(ctx, recarregar) {
         el("h3", { texto: "Pelo número oficial (Meta)" }),
         el("p", {
           classe: "muted",
-          texto: "Conecte o WhatsApp oficial em Ajustes → WhatsApp da casa para mandar o convite por ele. Enquanto isso, sai pelo conector com o texto padrão.",
+          texto: "Conecte o WhatsApp oficial em Ajustes → WhatsApp e Instagram para mandar o convite por ele. Enquanto isso, sai pelo número de avisos com o texto padrão.",
         }),
       ]);
     }
@@ -1406,7 +1406,7 @@ async function telaConvites(ctx, recarregar) {
             : m.botao_url
               ? `\n\n[botão: ${m.botoes[0] ?? "Responder"} → link FIXO, igual para todo mundo: ${m.botao_url}]`
               : "")
-        : "Nenhum modelo: o convite sai pelo conector com o texto padrão.";
+        : "Nenhum modelo: o convite sai pelo número de avisos com o texto padrão.";
     }
     seletor.addEventListener("change", () => {
       lacunas = editorDeLacunas(areaLacunas, modeloEscolhido(modelos, seletor.value), [], atualizarPrevia, sugestao(modeloEscolhido(modelos, seletor.value)));
@@ -1424,7 +1424,7 @@ async function telaConvites(ctx, recarregar) {
       el("h3", { texto: "Pelo número oficial (Meta)" }),
       el("p", {
         classe: "muted",
-        texto: "Pelo número oficial o convite sai por um modelo aprovado pela Meta. O link da pesquisa entra numa lacuna do texto, ou no botão de link do modelo. Sem modelo escolhido, sai pelo conector.",
+        texto: "Pelo número oficial o convite sai por um modelo aprovado pela Meta. O link da pesquisa entra numa lacuna do texto, ou no botão de link do modelo. Sem modelo escolhido, sai pelo número de avisos.",
       }),
       campo("Modelo aprovado", seletor),
       areaLacunas,
@@ -1488,7 +1488,7 @@ async function telaConvites(ctx, recarregar) {
     el("h3", { texto: "Mandar a pesquisa para um cliente" }),
     el("p", {
       classe: "muted",
-      texto: "Sai pelo WhatsApp da casa (o administrativo), nunca pelo número do agente. Cada link vale uma resposta só.",
+      texto: "Sai pelo número de avisos da casa, nunca pelo número do atendimento. Cada link vale uma resposta só.",
     }),
     el("p", { classe: "muted", style: "margin-top:6px", texto: previaDaMensagem }),
     el("div", { classe: "grade", style: "margin-top:12px" }, [

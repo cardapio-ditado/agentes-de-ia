@@ -15,7 +15,7 @@ import {
   type DadosAgente,
 } from "./repository.js";
 import { decidirReserva } from "./reservationFlow.js";
-import { listNotificationsForReservation } from "./notifications.js";
+import { enviarPelaCloudApi, inserirAvisos, listNotificationsForReservation, normalizarTelefone } from "./notifications.js";
 import {
   ErroDoCardapio,
   LIMITES as LIMITES_DO_CARDAPIO,
@@ -421,6 +421,7 @@ import {
   criarModelo,
   modelosDaConta,
   paraOPainel as conexaoParaOPainel,
+  prontaParaEnviar,
   salvarConexao,
   testarESalvar,
 } from "./whatsappOficial.js";
@@ -1576,6 +1577,54 @@ async function roteasApi(
     // Fora do MODULO_DO_RECURSO de propósito: conectar o PDV é da casa, e não
     // de um módulo. A Zig alimenta vários (o estoque, a base de clientes, a
     // pesquisa); cada uso tem a sua chave.
+
+    // POST /v1/venues/:slug/canais/teste — uma mensagem de teste para o
+    // celular de quem está implantando. A pergunta que a tela de canais não
+    // respondia: "está ligado, mas chega?". Só o envio de verdade responde.
+    if (metodo === "POST" && recurso === "canais" && p[3] === "teste" && p.length === 4) {
+      const chave = await exigirChave(req, "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      const telefone = normalizarTelefone(String(corpo.telefone ?? ""));
+      if (!telefone) throw erro(400, "telefone_invalido", "Escreva o celular com DDD, por exemplo 65 99999-9999.");
+      const numero = String(corpo.numero ?? "");
+      const TAREFA: Record<string, string> = {
+        atendente: "atendimento ao cliente",
+        avisos: "avisos para a equipe",
+        oficial: "aniversários e campanhas",
+      };
+      if (!TAREFA[numero]) throw erro(400, "numero_invalido", "Escolha qual número testar.");
+      const texto = `✅ Teste do Brasa Food: este é o número de ${TAREFA[numero]} da ${venue.name}. Se esta mensagem chegou, está funcionando.`;
+
+      if (numero === "oficial") {
+        const conexao = await comErroDaConexao(() => conexaoDaCasa(venue));
+        if (!prontaParaEnviar(conexao)) throw erro(400, "oficial_desligado", "O número oficial ainda não está ativo nesta casa.");
+        const r = await enviarPelaCloudApi(telefone, texto, conexao);
+        if (!r.enviado) {
+          // Fora da janela de 24h a Meta só aceita modelo aprovado: é o erro
+          // mais comum do teste, e tem conserto em dez segundos.
+          throw erro(
+            400,
+            "oficial_recusou",
+            "A Meta só deixa o número oficial mandar mensagem livre para quem falou com ele nas últimas 24 horas. " +
+              `Mande um "oi" do seu celular para ${conexao.telefone ?? "o número oficial"} e teste de novo.` +
+              (r.erro ? ` (${r.erro})` : ""),
+          );
+        }
+        return ok(res, { enviado: true, na_fila: false });
+      }
+
+      const { error } = await inserirAvisos({
+        venue_id: venue.id,
+        channel: "whatsapp",
+        destination: telefone,
+        papel: numero === "atendente" ? "agente" : "administrativo",
+        template: "teste_canal",
+        body: texto,
+      });
+      if (error) throw erro(500, "fila", `Não deu para enfileirar o teste: ${error.message}`);
+      return ok(res, { enviado: false, na_fila: true });
+    }
 
     // GET /v1/venues/:slug/integracoes — o que está ligado
     if (metodo === "GET" && recurso === "integracoes" && p.length === 3) {

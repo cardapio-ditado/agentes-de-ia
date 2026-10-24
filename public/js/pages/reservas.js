@@ -396,7 +396,7 @@ async function blocoDeAvisos(ctx) {
     el("p", {
       classe: "muted",
       style: "margin-top:6px",
-      texto: "As duas mensagens saem pelo WhatsApp da casa (o administrativo), configurado em Ajustes.",
+      texto: "As duas mensagens saem pelo número de avisos da casa, configurado em Ajustes → WhatsApp e Instagram.",
     }),
   ]);
 
