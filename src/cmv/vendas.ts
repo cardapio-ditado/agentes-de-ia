@@ -77,16 +77,46 @@ export async function importarVendas(params: {
     dataPadrao: params.dataPadrao,
   });
 
+  const r = await registrarImportacao({
+    venueId: params.venueId,
+    arquivoNome: params.arquivoNome,
+    hash,
+    origem: params.mediaType.startsWith("image/") ? "foto" : "arquivo",
+    periodoInicio: lido.periodoInicio,
+    periodoFim: lido.periodoFim,
+    extracao: { avisos: lido.avisos, impressao: lido.impressaoDigital, linhas: lido.linhas.length },
+    linhas: lido.linhas,
+    criadoPor: params.criadoPor,
+  });
+  return { ...r, avisos: lido.avisos };
+}
+
+/**
+ * Grava uma importação já lida — de arquivo, de foto ou da API da Zig — e
+ * casa cada linha com o vocabulário da casa. É o tronco comum: quem lê o
+ * relatório muda, o que acontece depois da leitura não.
+ */
+export async function registrarImportacao(params: {
+  venueId: string;
+  arquivoNome: string;
+  hash: string;
+  origem: "arquivo" | "foto" | "api";
+  periodoInicio: string | null;
+  periodoFim: string | null;
+  extracao: Record<string, unknown>;
+  linhas: LinhaDeVenda[];
+  criadoPor?: string | null;
+}): Promise<{ importacaoId: string; total: number; casados: number; pendentes: number }> {
   const criada = await cliente()
     .from("venda_importacoes")
     .insert({
       venue_id: params.venueId,
       arquivo_nome: params.arquivoNome,
-      arquivo_hash: hash,
-      periodo_inicio: lido.periodoInicio,
-      periodo_fim: lido.periodoFim,
-      origem: params.mediaType.startsWith("image/") ? "foto" : "arquivo",
-      extracao_ia: { avisos: lido.avisos, impressao: lido.impressaoDigital, linhas: lido.linhas.length },
+      arquivo_hash: params.hash,
+      periodo_inicio: params.periodoInicio,
+      periodo_fim: params.periodoFim,
+      origem: params.origem,
+      extracao_ia: params.extracao,
       criado_por: params.criadoPor ?? null,
     })
     .select("id")
@@ -97,7 +127,7 @@ export async function importarVendas(params: {
   const { fichas, insumos, apelidos } = await vocabulario(params.venueId);
 
   let casados = 0;
-  const linhas = lido.linhas.map((linha: LinhaDeVenda, i: number) => {
+  const linhas = params.linhas.map((linha: LinhaDeVenda, i: number) => {
     const c = casarVenda(linha.produto, linha.codigo, fichas, insumos, apelidos);
     const automatico = entraSozinho(c);
     if (automatico) casados += 1;
@@ -123,13 +153,14 @@ export async function importarVendas(params: {
       status: c.ignorar ? "ignorado" : automatico ? "mapeado" : "pendente",
     };
   });
+  const pendentes = linhas.filter((l) => l.status === "pendente").length;
 
   if (linhas.length > 0) {
     const { error } = await cliente().from("venda_itens").insert(linhas);
     if (error) throw traduzir(error);
   }
 
-  return { importacaoId, total: linhas.length, casados, avisos: lido.avisos };
+  return { importacaoId, total: linhas.length, casados, pendentes };
 }
 
 /** Fichas, insumos e apelidos da casa — o vocabulário do casamento. */

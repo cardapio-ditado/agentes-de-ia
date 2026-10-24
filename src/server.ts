@@ -15,6 +15,7 @@ import { enviarPendentesPeloOficial } from "./filaOficial.js";
 import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
 import { sincronizarRecentes as sincronizarAvaliacoesDoGoogle } from "./avaliacoesMake.js";
 import { cicloAoVivo as retratoDaCasaPelaZig } from "./zigAoVivo.js";
+import { cicloDasVendasDaZig } from "./cmv/vendasZig.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
@@ -280,6 +281,10 @@ setInterval(() => {
   // regra. O gatilho "vigiar" do Make não serve: percorre o histórico
   // inteiro desde 2014 e come a cota do plano antes de chegar na de hoje.
   cicloDasAvaliacoesDoGoogle().catch((e) => console.error("[google] sincronização das recentes:", e));
+  // E as vendas de ontem, pela API da Zig, direto no estoque: a partir das 6h
+  // da casa, uma importação por dia, casada com o vocabulário da casa e
+  // baixada sozinha quando não sobra nada para alguém decidir.
+  cicloDasVendasDaZig().catch((e) => console.error("[vendas-zig] varredura:", e));
 }, 60 * 60_000);
 
 const HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE = Math.max(1, Number(process.env.GOOGLE_SINCRONIZAR_CADA_HORAS) || 4);
@@ -320,6 +325,7 @@ void varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:"
 void varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura:", e));
 void varrerAvisosEncalhados().catch((e) => console.error("[encalhados] varredura:", e));
 void varrerHistorico().catch((e) => console.error("[historico-zig] varredura:", e));
+void cicloDasVendasDaZig().catch((e) => console.error("[vendas-zig] varredura:", e));
 void cicloDosChecklists();
 
 const server = createServer(criarHandler({ servirEstaticos: true }));

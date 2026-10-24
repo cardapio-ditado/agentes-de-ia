@@ -111,7 +111,7 @@ export async function vendas(raiz, ctx) {
       return el("tr", {}, [
         el("td", {}, [
           el("strong", { texto: i.arquivo_nome || "relatório" }),
-          el("small", { classe: "muted", texto: i.origem === "foto" ? " foto" : "" }),
+          el("small", { classe: "muted", texto: i.origem === "foto" ? " foto" : i.origem === "api" ? " Zig, automático" : "" }),
         ]),
         el("td", {
           texto:

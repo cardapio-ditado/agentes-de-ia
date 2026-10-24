@@ -1423,6 +1423,8 @@ export async function lancarFaturamento(params: {
   data: string;
   valor: number;
   criadoPor?: string | null;
+  /** De onde veio o número: digitado ("manual") ou do PDV (a Zig, "pdv"). */
+  origem?: "manual" | "pdv";
 }): Promise<void> {
   if (!(params.valor >= 0)) throw new ErroDoEstoque(400, "Informe o valor do dia.");
   const { error } = await cliente()
@@ -1432,7 +1434,7 @@ export async function lancarFaturamento(params: {
         venue_id: params.venueId,
         data_referencia: params.data,
         valor: params.valor,
-        origem: "manual",
+        origem: params.origem ?? "manual",
         criado_por: params.criadoPor ?? null,
       },
       { onConflict: "venue_id,data_referencia" },
