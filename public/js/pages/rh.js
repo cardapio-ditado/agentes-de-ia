@@ -4,7 +4,7 @@ import { criarEscala } from "./rhEscala.js";
 import { criarFerias } from "./rhFerias.js";
 import { criarFechamento } from "./rhFechamento.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
-import { camposDaExperiencia, resumoDaPessoa, secaoDeOcorrencias } from "./rhPessoa.js";
+import { camposDaExperiencia, cartaoDoMapaDisc, resumoDaPessoa, secaoDeAvaliacoes, secaoDeOcorrencias, secaoDoDisc } from "./rhPessoa.js";
 
 /**
  * RH — Fase 1: a ficha de cada pessoa da casa.
@@ -235,6 +235,26 @@ export async function rh(raiz, ctx) {
             onclick: async () => {
               verDesligados = !verDesligados;
               await recarregar();
+            },
+          }),
+          el("button", {
+            classe: "btn btn-peq",
+            type: "button",
+            texto: "Mapa DISC",
+            title: "O perfil comportamental de cada um, e o que falta na equipe",
+            onclick: async (e) => {
+              e.target.disabled = true;
+              try {
+                const mapa = await get(`/v1/venues/${ctx.venue}/rh/disc-equipe`);
+                const cartao = cartaoDoMapaDisc(mapa);
+                corpo.querySelector(".disc-mapa")?.closest("section")?.remove();
+                corpo.children[0]?.after(cartao);
+                cartao.scrollIntoView({ behavior: "smooth", block: "start" });
+              } catch (err) {
+                avisar(err.message, "erro");
+              } finally {
+                e.target.disabled = false;
+              }
             },
           }),
           seletorDoMes,
@@ -672,6 +692,8 @@ export async function rh(raiz, ctx) {
               onclick: () => desligarPessoa(id, pessoa.nome),
             }),
       ]),
+      secaoDeAvaliacoes({ ctx, id, pessoa, ficha: f, visao: visao360, aoMudar }) ?? el("span", {}),
+      secaoDoDisc({ ctx, id, pessoa, ficha: f, visao: visao360 }) ?? el("span", {}),
       secaoDeOcorrencias({ ctx, id, pessoa, ficha: f, visao: visao360, aoMudar }) ?? el("span", {}),
       secaoDeDocumentos(id, documentos),
     );

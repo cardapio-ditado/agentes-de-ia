@@ -57,3 +57,13 @@ test("documento: aponta CPF e nome diferentes, ignora acento e caixa", () => {
   const avisos = conferirComAFicha(lido, { nome_completo: "João Souza", cpf: "11144477735" });
   assert.equal(avisos.length, 2);
 });
+
+test("avaliação: nota de 1 a 5 em toda competência, média e até 3 combinados", async () => {
+  const { montarAvaliacao, COMPETENCIAS } = await import("./rhPessoa.js");
+  const notas = Object.fromEntries(COMPETENCIAS.map((c, i) => [c.id, i % 2 ? 4 : 5]));
+  const a = montarAvaliacao({ momento: "experiencia_45", dia: "2026-11-01", notas, combinados: ["a", "", "b", "c", "d"] });
+  assert.equal(a.media, 4.5);
+  assert.deepEqual(a.combinados, ["a", "b", "c"]);
+  assert.throws(() => montarAvaliacao({ momento: "avulsa", dia: "2026-11-01", notas: { ...notas, higiene: 0 } }), ErroDoRh);
+  assert.throws(() => montarAvaliacao({ momento: "x", dia: "2026-11-01", notas }), ErroDoRh);
+});

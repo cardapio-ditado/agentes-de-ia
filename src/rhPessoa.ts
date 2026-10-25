@@ -300,12 +300,17 @@ export async function visao360(params: { venueId: string; atendenteId: string; t
 
 const VALIDADE_DO_CONVITE_DIAS = 7;
 
-export async function criarConvite(params: { venueId: string; atendenteId: string; quem: string }): Promise<{ token: string; expira_em: string }> {
+export async function criarConvite(params: {
+  venueId: string;
+  atendenteId: string;
+  quem: string;
+  tipo?: "ficha" | "disc";
+}): Promise<{ token: string; expira_em: string }> {
   const token = randomBytes(18).toString("base64url");
   const expiraEm = new Date(Date.now() + VALIDADE_DO_CONVITE_DIAS * DIA_MS).toISOString();
   const { error } = await cliente()
     .from("rh_convites")
-    .insert({ venue_id: params.venueId, atendente_id: params.atendenteId, token, criado_por: params.quem, expira_em: expiraEm });
+    .insert({ venue_id: params.venueId, atendente_id: params.atendenteId, token, criado_por: params.quem, expira_em: expiraEm, tipo: params.tipo ?? "ficha" });
   if (error) falhar("Falha ao criar o link", error.message);
   return { token, expira_em: expiraEm };
 }
@@ -321,14 +326,15 @@ export interface ConviteAberto {
 }
 
 /** O que o link mostra. Só campos que a própria pessoa preenche — salário não. */
-export async function abrirConvite(token: string): Promise<ConviteAberto> {
+export async function abrirConvite(token: string, tipo: "ficha" | "disc" = "ficha"): Promise<ConviteAberto> {
   const { data: convite, error } = await cliente()
     .from("rh_convites")
-    .select("venue_id, atendente_id, expira_em, enviado_em")
+    .select("venue_id, atendente_id, expira_em, enviado_em, tipo")
     .eq("token", token)
     .maybeSingle();
   if (error) falhar("Falha ao abrir o link", error.message);
-  if (!convite) throw new ErroDoRh(404, "Este link não existe. Peça um novo para a casa.");
+  // O link da ficha não abre o teste, e vice-versa: cada um é um convite.
+  if (!convite || (convite.tipo ?? "ficha") !== tipo) throw new ErroDoRh(404, "Este link não existe. Peça um novo para a casa.");
   if (new Date(convite.expira_em).getTime() < Date.now()) {
     throw new ErroDoRh(410, "Este link venceu. Peça um novo para a casa — ele vale 7 dias.");
   }
@@ -596,4 +602,170 @@ export async function cicloDaExperiencia(agora = new Date()): Promise<void> {
       console.error(`[rh] aviso de experiência de ${venue.name} falhou: ${(e as Error).message}`);
     }
   }
+}
+
+// ============================================================
+// DISC
+// ============================================================
+
+export interface DiscGravado {
+  d: number;
+  i: number;
+  s: number;
+  c: number;
+  perfil: string;
+  concluido_em: string;
+}
+
+/** O teste respondido pelo link. Devolve o resultado para a pessoa ver. */
+export async function receberDisc(token: string, respostas: unknown) {
+  const { calcularDisc, descreverPerfil } = await import("./rhDisc.js");
+  const convite = await abrirConvite(token, "disc");
+  let r;
+  try {
+    r = calcularDisc(respostas as never);
+  } catch (e) {
+    throw new ErroDoRh(400, (e as Error).message);
+  }
+  const { error } = await cliente()
+    .from("rh_disc")
+    .insert({ venue_id: convite.venue_id, atendente_id: convite.atendente_id, respostas, ...r });
+  if (error) falhar("Falha ao guardar o resultado", error.message);
+  await cliente().from("rh_convites").update({ enviado_em: new Date().toISOString() }).eq("token", token);
+  return { ...r, descricao: descreverPerfil(r.perfil) };
+}
+
+export async function discDaPessoa(venueId: string, atendenteId: string) {
+  const { descreverPerfil } = await import("./rhDisc.js");
+  const { data } = await cliente()
+    .from("rh_disc")
+    .select("d, i, s, c, perfil, concluido_em")
+    .eq("venue_id", venueId)
+    .eq("atendente_id", atendenteId)
+    .order("concluido_em", { ascending: false })
+    .limit(1);
+  const ultimo = ((data ?? []) as DiscGravado[])[0];
+  return ultimo ? { ...ultimo, descricao: descreverPerfil(ultimo.perfil) } : null;
+}
+
+/** O perfil mais recente de cada pessoa ativa, e o que a equipe tem e não tem. */
+export async function mapaDisc(venueId: string) {
+  const { mapaDaEquipe } = await import("./rhDisc.js");
+  const [{ data: discs }, { data: pessoas }] = await Promise.all([
+    cliente().from("rh_disc").select("atendente_id, perfil, d, i, s, c, concluido_em").eq("venue_id", venueId).order("concluido_em", { ascending: false }),
+    cliente().from("pesquisa_atendentes").select("id, nome, apelido, funcao, ativo").eq("venue_id", venueId).eq("ativo", true),
+  ]);
+  const ativos = new Map(((pessoas ?? []) as Array<{ id: string; nome: string; apelido: string | null; funcao: string | null }>).map((p) => [p.id, p]));
+  const vistos = new Set<string>();
+  const lista: Array<{ atendente_id: string; nome: string; funcao: string | null; perfil: string; d: number; i: number; s: number; c: number }> = [];
+  for (const d of (discs ?? []) as Array<DiscGravado & { atendente_id: string }>) {
+    if (vistos.has(d.atendente_id) || !ativos.has(d.atendente_id)) continue;
+    vistos.add(d.atendente_id);
+    const p = ativos.get(d.atendente_id)!;
+    lista.push({ atendente_id: d.atendente_id, nome: p.apelido || p.nome, funcao: p.funcao, perfil: d.perfil, d: d.d, i: d.i, s: d.s, c: d.c });
+  }
+  const semTeste = [...ativos.values()].filter((p) => !vistos.has(p.id)).map((p) => p.apelido || p.nome);
+  return { pessoas: lista, sem_teste: semTeste, ...mapaDaEquipe(lista) };
+}
+
+// ============================================================
+// Avaliação de desempenho
+// ============================================================
+
+/** As competências de bar e restaurante, de 1 a 5. */
+export const COMPETENCIAS = [
+  { id: "atendimento", nome: "Atendimento ao cliente", ajuda: "Cordialidade, atenção, resolve o que o cliente pede." },
+  { id: "agilidade", nome: "Agilidade", ajuda: "Ritmo no serviço, principalmente na casa cheia." },
+  { id: "higiene", nome: "Higiene e organização", ajuda: "Praça limpa, uniforme, boas práticas." },
+  { id: "pontualidade", nome: "Pontualidade e presença", ajuda: "Chega na hora, não falta sem avisar." },
+  { id: "equipe", nome: "Trabalho em equipe", ajuda: "Ajuda os colegas, aceita orientação, não cria clima ruim." },
+  { id: "funcao", nome: "Conhecimento da função", ajuda: "Sabe o cardápio, as fichas, os processos da casa." },
+] as const;
+
+export const MOMENTOS_DA_AVALIACAO = [
+  { id: "experiencia_45", nome: "Fim do 1º período de experiência" },
+  { id: "experiencia_90", nome: "Fim do 2º período de experiência" },
+  { id: "semestral", nome: "Avaliação semestral" },
+  { id: "avulsa", nome: "Avaliação avulsa" },
+] as const;
+
+/** As notas e os textos, conferidos. Pura: testável sem banco. */
+export function montarAvaliacao(campos: Record<string, unknown>) {
+  const momento = String(campos.momento ?? "avulsa");
+  if (!MOMENTOS_DA_AVALIACAO.some((m) => m.id === momento)) throw new ErroDoRh(400, "Momento da avaliação desconhecido.");
+  const dia = String(campos.dia ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) throw new ErroDoRh(400, "Informe o dia da avaliação.");
+  const brutas = (campos.notas ?? {}) as Record<string, unknown>;
+  const notas: Record<string, number> = {};
+  for (const c of COMPETENCIAS) {
+    const n = Math.round(Number(brutas[c.id]));
+    if (!(n >= 1 && n <= 5)) throw new ErroDoRh(400, `Dê uma nota de 1 a 5 em "${c.nome}".`);
+    notas[c.id] = n;
+  }
+  const media = Math.round((Object.values(notas).reduce((s, n) => s + n, 0) / COMPETENCIAS.length) * 100) / 100;
+  const texto = (v: unknown) => String(v ?? "").trim().slice(0, 2000) || null;
+  const combinados = (Array.isArray(campos.combinados) ? campos.combinados : [])
+    .map((c) => String(c ?? "").trim().slice(0, 300))
+    .filter(Boolean)
+    .slice(0, 3);
+  return { momento, dia, notas, media, pontos_fortes: texto(campos.pontos_fortes), melhorar: texto(campos.melhorar), combinados };
+}
+
+export async function listarAvaliacoes(venueId: string, atendenteId: string) {
+  const { data, error } = await cliente()
+    .from("rh_avaliacoes")
+    .select("*")
+    .eq("venue_id", venueId)
+    .eq("atendente_id", atendenteId)
+    .order("dia", { ascending: false });
+  if (error) falhar("Falha ao ler as avaliações", error.message);
+  return data ?? [];
+}
+
+/**
+ * Grava a avaliação com o retrato dos números do período: a nota do gestor
+ * fica ao lado do que o sistema mediu, para a conversa ser sobre fatos.
+ */
+export async function registrarAvaliacao(params: {
+  venueId: string;
+  atendenteId: string;
+  campos: Record<string, unknown>;
+  timezone: string;
+  quem: string;
+}) {
+  const linha = montarAvaliacao(params.campos);
+  const v = await visao360({ venueId: params.venueId, atendenteId: params.atendenteId, timezone: params.timezone });
+  const numeros = {
+    nota_do_cliente: v.cliente.media,
+    avaliacoes_de_cliente: v.cliente.avaliacoes,
+    faltas_30d: v.escala_30d.faltas,
+    atrasos_30d: v.escala_30d.atrasos,
+    elogios: v.contagem.elogios,
+    advertencias: v.contagem.advertencias,
+    suspensoes: v.contagem.suspensoes,
+    vendas_90d: v.vendas_90d,
+  };
+  const { data, error } = await cliente()
+    .from("rh_avaliacoes")
+    .insert({ venue_id: params.venueId, atendente_id: params.atendenteId, ...linha, numeros, avaliador: params.quem })
+    .select("*")
+    .single();
+  if (error) falhar("Falha ao guardar a avaliação", error.message);
+  return data;
+}
+
+export async function marcarAvaliacaoConversada(params: { venueId: string; id: string }) {
+  const { error } = await cliente()
+    .from("rh_avaliacoes")
+    .update({ conversada_em: new Date().toISOString() })
+    .eq("venue_id", params.venueId)
+    .eq("id", params.id);
+  if (error) falhar("Falha ao marcar a conversa", error.message);
+  return { ok: true };
+}
+
+export async function apagarAvaliacao(params: { venueId: string; id: string }) {
+  const { error } = await cliente().from("rh_avaliacoes").delete().eq("venue_id", params.venueId).eq("id", params.id);
+  if (error) falhar("Falha ao apagar a avaliação", error.message);
+  return { apagado: true };
 }

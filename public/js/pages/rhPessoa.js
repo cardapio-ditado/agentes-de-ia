@@ -111,19 +111,25 @@ function cartaoDaExperiencia(ctx, id, exp, nome, aoMudar) {
   ]);
 }
 
-/** O link para a própria pessoa preencher a ficha e mandar os documentos. */
-function botaoDeConvite(ctx, id, ficha, nome) {
+/**
+ * O link para a própria pessoa: preencher a ficha (tipo "ficha") ou
+ * responder o DISC (tipo "disc"). Com telefone na ficha, pergunta se vai
+ * direto no WhatsApp dela; sem, copia o link.
+ */
+function botaoDeConvite(ctx, id, ficha, nome, tipo = "ficha", texto = "📲 Pedir para a pessoa preencher") {
   return el("button", {
     classe: "btn btn-peq",
     type: "button",
-    texto: "📲 Pedir para a pessoa preencher",
-    title: `Manda para ${nome} um link para preencher os próprios dados e a foto dos documentos`,
+    texto,
+    title: tipo === "disc"
+      ? `Manda para ${nome} o link do teste DISC (24 perguntas, 5 minutos)`
+      : `Manda para ${nome} um link para preencher os próprios dados e a foto dos documentos`,
     onclick: async (e) => {
       const temTelefone = Boolean(ficha?.telefone);
       const enviar = temTelefone && confirm(`Mandar o link no WhatsApp de ${nome}? (Cancelar só copia o link para você mandar.)`);
       e.target.disabled = true;
       try {
-        const r = await post(`/v1/venues/${ctx.venue}/rh/${id}/convite`, { enviar });
+        const r = await post(`/v1/venues/${ctx.venue}/rh/${id}/convite`, { enviar, tipo });
         if (r.enviado_para) {
           avisar(`Link enviado no WhatsApp de ${nome}. Vale 7 dias.`, "ok");
         } else {
@@ -381,3 +387,269 @@ export function camposDaExperiencia(ficha) {
 }
 
 export { limpar };
+
+/* ================= DISC ================= */
+
+const COR_DO_FATOR = { D: "#c1121f", I: "#f4a100", S: "#1a7a4a", C: "#2563a8" };
+
+function barrasDisc(d) {
+  return el("div", { classe: "disc-barras" }, [["D", d.d], ["I", d.i], ["S", d.s], ["C", d.c]].map(([f, v]) =>
+    el("div", { classe: "disc-fator" }, [
+      el("strong", { texto: f }),
+      el("div", { classe: "disc-trilho" }, [el("span", { style: `width:${v}%;background:${COR_DO_FATOR[f]}` })]),
+      el("span", { classe: "muted", texto: String(v) }),
+    ])));
+}
+
+/**
+ * O perfil comportamental na ficha: o gráfico, o que o perfil quer dizer e,
+ * para a liderança, como liderar e como dar feedback. A pessoa vê o próprio
+ * resultado no fim do teste.
+ */
+export function secaoDoDisc({ ctx, id, pessoa, ficha, visao }) {
+  if (!visao) return null;
+  const nome = pessoa.apelido || pessoa.nome;
+  const d = visao.disc;
+  return el("section", { classe: "cartao pilha" }, [
+    el("div", { classe: "cabecalho-secao" }, [
+      el("div", {}, [
+        el("h3", { texto: d ? `Perfil comportamental: ${d.perfil}` : "Perfil comportamental (DISC)" }),
+        el("p", {
+          classe: "muted",
+          texto: d
+            ? `Respondido em ${dataBr(d.concluido_em)}. ${nome} viu o próprio resultado.`
+            : `${nome} ainda não fez o teste. São 24 perguntas rápidas pelo celular, e no fim a pessoa vê o resultado.`,
+        }),
+      ]),
+      botaoDeConvite(ctx, id, ficha, nome, "disc", d ? "Refazer o teste" : "📲 Mandar o teste"),
+    ]),
+    d ? barrasDisc(d) : null,
+    ...(d?.descricao ?? []).map((f) =>
+      el("div", { classe: "pilha-fina" }, [
+        el("strong", { texto: f.nome }),
+        el("p", { classe: "muted", style: "margin:0", texto: f.resumo }),
+        linhaDisc("Onde brilha", f.fortes),
+        linhaDisc("Fique de olho", f.cuidado),
+        linhaDisc("Como liderar", f.liderar),
+        linhaDisc("Como dar feedback", f.feedback),
+        linhaDisc("Tende a render em", f.rende),
+      ])),
+    el("p", {
+      classe: "muted",
+      texto: "O DISC mostra o jeito de agir, não a capacidade nem o caráter. Use para saber como falar com cada um e para montar a equipe — nunca como motivo para contratar ou demitir.",
+    }),
+  ].filter(Boolean));
+}
+
+function linhaDisc(rotulo, texto) {
+  return el("p", { style: "margin:0" }, [el("strong", { texto: `${rotulo}: ` }), el("span", { texto })]);
+}
+
+/** O mapa DISC da equipe: quem é o quê, e o que falta na equipe. */
+export function cartaoDoMapaDisc(mapa) {
+  const porFator = { D: [], I: [], S: [], C: [] };
+  for (const p of mapa.pessoas) porFator[p.perfil[0]]?.push(p);
+  return el("section", { classe: "cartao pilha" }, [
+    el("div", {}, [
+      el("h3", { texto: "Mapa DISC da equipe" }),
+      el("p", { classe: "muted", texto: "O fator principal de cada um. Equipe boa tem um pouco de cada jeito." }),
+    ]),
+    el("div", { classe: "disc-mapa" }, Object.entries(porFator).map(([f, pessoas]) =>
+      el("div", { classe: "disc-quadrante", style: `border-top:4px solid ${COR_DO_FATOR[f]}` }, [
+        el("strong", { texto: `${f} · ${pessoas.length}` }),
+        ...pessoas.map((p) => el("span", { texto: `${p.nome} (${p.perfil})${p.funcao ? ` — ${p.funcao}` : ""}` })),
+        pessoas.length ? null : el("span", { classe: "muted", texto: "ninguém" }),
+      ]))),
+    ...mapa.observacoes.map((o) => el("p", { classe: "aviso aviso-alerta", style: "margin:0", texto: o })),
+    mapa.sem_teste.length
+      ? el("p", { classe: "muted", texto: `Ainda sem teste: ${mapa.sem_teste.join(", ")}. Mande pela ficha de cada um.` })
+      : null,
+  ].filter(Boolean));
+}
+
+/* ================= Avaliação de desempenho ================= */
+
+/**
+ * As avaliações da pessoa e o formulário de uma nova. A nota do gestor
+ * (1 a 5 por competência) fica ao lado dos números que o sistema mediu, e a
+ * conversa fecha com até três combinados. Sai em PDF para a conversa.
+ */
+export function secaoDeAvaliacoes({ ctx, id, pessoa, ficha, visao, aoMudar }) {
+  if (!visao) return null;
+  const nome = pessoa.apelido || pessoa.nome;
+  const comp = visao.competencias ?? [];
+  const exp = visao.experiencia;
+  const momentoSugerido = exp && exp.fase === "primeiro" ? "experiencia_45" : exp && exp.fase === "segundo" ? "experiencia_90" : "semestral";
+
+  const area = el("div", {});
+  const abrirFormulario = () => {
+    const notas = {};
+    const momento = el("select", { classe: "select" }, (visao.momentos_da_avaliacao ?? []).map((m) =>
+      el("option", { value: m.id, texto: m.nome, selected: m.id === momentoSugerido })));
+    const dia = el("input", { classe: "input", type: "date", value: new Date().toLocaleDateString("en-CA") });
+    const linhas = comp.map((c) => {
+      const botoes = [1, 2, 3, 4, 5].map((n) =>
+        el("button", {
+          classe: "nota-botao",
+          type: "button",
+          texto: String(n),
+          "aria-label": `${c.nome}: ${n}`,
+          onclick: () => {
+            notas[c.id] = n;
+            for (const b of botoes) b.classList.toggle("nota-escolhida", Number(b.textContent) === n);
+          },
+        }));
+      return el("div", { classe: "avaliacao-linha" }, [
+        el("div", {}, [el("strong", { texto: c.nome }), el("small", { classe: "muted", texto: c.ajuda })]),
+        el("div", { classe: "nota-botoes" }, botoes),
+      ]);
+    });
+    const fortes = el("textarea", { classe: "input", rows: 2, placeholder: "O que a pessoa faz muito bem" });
+    const melhorar = el("textarea", { classe: "input", rows: 2, placeholder: "O que precisa melhorar, com exemplo" });
+    const combinados = [1, 2, 3].map((n) => el("input", { classe: "input", placeholder: `Combinado ${n} (ex.: chegar 10 min antes no fim de semana)` }));
+    const v = visao;
+    limpar(area).append(
+      el("div", { classe: "cartao pilha", style: "padding:14px" }, [
+        el("div", { classe: "grade" }, [
+          el("div", { classe: "campo" }, [el("label", { texto: "Momento" }), momento]),
+          el("div", { classe: "campo" }, [el("label", { texto: "Dia" }), dia]),
+        ]),
+        el("p", { classe: "muted", style: "margin:0", texto:
+          `Os números do período: nota do cliente ${v.cliente.media ?? "—"} · ${v.escala_30d.faltas} falta(s) e ${v.escala_30d.atrasos} atraso(s) em 30 dias · ` +
+          `${v.contagem.elogios} elogio(s) · ${v.contagem.advertencias} advertência(s). Use para conversar sobre fatos.` }),
+        ...linhas,
+        el("div", { classe: "campo" }, [el("label", { texto: "Pontos fortes" }), fortes]),
+        el("div", { classe: "campo" }, [el("label", { texto: "A melhorar" }), melhorar]),
+        el("div", { classe: "campo" }, [el("label", { texto: "Até 3 combinados para o próximo período" }), ...combinados]),
+        el("div", { classe: "reserva-acoes" }, [
+          el("button", {
+            classe: "btn btn-primario",
+            type: "button",
+            texto: "Salvar avaliação",
+            onclick: async (e) => {
+              e.target.disabled = true;
+              try {
+                await post(`/v1/venues/${ctx.venue}/rh/${id}/avaliacoes`, {
+                  momento: momento.value,
+                  dia: dia.value,
+                  notas,
+                  pontos_fortes: fortes.value,
+                  melhorar: melhorar.value,
+                  combinados: combinados.map((c) => c.value),
+                });
+                avisar("Avaliação salva. Gere o PDF para a conversa.", "ok");
+                await aoMudar();
+              } catch (err) {
+                avisar(err.message, "erro");
+                e.target.disabled = false;
+              }
+            },
+          }),
+          el("button", { classe: "btn btn-peq", type: "button", texto: "Cancelar", onclick: () => limpar(area) }),
+        ]),
+      ]),
+    );
+  };
+
+  const nomeDoMomento = Object.fromEntries((visao.momentos_da_avaliacao ?? []).map((m) => [m.id, m.nome]));
+  const lista = (visao.avaliacoes ?? []).map((a) =>
+    el("div", { classe: "linha-tabela" }, [
+      el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
+        el("strong", { texto: `${nomeDoMomento[a.momento] ?? a.momento} · ${dataBr(a.dia)}` }),
+        el("span", { classe: "muted", texto: `média ${String(Number(a.media).toFixed(1)).replace(".", ",")} de 5${a.avaliador ? ` · por ${a.avaliador}` : ""}` }),
+        a.combinados?.length ? el("small", { classe: "muted", texto: `Combinados: ${a.combinados.join(" · ")}` }) : null,
+      ]),
+      el("div", { classe: "reserva-acoes", style: "margin:0" }, [
+        a.conversada_em
+          ? etiqueta(`conversada ${dataBr(a.conversada_em)}`, "etiqueta-ok")
+          : el("button", {
+              classe: "btn btn-peq",
+              type: "button",
+              texto: "Já conversei",
+              title: "Marque depois da conversa com a pessoa",
+              onclick: async () => {
+                try {
+                  await put(`/v1/venues/${ctx.venue}/rh/${id}/avaliacoes/${a.id}/conversada`, {});
+                  await aoMudar();
+                } catch (err) {
+                  avisar(err.message, "erro");
+                }
+              },
+            }),
+        botaoDePdf(() => avaliacaoEmPdf(pessoa, ficha, a, comp, nomeDoMomento, visao.disc), "PDF"),
+        el("button", {
+          classe: "btn-icone",
+          type: "button",
+          title: "Apagar esta avaliação",
+          texto: "🗑",
+          onclick: async () => {
+            if (!confirm("Apagar esta avaliação?")) return;
+            try {
+              await del(`/v1/venues/${ctx.venue}/rh/${id}/avaliacoes/${a.id}`);
+              await aoMudar();
+            } catch (err) {
+              avisar(err.message, "erro");
+            }
+          },
+        }),
+      ]),
+    ]));
+
+  return el("section", { classe: "cartao pilha" }, [
+    el("div", { classe: "cabecalho-secao" }, [
+      el("div", {}, [
+        el("h3", { texto: "Avaliação de desempenho" }),
+        el("p", {
+          classe: "muted",
+          texto: exp && exp.fase !== "fim"
+            ? `Avalie ${nome} antes de decidir a experiência — a conversa do dia ${exp.fase === "primeiro" ? "45" : "90"} é a mais importante.`
+            : "Nota de 1 a 5 em cada competência, ao lado dos números do período. Depois, a conversa e os combinados.",
+        }),
+      ]),
+      el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Nova avaliação", onclick: abrirFormulario }),
+    ]),
+    area,
+    lista.length ? el("div", { classe: "tabela" }, lista) : el("p", { classe: "muted", texto: "Nenhuma avaliação ainda." }),
+  ]);
+}
+
+/** A avaliação no papel, para a conversa: notas, números, texto e combinados. */
+function avaliacaoEmPdf(pessoa, ficha, a, comp, nomeDoMomento, disc) {
+  const n = a.numeros ?? {};
+  imprimirRelatorio({
+    tipo: "RH",
+    titulo: `Avaliação de desempenho — ${ficha?.nome_completo || pessoa.nome}`,
+    periodo: `${nomeDoMomento[a.momento] ?? a.momento} · ${dataBr(a.dia)}`,
+    selos: [
+      { valor: String(Number(a.media).toFixed(1)).replace(".", ","), rotulo: "média (de 5)" },
+      { valor: n.nota_do_cliente === null || n.nota_do_cliente === undefined ? "—" : `${String(n.nota_do_cliente).replace(".", ",")}★`, rotulo: "nota do cliente" },
+      { valor: String(n.faltas_30d ?? 0), rotulo: "faltas (30 dias)", ruim: (n.faltas_30d ?? 0) > 0 },
+      { valor: String(n.elogios ?? 0), rotulo: "elogios" },
+    ],
+    secoes: [
+      {
+        titulo: "Competências",
+        colunas: [{ rotulo: "Competência" }, { rotulo: "Nota", num: true }],
+        linhas: comp.map((c) => ({ destaque: (a.notas?.[c.id] ?? 0) <= 2, celulas: [c.nome, `${a.notas?.[c.id] ?? "—"} de 5`] })),
+      },
+      {
+        titulo: "Os números do período",
+        pares: [
+          ["Nota dos clientes na pesquisa", n.nota_do_cliente === null || n.nota_do_cliente === undefined ? "—" : `${n.nota_do_cliente} (${n.avaliacoes_de_cliente} avaliações)`],
+          ["Faltas e atrasos (30 dias)", `${n.faltas_30d ?? 0} falta(s) · ${n.atrasos_30d ?? 0} atraso(s)`],
+          ["Elogios registrados", String(n.elogios ?? 0)],
+          ["Advertências / suspensões", `${n.advertencias ?? 0} / ${n.suspensoes ?? 0}`],
+          n.vendas_90d ? ["Vendas (90 dias)", dinheiro(Number(n.vendas_90d))] : null,
+          disc ? ["Perfil DISC", disc.perfil] : null,
+        ].filter(Boolean),
+      },
+      a.pontos_fortes ? { titulo: "Pontos fortes", paragrafos: [a.pontos_fortes] } : null,
+      a.melhorar ? { titulo: "A melhorar", paragrafos: [a.melhorar] } : null,
+      a.combinados?.length
+        ? { titulo: "Combinados para o próximo período", colunas: [{ rotulo: "#" }, { rotulo: "Combinado" }], linhas: a.combinados.map((c, i) => [String(i + 1), c]) }
+        : null,
+    ],
+    assinaturas: ["Funcionário", "Avaliador"],
+    arquivo: `avaliacao-${pessoa.nome}-${a.dia}`,
+  });
+}

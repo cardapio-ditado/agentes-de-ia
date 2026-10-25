@@ -32,6 +32,10 @@
       "destination": "/ficha.html"
     },
     {
+      "source": "/disc/:token",
+      "destination": "/disc.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

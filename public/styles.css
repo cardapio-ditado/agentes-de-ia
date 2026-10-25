@@ -3413,3 +3413,20 @@ a.btn { text-decoration: none; }
 .folha-relatorio .relatorio-bloco:first-of-type { margin-top: 12pt; }
 /* O total aparece uma vez, no fim — e não no pé de cada página. */
 .relatorio-tabela tfoot { display: table-row-group; }
+
+/* ============ RH: DISC e avaliação ============ */
+.disc-barras { display: grid; gap: 6px; max-width: 420px; }
+.disc-fator { display: grid; grid-template-columns: 18px 1fr 32px; gap: 8px; align-items: center; }
+.disc-trilho { height: 12px; border-radius: 999px; background: var(--superficie-2); overflow: hidden; }
+.disc-trilho > span { display: block; height: 100%; border-radius: inherit; }
+.disc-mapa { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.disc-quadrante { display: grid; gap: 4px; align-content: start; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 10px; background: var(--superficie); font-size: 0.9rem; }
+.avaliacao-linha { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--borda); }
+.avaliacao-linha small { display: block; }
+.nota-botoes { display: flex; gap: 6px; }
+.nota-botao {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--borda-forte); background: var(--superficie); color: var(--texto);
+  font: inherit; font-weight: 700; cursor: pointer;
+}
+.nota-botao.nota-escolhida { background: var(--marca-forte); border-color: var(--marca-forte); color: #fff; }
