@@ -18,6 +18,17 @@ import { decidirReserva } from "./reservationFlow.js";
 import { hojeDaCasa } from "./hoje.js";
 import { BLOCOS as BLOCOS_DO_DISC } from "./rhDisc.js";
 import {
+  PERGUNTAS_DO_CLIMA,
+  abrirClima,
+  abrirConviteDoClima,
+  apagarCandidato,
+  indicadoresDoRh,
+  listarCandidatos,
+  responderClima,
+  resultadoDoClima,
+  salvarCandidato,
+} from "./rhIndicadores.js";
+import {
   MODELOS_DE_TREINAMENTO,
   arquivarTreinamento,
   definirPadrinho,
@@ -2716,6 +2727,9 @@ async function roteasApi(
         alvo === "regra-da-gorjeta" ||
         alvo === "disc-equipe" ||
         alvo === "treinamentos" ||
+        alvo === "indicadores" ||
+        alvo === "clima" ||
+        alvo === "candidatos" ||
         alvo === "resumo";
 
       // Id que não é uuid nunca chega ao banco: sem isto um `undefined` que
@@ -3148,6 +3162,33 @@ async function roteasApi(
         if (metodo === "DELETE" && p.length === 6) {
           return ok(res, await comErroDoRh(() => apagarOcorrencia({ venueId: venue.id, id: p[5]! })));
         }
+      }
+
+      // ---- Indicadores, clima e candidatos (Rodada D) ----
+      if (metodo === "GET" && alvo === "indicadores" && p.length === 4) {
+        return ok(res, await comErroDoRh(() => indicadoresDoRh({ venueId: venue.id, timezone: venue.timezone ?? "America/Cuiaba" })));
+      }
+      if (alvo === "clima" && p.length === 4) {
+        if (metodo === "GET") return ok(res, { perguntas: PERGUNTAS_DO_CLIMA, rodadas: await comErroDoRh(() => resultadoDoClima(venue.id)) });
+        if (metodo === "POST") {
+          return ok(
+            res,
+            await comErroDoRh(() => abrirClima({ venueId: venue.id, casa: venue.name, timezone: venue.timezone ?? "America/Cuiaba", quem: chave.name, base: enderecoBase() })),
+            201,
+          );
+        }
+      }
+      if (alvo === "candidatos") {
+        if (metodo === "GET" && p.length === 4) return ok(res, { candidatos: await comErroDoRh(() => listarCandidatos(venue.id)), link: `${enderecoBase()}/vaga/${venue.slug}` });
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoRh(() => salvarCandidato({ venueId: venue.id, campos: corpo })), 201);
+        }
+        if (metodo === "PUT" && p.length === 5) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoRh(() => salvarCandidato({ venueId: venue.id, id: p[4]!, campos: corpo })));
+        }
+        if (metodo === "DELETE" && p.length === 5) return ok(res, await comErroDoRh(() => apagarCandidato({ venueId: venue.id, id: p[4]! })));
       }
 
       // ---- Treinamentos: /rh/treinamentos[/:id] · /rh/treinamentos/modelos ----
@@ -5766,6 +5807,40 @@ async function roteasApi(
     }
   }
 
+  // ---- A pesquisa de clima: /v1/clima/:token (anônima) ----
+  if (p[0] === "clima" && p.length === 2) {
+    const token = p[1]!;
+    if (metodo === "GET") {
+      const c = await comErroDoRh(() => abrirConviteDoClima(token));
+      return ok(res, { casa: c.casa, mes: c.mes, perguntas: PERGUNTAS_DO_CLIMA });
+    }
+    if (metodo === "POST") {
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      return ok(res, await comErroDoRh(() => responderClima({ token, enps: corpo.enps, notas: corpo.notas, comentario: corpo.comentario })));
+    }
+  }
+
+  // ---- Trabalhe conosco: /v1/vaga/:casa ----
+  // O link que a casa põe no Instagram e no balcão. Cai na lista de
+  // candidatos do RH; só existe para quem tem o módulo.
+  if (p[0] === "vaga" && p.length === 2) {
+    const venue = await venueDaPesquisa(p[1]!);
+    if (!venue || !(await temModulo(venue.id, "rh"))) throw erro(404, "not_found", "Esta página não existe.");
+    if (metodo === "GET") return ok(res, { casa: venue.name });
+    if (metodo === "POST") {
+      const corpo = (await lerJson(req, 20_000)) as Record<string, unknown>;
+      if (String(corpo.site ?? "")) return ok(res, { ok: true }); // armadilha de robô
+      await comErroDoRh(() =>
+        salvarCandidato({
+          venueId: venue.id,
+          origem: "link",
+          campos: { nome: corpo.nome, telefone: corpo.telefone, funcao: corpo.funcao, tipo: corpo.tipo, experiencia: corpo.experiencia },
+        }),
+      );
+      return ok(res, { ok: true }, 201);
+    }
+  }
+
   // ---- O espaço do funcionário: /v1/eu/:token ----
   // O link fixo de cada um (seis meses). Mostra só o que é dele.
   if (p[0] === "eu" && p.length >= 2) {
@@ -6375,7 +6450,11 @@ async function servirEstatico(res: ServerResponse, caminho: string): Promise<voi
         ? "disc.html"
         : caminho.startsWith("/eu/")
           ? "eu.html"
-          : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
+          : caminho.startsWith("/clima/")
+            ? "clima.html"
+            : caminho.startsWith("/vaga/")
+              ? "vaga.html"
+              : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
 
   // normalize resolve "..", e o prefixo é conferido depois — sem isso,
   // "/../.env" escaparia do diretório público.

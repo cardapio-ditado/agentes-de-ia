@@ -40,6 +40,14 @@
       "destination": "/eu.html"
     },
     {
+      "source": "/clima/:token",
+      "destination": "/clima.html"
+    },
+    {
+      "source": "/vaga/:casa",
+      "destination": "/vaga.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

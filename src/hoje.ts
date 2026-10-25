@@ -339,6 +339,20 @@ export async function hojeDaCasa(params: {
     };
   });
 
+  pendencia("rh", "risco", async () => {
+    const { indicadoresDoRh } = await import("./rhIndicadores.js");
+    const altos = (await indicadoresDoRh({ venueId: venue.id, timezone: fuso })).risco.filter((r) => r.nivel === "alto");
+    return {
+      id: "risco",
+      modulo: "rh",
+      titulo: "Gente dando sinal de que pode sair",
+      quantidade: altos.length,
+      detalhe: altos.length ? `${altos.map((r) => r.nome).join(", ")}. Uma conversa agora sai mais barato que uma contratação.` : "",
+      destino: "rh:indicadores",
+      urgente: false,
+    };
+  });
+
   pendencia("rh", "rh", async () => ({
     id: "documentos",
     modulo: "rh",

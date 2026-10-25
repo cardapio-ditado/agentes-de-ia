@@ -493,6 +493,7 @@ const NOME_DO_AVISO: Record<string, string> = {
   rh_convite_disc: "Link do teste DISC",
   rh_convite_portal: "Link do espaço do funcionário",
   rh_atestado: "Atestado enviado pelo funcionário",
+  rh_clima: "Pesquisa de clima da equipe",
   rh_elogio_cliente: "Elogio de cliente para o funcionário",
   rh_experiencia: "Aviso do contrato de experiência",
   resposta_humana: "Resposta de gente",

@@ -6,6 +6,7 @@ import { criarFechamento } from "./rhFechamento.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 import { camposDaExperiencia, cartaoDoMapaDisc, resumoDaPessoa, secaoDaIntegracao, secaoDeAvaliacoes, secaoDeOcorrencias, secaoDoDisc } from "./rhPessoa.js";
 import { criarTreinamentos } from "./rhTreinamentos.js";
+import { criarContratacao, criarIndicadores } from "./rhIndicadores.js";
 
 /**
  * RH — Fase 1: a ficha de cada pessoa da casa.
@@ -65,7 +66,8 @@ export async function rh(raiz, ctx) {
   let ordem = { campo: "nome", desc: false };
 
   // A aba "ponto" saiu do produto: quem a deixou guardada cai na equipe.
-  let abaAtiva = sessionStorage.getItem("brasa.rh.aba") || "equipe";
+  // #rh:indicadores (o link do Hoje) abre direto na aba.
+  let abaAtiva = ctx.aba || sessionStorage.getItem("brasa.rh.aba") || "equipe";
   if (abaAtiva === "ponto") abaAtiva = "equipe";
 
   const cabecalho = el("div", { classe: "grade" });
@@ -80,6 +82,8 @@ export async function rh(raiz, ctx) {
   const ferias = criarFerias(corpo, ctx);
   const fechamento = criarFechamento(corpo, ctx);
   const treinamentos = criarTreinamentos(corpo, ctx);
+  const indicadores = criarIndicadores(corpo, ctx);
+  const contratacao = criarContratacao(corpo, ctx);
 
   const barra = el(
     "div",
@@ -90,6 +94,8 @@ export async function rh(raiz, ctx) {
       ["ferias", "Férias"],
       ["fechamento", "Gorjeta"],
       ["treinamentos", "Treinamentos"],
+      ["indicadores", "Indicadores"],
+      ["contratacao", "Contratação"],
     ].map(([id, rotulo]) =>
       el("button", {
         classe: `aba ${id === abaAtiva ? "aba-ativa" : ""}`.trim(),
@@ -115,6 +121,8 @@ export async function rh(raiz, ctx) {
     else if (id === "escala") await escala.recarregar();
     else if (id === "ferias") await ferias.recarregar();
     else if (id === "treinamentos") await treinamentos.recarregar();
+    else if (id === "indicadores") await indicadores.recarregar();
+    else if (id === "contratacao") await contratacao.recarregar();
     else await fechamento.recarregar();
   }
 
