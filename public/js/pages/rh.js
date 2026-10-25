@@ -4,7 +4,8 @@ import { criarEscala } from "./rhEscala.js";
 import { criarFerias } from "./rhFerias.js";
 import { criarFechamento } from "./rhFechamento.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
-import { camposDaExperiencia, cartaoDoMapaDisc, resumoDaPessoa, secaoDeAvaliacoes, secaoDeOcorrencias, secaoDoDisc } from "./rhPessoa.js";
+import { camposDaExperiencia, cartaoDoMapaDisc, resumoDaPessoa, secaoDaIntegracao, secaoDeAvaliacoes, secaoDeOcorrencias, secaoDoDisc } from "./rhPessoa.js";
+import { criarTreinamentos } from "./rhTreinamentos.js";
 
 /**
  * RH — Fase 1: a ficha de cada pessoa da casa.
@@ -78,6 +79,7 @@ export async function rh(raiz, ctx) {
   const escala = criarEscala(corpo, ctx);
   const ferias = criarFerias(corpo, ctx);
   const fechamento = criarFechamento(corpo, ctx);
+  const treinamentos = criarTreinamentos(corpo, ctx);
 
   const barra = el(
     "div",
@@ -87,6 +89,7 @@ export async function rh(raiz, ctx) {
       ["escala", "Escala"],
       ["ferias", "Férias"],
       ["fechamento", "Gorjeta"],
+      ["treinamentos", "Treinamentos"],
     ].map(([id, rotulo]) =>
       el("button", {
         classe: `aba ${id === abaAtiva ? "aba-ativa" : ""}`.trim(),
@@ -111,6 +114,7 @@ export async function rh(raiz, ctx) {
     if (id === "equipe") await recarregar();
     else if (id === "escala") await escala.recarregar();
     else if (id === "ferias") await ferias.recarregar();
+    else if (id === "treinamentos") await treinamentos.recarregar();
     else await fechamento.recarregar();
   }
 
@@ -580,6 +584,8 @@ export async function rh(raiz, ctx) {
     const aoMudar = () => abrirFicha(id);
     const resumo = resumoDaPessoa({ ctx, id, pessoa, ficha: f, visao: visao360, documentos, aoMudar });
     if (resumo) corpo.append(resumo);
+    const integracao = secaoDaIntegracao({ ctx, id, pessoa, visao: visao360, equipe: dados.pessoas, aoMudar });
+    if (integracao) corpo.append(integracao);
 
     // ---- O que falta (admissão guiada) ----
     if (!desligado && pessoa.pendencias.length) {

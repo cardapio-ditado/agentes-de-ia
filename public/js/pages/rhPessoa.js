@@ -44,6 +44,7 @@ export function resumoDaPessoa({ ctx, id, pessoa, ficha, visao, documentos, aoMu
       el("h3", { texto: "Resumo" }),
       el("div", { classe: "reserva-acoes" }, [
         botaoDeConvite(ctx, id, ficha, nome),
+        botaoDeConvite(ctx, id, ficha, nome, "portal", "🔗 Espaço do funcionário"),
         botaoDePdf(() => fichaEmPdf({ pessoa, ficha, visao, documentos }), "Ficha em PDF"),
       ]),
     ]),
@@ -123,18 +124,21 @@ function botaoDeConvite(ctx, id, ficha, nome, tipo = "ficha", texto = "📲 Pedi
     texto,
     title: tipo === "disc"
       ? `Manda para ${nome} o link do teste DISC (24 perguntas, 5 minutos)`
-      : `Manda para ${nome} um link para preencher os próprios dados e a foto dos documentos`,
+      : tipo === "portal"
+        ? `Manda para ${nome} o link fixo do espaço dele: escala, gorjeta, férias, treinamentos e atestado por foto`
+        : `Manda para ${nome} um link para preencher os próprios dados e a foto dos documentos`,
     onclick: async (e) => {
       const temTelefone = Boolean(ficha?.telefone);
       const enviar = temTelefone && confirm(`Mandar o link no WhatsApp de ${nome}? (Cancelar só copia o link para você mandar.)`);
       e.target.disabled = true;
       try {
         const r = await post(`/v1/venues/${ctx.venue}/rh/${id}/convite`, { enviar, tipo });
+        const validade = tipo === "portal" ? "6 meses" : "7 dias";
         if (r.enviado_para) {
-          avisar(`Link enviado no WhatsApp de ${nome}. Vale 7 dias.`, "ok");
+          avisar(`Link enviado no WhatsApp de ${nome}. Vale ${validade}.`, "ok");
         } else {
           await navigator.clipboard?.writeText(r.link).catch(() => {});
-          prompt(`Link copiado. Mande para ${nome} (vale 7 dias):`, r.link);
+          prompt(`Link copiado. Mande para ${nome} (vale ${validade}):`, r.link);
         }
       } catch (err) {
         avisar(err.message, "erro");
@@ -652,4 +656,74 @@ function avaliacaoEmPdf(pessoa, ficha, a, comp, nomeDoMomento, disc) {
     assinaturas: ["Funcionário", "Avaliador"],
     arquivo: `avaliacao-${pessoa.nome}-${a.dia}`,
   });
+}
+
+/* ================= Integração ================= */
+
+/**
+ * As etapas dos primeiros 90 dias, para quem acabou de chegar. Algumas se
+ * marcam sozinhas (ficha completa, DISC, avaliação, efetivação); as outras o
+ * gerente marca. O padrinho é o colega que acompanha.
+ */
+export function secaoDaIntegracao({ ctx, id, pessoa, visao, equipe, aoMudar }) {
+  const i = visao?.integracao;
+  if (!i || !i.ativa) return null;
+  const nome = pessoa.apelido || pessoa.nome;
+  const padrinho = el("select", { classe: "select", style: "max-width:260px" }, [
+    el("option", { value: "", texto: "Ninguém ainda" }),
+    ...(equipe ?? []).filter((p) => p.id !== id && !p.ficha?.desligamento).map((p) =>
+      el("option", { value: p.id, texto: p.apelido || p.nome, selected: p.id === i.padrinho_id })),
+  ]);
+  padrinho.addEventListener("change", async () => {
+    try {
+      await put(`/v1/venues/${ctx.venue}/rh/${id}/padrinho`, { padrinho_id: padrinho.value || null });
+      avisar(padrinho.value ? "Padrinho definido." : "Padrinho retirado.", "ok");
+      await aoMudar();
+    } catch (err) {
+      avisar(err.message, "erro");
+    }
+  });
+
+  return el("section", { classe: "cartao pilha" }, [
+    el("div", { classe: "cabecalho-secao" }, [
+      el("div", {}, [
+        el("h3", { texto: `Integração · ${i.feitas} de ${i.total}` }),
+        el("p", { classe: "muted", texto: `Os primeiros 90 dias de ${nome} na casa. Quem é bem recebido fica — a conversa do dia 30 é quando o novato decide.` }),
+      ]),
+      el("div", { classe: "campo" }, [el("label", { texto: "Padrinho (quem acompanha)" }), padrinho]),
+    ]),
+    el("div", { classe: "trilha-barra" }, [el("span", { style: `width:${Math.round((i.feitas / i.total) * 100)}%` })]),
+    el("div", { classe: "tabela" }, i.etapas.map((e) =>
+      el("div", { classe: `linha-tabela linha-tarefa${e.feita ? " trilha-feito" : ""}` }, [
+        el("span", { classe: `trilha-check${e.feita ? " trilha-check-ok" : ""}`, texto: e.feita ? "✓" : "" }),
+        el("div", { classe: "linha-tarefa-texto" }, [
+          el("strong", { texto: e.titulo }),
+          el("span", { classe: "muted", texto: e.feita
+            ? e.como === "automatica" ? "Feito — o sistema conferiu" : "Feito"
+            : `${e.atrasada ? "Atrasada · era até" : "Até"} ${dataBr(e.vence_em)} · ${e.ajuda}` }),
+        ]),
+        e.automatica && !e.feita
+          ? etiqueta("automática", "")
+          : e.como === "automatica"
+            ? el("span", {})
+            : el("label", { classe: "trilha-marcar" }, [
+                el("input", {
+                  type: "checkbox",
+                  checked: e.feita,
+                  onchange: async (ev) => {
+                    ev.target.disabled = true;
+                    try {
+                      await put(`/v1/venues/${ctx.venue}/rh/${id}/integracao/${e.id}`, { feita: ev.target.checked });
+                      await aoMudar();
+                    } catch (err) {
+                      avisar(err.message, "erro");
+                      ev.target.checked = !ev.target.checked;
+                      ev.target.disabled = false;
+                    }
+                  },
+                }),
+                el("span", { texto: "feito" }),
+              ]),
+      ]))),
+  ]);
 }

@@ -18,6 +18,18 @@ import { decidirReserva } from "./reservationFlow.js";
 import { hojeDaCasa } from "./hoje.js";
 import { BLOCOS as BLOCOS_DO_DISC } from "./rhDisc.js";
 import {
+  MODELOS_DE_TREINAMENTO,
+  arquivarTreinamento,
+  definirPadrinho,
+  espacoDoFuncionario,
+  integracaoDaPessoa,
+  listarTreinamentos,
+  marcarEtapa,
+  receberAtestado,
+  responderTreino,
+  salvarTreinamento,
+} from "./rhIntegracao.js";
+import {
   COMPETENCIAS,
   MOMENTOS_DA_AVALIACAO,
   apagarAvaliacao,
@@ -2703,6 +2715,7 @@ async function roteasApi(
         alvo === "extras" ||
         alvo === "regra-da-gorjeta" ||
         alvo === "disc-equipe" ||
+        alvo === "treinamentos" ||
         alvo === "resumo";
 
       // Id que não é uuid nunca chega ao banco: sem isto um `undefined` que
@@ -3104,15 +3117,17 @@ async function roteasApi(
         return ok(
           res,
           await comErroDoRh(async () => {
-            const [v, disc, avaliacoes] = await Promise.all([
+            const [v, disc, avaliacoes, integracao] = await Promise.all([
               visao360({ venueId: venue.id, atendenteId: p[3]!, timezone: venue.timezone ?? "America/Cuiaba" }),
               discDaPessoa(venue.id, p[3]!).catch(() => null),
               listarAvaliacoes(venue.id, p[3]!).catch(() => []),
+              integracaoDaPessoa({ venueId: venue.id, atendenteId: p[3]!, timezone: venue.timezone ?? "America/Cuiaba" }).catch(() => null),
             ]);
             return {
               ...v,
               disc,
               avaliacoes,
+              integracao,
               competencias: COMPETENCIAS,
               momentos_da_avaliacao: MOMENTOS_DA_AVALIACAO,
               tipos_de_ocorrencia: TIPOS_DE_OCORRENCIA,
@@ -3133,6 +3148,31 @@ async function roteasApi(
         if (metodo === "DELETE" && p.length === 6) {
           return ok(res, await comErroDoRh(() => apagarOcorrencia({ venueId: venue.id, id: p[5]! })));
         }
+      }
+
+      // ---- Treinamentos: /rh/treinamentos[/:id] · /rh/treinamentos/modelos ----
+      if (alvo === "treinamentos") {
+        if (metodo === "GET" && p.length === 4) return ok(res, await comErroDoRh(() => listarTreinamentos(venue.id)));
+        if (metodo === "GET" && p.length === 5 && p[4] === "modelos") return ok(res, MODELOS_DE_TREINAMENTO);
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoRh(() => salvarTreinamento({ venueId: venue.id, campos: corpo })), 201);
+        }
+        if (metodo === "PUT" && p.length === 5) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoRh(() => salvarTreinamento({ venueId: venue.id, id: p[4]!, campos: corpo })));
+        }
+        if (metodo === "DELETE" && p.length === 5) return ok(res, await comErroDoRh(() => arquivarTreinamento({ venueId: venue.id, id: p[4]! })));
+      }
+
+      // PUT /rh/:id/integracao/:etapa {feita} · PUT /rh/:id/padrinho {padrinho_id}
+      if (metodo === "PUT" && p.length === 6 && !ehSecaoPropria && p[4] === "integracao") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDoRh(() => marcarEtapa({ venueId: venue.id, atendenteId: p[3]!, etapa: p[5]!, feita: corpo.feita !== false, quem: chave.name })));
+      }
+      if (metodo === "PUT" && p.length === 5 && !ehSecaoPropria && p[4] === "padrinho") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDoRh(() => definirPadrinho({ venueId: venue.id, atendenteId: p[3]!, padrinhoId: corpo.padrinho_id })));
       }
 
       // GET /rh/disc-equipe — o mapa DISC da equipe ativa
@@ -3173,9 +3213,9 @@ async function roteasApi(
       // pessoa preencher a ficha; com `enviar`, já vai no WhatsApp dela.
       if (metodo === "POST" && p.length === 5 && !ehSecaoPropria && p[4] === "convite") {
         const corpo = (await lerJson(req)) as Record<string, unknown>;
-        const tipo = corpo.tipo === "disc" ? "disc" : "ficha";
+        const tipo = corpo.tipo === "disc" ? "disc" : corpo.tipo === "portal" ? "portal" : "ficha";
         const convite = await comErroDoRh(() => criarConvite({ venueId: venue.id, atendenteId: p[3]!, quem: chave.name, tipo }));
-        const link = `${enderecoBase()}/${tipo}/${convite.token}`;
+        const link = `${enderecoBase()}/${tipo === "portal" ? "eu" : tipo}/${convite.token}`;
         let enviadoPara: string | null = null;
         if (corpo.enviar === true) {
           const { data: ficha } = await (db() as any).from("rh_fichas").select("telefone").eq("atendente_id", p[3]!).maybeSingle();
@@ -3188,9 +3228,12 @@ async function roteasApi(
             channel: "whatsapp",
             destination: telefone,
             papel: "administrativo",
-            template: tipo === "disc" ? "rh_convite_disc" : "rh_convite_ficha",
+            template: tipo === "disc" ? "rh_convite_disc" : tipo === "portal" ? "rh_convite_portal" : "rh_convite_ficha",
             body:
-              tipo === "disc"
+              tipo === "portal"
+                ? `Oi${primeiro ? `, ${primeiro}` : ""}! Aqui é da ${venue.name}. ` +
+                  `Este é o seu espaço na equipe: a sua escala, a gorjeta da semana, as férias, os treinamentos — e é por aqui que você manda atestado. Guarde o link:\n${link}`
+                : tipo === "disc"
                 ? `Oi${primeiro ? `, ${primeiro}` : ""}! Aqui é da ${venue.name}. ` +
                   `Queremos conhecer melhor o seu jeito de trabalhar. São 24 perguntas rápidas (uns 5 minutos), sem resposta certa ou errada — e no fim você vê o seu resultado:\n${link}`
                 : `Oi${primeiro ? `, ${primeiro}` : ""}! Aqui é da ${venue.name}. ` +
@@ -5723,6 +5766,32 @@ async function roteasApi(
     }
   }
 
+  // ---- O espaço do funcionário: /v1/eu/:token ----
+  // O link fixo de cada um (seis meses). Mostra só o que é dele.
+  if (p[0] === "eu" && p.length >= 2) {
+    const token = p[1]!;
+    const c = await comErroDoRh(() => abrirConvite(token, "portal"));
+    const { data: casa } = await (db() as any).from("venues").select("timezone").eq("id", c.venue_id).maybeSingle();
+    const fuso = casa?.timezone ?? "America/Cuiaba";
+    if (metodo === "GET" && p.length === 2) {
+      return ok(res, await comErroDoRh(() => espacoDoFuncionario({ venueId: c.venue_id, atendenteId: c.atendente_id, casa: c.casa, nome: c.nome, timezone: fuso })));
+    }
+    if (metodo === "POST" && p.length === 4 && p[2] === "treino") {
+      const corpo = (await lerJson(req)) as Record<string, unknown>;
+      return ok(res, await comErroDoRh(() => responderTreino({ venueId: c.venue_id, atendenteId: c.atendente_id, treinamentoId: p[3]!, respostas: corpo.respostas })));
+    }
+    if (metodo === "POST" && p.length === 3 && p[2] === "atestado") {
+      const arquivo = await lerBinario(req, LIMITE_DOCUMENTO_BYTES);
+      return ok(
+        res,
+        await comErroDoRh(() =>
+          receberAtestado({ venueId: c.venue_id, atendenteId: c.atendente_id, nome: c.nome, casa: c.casa, timezone: fuso, arquivo, contentType: req.headers["content-type"] ?? "image/jpeg" }),
+        ),
+        201,
+      );
+    }
+  }
+
   // ---- O teste DISC: /v1/disc/:token ----
   // Sem login, como a ficha: o token é o convite daquela pessoa. A pessoa vê
   // o próprio resultado no fim — é dela.
@@ -6304,7 +6373,9 @@ async function servirEstatico(res: ServerResponse, caminho: string): Promise<voi
       ? "ficha.html"
       : caminho.startsWith("/disc/")
         ? "disc.html"
-        : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
+        : caminho.startsWith("/eu/")
+          ? "eu.html"
+          : (PAGINAS_LIMPAS[caminho] ?? caminho.slice(1));
 
   // normalize resolve "..", e o prefixo é conferido depois — sem isso,
   // "/../.env" escaparia do diretório público.

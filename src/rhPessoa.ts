@@ -304,10 +304,13 @@ export async function criarConvite(params: {
   venueId: string;
   atendenteId: string;
   quem: string;
-  tipo?: "ficha" | "disc";
+  tipo?: "ficha" | "disc" | "portal";
 }): Promise<{ token: string; expira_em: string }> {
   const token = randomBytes(18).toString("base64url");
-  const expiraEm = new Date(Date.now() + VALIDADE_DO_CONVITE_DIAS * DIA_MS).toISOString();
+  // O espaço do funcionário é o "meu cantinho" dele: vale seis meses, e não
+  // a semana de um formulário.
+  const validade = params.tipo === "portal" ? 180 : VALIDADE_DO_CONVITE_DIAS;
+  const expiraEm = new Date(Date.now() + validade * DIA_MS).toISOString();
   const { error } = await cliente()
     .from("rh_convites")
     .insert({ venue_id: params.venueId, atendente_id: params.atendenteId, token, criado_por: params.quem, expira_em: expiraEm, tipo: params.tipo ?? "ficha" });
@@ -326,7 +329,7 @@ export interface ConviteAberto {
 }
 
 /** O que o link mostra. Só campos que a própria pessoa preenche — salário não. */
-export async function abrirConvite(token: string, tipo: "ficha" | "disc" = "ficha"): Promise<ConviteAberto> {
+export async function abrirConvite(token: string, tipo: "ficha" | "disc" | "portal" = "ficha"): Promise<ConviteAberto> {
   const { data: convite, error } = await cliente()
     .from("rh_convites")
     .select("venue_id, atendente_id, expira_em, enviado_em, tipo")
@@ -336,7 +339,7 @@ export async function abrirConvite(token: string, tipo: "ficha" | "disc" = "fich
   // O link da ficha não abre o teste, e vice-versa: cada um é um convite.
   if (!convite || (convite.tipo ?? "ficha") !== tipo) throw new ErroDoRh(404, "Este link não existe. Peça um novo para a casa.");
   if (new Date(convite.expira_em).getTime() < Date.now()) {
-    throw new ErroDoRh(410, "Este link venceu. Peça um novo para a casa — ele vale 7 dias.");
+    throw new ErroDoRh(410, "Este link venceu. Peça um novo para a casa.");
   }
   const [{ data: venue }, { data: pessoa }, { data: ficha }, { data: docs }] = await Promise.all([
     cliente().from("venues").select("name").eq("id", convite.venue_id).single(),

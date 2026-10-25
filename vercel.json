@@ -36,6 +36,10 @@
       "destination": "/disc.html"
     },
     {
+      "source": "/eu/:token",
+      "destination": "/eu.html"
+    },
+    {
       "source": "/app",
       "destination": "/app.html"
     },

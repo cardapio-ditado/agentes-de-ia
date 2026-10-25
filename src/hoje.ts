@@ -325,6 +325,20 @@ export async function hojeDaCasa(params: {
     };
   });
 
+  pendencia("rh", "integracao", async () => {
+    const { integracoesAtrasadas } = await import("./rhIntegracao.js");
+    const lista = await integracoesAtrasadas(venue.id, fuso);
+    return {
+      id: "integracao",
+      modulo: "rh",
+      titulo: "Integração de quem chegou atrasada",
+      quantidade: lista.length,
+      detalhe: lista.map((x) => `${x.nome}: ${x.etapa.toLowerCase()}`).join(" · "),
+      destino: "rh",
+      urgente: false,
+    };
+  });
+
   pendencia("rh", "rh", async () => ({
     id: "documentos",
     modulo: "rh",
