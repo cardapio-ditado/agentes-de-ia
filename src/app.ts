@@ -46,6 +46,7 @@ import {
   sugerirParcelas,
   transferir as transferirEntreContas,
 } from "./financeiro.js";
+import { fluxoDeCaixa, painelFinanceiro } from "./financeiroFluxo.js";
 import {
   MODELOS_DE_TREINAMENTO,
   arquivarTreinamento,
@@ -2765,6 +2766,16 @@ async function roteasApi(
         if (metodo === "GET" && secao === "fornecedores" && p.length === 5) {
           return ok(res, await comErroDoFinanceiro(() => fichaDoFornecedor({ venueId: venue.id, id: idValido(p[4]), timezone: fuso })));
         }
+      }
+
+      // GET /financeiro/painel?mes=AAAA-MM — o resultado do mês e o que vence
+      if (metodo === "GET" && secao === "painel" && p.length === 4) {
+        return ok(res, await comErroDoFinanceiro(() => painelFinanceiro({ venueId: venue.id, timezone: fuso, mes: url.searchParams.get("mes") })));
+      }
+      // GET /financeiro/fluxo?de=&ate=&agrupar=dia|semana|mes&conta=
+      if (metodo === "GET" && secao === "fluxo" && p.length === 4) {
+        const q = url.searchParams;
+        return ok(res, await comErroDoFinanceiro(() => fluxoDeCaixa({ venueId: venue.id, timezone: fuso, de: q.get("de"), ate: q.get("ate"), agrupar: q.get("agrupar"), contaId: q.get("conta") })));
       }
 
       // POST /financeiro/parcelas — a sugestão de parcelas (a tela edita depois)

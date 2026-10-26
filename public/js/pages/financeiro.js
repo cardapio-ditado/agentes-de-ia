@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { NOME_DO_TIPO, formularioDeBaixa, formularioDeConta, nomeDaCategoria } from "./financeiroConta.js";
 
@@ -72,7 +72,7 @@ async function listaDeContas(raiz, ctx, tipo) {
     } catch {
       /* navegação privada */
     }
-    limpar(corpo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
     const [de, ate] = intervalo();
     const q = new URLSearchParams({ tipo, de, ate });
     if (filtro.situacao === "atrasadas") q.set("situacao", "atrasado");
@@ -89,7 +89,7 @@ async function listaDeContas(raiz, ctx, tipo) {
         get(`/v1/venues/${ctx.venue}/financeiro/lancamentos?${q}`),
       ]);
     } catch (e) {
-      limpar(corpo).append(vazio(`Contas a ${tipo} indisponíveis`, e.message));
+      preencher(corpo, vazio(`Contas a ${tipo} indisponíveis`, e.message));
       return;
     }
     desenhar(dados, de, ate);
@@ -143,7 +143,7 @@ async function listaDeContas(raiz, ctx, tipo) {
     deLivre.addEventListener("change", aplicarLivre);
     ateLivre.addEventListener("change", aplicarLivre);
 
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("p", { classe: "muted", style: "margin:0", texto: tipo === "pagar" ? "Boleto, nota, aluguel, salário: tudo que sai, com o dia de pagar." : "Vendas a receber, evento com sinal, o que te devem: tudo que entra." }),
         el("div", { classe: "reserva-acoes", style: "margin:0" }, [

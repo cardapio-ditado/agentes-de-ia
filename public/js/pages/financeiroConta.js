@@ -1,5 +1,5 @@
 import { del, post, put } from "../api.js";
-import { avisar, dinheiro, el, limpar } from "../ui.js";
+import { avisar, dinheiro, el, limpar, preencher } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 
 /**
@@ -128,7 +128,7 @@ export function formularioDeConta(corpo, { ctx, cad, tipo, existente = null, aoT
     const valor = el("input", { classe: "input", inputmode: "decimal", value: valorNoCampo(existente.valor), disabled: existente.situacao === "pago" });
     const nasProximas = el("input", { type: "checkbox" });
     const pago = existente.situacao === "pago";
-    limpar(corpo).append(
+    preencher(corpo, 
       cabecalho,
       pago
         ? el("p", { classe: "aviso-ok", texto: `${n.feito} em ${dataBr(existente.pago_em)}: ${dinheiro(Number(existente.valor_pago))}${Number(existente.juros) ? ` (juros ${dinheiro(Number(existente.juros))})` : ""}${Number(existente.desconto) ? ` (desconto ${dinheiro(Number(existente.desconto))})` : ""}` })
@@ -225,7 +225,7 @@ export function formularioDeConta(corpo, { ctx, cad, tipo, existente = null, aoT
     const soma = parcelas.reduce((s, p) => s + Math.round((lerValor(p.valor) || 0) * 100), 0) / 100;
     const alvo = lerValor(total.value);
     const recorrente = modo === "mensal";
-    limpar(areaParcelas).append(
+    preencher(areaParcelas, 
       ...parcelas.map((p, i) =>
         el("div", { classe: "linha-campos parcela-linha" }, [
           el("strong", { classe: "parcela-num", texto: `${i + 1}ª` }),
@@ -310,14 +310,14 @@ export function formularioDeConta(corpo, { ctx, cad, tipo, existente = null, aoT
         areaParcelas,
       );
     }
-    limpar(areaModo).append(...linhas);
+    preencher(areaModo, ...linhas);
     const area = areaModo.querySelector("#area-ja-pago");
     jaPago.onchange = () => { if (area) area.hidden = !jaPago.checked; };
   };
   if (modo === "mensal") quantidade.value = 12;
   desenharModo();
 
-  limpar(corpo).append(
+  preencher(corpo, 
     cabecalho,
     dados,
     el("section", { classe: "cartao pilha" }, [el("h3", { texto: "Valor e vencimento" }), areaModo]),
@@ -378,7 +378,7 @@ export function formularioDeBaixa(corpo, { ctx, cad, tipo, conta: l, aoTerminar 
   parcial.addEventListener("change", () => { areaParcial.hidden = !parcial.checked; conta(); });
   conta();
 
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h2", { texto: `${n.acao}: ${l.descricao}` }),

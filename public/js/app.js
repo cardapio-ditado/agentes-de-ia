@@ -42,6 +42,7 @@ import { producao } from "./pages/producao.js";
 import { cardapioDigital } from "./pages/cardapioDigital.js";
 import { rh } from "./pages/rh.js";
 import { contasAPagar, contasAReceber } from "./pages/financeiro.js";
+import { fluxoDeCaixa, painelFinanceiro } from "./pages/financeiroPainel.js";
 import { financeiroCategorias, financeiroContas, financeiroFormas, financeiroFornecedores } from "./pages/financeiroCadastros.js";
 
 /**
@@ -179,9 +180,11 @@ const PAGINAS = [
   // entrega os números prontos para quem já fecha a folha da casa.
   { id: "rh", modulo: "rh", rotulo: "RH", icone: ICONES.pessoa, render: rh, subtitulo: "Ficha da equipe, documentos com validade, admissão e desligamento" },
 
-  // Financeiro — Rodada 1: contas a pagar e a receber, e os cadastros.
+  // Financeiro. O painel abre o módulo: "sobrou quanto, vai faltar?".
+  { id: "fin-painel", modulo: "financeiro", rotulo: "Painel financeiro", icone: ICONES.painel, render: painelFinanceiro, subtitulo: "Sobrou quanto este mês — e se vai faltar dinheiro" },
   { id: "fin-pagar", modulo: "financeiro", rotulo: "Contas a pagar", icone: ICONES.caixa, render: contasAPagar, subtitulo: "O que sai, com o dia de pagar — e o que já atrasou" },
   { id: "fin-receber", modulo: "financeiro", rotulo: "Contas a receber", icone: ICONES.raio, render: contasAReceber, subtitulo: "O que entra: vendas a receber, eventos, o que te devem" },
+  { id: "fin-fluxo", modulo: "financeiro", grupo: "analise", rotulo: "Fluxo de caixa", icone: ICONES.relogio, render: fluxoDeCaixa, subtitulo: "O saldo de hoje, o que vai entrar e o que vai sair, dia a dia" },
   {
     id: "fin-cadastros", modulo: "financeiro", grupo: "configurar", rotulo: "Cadastros do financeiro", icone: ICONES.organizacao, subtitulo: "Bancos e caixas, categorias, formas de pagamento e fornecedores",
     render: comAbas("fin-cadastros", [

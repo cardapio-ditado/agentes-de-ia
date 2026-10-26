@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, el, limpar, vazio } from "../ui.js";
+import { avisar, el, preencher, vazio } from "../ui.js";
 
 /**
  * RH — Treinamentos: vídeo curto e até cinco perguntas, por função.
@@ -15,14 +15,14 @@ export function criarTreinamentos(corpo, ctx) {
   return { recarregar };
 
   async function recarregar() {
-    limpar(corpo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
     try {
       [lista, modelos] = await Promise.all([
         get(`/v1/venues/${ctx.venue}/rh/treinamentos`),
         get(`/v1/venues/${ctx.venue}/rh/treinamentos/modelos`).catch(() => []),
       ]);
     } catch (e) {
-      limpar(corpo).append(vazio("Treinamentos indisponíveis", e.message));
+      preencher(corpo, vazio("Treinamentos indisponíveis", e.message));
       return;
     }
     desenharLista();
@@ -30,7 +30,7 @@ export function criarTreinamentos(corpo, ctx) {
 
   function desenharLista() {
     const titulos = new Set(lista.map((t) => t.titulo.toLowerCase()));
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Treinamentos" }),
@@ -100,7 +100,7 @@ export function criarTreinamentos(corpo, ctx) {
     const area = el("div", { classe: "pilha" });
 
     const desenharPerguntas = () => {
-      limpar(area).append(
+      preencher(area, 
         ...perguntas.map((p, i) => {
           const campoPergunta = el("input", { classe: "input", value: p.pergunta, placeholder: `Pergunta ${i + 1}`, oninput: (e) => { p.pergunta = e.target.value; } });
           return el("div", { classe: "cartao pilha", style: "padding:12px" }, [
@@ -127,7 +127,7 @@ export function criarTreinamentos(corpo, ctx) {
     };
     desenharPerguntas();
 
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("h2", { texto: existente?.id ? `Editar: ${existente.titulo}` : "Novo treinamento" }),
         el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenharLista }),

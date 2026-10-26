@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { avisar, dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -14,7 +14,7 @@ export function criarIndicadores(corpo, ctx) {
   return { recarregar };
 
   async function recarregar() {
-    limpar(corpo).append(el("p", { classe: "muted", texto: "Calculando…" }));
+    preencher(corpo, el("p", { classe: "muted", texto: "Calculando…" }));
     let ind, clima;
     try {
       [ind, clima] = await Promise.all([
@@ -22,13 +22,13 @@ export function criarIndicadores(corpo, ctx) {
         get(`/v1/venues/${ctx.venue}/rh/clima`).catch(() => ({ perguntas: [], rodadas: [] })),
       ]);
     } catch (e) {
-      limpar(corpo).append(vazio("Indicadores indisponíveis", e.message));
+      preencher(corpo, vazio("Indicadores indisponíveis", e.message));
       return;
     }
     const ultimoClima = clima.rodadas.find((r) => r.visivel) ?? null;
     const anosEMeses = (dias) => (dias === null ? "—" : dias < 365 ? `${Math.round(dias / 30)} meses` : `${(dias / 365).toFixed(1).replace(".", ",")} anos`);
 
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Indicadores de gente" }),
@@ -176,18 +176,18 @@ export function criarContratacao(corpo, ctx) {
   return { recarregar };
 
   async function recarregar() {
-    limpar(corpo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
     let dados;
     try {
       dados = await get(`/v1/venues/${ctx.venue}/rh/candidatos`);
     } catch (e) {
-      limpar(corpo).append(vazio("Contratação indisponível", e.message));
+      preencher(corpo, vazio("Contratação indisponível", e.message));
       return;
     }
     const lista = dados.candidatos.filter((c) => c.tipo === filtro);
     const NOME_DA_SITUACAO = { novo: "novo", conversando: "conversando", contratado: "contratado", nao_serve: "não serve", disponivel: "disponível" };
 
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Contratação" }),
@@ -252,7 +252,7 @@ export function criarContratacao(corpo, ctx) {
     const nota = el("select", { classe: "select" }, [["", "—"], ["5", "★★★★★ ótimo"], ["4", "★★★★ bom"], ["3", "★★★ ok"], ["2", "★★ fraco"], ["1", "★ ruim"]].map(([v, t]) => el("option", { value: v, texto: t, selected: String(c?.nota ?? "") === v })));
     const ultima = el("input", { classe: "input", type: "date", value: c?.ultima_vez ?? "" });
     const obs = el("textarea", { classe: "input", rows: 2, texto: c?.observacoes ?? "" });
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("h2", { texto: c ? c.nome : extra ? "Novo extra" : "Novo candidato" }),
         el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: recarregar }),

@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { avisar, dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 import { nomeDaCategoria, seletorDeCategoria } from "./financeiroConta.js";
 
@@ -20,11 +20,11 @@ const valorNoCampo = (n) => (n === null || n === undefined ? "" : Number(n).toFi
 
 async function carregar(corpo, ctx) {
   corpo.classList.add("pilha");
-  limpar(corpo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+  preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
   try {
     return await get(`${base(ctx)}/cadastros`);
   } catch (e) {
-    limpar(corpo).append(vazio("Cadastros indisponíveis", e.message));
+    preencher(corpo, vazio("Cadastros indisponíveis", e.message));
     return null;
   }
 }
@@ -67,7 +67,7 @@ export async function financeiroContas(corpo, ctx) {
   }
   const nomeConta = (id) => cad.contas.find((c) => c.id === id)?.nome ?? "—";
 
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h2", { texto: "Bancos e caixas" }),
@@ -129,7 +129,7 @@ function formConta(corpo, ctx, c, voltar) {
   const numero = el("input", { classe: "input", value: c?.numero ?? "" });
   const saldo = el("input", { classe: "input", inputmode: "decimal", value: valorNoCampo(c?.saldo_inicial ?? 0) });
   const saldoEm = el("input", { classe: "input", type: "date", value: c?.saldo_inicial_em ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date()) });
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: c ? c.nome : "Novo banco ou caixa" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [
@@ -165,7 +165,7 @@ function formTransferencia(corpo, ctx, cad, voltar) {
   const valor = el("input", { classe: "input", inputmode: "decimal", placeholder: "0,00" });
   const dia = el("input", { classe: "input", type: "date", value: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date()) });
   const descricao = el("input", { classe: "input", placeholder: "Ex.: depósito do caixa de sábado" });
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: "Transferir entre contas" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [campo("De", de), campo("Para", para), campo("Valor", valor), campo("Dia", dia)]),
@@ -194,7 +194,7 @@ export async function financeiroCategorias(corpo, ctx, tipoInicial = "despesa") 
 
   const desenhar = () => {
     const pais = cad.categorias.filter((c) => !c.pai_id && c.tipo === tipo);
-    limpar(corpo).append(
+    preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Categorias" }),
@@ -230,7 +230,7 @@ function formCategoria(corpo, ctx, cad, c, voltar) {
   const sub = Boolean(c.pai_id);
   const grupo = el("select", { classe: "select" }, cad.grupos.filter((g) => g.tipo === (c.tipo ?? "despesa")).map((g) => el("option", { value: g.id, texto: g.nome, selected: g.id === c.grupo })));
   const pai = sub ? cad.categorias.find((x) => x.id === c.pai_id) : null;
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("h2", { texto: c.id ? c.nome : sub ? `Nova subcategoria em ${pai?.nome ?? ""}` : "Nova categoria" }),
       el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar }),
@@ -262,7 +262,7 @@ export async function financeiroFormas(corpo, ctx) {
   if (!cad) return;
   const recarregar = () => financeiroFormas(corpo, ctx);
   const nomeConta = (id) => cad.contas.find((c) => c.id === id)?.nome;
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h2", { texto: "Formas de pagamento" }),
@@ -287,7 +287,7 @@ function formForma(corpo, ctx, cad, f, voltar) {
   const prazo = el("input", { classe: "input", type: "number", min: 0, max: 120, value: f?.prazo_dias ?? 0 });
   const taxa = el("input", { classe: "input", inputmode: "decimal", value: f ? String(f.taxa).replace(".", ",") : "0" });
   const conta = el("select", { classe: "select" }, [el("option", { value: "", texto: "—" }), ...cad.contas.filter((c) => c.ativo).map((c) => el("option", { value: c.id, texto: c.nome, selected: c.id === f?.conta_id }))]);
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: f ? f.nome : "Nova forma de pagamento" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [
@@ -322,7 +322,7 @@ export async function financeiroFornecedores(corpo, ctx) {
   const desenharLista = () => {
     const t = termo.toLowerCase();
     const achados = cad.fornecedores.filter((f) => !t || [f.nome, f.razao_social, f.cnpj, f.telefone].filter(Boolean).some((v) => String(v).toLowerCase().includes(t)));
-    limpar(lista).append(
+    preencher(lista, 
       ...(achados.length
         ? achados.map((f) =>
             el("div", { classe: "linha-tabela linha-clicavel", onclick: () => fichaFornecedor(corpo, ctx, cad, f.id, recarregar) }, [
@@ -336,7 +336,7 @@ export async function financeiroFornecedores(corpo, ctx) {
     );
   };
   busca.addEventListener("input", () => { termo = busca.value; desenharLista(); });
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h2", { texto: "Fornecedores" }),
@@ -354,19 +354,19 @@ const cnpjBonito = (d) =>
   d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : d.length === 11 ? d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : d;
 
 async function fichaFornecedor(corpo, ctx, cad, id, voltar) {
-  limpar(corpo).append(el("p", { classe: "muted", texto: "Abrindo a ficha…" }));
+  preencher(corpo, el("p", { classe: "muted", texto: "Abrindo a ficha…" }));
   let ficha;
   try {
     ficha = await get(`${base(ctx)}/fornecedores/${id}`);
   } catch (e) {
-    limpar(corpo).append(vazio("Ficha indisponível", e.message));
+    preencher(corpo, vazio("Ficha indisponível", e.message));
     return;
   }
   const f = ficha.fornecedor;
   const n = ficha.numeros;
   const dado = (rotulo, valor) => (valor ? el("div", { classe: "par" }, [el("small", { classe: "muted", texto: rotulo }), el("span", { texto: valor })]) : null);
   const ESTADO = { atrasado: ["atrasada", "etiqueta-perigo"], vence_hoje: ["vence hoje", "etiqueta-alerta"], aberto: ["em aberto", ""], pago: ["paga", "etiqueta-ok"], cancelado: ["cancelada", ""] };
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [el("h2", { texto: f.nome }), el("p", { classe: "muted", texto: [f.razao_social, f.cnpj ? cnpjBonito(f.cnpj) : null].filter(Boolean).join(" · ") })]),
       el("div", { classe: "reserva-acoes", style: "margin:0" }, [
@@ -444,7 +444,7 @@ function formFornecedor(corpo, ctx, cad, f, voltar) {
     forma_id: el("select", { classe: "select" }, [el("option", { value: "", texto: "—" }), ...cad.formas.filter((x) => x.ativo).map((x) => el("option", { value: x.id, texto: x.nome, selected: x.id === f?.forma_id }))]),
     observacoes: el("textarea", { classe: "input", rows: 2, texto: f?.observacoes ?? "" }),
   };
-  limpar(corpo).append(
+  preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: f ? f.nome : "Novo fornecedor" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [

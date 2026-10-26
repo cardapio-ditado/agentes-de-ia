@@ -161,6 +161,7 @@ async function contar(consulta: PromiseLike<{ count: number | null; error: { mes
 }
 
 const CONTAGEM = { count: "exact" as const, head: true };
+const somarDiasIso = (iso: string, dias: number) => new Date(Date.parse(`${iso}T12:00:00Z`) + dias * 86_400_000).toISOString().slice(0, 10);
 
 /** Um pedaço que falha vira null — e some da tela, sem derrubar o resto. */
 async function talvez<T>(nome: string, acao: () => Promise<T>): Promise<T | null> {
@@ -375,6 +376,23 @@ export async function hojeDaCasa(params: {
         : `${soma(lista)} para pagar hoje.`,
       destino: "fin-pagar",
       urgente: atrasadas.length > 0,
+    };
+  });
+
+  pendencia("financeiro", "caixa", async () => {
+    const { fluxoDeCaixa } = await import("./financeiroFluxo.js");
+    const f = await fluxoDeCaixa({ venueId: venue.id, timezone: fuso, de: dia, ate: somarDiasIso(dia!, 30) });
+    const neg = f.primeiro_negativo;
+    return {
+      id: "caixa-negativo",
+      modulo: "financeiro",
+      titulo: "O caixa vai ficar negativo",
+      quantidade: neg ? 1 : 0,
+      detalhe: neg
+        ? `Em ${neg.dia.split("-").reverse().join("/")}: ${neg.saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, pelo que vence e pelo que está para entrar.`
+        : "",
+      destino: "fin-fluxo",
+      urgente: Boolean(neg && neg.dia <= somarDiasIso(dia!, 7)),
     };
   });
 

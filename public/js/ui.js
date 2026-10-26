@@ -28,6 +28,16 @@ export function limpar(node) {
   return node;
 }
 
+/**
+ * Troca o conteúdo de `node` pelos filhos, pulando null/false. O `append`
+ * do navegador escreve "null" na tela quando recebe null — e bloco opcional
+ * (`cond ? el(...) : null`) é o jeito de escrever tela aqui.
+ */
+export function preencher(node, ...filhos) {
+  node.replaceChildren(...filhos.flat().filter((f) => f !== null && f !== undefined && f !== false));
+  return node;
+}
+
 /** SVG por caminho: os ícones da interface vêm todos daqui. */
 export function icone(d, tamanho = 19) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
