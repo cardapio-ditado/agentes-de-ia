@@ -353,6 +353,31 @@ export async function hojeDaCasa(params: {
     };
   });
 
+  pendencia("financeiro", "pagar", async () => {
+    const { data } = await cliente()
+      .from("fin_lancamentos")
+      .select("valor, vencimento")
+      .eq("venue_id", venue.id)
+      .eq("tipo", "pagar")
+      .eq("situacao", "aberto")
+      .lte("vencimento", dia)
+      .limit(1000);
+    const lista = (data ?? []) as { valor: number; vencimento: string }[];
+    const atrasadas = lista.filter((l) => l.vencimento < dia!);
+    const soma = (xs: typeof lista) => xs.reduce((s, l) => s + Number(l.valor), 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    return {
+      id: "contas-a-pagar",
+      modulo: "financeiro",
+      titulo: atrasadas.length ? "Contas atrasadas" : "Contas vencendo hoje",
+      quantidade: lista.length,
+      detalhe: atrasadas.length
+        ? `${soma(atrasadas)} atrasado${lista.length > atrasadas.length ? ` e ${soma(lista.filter((l) => l.vencimento === dia))} vencendo hoje` : ""}. Atraso é juros.`
+        : `${soma(lista)} para pagar hoje.`,
+      destino: "fin-pagar",
+      urgente: atrasadas.length > 0,
+    };
+  });
+
   pendencia("rh", "rh", async () => ({
     id: "documentos",
     modulo: "rh",

@@ -21,6 +21,7 @@ const NOME_DO_MODULO = {
   avaliacoes: "Avaliações",
   cmv: "Custos e estoque",
   rh: "RH",
+  financeiro: "Financeiro",
 };
 
 export async function pessoas(raiz, ctx) {

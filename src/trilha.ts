@@ -57,6 +57,8 @@ export const PASSOS: DefinicaoDoPasso[] = [
   { id: "contagem", modulo: "cmv", etapa: "Custos e estoque", titulo: "Fazer a primeira contagem", explicacao: "O contado vira o saldo e a quebra aparece em reais.", destino: "contagem" },
 
   { id: "rh", modulo: "rh", etapa: "RH", titulo: "Cadastrar a equipe no RH", explicacao: "Ficha de cada um e os documentos com validade.", destino: "rh" },
+  { id: "fin-bancos", modulo: "financeiro", etapa: "Financeiro", titulo: "Cadastrar os bancos com o saldo de hoje", explicacao: "Cada conta e o caixa, com o saldo do extrato: daí em diante o saldo é conta.", destino: "fin-cadastros:bancos" },
+  { id: "fin-contas", modulo: "financeiro", etapa: "Financeiro", titulo: "Lançar as contas do mês", explicacao: "Boletos, aluguel, salários: tudo que vence, com a data e a categoria.", destino: "fin-pagar" },
   { id: "cardapio", modulo: "cardapio-digital", etapa: "Cardápio", titulo: "Publicar o cardápio", explicacao: "Itens com foto e preço, e o QR na mesa.", destino: "cardapio" },
 
   { id: "desmame", modulo: null, etapa: "Desmame", titulo: "A casa rodou duas semanas sem o mentor", explicacao: "Checklist saindo, atendente respondendo, números conferidos pela própria casa. É aqui que a implantação termina.", destino: "hoje", manual: true },
@@ -192,6 +194,12 @@ export async function trilhaDaCasa(params: {
   }
   if (temModulo("rh")) {
     checagens.push(["rh", async () => (await contar(cliente().from("rh_fichas").select("*", CONTAGEM).eq("venue_id", v))) > 0]);
+  }
+  if (temModulo("financeiro")) {
+    checagens.push(
+      ["fin-bancos", async () => (await contar(cliente().from("fin_contas").select("*", CONTAGEM).eq("venue_id", v).neq("tipo", "caixa"))) > 0],
+      ["fin-contas", async () => (await contar(cliente().from("fin_lancamentos").select("*", CONTAGEM).eq("venue_id", v).eq("tipo", "pagar"))) >= 5],
+    );
   }
   if (temModulo("cardapio-digital")) {
     checagens.push(["cardapio", async () => (await contar(cliente().from("items").select("*", CONTAGEM).eq("venue_id", v).eq("is_active", true))) > 0]);

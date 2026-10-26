@@ -48,6 +48,7 @@ const MODULOS_VENDAVEIS = [
   ["cmv", "Custos e estoque"],
   ["pesquisa", "Voz do Cliente"],
   ["rh", "RH"],
+  ["financeiro", "Financeiro"],
 ];
 
 // Os fusos que existem no Brasil. Lista curta de propósito: o seletor com as

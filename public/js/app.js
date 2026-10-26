@@ -41,6 +41,8 @@ import { pesquisaRespostas } from "./pages/pesquisaRespostas.js";
 import { producao } from "./pages/producao.js";
 import { cardapioDigital } from "./pages/cardapioDigital.js";
 import { rh } from "./pages/rh.js";
+import { contasAPagar, contasAReceber } from "./pages/financeiro.js";
+import { financeiroCategorias, financeiroContas, financeiroFormas, financeiroFornecedores } from "./pages/financeiroCadastros.js";
 
 /**
  * Casca do painel: barra lateral, roteamento por hash e estado compartilhado.
@@ -177,6 +179,19 @@ const PAGINAS = [
   // entrega os números prontos para quem já fecha a folha da casa.
   { id: "rh", modulo: "rh", rotulo: "RH", icone: ICONES.pessoa, render: rh, subtitulo: "Ficha da equipe, documentos com validade, admissão e desligamento" },
 
+  // Financeiro — Rodada 1: contas a pagar e a receber, e os cadastros.
+  { id: "fin-pagar", modulo: "financeiro", rotulo: "Contas a pagar", icone: ICONES.caixa, render: contasAPagar, subtitulo: "O que sai, com o dia de pagar — e o que já atrasou" },
+  { id: "fin-receber", modulo: "financeiro", rotulo: "Contas a receber", icone: ICONES.raio, render: contasAReceber, subtitulo: "O que entra: vendas a receber, eventos, o que te devem" },
+  {
+    id: "fin-cadastros", modulo: "financeiro", grupo: "configurar", rotulo: "Cadastros do financeiro", icone: ICONES.organizacao, subtitulo: "Bancos e caixas, categorias, formas de pagamento e fornecedores",
+    render: comAbas("fin-cadastros", [
+      { id: "bancos", rotulo: "Bancos e caixas", render: financeiroContas },
+      { id: "categorias", rotulo: "Categorias", render: (c, ctx) => financeiroCategorias(c, ctx) },
+      { id: "formas", rotulo: "Formas de pagamento", render: financeiroFormas },
+      { id: "fornecedores", rotulo: "Fornecedores", render: financeiroFornecedores },
+    ]),
+  },
+
   // O que se olha todo dia vem primeiro; o modelo se monta uma vez.
   { id: "execucoes", modulo: "checklist", rotulo: "Checklists feitos", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
   { id: "checklists", modulo: "checklist", grupo: "configurar", rotulo: "Modelos de checklist", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
@@ -306,6 +321,14 @@ const MODULOS = [
       "A equipe organizada: ficha de cada um, documento com aviso de vencimento, admissão guiada e desligamento registrado. A folha continua com a contabilidade.",
     icone: ICONES.pessoa,
     pos: { x: 0.75, y: -0.5 },
+  },
+  {
+    id: "financeiro",
+    nome: "Financeiro",
+    descricao:
+      "Contas a pagar e a receber com parcelas do jeito que o fornecedor dá, bancos e caixas com saldo, e a ficha de cada fornecedor.",
+    icone: "M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",
+    pos: { x: 1.5, y: 0 },
   },
   {
     id: "checklist",

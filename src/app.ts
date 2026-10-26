@@ -29,6 +29,24 @@ import {
   salvarCandidato,
 } from "./rhIndicadores.js";
 import {
+  ErroDoFinanceiro,
+  apagarLancamento,
+  apagarTransferencia,
+  arquivarCadastro,
+  baixarLancamento,
+  cadastrosDoFinanceiro,
+  criarLancamentos,
+  editarLancamento,
+  ehCadastro,
+  estornarLancamento,
+  fichaDoFornecedor,
+  listarLancamentos,
+  listarTransferencias,
+  salvarCadastro,
+  sugerirParcelas,
+  transferir as transferirEntreContas,
+} from "./financeiro.js";
+import {
   MODELOS_DE_TREINAMENTO,
   arquivarTreinamento,
   definirPadrinho,
@@ -1025,6 +1043,18 @@ async function conferirDocumento(
   }
 }
 
+async function comErroDoFinanceiro<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDoFinanceiro) {
+      const codigo = e.status === 404 ? "not_found" : e.status === 503 ? "migracao_pendente" : e.status === 409 ? "conflito" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
 async function comErroDoRh<T>(acao: () => Promise<T>): Promise<T> {
   try {
     return await acao();
@@ -1660,6 +1690,7 @@ async function roteasApi(
       aniversariantes: "clientes",
       cardapio: "cardapio-digital",
       rh: "rh",
+      financeiro: "financeiro",
     };
     if (metodo !== "GET" && RECURSOS_DE_CONFIGURAR.has(recurso ?? "")) {
       exigirQuemConfigura(await exigirChave(req, "reservations:write"));
@@ -2697,6 +2728,119 @@ async function roteasApi(
     // Tudo aqui passa pela trava de módulo lá em cima (recurso "cardapio").
     // Leitura com reservations:read, escrita com reservations:write — o mesmo
     // par que separa quem olha de quem mexe no resto do painel.
+    // ---- Financeiro: cadastros, contas a pagar e a receber ----
+    //
+    // A trava é a do módulo (MODULO_DO_RECURSO): quem tem acesso ao
+    // Financeiro — o dono, o gerente, ou a pessoa do financeiro com acesso só
+    // a ele — entra. Quem só lê (contador) não escreve: a chave dele não tem
+    // escrita.
+    if (recurso === "financeiro") {
+      const escrita = metodo !== "GET";
+      const chave = await exigirChave(req, escrita ? "reservations:write" : "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const fuso = venue.timezone ?? "America/Cuiaba";
+      const secao = p[3] ?? "";
+      const idValido = (v: string | undefined) => {
+        if (!v || !/^[0-9a-f-]{36}$/i.test(v)) throw erro(400, "invalid_request", "Cadastro não identificado. Recarregue a página e tente de novo.");
+        return v;
+      };
+
+      // GET /financeiro/cadastros — contas (com saldo), categorias, formas, fornecedores
+      if (metodo === "GET" && secao === "cadastros" && p.length === 4) {
+        return ok(res, await comErroDoFinanceiro(() => cadastrosDoFinanceiro(venue.id)));
+      }
+      // POST /financeiro/:cadastro · PUT|DELETE /financeiro/:cadastro/:id
+      if (ehCadastro(secao)) {
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoFinanceiro(() => salvarCadastro({ venueId: venue.id, qual: secao, campos: corpo })), 201);
+        }
+        if (metodo === "PUT" && p.length === 5) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoFinanceiro(() => salvarCadastro({ venueId: venue.id, qual: secao, id: idValido(p[4]), campos: corpo })));
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          return ok(res, await comErroDoFinanceiro(() => arquivarCadastro({ venueId: venue.id, qual: secao, id: idValido(p[4]) })));
+        }
+        if (metodo === "GET" && secao === "fornecedores" && p.length === 5) {
+          return ok(res, await comErroDoFinanceiro(() => fichaDoFornecedor({ venueId: venue.id, id: idValido(p[4]), timezone: fuso })));
+        }
+      }
+
+      // POST /financeiro/parcelas — a sugestão de parcelas (a tela edita depois)
+      if (metodo === "POST" && secao === "parcelas" && p.length === 4) {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDoFinanceiro(async () =>
+            sugerirParcelas({
+              total: Number(corpo.total),
+              quantidade: Number(corpo.quantidade),
+              primeiro: String(corpo.primeiro ?? ""),
+              intervalo: corpo.intervalo === "mensal" ? "mensal" : Number(corpo.intervalo) || 30,
+            }),
+          ),
+        );
+      }
+
+      if (secao === "lancamentos") {
+        // GET /financeiro/lancamentos?tipo=&de=&ate=&situacao=&fornecedor=&categoria=&conta=&busca=&por=
+        if (metodo === "GET" && p.length === 4) {
+          const q = url.searchParams;
+          return ok(
+            res,
+            await comErroDoFinanceiro(() =>
+              listarLancamentos({
+                venueId: venue.id,
+                timezone: fuso,
+                tipo: q.get("tipo"),
+                de: q.get("de"),
+                ate: q.get("ate"),
+                situacao: q.get("situacao"),
+                fornecedorId: q.get("fornecedor"),
+                categoriaId: q.get("categoria"),
+                contaId: q.get("conta"),
+                busca: q.get("busca"),
+                por: q.get("por"),
+              }),
+            ),
+          );
+        }
+        // POST /financeiro/lancamentos — { tipo, ...campos, parcelas: [{vencimento, valor}] }
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req, 200_000)) as Record<string, unknown>;
+          const tipo = corpo.tipo === "receber" ? "receber" : "pagar";
+          return ok(res, await comErroDoFinanceiro(() => criarLancamentos({ venueId: venue.id, tipo, campos: corpo, parcelas: corpo.parcelas, quem: chave.name })), 201);
+        }
+        if (metodo === "PUT" && p.length === 5) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoFinanceiro(() => editarLancamento({ venueId: venue.id, id: idValido(p[4]), campos: corpo })));
+        }
+        if (metodo === "POST" && p.length === 6 && p[5] === "baixa") {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoFinanceiro(() => baixarLancamento({ venueId: venue.id, id: idValido(p[4]), campos: corpo, timezone: fuso })));
+        }
+        if (metodo === "POST" && p.length === 6 && p[5] === "estorno") {
+          return ok(res, await comErroDoFinanceiro(() => estornarLancamento({ venueId: venue.id, id: idValido(p[4]) })));
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          return ok(res, await comErroDoFinanceiro(() => apagarLancamento({ venueId: venue.id, id: idValido(p[4]), grupo: url.searchParams.get("grupo") === "1" })));
+        }
+      }
+
+      if (secao === "transferencias") {
+        if (metodo === "GET" && p.length === 4) return ok(res, await comErroDoFinanceiro(() => listarTransferencias(venue.id)));
+        if (metodo === "POST" && p.length === 4) {
+          const corpo = (await lerJson(req)) as Record<string, unknown>;
+          return ok(res, await comErroDoFinanceiro(() => transferirEntreContas({ venueId: venue.id, campos: corpo, quem: chave.name, timezone: fuso })), 201);
+        }
+        if (metodo === "DELETE" && p.length === 5) {
+          return ok(res, await comErroDoFinanceiro(() => apagarTransferencia({ venueId: venue.id, id: idValido(p[4]) })));
+        }
+      }
+      throw erro(404, "not_found", "Rota do Financeiro não encontrada.");
+    }
+
     // ---- RH: ficha, documentos, admissão e desligamento ----
     //
     // Tudo aqui é dado sensível (CPF, endereço, salário, atestado). Por isso
