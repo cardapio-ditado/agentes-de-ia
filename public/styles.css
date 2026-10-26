@@ -2022,9 +2022,9 @@ textarea:focus {
   margin: 0;
 }
 .aviso-alerta {
-  background: #fff6e0;
+  background: var(--alerta-suave);
   border: 1px solid var(--ambar);
-  color: #6b4a00;
+  color: var(--texto);
 }
 .aviso-perigo {
   background: var(--marca-suave);
@@ -2155,12 +2155,12 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 }
 .linha-atencao {
   border-left: 4px solid var(--ambar);
-  background: #fff6e0;
+  background: var(--alerta-suave);
 }
 /* Deu errado de verdade — não é "olha isso", é "alguém tem de resolver". */
 .linha-perigo {
   border-left: 4px solid var(--perigo);
-  background: #fdeff0;
+  background: var(--perigo-suave);
 }
 
 /* Checkbox com explicação ao lado — o "entra no CMV". */
@@ -2184,11 +2184,11 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 
 /* A ação principal da linha de compra: receber. Verde, como no Gorjeta. */
 .btn-receber {
-  border-color: #14532d;
-  color: #14532d;
+  border-color: var(--ok);
+  color: var(--ok);
   font-weight: 700;
 }
-.btn-receber:hover { background: #e7f5ec; }
+.btn-receber:hover { background: var(--ok-suave); }
 
 /* ============ Planilha (a tabela de compras, como no Gorjeta) ============ */
 
@@ -2264,7 +2264,7 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 /* A linha do motivo da divergência, colada na linha do item. */
 .linha-motivo td {
   padding-top: 0;
-  background: #fff6e0;
+  background: var(--alerta-suave);
 }
 .linha-motivo .campo { width: 100%; }
 
@@ -2355,6 +2355,10 @@ button.linha-tabela:hover { background: var(--marca-suave); }
 .item-jogo     { background: #e2f2e6; color: #1c5b30; }
 .item-promocao { background: #fff2d9; color: #7a4c00; }
 .item-evento   { background: #e4eeff; color: #1e3f7a; }
+[data-tema="escuro"] .item-musica   { background: #2a2040; color: #cdb8ff; }
+[data-tema="escuro"] .item-jogo     { background: #17291d; color: #8fd6a5; }
+[data-tema="escuro"] .item-promocao { background: #2e2412; color: #f4c46a; }
+[data-tema="escuro"] .item-evento   { background: #18233a; color: #9fbcf0; }
 .item-outro    { background: var(--fundo); color: var(--texto-suave); }
 
 @media (max-width: 720px) {

@@ -3104,7 +3104,7 @@ async function roteasApi(
       }
 
       // GET | PATCH /v1/venues/:slug/rh/:atendenteId — a ficha de uma pessoa
-      if (p.length === 4 && !ehDocumentoSolto) {
+      if (p.length === 4 && !ehDocumentoSolto && !ehSecaoPropria) {
         if (metodo === "GET") {
           return ok(res, await comErroDoRh(() => verPessoa(venue.id, p[3]!)));
         }
