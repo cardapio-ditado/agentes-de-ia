@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { lerEstadoPonte, papelValido } from "./ponteWhatsapp.js";
+import { SINAL_VELHO_MS, lerEstadoPonte, papelValido } from "./ponteWhatsapp.js";
 import type { Json } from "./database.types.js";
 
 /**
@@ -75,7 +75,7 @@ test("sinal velho vira sem_conector, mesmo que o último estado diga conectado",
         status: "conectado",
         qr: null,
         telefone: "556599",
-        atualizado_em: new Date(Date.now() - 120_000).toISOString(),
+        atualizado_em: new Date(Date.now() - SINAL_VELHO_MS - 5_000).toISOString(),
       },
     },
   } as unknown as Json;

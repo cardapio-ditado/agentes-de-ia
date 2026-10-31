@@ -12,6 +12,7 @@ import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
 import { cuidarDosDisparos } from "./disparos.js";
 import { enviarPendentesPeloOficial } from "./filaOficial.js";
+import { reivindicar } from "./rotinas.js";
 import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
 import { sincronizarRecentes as sincronizarAvaliacoesDoGoogle } from "./avaliacoesMake.js";
 import { cicloDasVendasDaZig } from "./cmv/vendasZig.js";
@@ -21,6 +22,7 @@ import { cicloDaExperiencia } from "./rhPessoa.js";
 import { cicloDaPesquisaZig, varrerBaseDeClientes } from "./pesquisaZig.js";
 import { listAgentsInOrg } from "./repository.js";
 import {
+  BATIDA_DA_PONTE_MS,
   consumirComandoPonte,
   lerEstadoPonte,
   papelValido,
@@ -57,7 +59,15 @@ registrarConectorWhatsapp({
 // comando enfileirado pelo site (conectar/desconectar) e publica o estado
 // atual (status, QR, telefone) para o site mostrar. Ver src/ponteWhatsapp.ts.
 
-const CICLO_PONTE_MS = 5_000;
+// O ciclo procura o "Conectar" clicado no painel. Era de 5 em 5 segundos,
+// lendo e regravando as configurações da casa a cada volta, em cada processo
+// do VPS: em 20 dias isso sozinho passou da cota de tráfego do Supabase e o
+// sistema inteiro saiu do ar. Agora: o comando a cada 10 s (resposta quase
+// sempre vazia) e o "estou vivo" a cada minuto — ou na hora, se o estado
+// mudou (QR novo, conectou, caiu).
+const CICLO_PONTE_MS = 10_000;
+let ultimaBatida = 0;
+let ultimoEstadoPublicado = "";
 let venueDaPonte: { id: string; slug: string } | null = null;
 let cicloEmAndamento = false;
 
@@ -114,13 +124,13 @@ async function cicloDaPonte(): Promise<void> {
     // heartbeat que diz ao site "tem conector vivo aqui".
     if (venueDaPonte) {
       const e = estadoWhatsapp();
-      await publicarEstadoPonte(venueDaPonte.id, PAPEL_DESTE_CONECTOR, {
-        status: e.status,
-        qr: e.qr,
-        telefone: e.telefone,
-        agentSlug: e.agentSlug,
-        venueSlug: e.venueSlug,
-      });
+      const estado = { status: e.status, qr: e.qr, telefone: e.telefone, agentSlug: e.agentSlug, venueSlug: e.venueSlug };
+      const assinatura = JSON.stringify(estado);
+      if (assinatura !== ultimoEstadoPublicado || Date.now() - ultimaBatida >= BATIDA_DA_PONTE_MS) {
+        await publicarEstadoPonte(venueDaPonte.id, PAPEL_DESTE_CONECTOR, estado);
+        ultimoEstadoPublicado = assinatura;
+        ultimaBatida = Date.now();
+      }
     }
   } catch (e) {
     // Banco fora do ar não pode derrubar o atendimento — só a ponte espera.
@@ -202,10 +212,21 @@ let agendadorEmAndamento = false;
 async function cicloDosChecklists(): Promise<void> {
   if (agendadorEmAndamento) return;
   agendadorEmAndamento = true;
+  // Um processo por minuto faz a varredura dos agendados e dos lembretes de
+  // reserva: os quatro conectores do VPS faziam a mesma leitura no mesmo
+  // minuto, e o resultado era o mesmo (as duas coisas já são idempotentes).
+  let souOAgendador = true;
   try {
-    await dispararChecklistsAgendados();
-  } catch (e) {
-    console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
+    souOAgendador = await reivindicar("agendador", 1);
+  } catch {
+    // Sem a trava, roda: melhor repetir a leitura do que não disparar.
+  }
+  if (souOAgendador) {
+    try {
+      await dispararChecklistsAgendados();
+    } catch (e) {
+      console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
+    }
   }
   // As rodadas têm o seu próprio relógio: cutucar quem atrasou e fechar a
   // noite. Em falha separada, pelo mesmo motivo dos lembretes abaixo.
@@ -220,7 +241,7 @@ async function cicloDosChecklists(): Promise<void> {
   // Fora do try do checklist de propósito: uma falha lá não pode impedir o
   // lembrete de reserva de sair, e vice-versa. São dois trabalhos que só
   // dividem o relógio.
-  try {
+  if (souOAgendador) try {
     const quantos = await lembrarReservasProximas();
     if (quantos > 0) console.log(`[lembretes] ${quantos} lembrete(s) na fila.`);
   } catch (e) {

@@ -1,4 +1,4 @@
-import { db, ehMigracaoPendente, todasAsLinhas } from "./supabase.js";
+import { db, ehMigracaoPendente } from "./supabase.js";
 import { hojeNaCasa } from "./fuso.js";
 import { reivindicar } from "./rotinas.js";
 import { alimentarBasePelaZig, diaAnterior } from "./pesquisaZig.js";
@@ -79,27 +79,32 @@ export function buracos(janela: string[], jaTem: Set<string>): string[] {
  * refazer meses de carga por causa de uma mudança de mecanismo seria trocar
  * um desperdício por outro.
  */
-async function diasJaBuscados(venueId: string, desde: string): Promise<Set<string>> {
-  // As visitas são uma linha por pessoa por dia — dezenas de milhares no
-  // ano. Sem paginar, o corte de mil linhas do PostgREST faria os dias
-  // além dele parecerem buracos, e a carga refaria o que já tem.
-  const [marcados, comVisita] = await Promise.all([
-    cliente().from("clientes_dias_zig").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(1000),
-    todasAsLinhas<{ dia: string }>(() =>
-      cliente().from("clientes_visitas").select("dia").eq("venue_id", venueId).gte("dia", desde).order("dia").order("cliente_id"),
-    ),
-  ]);
+async function diasJaBuscados(venueId: string, janela: string[]): Promise<Set<string>> {
+  const desde = janela[janela.length - 1]!;
+  const { data: marcados, error } = await cliente().from("clientes_dias_zig").select("dia").eq("venue_id", venueId).gte("dia", desde).limit(1000);
 
   // Banco sem a migração ainda: o marcador simplesmente não conta, e a
   // varredura volta a se guiar pelo dado. Degradar é melhor que parar.
-  if (marcados.error && !ehMigracaoPendente(marcados.error.message)) {
-    throw new Error(`Falha ao ler os dias buscados: ${marcados.error.message}`);
-  }
-  if (comVisita.error) throw new Error(`Falha ao ler as visitas: ${comVisita.error.message}`);
+  const semMarcador = Boolean(error && ehMigracaoPendente(error.message));
+  if (error && !semMarcador) throw new Error(`Falha ao ler os dias buscados: ${error.message}`);
+  const dias = new Set<string>(((marcados ?? []) as Array<{ dia: string }>).map((m) => m.dia));
 
-  const dias = new Set<string>();
-  for (const linha of [...(marcados.data ?? []), ...(comVisita.data ?? [])] as Array<{ dia: string }>) {
-    dias.add(linha.dia);
+  // Os dias sem marcador podem ter entrado antes de o marcador existir. Antes
+  // isto relia a tabela de visitas inteira do ano (100 mil+ linhas) de hora
+  // em hora — era boa parte do tráfego do banco. Agora conta só os dias sem
+  // marcador, um a um e sem trazer linha nenhuma, e marca o que achar: na
+  // volta seguinte, o dia já está no marcador e nem é contado.
+  for (const dia of janela.filter((d) => !dias.has(d))) {
+    const { count, error: e2 } = await cliente()
+      .from("clientes_visitas")
+      .select("dia", { count: "exact", head: true })
+      .eq("venue_id", venueId)
+      .eq("dia", dia);
+    if (e2) throw new Error(`Falha ao ler as visitas: ${e2.message}`);
+    if ((count ?? 0) > 0) {
+      dias.add(dia);
+      if (!semMarcador) await anotarDiaBuscado(venueId, dia, count ?? 0);
+    }
   }
   return dias;
 }
@@ -151,7 +156,7 @@ export async function preencherHistorico(
   // acontecendo, e gravá-lo pela metade seria pior que não ter.
   const ultimo = diaAnterior(hojeNaCasa(venue.timezone, agora));
   const dias = diasDaJanela(ultimo, janela);
-  const faltando = buracos(dias, await diasJaBuscados(venue.id, dias[dias.length - 1]!));
+  const faltando = buracos(dias, await diasJaBuscados(venue.id, dias));
 
   const resultado: ResultadoDoHistorico = {
     faltavam: faltando.length,

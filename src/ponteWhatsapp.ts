@@ -51,8 +51,15 @@ export function papelValido(valor: string | null | undefined): PapelWhatsapp {
   return valor === "administrativo" ? "administrativo" : "agente";
 }
 
-/** Sem sinal do conector por este tempo, ele é dado como desligado. */
-export const SINAL_VELHO_MS = 45_000;
+/**
+ * Sem sinal do conector por este tempo, ele é dado como desligado.
+ *
+ * O conector publica de minuto em minuto (e na hora, quando o estado muda);
+ * dois minutos e meio dão folga para um ciclo perdido sem acender o alerta.
+ */
+export const SINAL_VELHO_MS = 150_000;
+/** De quanto em quanto tempo o conector diz "estou vivo" sem nada ter mudado. */
+export const BATIDA_DA_PONTE_MS = 60_000;
 /** Comando mais velho que isto é descartado: ninguém quer conectar 2h depois do clique. */
 const COMANDO_VELHO_MS = 120_000;
 
@@ -191,9 +198,11 @@ export async function consumirComandoPonte(
   papel: PapelWhatsapp = "agente",
   venueId?: string,
 ): Promise<ComandoRecebido | null> {
+  // Só o id e o slug: quase sempre a resposta é vazia, e quando tem comando
+  // as configurações são lidas logo abaixo, uma vez.
   let busca = db()
     .from("venues")
-    .select("id, slug, settings")
+    .select("id, slug")
     // Só o comando DESTE papel: o conector administrativo não pode engolir o
     // "conectar" que era do agente e parear o número errado.
     .not(`settings->${CHAVE_COMANDO}->${papel}`, "is", null);
@@ -204,7 +213,7 @@ export async function consumirComandoPonte(
   const venue = data?.[0];
   if (!venue) return null;
 
-  const settings = comoObjeto(venue.settings);
+  const settings = await settingsDoVenue(venue.id);
   const fila = comoObjeto(settings[CHAVE_COMANDO] as Json | undefined);
   const comando = fila[papel] as unknown as ComandoPonte;
   if (!comando) return null;
