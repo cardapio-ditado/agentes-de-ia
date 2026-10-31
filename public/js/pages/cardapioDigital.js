@@ -224,7 +224,9 @@ export async function cardapioDigital(raiz, ctx) {
     }
 
     atualizar();
-    const timer = setInterval(atualizar, 10_000);
+    const timer = setInterval(() => {
+      if (!document.hidden) atualizar();
+    }, 10_000);
     pararAoVivo = () => clearInterval(timer);
     ctx.aoSair(() => clearInterval(timer));
   }

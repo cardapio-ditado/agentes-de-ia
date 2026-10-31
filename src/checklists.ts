@@ -427,6 +427,14 @@ export async function dispararChecklist(
  * processo longo (PC/VPS) a cada minuto — o mesmo lugar que entrega as
  * notificações, então o link sai na sequência.
  */
+/**
+ * O que este processo já sabe que existe hoje: depois que a execução do dia
+ * foi criada (ou achada), não há o que perguntar ao banco até amanhã. Antes,
+ * passada a hora, cada checklist tentava criar e relia a execução a cada
+ * minuto, o dia inteiro.
+ */
+const jaDisparados = new Set<string>();
+
 export async function dispararChecklistsAgendados(): Promise<number> {
   const { data: ativos, error } = await db()
     .from("checklists")
@@ -441,8 +449,12 @@ export async function dispararChecklistsAgendados(): Promise<number> {
     if (!venue) continue;
     const checklist = linha as unknown as Checklist;
     if (!estaNaHora(agendaDe(checklist), agora, venue.timezone)) continue;
+    const chave = `${checklist.id}|${agoraLocal(agora, venue.timezone).data}`;
+    if (jaDisparados.has(chave)) continue;
     try {
       const { criadaAgora } = await dispararChecklist(checklist, venue);
+      if (jaDisparados.size > 5_000) jaDisparados.clear();
+      jaDisparados.add(chave);
       if (criadaAgora) {
         disparados += 1;
         console.log(`[checklists] "${checklist.name}" disparado para hoje.`);
@@ -921,11 +933,21 @@ export async function cuidarDasRodadas(agora = new Date()): Promise<{ cutucadas:
   // Só as execuções recentes: uma noite de rodadas vira a madrugada, então
   // "ontem" ainda pode estar aberta; anteontem não.
   const desde = new Date(agora.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);
+  // Primeiro o leve (só o id e as rodadas); o checklist inteiro só vem para
+  // as execuções que têm rodada. Era a execução aberta de todo checklist,
+  // com o checklist junto, de minuto em minuto.
+  const { data: leves, error: erroLeve } = await db()
+    .from("checklist_runs")
+    .select("id, rodadas")
+    .neq("status", "concluida")
+    .gte("scheduled_for", desde);
+  if (erroLeve) throw new Error(`Falha ao varrer as rodadas: ${erroLeve.message}`);
+  const comRodada = (leves ?? []).filter((l) => Array.isArray(l.rodadas) && l.rodadas.length > 0).map((l) => l.id);
+  if (comRodada.length === 0) return { cutucadas: 0, fechadas: 0 };
   const { data, error } = await db()
     .from("checklist_runs")
     .select("*, checklists:checklist_id(*), venues:venue_id(id, name, timezone)")
-    .neq("status", "concluida")
-    .gte("scheduled_for", desde);
+    .in("id", comRodada);
   if (error) throw new Error(`Falha ao varrer as rodadas: ${error.message}`);
 
   const resultado = { cutucadas: 0, fechadas: 0 };

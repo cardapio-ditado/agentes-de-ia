@@ -24,7 +24,10 @@ export async function hoje(raiz, ctx) {
   await desenhar();
   // Um minuto é o bastante: é tela de abrir de manhã e deixar aberta no
   // caixa, não painel de bolsa.
-  const timer = setInterval(() => desenhar().catch(() => {}), 60_000);
+  // Aba escondida não pergunta nada ao servidor.
+  const timer = setInterval(() => {
+    if (!document.hidden) desenhar().catch(() => {});
+  }, 60_000);
   ctx.aoSair(() => clearInterval(timer));
 
   async function desenhar() {

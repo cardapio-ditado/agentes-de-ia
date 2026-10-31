@@ -43,8 +43,9 @@ export async function reivindicar(rotina: string, janelaMinutos: number, agora =
 
   if (!error) {
     // Limpeza de passagem: só quem ganhou a vez varre o que tem mais de um
-    // dia. Nunca estoura — a rotina em si é o que importa.
-    void cliente()
+    // dia, e só de vez em quando (em média uma vez por hora) — a cada vez
+    // era uma requisição a mais por minuto. Nunca estoura.
+    if (Math.random() < 1 / 60) void cliente()
       .from("rotinas_reivindicadas")
       .delete()
       .lt("reivindicada_em", new Date(agora.getTime() - 86_400_000).toISOString())

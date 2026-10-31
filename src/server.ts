@@ -66,6 +66,11 @@ registrarConectorWhatsapp({
 // sempre vazia) e o "estou vivo" a cada minuto — ou na hora, se o estado
 // mudou (QR novo, conectou, caiu).
 const CICLO_PONTE_MS = 10_000;
+// Conectado, o "Conectar"/"Desconectar" do painel é raro: procura a cada 30 s.
+// Desconectado ou esperando o QR, a cada volta (10 s) — é quando alguém está
+// olhando a tela esperando.
+const BUSCA_COMANDO_CONECTADO_MS = 30_000;
+let ultimaBuscaDeComando = 0;
 let ultimaBatida = 0;
 let ultimoEstadoPublicado = "";
 let venueDaPonte: { id: string; slug: string } | null = null;
@@ -92,7 +97,9 @@ async function cicloDaPonte(): Promise<void> {
     // e parearia o número da casa errada. Com WHATSAPP_VENUE no .env, cada
     // processo só enxerga a fila da sua casa.
     if (!venueDaPonte) venueDaPonte = await venueDoConector();
-    const recebido = await consumirComandoPonte(PAPEL_DESTE_CONECTOR, venueDaPonte?.id);
+    const calmo = estadoWhatsapp().status === "conectado" && Date.now() - ultimaBuscaDeComando < BUSCA_COMANDO_CONECTADO_MS;
+    const recebido = calmo ? null : await consumirComandoPonte(PAPEL_DESTE_CONECTOR, venueDaPonte?.id);
+    if (!calmo) ultimaBuscaDeComando = Date.now();
     if (recebido) {
       venueDaPonte = { id: recebido.venueId, slug: recebido.venueSlug };
       const { comando } = recebido;
@@ -212,21 +219,23 @@ let agendadorEmAndamento = false;
 async function cicloDosChecklists(): Promise<void> {
   if (agendadorEmAndamento) return;
   agendadorEmAndamento = true;
-  // Um processo por minuto faz a varredura dos agendados e dos lembretes de
-  // reserva: os quatro conectores do VPS faziam a mesma leitura no mesmo
-  // minuto, e o resultado era o mesmo (as duas coisas já são idempotentes).
+  // UM processo por minuto faz o minuto inteiro: os quatro conectores do VPS
+  // faziam as mesmas leituras no mesmo minuto, e tudo aqui é global e
+  // idempotente (nada depende do WhatsApp deste processo).
   let souOAgendador = true;
   try {
-    souOAgendador = await reivindicar("agendador", 1);
+    souOAgendador = await reivindicar("minuto", 1);
   } catch {
     // Sem a trava, roda: melhor repetir a leitura do que não disparar.
   }
-  if (souOAgendador) {
-    try {
-      await dispararChecklistsAgendados();
-    } catch (e) {
-      console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
-    }
+  if (!souOAgendador) {
+    agendadorEmAndamento = false;
+    return;
+  }
+  try {
+    await dispararChecklistsAgendados();
+  } catch (e) {
+    console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
   }
   // As rodadas têm o seu próprio relógio: cutucar quem atrasou e fechar a
   // noite. Em falha separada, pelo mesmo motivo dos lembretes abaixo.
@@ -241,7 +250,7 @@ async function cicloDosChecklists(): Promise<void> {
   // Fora do try do checklist de propósito: uma falha lá não pode impedir o
   // lembrete de reserva de sair, e vice-versa. São dois trabalhos que só
   // dividem o relógio.
-  if (souOAgendador) try {
+  try {
     const quantos = await lembrarReservasProximas();
     if (quantos > 0) console.log(`[lembretes] ${quantos} lembrete(s) na fila.`);
   } catch (e) {
@@ -271,7 +280,12 @@ setInterval(() => void cicloDosChecklists(), 60_000);
 // rodar mais de uma vez por dia sem estrago — o snapshot é upsert por dia e o
 // lembrete tem índice único; a repetição é a resiliência contra o conector
 // ter estado fora do ar na hora "certa".
-setInterval(() => {
+setInterval(() => void cicloDaHora(), 60 * 60_000);
+
+async function cicloDaHora(): Promise<void> {
+  // Um processo por hora faz a hora inteira (janela de 50 min: o relógio de
+  // cada processo anda um pouco diferente). Antes, os quatro faziam tudo.
+  if (!(await reivindicar("hora", 50).catch(() => true))) return;
   cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
   // No mesmo relógio, em falha separada: quem esteve na casa ontem (segundo
   // a Zig) recebe o convite da pesquisa. `ultimo_dia` + índice único seguram
@@ -309,7 +323,7 @@ setInterval(() => {
   // E o contrato de experiência: a partir das 9h da casa, quem vence em até
   // 7 dias vira uma mensagem para o gestor. Uma por dia, trava na fila.
   cicloDaExperiencia().catch((e) => console.error("[rh] aviso de experiência:", e));
-}, 60 * 60_000);
+}
 
 const HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE = Math.max(1, Number(process.env.GOOGLE_SINCRONIZAR_CADA_HORAS) || 4);
 let ultimaSincronizacaoDoGoogle = 0;

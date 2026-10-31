@@ -100,6 +100,9 @@ export async function canaisDaCasa(raiz, ctx) {
   );
 
   let timer = null;
+  // Depois de um clique em Conectar/Desconectar, a tela fica no modo rápido
+  // por 3 minutos: é quando o QR chega e a pessoa está olhando.
+  let rapidoAte = 0;
   ctx.aoSair(() => clearInterval(timer));
 
   // A volta do login do Instagram chega com o resultado no endereço.
@@ -129,7 +132,16 @@ export async function canaisDaCasa(raiz, ctx) {
   desenharResumo();
 
   await Promise.all([desenharOficial(), desenharInstagram(), atualizarConectores()]);
-  timer = setInterval(atualizarConectores, 4000);
+  // Rápido (4 s) só enquanto alguém espera o QR ou a conexão; conectado ou
+  // desligado, a cada 30 s. Aba escondida não pergunta nada.
+  let ultimaVolta = Date.now();
+  timer = setInterval(() => {
+    if (document.hidden) return;
+    const esperando = [retrato.atendente?.status, retrato.avisos?.status].some((s) => s === "aguardando_qr" || s === "conectando");
+    if (!esperando && Date.now() > rapidoAte && Date.now() - ultimaVolta < 30_000) return;
+    ultimaVolta = Date.now();
+    atualizarConectores();
+  }, 4000);
 
   // ============================================================
   // O quadro "Quem faz o quê"
@@ -708,6 +720,7 @@ export async function canaisDaCasa(raiz, ctx) {
             onclick: async (e) => {
               e.target.disabled = true;
               try {
+                rapidoAte = Date.now() + 180_000;
                 const res = await post("/v1/whatsapp/conectar", { venue: ctx.venue, agent: seletorAtendente.value, papel: "agente" });
                 avisar(res.na_fila ? "Comando enviado. O QR aparece aqui em ~10 segundos." : "Conectando. O QR aparece em instantes.", "ok");
               } catch (err) {
@@ -725,6 +738,7 @@ export async function canaisDaCasa(raiz, ctx) {
               if (!confirm("Desconectar o número do atendimento? Os clientes ficam sem resposta automática até conectar de novo.")) return;
               e.target.disabled = true;
               try {
+                rapidoAte = Date.now() + 180_000;
                 const res = await post("/v1/whatsapp/desconectar", { venue: ctx.venue, papel: "agente" });
                 avisar(res.na_fila ? "Comando de desconexão enviado." : "Desconectado.", "ok");
               } catch (err) {
@@ -817,6 +831,7 @@ export async function canaisDaCasa(raiz, ctx) {
               onclick: async (e) => {
                 e.target.disabled = true;
                 try {
+                  rapidoAte = Date.now() + 180_000;
                   const res = await post("/v1/whatsapp/conectar", {
                     venue: ctx.venue,
                     papel: "administrativo",
@@ -841,6 +856,7 @@ export async function canaisDaCasa(raiz, ctx) {
               onclick: async (e) => {
                 e.target.disabled = true;
                 try {
+                  rapidoAte = Date.now() + 180_000;
                   const res = await post("/v1/whatsapp/desconectar", {
                     venue: ctx.venue,
                     papel: "administrativo",
