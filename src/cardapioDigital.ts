@@ -205,6 +205,41 @@ export function grupoValido(bruto: unknown): "comer" | "beber" {
   return String(bruto ?? "").trim().toLowerCase() === "beber" ? "beber" : "comer";
 }
 
+// ============================================================
+// Visual do cardápio
+// ============================================================
+
+/**
+ * O tema da página do cliente. "padrao" é o creme quente vestido com a cor
+ * da casa; "acougue" é o papel kraft de parrilla, com carimbo e o mosaico
+ * de categorias na primeira tela (feito para o Ditado Brasa & Bar).
+ */
+export const TEMAS_DO_CARDAPIO = ["padrao", "acougue"] as const;
+export type TemaDoCardapio = (typeof TEMAS_DO_CARDAPIO)[number];
+
+export interface AparenciaDoCardapio {
+  tema: TemaDoCardapio;
+  slogan: string;
+}
+
+export function aparenciaDoCardapio(venue: Pick<Venue, "settings">): AparenciaDoCardapio {
+  const bruto = (venue.settings as Record<string, unknown> | null)?.cardapio_aparencia as Record<string, unknown> | undefined;
+  const tema = TEMAS_DO_CARDAPIO.includes(bruto?.tema as TemaDoCardapio) ? (bruto!.tema as TemaDoCardapio) : "padrao";
+  return { tema, slogan: String(bruto?.slogan ?? "").trim().slice(0, 80) };
+}
+
+export async function salvarAparenciaDoCardapio(params: { venueId: string; campos: Record<string, unknown> }): Promise<AparenciaDoCardapio> {
+  const tema = String(params.campos.tema ?? "padrao");
+  if (!TEMAS_DO_CARDAPIO.includes(tema as TemaDoCardapio)) falhar(400, "Tema inválido", tema);
+  const aparencia: AparenciaDoCardapio = { tema: tema as TemaDoCardapio, slogan: String(params.campos.slogan ?? "").trim().slice(0, 80) };
+  const { data, error } = await cliente().from("venues").select("settings").eq("id", params.venueId).single();
+  if (error) falhar(500, "Falha ao ler a casa", error.message);
+  const settings = { ...((data?.settings as Record<string, unknown>) ?? {}), cardapio_aparencia: aparencia };
+  const { error: e2 } = await cliente().from("venues").update({ settings }).eq("id", params.venueId);
+  if (e2) falhar(500, "Falha ao salvar o visual", e2.message);
+  return aparencia;
+}
+
 /** O cardápio inteiro, como a página pública o desenha. */
 export async function cardapioPublico(venue: Venue, agora = new Date()): Promise<CardapioPublico> {
   const [categorias, itens, banners, comentarios] = await Promise.all([

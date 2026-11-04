@@ -22,6 +22,13 @@ const ABAS = [
   ["comentarios", "Comentários"],
   ["mesas", "Mesas e garçons"],
   ["qrcode", "QR code"],
+  ["visual", "Visual"],
+];
+
+/** Os temas da página do cliente: o nome e o que muda, em uma linha. */
+const TEMAS = [
+  ["padrao", "Padrão", "Fundo creme vestido com a cor da casa, lista com foto ao lado."],
+  ["acougue", "Papel de açougue", "Kraft e carimbo vermelho de parrilla, com as categorias em mosaico na primeira tela."],
 ];
 
 const NOME_DO_EVENTO = {
@@ -132,6 +139,7 @@ export async function cardapioDigital(raiz, ctx) {
     else if (abaAtiva === "promocoes") abaPromocoes();
     else if (abaAtiva === "comentarios") abaComentarios();
     else if (abaAtiva === "mesas") abaMesas();
+    else if (abaAtiva === "visual") abaVisual();
     else abaQrcode();
   }
 
@@ -1340,6 +1348,49 @@ export async function cardapioDigital(raiz, ctx) {
   }
 
   /* ================= QR code ================= */
+
+  function abaVisual() {
+    const atual = dados.aparencia ?? { tema: "padrao", slogan: "" };
+    let escolhido = atual.tema;
+    const slogan = el("input", { classe: "input", value: atual.slogan, maxlength: 80, placeholder: "Onde há fumaça, há fogo." });
+    const opcoes = el("div", { classe: "pilha" });
+    const desenharOpcoes = () =>
+      limpar(opcoes).append(
+        ...TEMAS.map(([id, nome, descricao]) =>
+          el("label", { classe: `cartao tema-opcao${escolhido === id ? " tema-escolhido" : ""}`, style: "display:flex;gap:12px;align-items:flex-start;cursor:pointer" }, [
+            el("input", { type: "radio", name: "tema", value: id, checked: escolhido === id, onchange: () => { escolhido = id; desenharOpcoes(); } }),
+            el("div", {}, [el("strong", { texto: nome }), el("p", { classe: "muted", style: "margin:2px 0 0", texto: descricao })]),
+          ]),
+        ),
+      );
+    desenharOpcoes();
+    corpo.append(
+      el("div", { classe: "pilha" }, [
+        el("p", { classe: "muted", style: "margin:0", texto: "Como a página do cliente se apresenta. Muda na hora para quem abrir o QR." }),
+        opcoes,
+        el("div", { classe: "campo" }, [el("label", { texto: "Frase da casa (aparece no topo)" }), slogan]),
+        el("div", { classe: "reserva-acoes" }, [
+          el("button", {
+            classe: "btn btn-primario",
+            type: "button",
+            texto: "Salvar visual",
+            onclick: async (e) => {
+              e.target.disabled = true;
+              try {
+                dados.aparencia = await put(`/v1/venues/${ctx.venue}/cardapio/aparencia`, { tema: escolhido, slogan: slogan.value });
+                avisar("Visual salvo. Abra como cliente para ver.", "ok");
+              } catch (err) {
+                avisar(err.message, "erro");
+              } finally {
+                e.target.disabled = false;
+              }
+            },
+          }),
+          el("a", { classe: "btn", href: dados.endereco, target: "_blank", rel: "noopener", texto: "Abrir como cliente" }),
+        ]),
+      ]),
+    );
+  }
 
   function abaQrcode() {
     const mesa = el("input", { placeholder: "Ex.: 7 (deixe vazio para um QR geral)", value: sessionStorage.getItem("brasa.cardapio.mesa-qr") ?? "" });

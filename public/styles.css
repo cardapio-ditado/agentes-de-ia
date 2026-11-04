@@ -3518,3 +3518,5 @@ a.btn { text-decoration: none; }
   font-variant-numeric: tabular-nums;
   z-index: 2;
 }
+.tema-opcao { border: 1.5px solid var(--borda); }
+.tema-escolhido { border-color: var(--marca); background: var(--marca-suave); }

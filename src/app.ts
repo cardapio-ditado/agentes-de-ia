@@ -138,6 +138,8 @@ import {
   type DadosDaPromocao,
   type DadosDoBanner,
   type DadosDoItem,
+  aparenciaDoCardapio,
+  salvarAparenciaDoCardapio,
 } from "./cardapioDigital.js";
 import {
   ErroDoRh,
@@ -3509,6 +3511,7 @@ async function roteasApi(
         );
         return ok(res, {
           endereco: await enderecoDoCardapio(venue),
+          aparencia: aparenciaDoCardapio(venue),
           categorias,
           itens,
           banners,
@@ -3516,6 +3519,14 @@ async function roteasApi(
           comentarios_pendentes: pendentes,
           chamados,
         });
+      }
+
+      // PUT /v1/venues/:slug/cardapio/aparencia — { tema, slogan }
+      if (metodo === "PUT" && acao === "aparencia" && p.length === 4) {
+        const chave = await exigirChave(req, "reservations:write");
+        const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(res, await comErroDoCardapio(() => salvarAparenciaDoCardapio({ venueId: venue.id, campos: corpo })));
       }
 
       // GET /v1/venues/:slug/cardapio/qrcode?mesa=7 — o cartaz da mesa
@@ -6051,7 +6062,7 @@ async function roteasApi(
       const [cardapio, agente] = await Promise.all([comErroDoCardapio(() => cardapioPublico(venue)), agenteDaMesa(venue)]);
       return ok(res, {
         ...cardapio,
-        casa: { ...cardapio.casa, ...marcaDaCasa(venue) },
+        casa: { ...cardapio.casa, ...marcaDaCasa(venue), ...aparenciaDoCardapio(venue) },
         chat: agente !== null,
       });
     }

@@ -257,6 +257,78 @@
       .rodape-brasa { text-align: center; color: var(--apoio-2); font-size: 11px; padding: 24px 16px 0; }
       .rodape-brasa a { color: inherit; }
       :focus-visible { outline: 2px solid var(--brasa); outline-offset: 2px; }
+
+      /* ================= tema "papel de açougue" =================
+         Kraft de parrilla, tinta carvão e carimbo vermelho. Só troca tokens
+         e o desenho de algumas peças; o resto da página é o mesmo. */
+      body.tema-acougue {
+        --fundo: #d8c29c; --superficie: #efe3cb; --superficie-2: #e6d5b5; --faixa: transparent;
+        --texto: #2a2420; --apoio: #5e5046; --apoio-2: #7a6a5c; --borda: rgba(42, 36, 32, 0.22);
+        --brasa: #a61e17; --tinta: #a61e17; --traco: #f3d9a4; --sobre-marca: #fff7ec;
+        --fonte: "Libre Franklin", -apple-system, "Segoe UI", Roboto, sans-serif;
+        --carimbo: "Alfa Slab One", Georgia, serif;
+        background-color: var(--fundo);
+        background-image: repeating-linear-gradient(12deg, rgba(90, 60, 30, 0.035) 0 2px, transparent 2px 7px), repeating-linear-gradient(-71deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 5px);
+        font-size: 15px;
+      }
+      .tema-acougue .topo { flex-direction: column; align-items: stretch; gap: 0; padding: 18px 20px 6px; text-align: center; }
+      .tema-acougue .topo .avatar { display: none; }
+      .tema-acougue .linha-topo { display: flex; justify-content: space-between; align-items: flex-start; font-size: 13px; font-weight: 600; color: var(--apoio); text-align: left; }
+      .tema-acougue .mesa { background: transparent; border: 0; padding: 0; color: var(--apoio); text-align: right; }
+      .tema-acougue .casa h1 { display: inline-block; margin: 18px auto 4px; padding: 12px 20px 10px; border: 3px solid var(--tinta); border-radius: 6px; color: var(--tinta); transform: rotate(-2deg); font: 400 38px/0.95 var(--carimbo); }
+      .tema-acougue .casa h1 .resto { display: block; font: 700 13px/1 var(--fonte); letter-spacing: 0.12em; margin-top: 6px; }
+      .tema-acougue .casa small { font-size: 15px; color: var(--apoio); margin-top: 10px; }
+      .tema-acougue .banners { border-radius: 6px; box-shadow: none; }
+      .tema-acougue .grupos { display: flex; justify-content: center; gap: 28px; border: 0; margin-top: 10px; }
+      .tema-acougue .grupo { font: 400 22px var(--carimbo); color: var(--apoio); padding: 6px 2px; border-bottom-width: 3px; }
+      .tema-acougue .grupo[aria-selected="true"] { color: var(--texto); border-bottom-color: var(--texto); }
+      .tema-acougue .trilho-wrap { border-bottom: 2px dashed var(--borda); padding: 12px 0; }
+      .tema-acougue .cat { border: 1.5px solid var(--texto); border-radius: 4px; background: transparent; font-size: 14px; }
+      .tema-acougue .cat[aria-current="true"] { background: var(--texto); border-color: var(--texto); color: var(--superficie); }
+      .tema-acougue .secao { padding-top: 26px; scroll-margin-top: 64px; }
+      .tema-acougue .secao-cab { background: transparent; border: 0; margin: 0 0 8px; padding: 0; }
+      .tema-acougue .secao h2 { display: inline-block; font: 400 25px/1 var(--carimbo); text-transform: none; letter-spacing: 0; color: var(--tinta); border: 2.5px solid var(--tinta); border-radius: 4px; padding: 7px 12px 5px; transform: rotate(-1.5deg); }
+      .tema-acougue .secao h2 small { display: none; }
+      .tema-acougue .secao .desc-cat { margin: 6px 0 6px; font-size: 14px; }
+      .tema-acougue .item { border-bottom: 1.5px dashed var(--borda); padding: 15px 0; }
+      .tema-acougue .item .nome { font-weight: 700; font-size: 16.5px; }
+      .tema-acougue .item .desc { font-size: 14px; -webkit-line-clamp: 3; }
+      .tema-acougue .item .preco { font: 400 19px/1 var(--carimbo); color: var(--texto); }
+      .tema-acougue .item .preco s { font-family: var(--fonte); }
+      .tema-acougue .selo { border-radius: 3px; background: transparent; border: 1.5px solid var(--tinta); }
+      .tema-acougue .selo.sugestao { display: none; }
+      /* A sugestão da casa: o preço dentro de um selo redondo carimbado. */
+      .tema-acougue .item.sugestao .preco { width: 68px; height: 68px; border-radius: 50%; border: 2.5px solid var(--tinta); color: var(--tinta); display: grid; place-content: center; text-align: center; font-size: 18px; transform: rotate(8deg); }
+      .tema-acougue .item.sugestao .preco::after { content: "sugestão"; display: block; font: 700 9px/1 var(--fonte); letter-spacing: 0.08em; margin-top: 3px; }
+      .tema-acougue .item.sugestao .preco s { display: none; }
+      .preco .p-selo { display: none; }
+      .tema-acougue .item.sugestao .preco .p-normal { display: none; }
+      .tema-acougue .item.sugestao .preco .p-selo { display: block; white-space: nowrap; }
+      .tema-acougue .item.sugestao .preco .p-selo small { font: 700 10px var(--fonte); margin-right: 1px; vertical-align: 4px; }
+      .tema-acougue .curtir { color: var(--apoio); }
+      .tema-acougue .fab { background: var(--superficie); border-top: 2px solid var(--texto); }
+      .tema-acougue .fab button { border: 2px solid var(--texto); border-radius: 4px; background: transparent; font-weight: 700; }
+      .tema-acougue .fab button.principal { background: var(--tinta); border-color: var(--tinta); color: var(--sobre-marca); }
+      .tema-acougue .bolha { box-shadow: none; }
+      .tema-acougue .folha { background: var(--superficie); }
+      .tema-acougue .folha h3 { font: 400 24px/1.1 var(--carimbo); }
+      .tema-acougue .folha .preco-grande, .tema-acougue .folha .total { font-family: var(--carimbo); font-weight: 400; color: var(--tinta); }
+      .tema-acougue .opcao { border-radius: 4px; background: #f6eedc; }
+      .tema-acougue .botao { border-radius: 4px; }
+      /* O mosaico: a primeira tela mostra as categorias em etiquetas de
+         açougue, e o tamanho do bloco segue a ordem do cardápio. */
+      .mosaico { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-rows: minmax(84px, auto); gap: 8px; margin: 16px 16px 6px; }
+      .mosaico[hidden] { display: none; }
+      .etiqueta { appearance: none; text-align: left; font: inherit; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 13px; color: var(--texto); border: 2px dashed rgba(42, 36, 32, 0.55); border-radius: 6px; background: rgba(239, 227, 203, 0.55); grid-column: span 3; min-width: 0; }
+      .etiqueta strong { font: 400 17px/1.08 var(--carimbo); overflow-wrap: anywhere; margin-bottom: 8px; }
+      .etiqueta span { font-size: 13px; font-weight: 600; color: var(--apoio); }
+      .etiqueta.grande { grid-column: span 6; grid-row: span 2; border: 0; background: var(--tinta); color: var(--sobre-marca); padding: 16px 18px; }
+      .etiqueta.grande strong { font-size: 40px; transform: rotate(-2deg); transform-origin: left; }
+      .etiqueta.grande span { color: var(--sobre-marca); opacity: 0.92; font-size: 14px; font-weight: 500; }
+      .etiqueta.media { grid-row: span 2; border: 0; background: var(--texto); color: var(--superficie); }
+      .etiqueta.media strong { font-size: 24px; }
+      .etiqueta.media span { color: var(--fundo); }
+      .etiqueta.faixa { grid-column: span 6; flex-direction: row; align-items: center; }
     </style>
   </head>
   <body>
@@ -272,6 +344,7 @@
 
       <section class="banners" id="banners" aria-label="Destaques da casa" hidden></section>
       <div class="grupos" role="tablist" id="grupos" hidden></div>
+      <nav class="mosaico" id="mosaico" aria-label="Categorias" hidden></nav>
       <div class="trilho-wrap" id="trilho-wrap" hidden><nav class="trilho" id="trilho" aria-label="Categorias"></nav></div>
       <main id="cardapio"><div class="estado" id="carregando">Carregando o cardápio…</div></main>
       <p class="rodape-brasa" id="rodape" hidden>cardápio digital por <a href="https://brasafood.app" rel="noopener">Brasa Food</a></p>
@@ -603,12 +676,29 @@
         return s.length ? `<span class="selos">${s.join("")}</span>` : "";
       }
       const precoHtml = (i) => (i.promocao ? `<s>${BRL(i.preco)}</s>${BRL(i.promocao.preco)}` : BRL(i.preco));
+      // No selo redondo da sugestão cabe só o número: "44" ou "39,90".
+      const precoCurto = (v) => (Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2).replace(".", ","));
+      const precoDaLinha = (i) =>
+        i.destaque && !i.capa
+          ? `<span class="p-normal">${precoHtml(i)}</span><span class="p-selo"><small>R$</small>${precoCurto(precoHoje(i))}</span>`
+          : precoHtml(i);
       const linhaItem = (i, seloExtra = "") => `
-        <div class="item${i.capa ? "" : " sem-foto"}" role="button" tabindex="0" data-id="${i.id}">
+        <div class="item${i.capa ? "" : " sem-foto"}${i.destaque && !i.capa ? " sugestao" : ""}" role="button" tabindex="0" data-id="${i.id}">
           ${i.capa ? `<div class="thumb">${foto(i)}</div>` : ""}
           <div class="texto"><div class="nome">${escapar(i.nome)}${seloExtra || selosDe(i)}</div><div class="desc">${escapar(i.descricao)}</div></div>
-          <div class="direita"><div class="preco">${precoHtml(i)}</div>${botaoCurtir(i)}</div>
+          <div class="direita"><div class="preco">${precoDaLinha(i)}</div>${botaoCurtir(i)}</div>
         </div>`;
+
+      const TEMA = () => DADOS?.casa?.tema || "padrao";
+      function aplicarTema() {
+        if (TEMA() !== "acougue") return;
+        document.body.classList.add("tema-acougue");
+        const fonte = document.createElement("link");
+        fonte.rel = "stylesheet";
+        fonte.href = "https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Libre+Franklin:wght@400;500;600;700&display=swap";
+        document.head.append(fonte);
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", "#d8c29c");
+      }
 
       function desenharCasa() {
         const casa = DADOS.casa;
@@ -625,6 +715,17 @@
           avatar.append(img);
         } else {
           avatar.innerHTML = `<div class="inicial">${escapar(inicialDe(casa.nome))}</div>`;
+        }
+        if (TEMA() === "acougue") {
+          // O nome vira carimbo: a primeira palavra grande, o resto embaixo.
+          const [primeira, ...resto] = String(casa.nome).split(" ");
+          $("nome-casa").innerHTML = `${escapar(primeira)}${resto.length ? `<span class="resto">${escapar(resto.join(" ").toUpperCase())}</span>` : ""}`;
+          $("sub-casa").textContent = casa.slogan || partes.join(" · ");
+          const linha = document.createElement("div");
+          linha.className = "linha-topo";
+          linha.innerHTML = `<span>${escapar(casa.horario_hoje ? `Hoje, ${casa.horario_hoje}` : casa.cidade || "")}</span>`;
+          linha.append($("mesa"));
+          $("topo").prepend(linha);
         }
         desenharMesa();
         $("topo").hidden = false;
@@ -697,6 +798,26 @@
         grupos.hidden = false;
       }
 
+      function desenharMosaico(cats) {
+        const mosaico = $("mosaico");
+        if (TEMA() !== "acougue" || cats.length < 3) { mosaico.hidden = true; return; }
+        mosaico.innerHTML = "";
+        // Grande para a primeira categoria, média para a segunda, etiquetas
+        // para o resto; a última sozinha numa linha vira faixa.
+        const resto = cats.length - 2;
+        cats.forEach((c, n) => {
+          const itens = ITENS.filter((i) => i.categoria_id === c.id);
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "etiqueta" + (n === 0 ? " grande" : n === 1 ? " media" : resto % 2 === 1 && n === cats.length - 1 ? " faixa" : "");
+          const detalhe = n === 0 ? itens.slice(0, 5).map((i) => i.nome).join(", ") : `${itens.length} ${itens.length === 1 ? "opção" : "opções"}`;
+          b.innerHTML = `<strong>${escapar(c.nome)}</strong><span>${escapar(detalhe)}</span>`;
+          b.addEventListener("click", () => irPara(c.id));
+          mosaico.append(b);
+        });
+        mosaico.hidden = false;
+      }
+
       function desenhar() {
         $("grupos").querySelectorAll(".grupo").forEach((b, n) => b.setAttribute("aria-selected", String(["comer", "beber"][n] === grupoAtual)));
         const cats = CATEGORIAS.filter((c) => c.grupo === grupoAtual && ITENS.some((i) => i.categoria_id === c.id));
@@ -713,6 +834,7 @@
           trilho.append(b);
         }
         $("trilho-wrap").hidden = cats.length < 2;
+        desenharMosaico(cats);
 
         cardapio.innerHTML = "";
         const secoes = cats.map((c) => ({ c, itens: ITENS.filter((i) => i.categoria_id === c.id) }));
@@ -956,7 +1078,8 @@
           $("cardapio").innerHTML = `<div class="estado"><h2>${e.status === 404 ? "Cardápio não encontrado" : "Não deu para abrir o cardápio"}</h2>${escapar(e.status === 404 ? "Confira o QR code com a equipe da casa." : e.message)}</div>`;
           return;
         }
-        vestirDaCasa(DADOS.casa.cor_marca);
+        if (DADOS.casa.tema === "acougue") aplicarTema();
+        else vestirDaCasa(DADOS.casa.cor_marca);
         ITENS = DADOS.itens;
         CATEGORIAS = DADOS.categorias;
         $("carregando")?.remove();

@@ -183,3 +183,13 @@ test("o ao vivo resume o salão: uma linha por mesa, mais vistos e chamados aber
   assert.equal(r.chamados_abertos, 1);
   assert.equal(r.ultimos.length, 5);
 });
+
+test("visual do cardápio: tema conhecido ou padrão, slogan aparado", async () => {
+  const { aparenciaDoCardapio } = await import("./cardapioDigital.js");
+  assert.deepEqual(aparenciaDoCardapio({ settings: null } as never), { tema: "padrao", slogan: "" });
+  assert.deepEqual(
+    aparenciaDoCardapio({ settings: { cardapio_aparencia: { tema: "acougue", slogan: "  Onde há fumaça, há fogo.  " } } } as never),
+    { tema: "acougue", slogan: "Onde há fumaça, há fogo." },
+  );
+  assert.equal(aparenciaDoCardapio({ settings: { cardapio_aparencia: { tema: "neon" } } } as never).tema, "padrao");
+});
