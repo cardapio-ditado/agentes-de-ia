@@ -182,11 +182,23 @@ export function cidadeDoEndereco(endereco: string | null | undefined): string | 
   // último pedaço mesmo. É um palpite bom para endereço brasileiro escrito à
   // mão; quando erra, mostra um bairro — nunca algo ofensivo ou vazio.
   const semCep = texto.replace(/\b\d{5}-?\d{3}\b/g, "").trim();
-  const pedacos = semCep.split(/[,\n]+/).map((p) => p.trim()).filter(Boolean);
+  // Vírgula, quebra de linha e " - " separam pedaços: "89 - praça popular -
+  // cuiabá/mt" é endereço de verdade, digitado assim.
+  const pedacos = semCep.split(/[,\n]+|\s+[-–]\s+/).map((p) => p.trim()).filter(Boolean);
+  // O estado sozinho no fim ("MT") não é a cidade: a cidade é o de antes.
+  while (pedacos.length > 1 && /^[a-z]{2}$/i.test(pedacos[pedacos.length - 1]!)) pedacos.pop();
   if (pedacos.length === 0) return null;
   const ultimo = pedacos[pedacos.length - 1]!;
-  const semEstado = ultimo.replace(/\s*[-–/]\s*[A-Z]{2}\s*$/, "").trim();
-  return semEstado || null;
+  const semEstado = ultimo.replace(/\s*[-–/]\s*[a-z]{2}\s*$/i, "").trim();
+  if (!semEstado || /^\d/.test(semEstado)) return null;
+  // Digitado todo em minúsculas, ganha maiúscula: "cuiabá" → "Cuiabá".
+  if (semEstado === semEstado.toLowerCase()) {
+    return semEstado
+      .split(/\s+/)
+      .map((p, i) => (i > 0 && /^(de|da|do|das|dos|e)$/.test(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
+      .join(" ");
+  }
+  return semEstado;
 }
 
 export function grupoValido(bruto: unknown): "comer" | "beber" {

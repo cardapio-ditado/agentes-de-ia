@@ -89,6 +89,9 @@ test("a cidade sai do fim do endereço, sem o estado nem o CEP", () => {
   assert.equal(cidadeDoEndereco("Cuiabá"), "Cuiabá");
   assert.equal(cidadeDoEndereco(""), null);
   assert.equal(cidadeDoEndereco(null), null);
+  // Endereço do Ditado, digitado em minúsculas e separado por " - ".
+  assert.equal(cidadeDoEndereco("Rua senador vilas boas, 89 - praça popular - cuiabá/mt"), "Cuiabá");
+  assert.equal(cidadeDoEndereco("rua x, 10 - várzea grande - mt"), "Várzea Grande");
 });
 
 test("o horário de hoje é o do dia da semana no calendário da casa", () => {

@@ -113,6 +113,11 @@
       .itens { display: flex; flex-direction: column; }
       .item { display: grid; grid-template-columns: 64px 1fr auto; column-gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--borda); cursor: pointer; }
       .item:last-child { border-bottom: 0; }
+      /* Sem foto, a linha é só texto: a letra num quadrado laranja em cada
+         item virava ruído num cardápio inteiro sem fotos. */
+      .item.sem-foto { grid-template-columns: 1fr auto; padding: 11px 0; }
+      .destaques.um { grid-template-columns: 1fr; }
+      .destaques.um .destaque { aspect-ratio: 2 / 1; }
       .item .thumb { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--superficie-2); box-shadow: var(--sombra); }
       .item .thumb .foto { width: 100%; height: 100%; object-fit: cover; }
       .item .texto { min-width: 0; }
@@ -123,6 +128,7 @@
       .selos { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
       .selo { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--faixa); color: var(--tinta); }
       .selo.hoje { background: var(--brasa); color: var(--sobre-marca); }
+      .selo.sugestao { background: transparent; border: 1px solid var(--brasa); color: var(--tinta); }
 
       /* sem foto: a inicial do prato num fundo quente da categoria */
       .arte { width: 100%; height: 100%; display: grid; place-items: center; font-weight: 800; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); font-size: 22px; }
@@ -466,7 +472,7 @@
           const zap = document.createElement("input");
           zap.placeholder = "WhatsApp, para novidades da casa (opcional)"; zap.type = "tel"; zap.inputMode = "tel";
           folha.className = "folha boas-vindas";
-          folha.innerHTML = `<div class="alca"></div><div class="corpo"><h3>Bem-vindo à ${escapar(DADOS.casa.nome)}!</h3><p>${MESA ? `Você está na mesa ${escapar(MESA)}. ` : ""}Como quer ser chamado? Ajuda a equipe a te atender pelo nome.</p><div id="bv-campos"></div><div class="acoes"><button type="button" class="botao quieto" id="bv-pular">Pular</button><button type="button" class="botao" id="bv-entrar">Entrar</button></div></div>`;
+          folha.innerHTML = `<div class="alca"></div><div class="corpo"><h3>Boas-vindas! 👋</h3><p>${escapar(DADOS.casa.nome)}${MESA ? ` · mesa ${escapar(MESA)}` : ""}. Diga seu nome, se quiser: ajuda a equipe a te atender pelo nome.</p><div id="bv-campos"></div><div class="acoes"><button type="button" class="botao quieto" id="bv-pular">Pular</button><button type="button" class="botao" id="bv-entrar">Entrar</button></div></div>`;
           $("bv-campos").append(nome, zap);
           const terminar = (dados) => { fecharFolha(); folha.className = "folha"; resolve(dados); };
           $("bv-pular").addEventListener("click", () => terminar(null));
@@ -543,12 +549,12 @@
       try { minhasCurtidas = new Set(JSON.parse(localStorage.getItem(GUARDA_CURTIDAS) || "[]")); } catch { /* sem memória */ }
       const CORACAO = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 7.8 3.6 4 7.3 4c2 0 3.5 1 4.7 2.6C13.2 5 14.7 4 16.7 4c3.7 0 6.3 3.8 4.8 7.8C19.5 16.4 12 21 12 21z"/></svg>';
       const botaoCurtir = (i, comNumero = true) =>
-        `<button type="button" class="curtir" data-curtir="${i.id}" aria-pressed="${minhasCurtidas.has(i.id)}" aria-label="Curtir">${CORACAO}${comNumero ? `<span>${i.curtidas}</span>` : ""}</button>`;
+        `<button type="button" class="curtir" data-curtir="${i.id}" aria-pressed="${minhasCurtidas.has(i.id)}" aria-label="Curtir">${CORACAO}${comNumero ? `<span>${i.curtidas || ""}</span>` : ""}</button>`;
 
       function pintarCurtida(i) {
         document.querySelectorAll(`[data-curtir="${i.id}"]`).forEach((b) => {
           b.setAttribute("aria-pressed", String(minhasCurtidas.has(i.id)));
-          const n = b.querySelector("span"); if (n) n.textContent = i.curtidas;
+          const n = b.querySelector("span"); if (n) n.textContent = i.curtidas || "";
         });
       }
 
@@ -592,13 +598,14 @@
       function selosDe(i) {
         const s = [];
         if (i.promocao) s.push(`<span class="selo hoje">${escapar(i.promocao.nome || "hoje")}</span>`);
+        if (i.destaque && !i.capa) s.push('<span class="selo sugestao">★ sugestão</span>');
         for (const t of i.etiquetas.slice(0, 2)) s.push(`<span class="selo">${escapar(t)}</span>`);
         return s.length ? `<span class="selos">${s.join("")}</span>` : "";
       }
       const precoHtml = (i) => (i.promocao ? `<s>${BRL(i.preco)}</s>${BRL(i.promocao.preco)}` : BRL(i.preco));
       const linhaItem = (i, seloExtra = "") => `
-        <div class="item" role="button" tabindex="0" data-id="${i.id}">
-          <div class="thumb">${foto(i)}</div>
+        <div class="item${i.capa ? "" : " sem-foto"}" role="button" tabindex="0" data-id="${i.id}">
+          ${i.capa ? `<div class="thumb">${foto(i)}</div>` : ""}
           <div class="texto"><div class="nome">${escapar(i.nome)}${seloExtra || selosDe(i)}</div><div class="desc">${escapar(i.descricao)}</div></div>
           <div class="direita"><div class="preco">${precoHtml(i)}</div>${botaoCurtir(i)}</div>
         </div>`;
@@ -715,14 +722,17 @@
           return;
         }
         for (const { c, itens } of secoes) {
-          const destaques = itens.filter((i) => i.destaque);
-          const resto = itens.filter((i) => !i.destaque);
+          // Só o destaque COM foto vira cartão grande; sem foto, fica na lista
+          // com o selo de sugestão (um quadrado laranja com uma letra não
+          // destaca nada).
+          const destaques = itens.filter((i) => i.destaque && i.capa);
+          const resto = itens.filter((i) => !(i.destaque && i.capa));
           const sec = document.createElement("section");
           sec.className = "secao"; sec.id = "cat-" + c.id;
           sec.innerHTML = `
             <div class="secao-cab"><h2>${escapar(c.nome)}<small>${itens.length} ${itens.length === 1 ? "item" : "itens"}</small></h2></div>
             ${c.descricao ? `<p class="desc-cat">${escapar(c.descricao)}</p>` : ""}
-            ${destaques.length ? `<div class="destaques">${destaques.map((i) => `
+            ${destaques.length ? `<div class="destaques${destaques.length === 1 ? " um" : ""}">${destaques.map((i) => `
               <div class="destaque" role="button" tabindex="0" data-id="${i.id}">
                 ${foto(i)}
                 ${i.promocao ? `<span class="tag">${escapar(i.promocao.nome || "hoje")}</span>` : ""}
@@ -817,10 +827,10 @@
           ? i.midias.map((m) => m.tipo === "video"
               ? `<div class="quadro"><video src="${escapar(m.url)}" muted autoplay loop playsinline preload="metadata"></video><span class="selo-video"><i></i>vídeo</span></div>`
               : `<div class="quadro"><img class="foto" src="${escapar(m.url)}" alt="" loading="lazy"></div>`)
-          : [`<div class="quadro">${foto(i)}</div>`];
+          : i.capa ? [`<div class="quadro">${foto(i)}</div>`] : [];
         folha.innerHTML = `
           <div class="alca"></div>
-          <div class="galeria">${quadros.join("")}</div>
+          ${quadros.length ? `<div class="galeria">${quadros.join("")}</div>` : ""}
           <div class="corpo">
             <div class="cab">
               <div><h3>${escapar(i.nome)}</h3><div class="preco-grande">${i.promocao ? `<s>${BRL(i.preco)}</s>` : ""}<span>${BRL(precoHoje(i))}</span></div></div>
