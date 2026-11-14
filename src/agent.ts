@@ -15,7 +15,9 @@ import {
 import { agenteDeveResponder, definirAtendimento } from "./inbox.js";
 import { MAXIMO_DE_MENSAGENS_NO_CONTEXTO, pareceLoop, recortarHistorico } from "./freioDoAgente.js";
 import { estadoDoPlano, PlanoBloqueadoError } from "./pontos.js";
-import { resolveTools, type AgentTool, type ToolContext } from "./tools/index.js";
+import { comDelivery, resolveTools, type AgentTool, type ToolContext } from "./tools/index.js";
+import { INSTRUCOES_DE_DELIVERY } from "./tools/delivery.js";
+import { temModulo } from "./modulos.js";
 import { findVenueBySlug } from "./venues.js";
 import type { Json } from "./database.types.js";
 
@@ -206,7 +208,21 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     if (plano.modelo) agenteEfetivo = { ...agent, model: plano.modelo };
   }
 
-  const tools = resolveTools(readToolNames(agent));
+  const nomesDasFerramentas = readToolNames(agent);
+  let tools = resolveTools(nomesDasFerramentas);
+  // O delivery é da CASA, não do agente: a mesma atendente serve uma casa que
+  // entrega e outra que não. Quem decide é o contrato do módulo — e, sem ele,
+  // nem as ferramentas nem as instruções de venda chegam ao modelo.
+  //
+  // Falha ao ler o contrato não derruba o atendimento: o cliente continua
+  // sendo atendido sobre reserva e programação, só sem o delivery.
+  let instrucoesDaCasa: string | null = null;
+  if (venue && (await temModulo(venue.id, "delivery").catch(() => false))) {
+    tools = comDelivery(tools, nomesDasFerramentas);
+    if (tools.some((t) => t.definition.name === "delivery_finalizar_pedido")) {
+      instrucoesDaCasa = INSTRUCOES_DE_DELIVERY;
+    }
+  }
   let stopReason: string | null = null;
   let textoFinal = "";
 
@@ -215,7 +231,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     // Sempre em streaming: com max_tokens alto a requisição não-streaming
     // estoura o timeout HTTP do SDK.
     const stream = anthropic().messages.stream(
-      buildRequest(agenteEfetivo, messages, tools, venue?.timezone ?? "America/Cuiaba"),
+      buildRequest(agenteEfetivo, messages, tools, venue?.timezone ?? "America/Cuiaba", instrucoesDaCasa),
     );
     if (onEvent) {
       stream.on("text", (delta) => onEvent({ type: "text_delta", text: delta }));
@@ -384,6 +400,7 @@ function buildRequest(
   messages: Anthropic.MessageParam[],
   tools: AgentTool[],
   timezone: string,
+  instrucoesDaCasa: string | null = null,
 ): Anthropic.MessageCreateParamsNonStreaming {
   // Prompt e base de conhecimento em blocos separados, o cache no último:
   // um breakpoint cobre o prefixo inteiro, e editar o treinamento não obriga
@@ -395,6 +412,11 @@ function buildRequest(
   const conhecimento = blocoDeConhecimento(agent);
   if (conhecimento) {
     blocos.push({ type: "text", text: conhecimento });
+  }
+  // O que vale só para a casa desta conversa (hoje, o delivery). Dentro do
+  // prefixo em cache: é texto fixo, igual em toda conversa da mesma casa.
+  if (instrucoesDaCasa) {
+    blocos.push({ type: "text", text: instrucoesDaCasa });
   }
   if (blocos.length > 0) {
     blocos[blocos.length - 1]!.cache_control = { type: "ephemeral" };

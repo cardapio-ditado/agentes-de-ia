@@ -140,7 +140,33 @@ import {
   type DadosDoItem,
   aparenciaDoCardapio,
   salvarAparenciaDoCardapio,
+  LimiteDeRitmo,
 } from "./cardapioDigital.js";
+import {
+  ErroDoDelivery,
+  abertoAgora,
+  abrirSacola,
+  adicionarASacola,
+  configDoDelivery,
+  configParaATela,
+  cotarPedido,
+  enderecoDoCardapio as enderecoDoDelivery,
+  fecharPedido,
+  lerSacola,
+  listarBairros,
+  listarCupons,
+  listarPedidos,
+  lojaPublica,
+  mudarQuantidade,
+  mudarStatus,
+  pedidoPublico,
+  receberAvisoDoMercadoPago,
+  relatorioDoDelivery,
+  sacolaParaATela,
+  salvarBairro,
+  salvarConfigDoDelivery,
+  salvarCupom,
+} from "./delivery.js";
 import {
   ErroDoRh,
   LIMITE_DOCUMENTO_BYTES,
@@ -1077,6 +1103,32 @@ async function comErroDoRh<T>(acao: () => Promise<T>): Promise<T> {
   }
 }
 
+async function comErroDoDelivery<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDoDelivery) {
+      const codigo =
+        e.status === 404 ? "not_found" : e.status === 503 ? "migracao_pendente" : e.status === 401 ? "forbidden" : e.status >= 500 ? "upstream_error" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
+/**
+ * O ritmo das rotas públicas do delivery — a mesma rede de baixo do cardápio.
+ *
+ * Fechar pedido é o mais apertado: cada tentativa cria uma cobrança no
+ * Mercado Pago da casa.
+ */
+const LIMITES_DO_DELIVERY = {
+  sacola: new LimiteDeRitmo(20, 10 * 60_000),
+  itens: new LimiteDeRitmo(120, 60_000),
+  pedido: new LimiteDeRitmo(8, 10 * 60_000),
+  chat: new LimiteDeRitmo(20, 10 * 60_000),
+};
+
 async function comErroDoCardapio<T>(acao: () => Promise<T>): Promise<T> {
   try {
     return await acao();
@@ -1692,6 +1744,7 @@ async function roteasApi(
       clientes: "clientes",
       aniversariantes: "clientes",
       cardapio: "cardapio-digital",
+      delivery: "delivery",
       rh: "rh",
       financeiro: "financeiro",
     };
@@ -2737,6 +2790,71 @@ async function roteasApi(
     // Financeiro — o dono, o gerente, ou a pessoa do financeiro com acesso só
     // a ele — entra. Quem só lê (contador) não escreve: a chave dele não tem
     // escrita.
+    // ---- Delivery ----
+    // Tudo aqui passa pela trava de módulo lá em cima (recurso "delivery").
+    if (recurso === "delivery") {
+      const escrita = metodo !== "GET";
+      const chave = await exigirChave(req, escrita ? "reservations:write" : "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const secao = p[3] ?? "";
+
+      // GET /v1/venues/:slug/delivery — o que a tela de ajustes desenha
+      if (metodo === "GET" && p.length === 3) {
+        const [cfg, bairros, cupons] = await comErroDoDelivery(() =>
+          Promise.all([configDoDelivery(venue.id), listarBairros(venue.id), listarCupons(venue.id)]),
+        );
+        return ok(res, {
+          config: configParaATela(cfg),
+          aberto: abertoAgora(cfg, venue.timezone),
+          bairros,
+          cupons,
+          link: enderecoDoDelivery(venue),
+          // O endereço que a casa cola no painel do Mercado Pago.
+          webhook: `${enderecoBase()}/v1/webhooks/mercadopago/${encodeURIComponent(venue.slug)}`,
+        });
+      }
+
+      // GET /delivery/pedidos — a fila da cozinha, do mais novo ao mais antigo
+      if (metodo === "GET" && secao === "pedidos" && p.length === 4) {
+        return ok(res, await comErroDoDelivery(() => listarPedidos(venue.id)));
+      }
+      // PATCH /delivery/pedidos/:id  { status } — a equipe move o pedido
+      if (metodo === "PATCH" && secao === "pedidos" && p.length === 5) {
+        const corpo = await lerJson(req);
+        const status = textoOpcional(corpo, "status");
+        if (!status) throw erro(400, "invalid_request", "Diga para qual situação o pedido vai.");
+        return ok(res, await comErroDoDelivery(() => mudarStatus(venue, p[4]!, status)));
+      }
+      // GET /delivery/relatorio?dias=7
+      if (metodo === "GET" && secao === "relatorio" && p.length === 4) {
+        return ok(res, await comErroDoDelivery(() => relatorioDoDelivery(venue, Number(url.searchParams.get("dias")) || 7)));
+      }
+
+      // Daqui para baixo é configuração: taxa, cupom e a conta que recebe o
+      // dinheiro não são coisa de quem só opera a fila.
+      if (escrita) exigirQuemConfigura(chave);
+
+      // PUT /delivery/config
+      if (metodo === "PUT" && secao === "config" && p.length === 4) {
+        const corpo = await lerJson(req);
+        return ok(res, configParaATela(await comErroDoDelivery(() => salvarConfigDoDelivery(venue.id, corpo))));
+      }
+      // POST /delivery/bairros · PUT /delivery/bairros/:id
+      if (secao === "bairros" && ((metodo === "POST" && p.length === 4) || (metodo === "PUT" && p.length === 5))) {
+        const corpo = await lerJson(req);
+        await comErroDoDelivery(() => salvarBairro(venue.id, corpo, p[4]));
+        return ok(res, await comErroDoDelivery(() => listarBairros(venue.id)), metodo === "POST" ? 201 : 200);
+      }
+      // PUT /delivery/cupons — cria ou edita pelo código
+      if (metodo === "PUT" && secao === "cupons" && p.length === 4) {
+        const corpo = await lerJson(req);
+        await comErroDoDelivery(() => salvarCupom(venue.id, corpo));
+        return ok(res, await comErroDoDelivery(() => listarCupons(venue.id)));
+      }
+
+      throw erro(404, "not_found", `Rota ${metodo} /v1/venues/${slug}/delivery/${p.slice(3).join("/")} não existe.`);
+    }
+
     if (recurso === "financeiro") {
       const escrita = metodo !== "GET";
       const chave = await exigirChave(req, escrita ? "reservations:write" : "reservations:read");
@@ -6048,6 +6166,169 @@ async function roteasApi(
     }
   }
 
+  // ---- Webhook do Mercado Pago: /v1/webhooks/mercadopago/:casa ----
+  // Sem chave de API: quem chama é o Mercado Pago. A casa vai no caminho
+  // porque cada uma tem a própria conta, e é com o token DELA que o pagamento
+  // é conferido (ver `receberAvisoDoMercadoPago`).
+  if (p[0] === "webhooks" && p[1] === "mercadopago" && p.length === 3 && metodo === "POST") {
+    const venue = await venueDaPesquisa(p[2]!);
+    if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    const corpo = await lerJson(req, 100_000).catch(() => ({}) as Record<string, unknown>);
+    const dados = corpo.data && typeof corpo.data === "object" ? (corpo.data as Record<string, unknown>) : {};
+    const q = url.searchParams;
+    const cabecalho = (nome: string) => {
+      const v = req.headers[nome];
+      return Array.isArray(v) ? v[0] : v;
+    };
+    const resultado = await comErroDoDelivery(() =>
+      receberAvisoDoMercadoPago(venue, {
+        tipo: String(corpo.type ?? q.get("type") ?? q.get("topic") ?? "") || null,
+        pagamentoId: String(dados.id ?? q.get("data.id") ?? q.get("id") ?? "") || null,
+        assinatura: cabecalho("x-signature"),
+        requestId: cabecalho("x-request-id"),
+      }),
+    );
+    return ok(res, resultado);
+  }
+
+  // ---- Cardápio de delivery: /v1/delivery-publico/:casa ----
+  // Sem login: é a vitrine da casa. O que identifica o cliente é o id da
+  // sacola (que só ele tem) e, no acompanhamento, o token do pedido.
+  if (p[0] === "delivery-publico" && p.length >= 2) {
+    const venue = await venueDaPesquisa(p[1]!);
+    if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    if (!(await temModulo(venue.id, "delivery"))) {
+      throw erro(404, "not_found", "Esta casa não tem delivery pelo Brasa.");
+    }
+    const ritmo = (balde: keyof typeof LIMITES_DO_DELIVERY, mensagem: string) => {
+      if (!LIMITES_DO_DELIVERY[balde].permitir(`${ipDe(req)}:${venue.id}`)) throw erro(429, "rate_limited", mensagem);
+    };
+
+    // GET /v1/delivery-publico/:casa — a loja, o cardápio e como ela entrega
+    if (metodo === "GET" && p.length === 2) {
+      const [cardapio, loja, agente] = await Promise.all([
+        comErroDoCardapio(() => cardapioPublico(venue)),
+        comErroDoDelivery(() => lojaPublica(venue)),
+        agenteDaMesa(venue),
+      ]);
+      return ok(res, {
+        casa: { ...cardapio.casa, ...marcaDaCasa(venue), ...loja },
+        categorias: cardapio.categorias,
+        itens: cardapio.itens,
+        chat: agente !== null,
+      });
+    }
+
+    // POST /v1/delivery-publico/:casa/sacola — abre a sacola de quem chegou pelo site
+    if (metodo === "POST" && p[2] === "sacola" && p.length === 3) {
+      ritmo("sacola", "Muitas sacolas abertas em seguida. Espere um pouco.");
+      const sacola = await comErroDoDelivery(() => abrirSacola(venue.id));
+      return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, sacola)), 201);
+    }
+
+    if (p[2] === "sacola" && p.length >= 4) {
+      const sacola = await comErroDoDelivery(() => lerSacola(venue.id, p[3]!));
+
+      // GET /sacola/:id
+      if (metodo === "GET" && p.length === 4) {
+        return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, sacola)));
+      }
+      // POST /sacola/:id/itens  { item, quantidade, opcoes?, observacao? }
+      if (metodo === "POST" && p[4] === "itens" && p.length === 5) {
+        ritmo("itens", "Muitos toques em seguida. Espere um instante.");
+        const corpo = await lerJson(req);
+        const nova = await comErroDoDelivery(() =>
+          adicionarASacola(venue, sacola, {
+            item: textoOpcional(corpo, "item") ?? "",
+            quantidade: Number(corpo.quantidade),
+            opcoes: Array.isArray(corpo.opcoes) ? corpo.opcoes.slice(0, 40).map(String) : [],
+            observacao: textoOpcional(corpo, "observacao") ?? null,
+          }),
+        );
+        return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, nova)));
+      }
+      // PATCH /sacola/:id/itens/:linha  { quantidade } — zero tira a linha
+      if (metodo === "PATCH" && p[4] === "itens" && p.length === 6) {
+        ritmo("itens", "Muitos toques em seguida. Espere um instante.");
+        const corpo = await lerJson(req);
+        const nova = await comErroDoDelivery(() => mudarQuantidade(sacola, p[5]!, Number(corpo.quantidade) || 0));
+        return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, nova)));
+      }
+
+      const pedidoDaTela = (corpo: Record<string, unknown>) => ({
+        tipo: corpo.tipo === "retirada" ? ("retirada" as const) : ("entrega" as const),
+        bairro: textoOpcional(corpo, "bairro") ?? null,
+        cupom: textoOpcional(corpo, "cupom") ?? null,
+        usar_cashback: corpo.usar_cashback === true,
+      });
+      // POST /sacola/:id/cotacao — quanto fica, sem fechar
+      if (metodo === "POST" && p[4] === "cotacao" && p.length === 5) {
+        ritmo("itens", "Muitos toques em seguida. Espere um instante.");
+        const corpo = await lerJson(req);
+        return ok(res, await comErroDoDelivery(() => cotarPedido(venue, sacola, pedidoDaTela(corpo))));
+      }
+      // POST /sacola/:id/pedido — fecha e devolve a cobrança
+      if (metodo === "POST" && p[4] === "pedido" && p.length === 5) {
+        ritmo("pedido", "Muitas tentativas de fechar o pedido. Espere alguns minutos.");
+        const corpo = await lerJson(req);
+        const pedido = await comErroDoDelivery(() =>
+          fecharPedido(venue, sacola, {
+            ...pedidoDaTela(corpo),
+            origem: "cardapio",
+            nome: textoOpcional(corpo, "nome") ?? "",
+            telefone: textoOpcional(corpo, "telefone") ?? null,
+            endereco: textoOpcional(corpo, "endereco") ?? null,
+            pagamento: textoOpcional(corpo, "pagamento") ?? "",
+            observacoes: textoOpcional(corpo, "observacoes") ?? null,
+          }),
+        );
+        return ok(res, await comErroDoDelivery(() => pedidoPublico(venue.id, pedido.token)), 201);
+      }
+    }
+
+    // GET /v1/delivery-publico/:casa/pedidos/:token — o acompanhamento
+    if (metodo === "GET" && p[2] === "pedidos" && p.length === 4) {
+      return ok(res, await comErroDoDelivery(() => pedidoPublico(venue.id, p[3]!)));
+    }
+
+    // POST /v1/delivery-publico/:casa/chat  { sacola, mensagem }
+    // O atendente da casa, na própria página. A sacola é o interlocutor: é
+    // por ela que as ferramentas de delivery acham o que o cliente montou.
+    if (metodo === "POST" && p[2] === "chat" && p.length === 3) {
+      ritmo("chat", "Muitas mensagens seguidas. Espere um minuto.");
+      const agentSlug = await agenteDaMesa(venue);
+      if (!agentSlug) throw erro(404, "not_found", "Esta casa não tem atendimento por chat.");
+      const corpo = await lerJson(req);
+      const mensagem = textoOpcional(corpo, "mensagem");
+      if (!mensagem) throw erro(400, "invalid_request", "Escreva a mensagem.");
+      if (mensagem.length > 1000) throw erro(400, "invalid_request", "Mensagem longa demais (máximo 1000 caracteres).");
+      const sacola = await comErroDoDelivery(() => lerSacola(venue.id, textoOpcional(corpo, "sacola") ?? ""));
+      // Sacola que veio do WhatsApp conversa no WhatsApp: abrir uma segunda
+      // conversa aqui daria ao cliente dois atendentes para a mesma sacola.
+      if (sacola.conversation_id) throw erro(400, "invalid_request", "Continue a conversa pelo WhatsApp.");
+      try {
+        const resultado = await runAgent({
+          agentSlug,
+          userMessage: mensagem,
+          channel: "delivery",
+          externalId: sacola.id,
+          venueSlug: venue.slug,
+          contato: { nome: sacola.nome ? `Delivery · ${sacola.nome}` : "Delivery (site)" },
+        });
+        // A conversa pode ter mexido na sacola: a página redesenha com o que volta.
+        const atual = await comErroDoDelivery(async () => sacolaParaATela(venue, await lerSacola(venue.id, sacola.id)));
+        return ok(res, { texto: resultado.respondeu ? resultado.text : null, humano: !resultado.respondeu, sacola: atual });
+      } catch (e) {
+        if (e instanceof PlanoBloqueadoError) {
+          return ok(res, { texto: "Nosso atendimento por chat está pausado agora. Você pode montar o pedido direto pelo cardápio.", humano: false });
+        }
+        throw e;
+      }
+    }
+
+    throw erro(404, "not_found", `Rota ${metodo} /v1/delivery-publico/${p.slice(1).join("/")} não existe.`);
+  }
+
   if (p[0] === "cardapio-publico" && p.length >= 2) {
     const venue = await venueDaPesquisa(p[1]!);
     if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
@@ -6610,7 +6891,9 @@ async function servirEstatico(res: ServerResponse, caminho: string): Promise<voi
   // /ficha/<token> é o link em que o funcionário preenche a própria ficha.
   const relativo = caminho.startsWith("/cardapio/")
     ? "cardapio.html"
-    : caminho.startsWith("/ficha/")
+    : caminho.startsWith("/delivery/")
+      ? "delivery.html"
+      : caminho.startsWith("/ficha/")
       ? "ficha.html"
       : caminho.startsWith("/disc/")
         ? "disc.html"

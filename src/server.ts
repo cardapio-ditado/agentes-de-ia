@@ -11,6 +11,7 @@ import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
 import { cuidarDosDisparos } from "./disparos.js";
+import { cuidarDoDelivery } from "./delivery.js";
 import { enviarPendentesPeloOficial } from "./filaOficial.js";
 import { reivindicar } from "./rotinas.js";
 import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
@@ -263,6 +264,16 @@ async function cicloDosChecklists(): Promise<void> {
     if (r.concluidos) console.log(`[disparos] ${r.concluidos} disparo(s) concluído(s).`);
   } catch (e) {
     console.error("[disparos] relógio falhou:", e instanceof Error ? e.message : e);
+  }
+  // O delivery: derruba o pedido que ninguém pagou (devolvendo cupom e
+  // cashback) e lembra, uma vez, a sacola esquecida no WhatsApp.
+  try {
+    const r = await cuidarDoDelivery();
+    if (r.expirados || r.lembrados) {
+      console.log(`[delivery] ${r.expirados} pedido(s) sem pagamento cancelado(s), ${r.lembrados} sacola(s) lembrada(s).`);
+    }
+  } catch (e) {
+    console.error("[delivery] relógio falhou:", e instanceof Error ? e.message : e);
   }
   // E os avisos com modelo (parabéns, convite da pesquisa) pelo oficial,
   // sem depender do conector estar conectado.

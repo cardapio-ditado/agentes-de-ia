@@ -40,6 +40,7 @@ import { clientesDaCasa } from "./pages/clientesDaCasa.js";
 import { pesquisaRespostas } from "./pages/pesquisaRespostas.js";
 import { producao } from "./pages/producao.js";
 import { cardapioDigital } from "./pages/cardapioDigital.js";
+import { delivery } from "./pages/delivery.js";
 import { rh } from "./pages/rh.js";
 import { contasAPagar, contasAReceber } from "./pages/financeiro.js";
 import { fluxoDeCaixa, painelFinanceiro } from "./pages/financeiroPainel.js";
@@ -175,6 +176,10 @@ const PAGINAS = [
   // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link
   // externo por cliente. Uma tela só, com abas — é o que a casa mexe todo dia.
   { id: "cardapio", modulo: "cardapio-digital", rotulo: "Cardápio", icone: ICONES.caixa, render: cardapioDigital, subtitulo: "Itens, fotos, banners, promoções e os comentários dos clientes" },
+
+  // Delivery — o canal próprio de pedidos. Os itens são os do Cardápio
+  // Digital; aqui ficam a fila de pedidos, os cupons e como a casa entrega.
+  { id: "delivery", modulo: "delivery", rotulo: "Delivery", icone: ICONES.raio, render: delivery, subtitulo: "A fila de pedidos, os cupons, os números e como a casa entrega" },
 
   // RH — Fase 1. Ficha, documento, admissão e desligamento. Não calcula folha:
   // entrega os números prontos para quem já fecha a folha da casa.
@@ -318,6 +323,15 @@ const MODULOS = [
     pos: { x: -0.75, y: 0.5 },
   },
   {
+    id: "delivery",
+    nome: "Delivery",
+    descricao:
+      "Canal próprio de pedidos, sem comissão: cardápio com link, sacola e pagamento por Pix ou cartão, e o atendente virtual fechando pedido pelo WhatsApp.",
+    icone: "M5 17a2 2 0 104 0 2 2 0 00-4 0zm10 0a2 2 0 104 0 2 2 0 00-4 0zM3 17V6h11v11M14 9h4l3 4v4h-2M9 17h6",
+    // Ao lado do Cardápio Digital, de onde vêm os itens. Era favo vazio.
+    pos: { x: -1.5, y: 0 },
+  },
+  {
     id: "rh",
     nome: "RH",
     descricao:
@@ -409,7 +423,6 @@ const MODULOS = [
  */
 const FAVOS_VAZIOS = [
   { x: 1.5, y: 0 },
-  { x: -1.5, y: 0 },
 ];
 
 const app = document.getElementById("app");

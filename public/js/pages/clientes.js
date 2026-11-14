@@ -43,6 +43,7 @@ const PLANOS = [
 const MODULOS_VENDAVEIS = [
   ["agentes-ia", "Atendente virtual"],
   ["cardapio-digital", "Cardápio Digital"],
+  ["delivery", "Delivery"],
   ["checklist", "Checklist"],
   ["avaliacoes", "Avaliações"],
   ["cmv", "Custos e estoque"],
