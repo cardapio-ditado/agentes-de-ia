@@ -277,6 +277,38 @@ const ficha = {
         "POST /disparos/previa": { pessoas: 2, amostra: ["Bruno Camargo", "Hugo Barreto"] },
       },
     },
+    "disparos-campanha-pronta": {
+      rotulo: "uma campanha pronta cujo texto a Meta já aprovou: o formulário fica preenchido",
+      cliques: ['.aba[data-aba="disparos"]', '[data-campanha="cliente_sumido"] button'],
+      rotas: {
+        "GET /disparos": [],
+        "GET /whatsapp-oficial/modelos": [
+          ...MODELOS,
+          // O mesmo texto da campanha pronta, como volta da Meta depois de aprovado.
+          resumirModelo({
+            name: "cliente_sumido",
+            language: "pt_BR",
+            category: "MARKETING",
+            status: "APPROVED",
+            components: [
+              { type: "BODY", text: "Oi, {{1}}, tudo bem? Faz um tempo que você não aparece no {{2}} e a gente sentiu a sua falta. Para te ver de novo, esta semana tem {{3}}. Quer que a gente guarde uma mesa para você?" },
+              { type: "FOOTER", text: "Responda SAIR para não receber mais mensagens." },
+              { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Quero reservar" }, { type: "QUICK_REPLY", text: "Agora não" }] },
+            ],
+          }),
+        ],
+        "POST /disparos/previa": { pessoas: 2, amostra: ["Bruno Camargo", "Hugo Barreto"] },
+      },
+    },
+    "disparos-campanha-nova": {
+      rotulo: "uma campanha pronta no primeiro uso: abre o criador de modelo com o texto, para mandar à Meta",
+      cliques: ['.aba[data-aba="disparos"]', '[data-campanha="convite_vip"] button'],
+      rotas: {
+        "GET /disparos": [],
+        "GET /whatsapp-oficial/modelos": MODELOS,
+        "POST /disparos/previa": { pessoas: 2, amostra: ["Renata Prado", "Lia Moura"] },
+      },
+    },
     "disparo-aberto": {
       rotulo: "um disparo aberto, com o que aconteceu com cada pessoa",
       cliques: ['.aba[data-aba="disparos"]', '[data-disparo="d1"]'],
