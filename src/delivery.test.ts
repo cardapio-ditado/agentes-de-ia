@@ -239,10 +239,10 @@ test("o ts do webhook vale em segundos e em milissegundos", () => {
 });
 
 test("o prazo do webhook: 10 minutos por padrão, ajustável, e 0 desliga", () => {
-  assert.equal(toleranciaDoWebhookMs(undefined), 600_000);
-  assert.equal(toleranciaDoWebhookMs(""), 600_000);
-  assert.equal(toleranciaDoWebhookMs("abc"), 600_000);
-  assert.equal(toleranciaDoWebhookMs("-3"), 600_000);
+  assert.equal(toleranciaDoWebhookMs(undefined), 0);
+  assert.equal(toleranciaDoWebhookMs(""), 0);
+  assert.equal(toleranciaDoWebhookMs("abc"), 0);
+  assert.equal(toleranciaDoWebhookMs("-3"), 0);
   assert.equal(toleranciaDoWebhookMs("30"), 1_800_000);
   assert.equal(toleranciaDoWebhookMs("0"), 0);
 });

@@ -136,21 +136,21 @@ export async function consultarPagamento(accessToken: string, pagamentoId: strin
 }
 
 /**
- * Quanto tempo depois de assinado um aviso ainda vale.
+ * Quanto tempo depois de assinado um aviso ainda vale — DESLIGADO por padrão.
  *
- * Sem prazo, um aviso verdadeiro capturado hoje (num log, num proxy) podia
- * ser reapresentado daqui a um mês e passar na assinatura. Dez minutos cobrem
- * a fila do Mercado Pago e o relógio torto de um servidor.
+ * Um prazo curto protege contra a reapresentação de um aviso antigo. Mas aqui
+ * a reapresentação não faz estrago: o aviso só diz QUAL pagamento olhar, o
+ * status e o valor vêm da API, e liberar o pedido é idempotente. Já recusar
+ * uma REENTREGA legítima (o Mercado Pago repete o aviso quando a resposta
+ * falha, e não está confirmado que ele assina de novo com a hora nova) faria
+ * um pedido pago nunca chegar à cozinha — e o aviso é a única confirmação.
  *
- * Ajustável por MP_WEBHOOK_TOLERANCIA_MINUTOS, e 0 desliga o prazo. Existe
- * porque não está confirmado se a REENTREGA do Mercado Pago (quando a nossa
- * resposta falha) vem assinada com hora nova ou com a do aviso original; se
- * for a original, o log abaixo ("aviso velho") vai mostrar, e a casa alarga
- * o prazo sem precisar de versão nova.
+ * Por isso o prazo é opção: MP_WEBHOOK_TOLERANCIA_MINUTOS liga (ex.: 60)
+ * depois que a casa vir, nos logs, como as reentregas chegam.
  */
 export function toleranciaDoWebhookMs(valor: string | undefined = process.env.MP_WEBHOOK_TOLERANCIA_MINUTOS): number {
   const minutos = Number(valor);
-  return valor !== undefined && valor.trim() !== "" && Number.isFinite(minutos) && minutos >= 0 ? minutos * 60_000 : 10 * 60_000;
+  return valor !== undefined && valor.trim() !== "" && Number.isFinite(minutos) && minutos >= 0 ? minutos * 60_000 : 0;
 }
 
 /**
