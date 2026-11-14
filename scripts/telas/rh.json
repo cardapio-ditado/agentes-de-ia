@@ -976,6 +976,18 @@
           "id": "horas",
           "nome": "Pelas horas trabalhadas"
         }
+      ],
+      "avisos_da_retencao": [
+        {
+          "acima_de": 33,
+          "nivel": "alto",
+          "texto": "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. Confirme com a contabilidade antes de pagar a semana."
+        },
+        {
+          "acima_de": 20,
+          "nivel": "atencao",
+          "texto": "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. Confirme com a contabilidade em qual caso a casa está."
+        }
       ]
     },
     "GET /rh/resumo": {
@@ -2305,6 +2317,486 @@
           ]
         }
       }
+    },
+    "gorjeta-retencao-alta": {
+      "rotulo": "a casa retém mais de 33%",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "rotas": {
+        "GET /rh/acerto": {
+          "ano": 2026,
+          "semana": 37,
+          "inicio": "2026-09-07",
+          "fim": "2026-09-13",
+          "regra": {
+            "metodo": "individual",
+            "percentual_servico": 10,
+            "percentual_repasse": 60,
+            "criterio_rateio": "peso",
+            "percentual_da_casa_para_apoio": 20,
+            "configurada": true
+          },
+          "linhas": [
+            {
+              "atendente_id": "p1",
+              "nome": "Ju",
+              "funcao": "Garçonete",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 20600,
+              "comandas": 140,
+              "comissao": 1483.2,
+              "rateio": 0,
+              "adicionais": 180,
+              "descontos": 0,
+              "a_receber": 1663.2
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "peso": 3,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 409.05,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 409.05
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago",
+              "funcao": "Barman",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 9700,
+              "comandas": 61,
+              "comissao": 698.4,
+              "rateio": 0,
+              "adicionais": 0,
+              "descontos": 64.5,
+              "a_receber": 633.9
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 136.35,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 136.35
+            }
+          ],
+          "totais": {
+            "vendas": 30300,
+            "arrecadado": 3030,
+            "repassado": 2727,
+            "retido": 1212.0,
+            "comissoes": 2181.6,
+            "rateio": 545.4,
+            "adicionais": 180,
+            "descontos": 64.5,
+            "a_receber": 2842.5
+          },
+          "vendas": [
+            {
+              "id": "v1",
+              "dia": "2026-09-08",
+              "turno_id": null,
+              "atendente_id": "p1",
+              "valor": 12400,
+              "comandas": 86,
+              "observacao": null
+            },
+            {
+              "id": "v2",
+              "dia": "2026-09-10",
+              "turno_id": "t1",
+              "atendente_id": "p1",
+              "valor": 8200,
+              "comandas": 54,
+              "observacao": null
+            },
+            {
+              "id": "v3",
+              "dia": "2026-09-09",
+              "turno_id": null,
+              "atendente_id": "p5",
+              "valor": 9700,
+              "comandas": 61,
+              "observacao": null
+            }
+          ],
+          "extras": [
+            {
+              "id": "x1",
+              "dia": "2026-09-12",
+              "atendente_id": "p1",
+              "tipo": "adicional",
+              "descricao": "Evento fechado",
+              "valor": 180
+            },
+            {
+              "id": "x2",
+              "dia": "2026-09-11",
+              "atendente_id": "p5",
+              "tipo": "desconto",
+              "descricao": "Consumo no bar",
+              "valor": 64.5
+            }
+          ],
+          "fechamentos": [],
+          "pesos": [
+            {
+              "id": "w1",
+              "funcao": "Cozinha",
+              "peso": 3
+            },
+            {
+              "id": "w2",
+              "funcao": "Copa",
+              "peso": 1
+            }
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "equipe": [
+            {
+              "atendente_id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete"
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha"
+            },
+            {
+              "atendente_id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança"
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa"
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman"
+            }
+          ],
+          "metodos": [
+            {
+              "id": "individual",
+              "nome": "Comissão individual",
+              "explicacao": "Cada um recebe um percentual sobre o que ele mesmo vendeu."
+            },
+            {
+              "id": "global",
+              "nome": "Bolo da casa",
+              "explicacao": "O serviço da casa inteira é repartido entre a equipe pelo critério escolhido."
+            }
+          ],
+          "criterios": [
+            {
+              "id": "igual",
+              "nome": "Igual para todos"
+            },
+            {
+              "id": "peso",
+              "nome": "Por peso da função (pontuação)"
+            },
+            {
+              "id": "horas",
+              "nome": "Pelas horas trabalhadas"
+            }
+          ],
+          "avisos_da_retencao": [
+            {
+              "acima_de": 33,
+              "nivel": "alto",
+              "texto": "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. Confirme com a contabilidade antes de pagar a semana."
+            },
+            {
+              "acima_de": 20,
+              "nivel": "atencao",
+              "texto": "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. Confirme com a contabilidade em qual caso a casa está."
+            }
+          ]
+        }
+      },
+      "cliques": [
+        "button:text-is(\"Regras\")"
+      ]
+    },
+    "gorjeta-retencao-atencao": {
+      "rotulo": "a casa retém entre 20% e 33%",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "rotas": {
+        "GET /rh/acerto": {
+          "ano": 2026,
+          "semana": 37,
+          "inicio": "2026-09-07",
+          "fim": "2026-09-13",
+          "regra": {
+            "metodo": "individual",
+            "percentual_servico": 10,
+            "percentual_repasse": 75,
+            "criterio_rateio": "peso",
+            "percentual_da_casa_para_apoio": 20,
+            "configurada": true
+          },
+          "linhas": [
+            {
+              "atendente_id": "p1",
+              "nome": "Ju",
+              "funcao": "Garçonete",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 20600,
+              "comandas": 140,
+              "comissao": 1483.2,
+              "rateio": 0,
+              "adicionais": 180,
+              "descontos": 0,
+              "a_receber": 1663.2
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "peso": 3,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 409.05,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 409.05
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago",
+              "funcao": "Barman",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 9700,
+              "comandas": 61,
+              "comissao": 698.4,
+              "rateio": 0,
+              "adicionais": 0,
+              "descontos": 64.5,
+              "a_receber": 633.9
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 136.35,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 136.35
+            }
+          ],
+          "totais": {
+            "vendas": 30300,
+            "arrecadado": 3030,
+            "repassado": 2727,
+            "retido": 757.5,
+            "comissoes": 2181.6,
+            "rateio": 545.4,
+            "adicionais": 180,
+            "descontos": 64.5,
+            "a_receber": 2842.5
+          },
+          "vendas": [
+            {
+              "id": "v1",
+              "dia": "2026-09-08",
+              "turno_id": null,
+              "atendente_id": "p1",
+              "valor": 12400,
+              "comandas": 86,
+              "observacao": null
+            },
+            {
+              "id": "v2",
+              "dia": "2026-09-10",
+              "turno_id": "t1",
+              "atendente_id": "p1",
+              "valor": 8200,
+              "comandas": 54,
+              "observacao": null
+            },
+            {
+              "id": "v3",
+              "dia": "2026-09-09",
+              "turno_id": null,
+              "atendente_id": "p5",
+              "valor": 9700,
+              "comandas": 61,
+              "observacao": null
+            }
+          ],
+          "extras": [
+            {
+              "id": "x1",
+              "dia": "2026-09-12",
+              "atendente_id": "p1",
+              "tipo": "adicional",
+              "descricao": "Evento fechado",
+              "valor": 180
+            },
+            {
+              "id": "x2",
+              "dia": "2026-09-11",
+              "atendente_id": "p5",
+              "tipo": "desconto",
+              "descricao": "Consumo no bar",
+              "valor": 64.5
+            }
+          ],
+          "fechamentos": [],
+          "pesos": [
+            {
+              "id": "w1",
+              "funcao": "Cozinha",
+              "peso": 3
+            },
+            {
+              "id": "w2",
+              "funcao": "Copa",
+              "peso": 1
+            }
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "equipe": [
+            {
+              "atendente_id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete"
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha"
+            },
+            {
+              "atendente_id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança"
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa"
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman"
+            }
+          ],
+          "metodos": [
+            {
+              "id": "individual",
+              "nome": "Comissão individual",
+              "explicacao": "Cada um recebe um percentual sobre o que ele mesmo vendeu."
+            },
+            {
+              "id": "global",
+              "nome": "Bolo da casa",
+              "explicacao": "O serviço da casa inteira é repartido entre a equipe pelo critério escolhido."
+            }
+          ],
+          "criterios": [
+            {
+              "id": "igual",
+              "nome": "Igual para todos"
+            },
+            {
+              "id": "peso",
+              "nome": "Por peso da função (pontuação)"
+            },
+            {
+              "id": "horas",
+              "nome": "Pelas horas trabalhadas"
+            }
+          ],
+          "avisos_da_retencao": [
+            {
+              "acima_de": 33,
+              "nivel": "alto",
+              "texto": "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. Confirme com a contabilidade antes de pagar a semana."
+            },
+            {
+              "acima_de": 20,
+              "nivel": "atencao",
+              "texto": "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. Confirme com a contabilidade em qual caso a casa está."
+            }
+          ]
+        }
+      }
+    },
+    "gorjeta-desconto": {
+      "rotulo": "lançando um desconto",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "cliques": [
+        "button:text-is(\"Desconto\")"
+      ]
     }
   }
 }

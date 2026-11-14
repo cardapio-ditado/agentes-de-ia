@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ErroDoRh } from "./rh.js";
 import {
+  avisoDaRetencao,
   bonusDaMeta,
+  descricaoDoExtra,
   bordasDaSemana,
   lerMetas,
   montarAcerto,
@@ -326,4 +328,37 @@ test("meta: faixa torta é recusada, e a lista sai em ordem", () => {
   assert.throws(() => lerMetas([{ a_partir_de: 0, bonus: 1 }]), ErroDoRh);
   assert.throws(() => lerMetas([{ a_partir_de: 100, bonus: 0 }]), ErroDoRh);
   assert.throws(() => lerMetas([{ a_partir_de: 100, bonus: 1 }, { a_partir_de: 100, bonus: 2 }]), ErroDoRh);
+});
+
+test("retenção: até 20% não avisa; entre 20% e 33% é atenção; acima de 33% é alerta alto", () => {
+  assert.equal(avisoDaRetencao(100), null);
+  assert.equal(avisoDaRetencao(90), null);
+  // 20% em ponto é o teto do Simples: ainda dentro.
+  assert.equal(avisoDaRetencao(80), null);
+  assert.equal(avisoDaRetencao(79.99)!.nivel, "atencao");
+  assert.equal(avisoDaRetencao(75)!.nivel, "atencao");
+  assert.equal(avisoDaRetencao(75)!.retencao, 25);
+  // 33% em ponto é o teto das demais: atenção, não alerta alto.
+  assert.equal(avisoDaRetencao(67)!.nivel, "atencao");
+  assert.equal(avisoDaRetencao(66.99)!.nivel, "alto");
+  assert.equal(avisoDaRetencao(0)!.nivel, "alto");
+  assert.equal(avisoDaRetencao(0)!.retencao, 100);
+});
+
+test("retenção: o aviso manda conferir com a contabilidade e não se diz parecer", () => {
+  for (const repasse of [75, 50]) {
+    const a = avisoDaRetencao(repasse)!;
+    assert.match(a.texto, /contabilidade/);
+    assert.match(a.texto, /13\.419/);
+  }
+  assert.equal(avisoDaRetencao(Number.NaN), null);
+});
+
+test("desconto sem motivo não entra; adicional pode ir sem descrição", () => {
+  assert.equal(descricaoDoExtra("adicional", ""), null);
+  assert.equal(descricaoDoExtra("adicional", "  evento de sábado "), "evento de sábado");
+  assert.equal(descricaoDoExtra("desconto", " consumo no bar "), "consumo no bar");
+  for (const vazio of ["", "   ", null, undefined, "ok"]) {
+    assert.throws(() => descricaoDoExtra("desconto", vazio), (e) => e instanceof ErroDoRh && e.status === 400 && /motivo do desconto/.test(e.message));
+  }
 });

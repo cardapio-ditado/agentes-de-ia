@@ -72,6 +72,11 @@ export function criarFechamento(corpo, ctx) {
       return;
     }
 
+    // Retenção acima do teto da lei aparece no acerto de TODA semana, e não
+    // só em Regras: quem paga a semana nem sempre é quem configurou.
+    const retencao = avisoDeRetencao(dados.avisos_da_retencao, dados.regra.percentual_repasse);
+    if (retencao) corpo.append(el("div", { style: "margin-bottom:16px" }, [retencao]));
+
     if (painel === "regras") corpo.append(painelDeRegras());
     if (painel === "venda") corpo.append(formularioDeVenda());
     if (painel === "adicional") corpo.append(formularioDeExtra("adicional"));
@@ -188,6 +193,17 @@ export function criarFechamento(corpo, ctx) {
     apoio.addEventListener("input", atualizarVisibilidade);
     atualizarVisibilidade();
 
+    // O aviso acompanha o número enquanto ele é digitado: é antes de salvar
+    // que o gestor precisa saber que passou do teto.
+    const avisoDoRepasse = el("div", { "aria-live": "polite" });
+    const atualizarAviso = () => {
+      const aviso = avisoDeRetencao(dados.avisos_da_retencao, repasse.value === "" ? 100 : repasse.value);
+      limpar(avisoDoRepasse);
+      if (aviso) avisoDoRepasse.append(aviso);
+    };
+    repasse.addEventListener("input", atualizarAviso);
+    atualizarAviso();
+
     const metas = editorDeMetas(r);
 
     return el("section", { classe: "cartao" }, [
@@ -206,11 +222,12 @@ export function criarFechamento(corpo, ctx) {
         el("div", { classe: "campo" }, [
           el("label", { texto: "Repassado à equipe (%)" }),
           repasse,
-          el("small", { classe: "muted", texto: "100 = a casa não retém nada. O que retém aparece na tela." }),
+          el("small", { classe: "muted", texto: "100 = a casa não retém nada. O que retém é só para encargos, e aparece na tela." }),
         ]),
         campoCriterio,
         campoApoio,
       ]),
+      avisoDoRepasse,
       metas.elemento,
       el("div", { classe: "reserva-acoes" }, [
         el("button", {
@@ -449,9 +466,11 @@ export function criarFechamento(corpo, ctx) {
           valor: dinheiro(t.arrecadado),
         }),
         indicador({
-          rotulo: "Fica com a casa",
+          // "Fica com a casa" dizia o que a lei não deixa: a retenção é para
+          // os encargos da própria gorjeta, não receita da casa.
+          rotulo: "Retido para encargos",
           valor: dinheiro(t.retido),
-          nota: t.retido > 0 ? `${numeroCurto(100 - dados.regra.percentual_repasse)}% do arrecadado` : "repassa tudo",
+          nota: t.retido > 0 ? `${numeroCurto(100 - dados.regra.percentual_repasse)}% do arrecadado, pela regra da casa` : "repassa tudo",
         }),
         indicador({
           rotulo: "A receber pela equipe",
@@ -493,7 +512,7 @@ export function criarFechamento(corpo, ctx) {
       selos: [
         { valor: dinheiro(t.vendas), rotulo: "vendas da semana" },
         { valor: dinheiro(t.arrecadado), rotulo: `serviço (${numeroCurto(dados.regra.percentual_servico)}%)` },
-        { valor: dinheiro(t.retido), rotulo: "fica com a casa" },
+        { valor: dinheiro(t.retido), rotulo: "retido para encargos, conforme a regra da casa" },
         { valor: dinheiro(t.a_receber), rotulo: "a receber pela equipe" },
       ],
       secoes: [
@@ -726,7 +745,7 @@ export function criarFechamento(corpo, ctx) {
       classe: "input",
       type: "text",
       value: f.descricao,
-      placeholder: adicional ? "Gorjeta do evento de sábado" : "Consumo no bar",
+      placeholder: adicional ? "Gorjeta do evento de sábado" : "Consumo no bar em 12/11, combinado com a pessoa",
       oninput: (e) => { f.descricao = e.target.value; },
     });
     const valor = el("input", { classe: "input", type: "number", min: "0", step: "0.01", value: f.valor, oninput: (e) => { f.valor = e.target.value; } });
@@ -739,10 +758,13 @@ export function criarFechamento(corpo, ctx) {
           ? "O que não sai de percentual nenhum: a gorjeta deixada na mão, o acerto de um evento fechado."
           : "O que sai do acerto da pessoa: consumo no bar, quebra combinada. O valor entra positivo; a tela é que subtrai.",
       }),
+      // Desconto mexe no dinheiro de alguém: uma linha diz o que a casa
+      // precisa ter em mãos, e o motivo deixa de ser opcional.
+      adicional ? null : el("p", { classe: "aviso aviso-alerta", style: "margin:8px 0", texto: dados.aviso_do_desconto ?? AVISO_DO_DESCONTO }),
       el("div", { classe: "grade" }, [
         el("div", { classe: "campo" }, [el("label", { texto: "Quem" }), quem]),
         el("div", { classe: "campo" }, [el("label", { texto: "Dia" }), dia]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Descrição" }), descricao]),
+        el("div", { classe: "campo" }, [el("label", { texto: adicional ? "Descrição" : "Motivo (obrigatório)" }), descricao]),
         el("div", { classe: "campo" }, [el("label", { texto: "Valor (R$)" }), valor]),
       ]),
       el("div", { classe: "reserva-acoes" }, [
@@ -753,6 +775,10 @@ export function criarFechamento(corpo, ctx) {
           onclick: async (e) => {
             if (!quem.value) return avisar("Escolha a pessoa.", "erro");
             if (!(Number(valor.value) > 0)) return avisar("Informe um valor maior que zero.", "erro");
+            if (!adicional && descricao.value.trim().length < 3) {
+              descricao.focus();
+              return avisar("Escreva o motivo do desconto: é o que explica o valor para a pessoa depois.", "erro");
+            }
             e.target.disabled = true;
             try {
               await post(`/v1/venues/${ctx.venue}/rh/extras`, {
@@ -879,6 +905,29 @@ function diaBr(iso) {
   if (!iso) return "";
   const [ano, mes, dia] = String(iso).slice(0, 10).split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+/** Só para o caso de a tela estar mais nova que o servidor: o aviso não some. */
+const AVISO_DO_DESCONTO =
+  "Desconto no que a pessoa recebe pede o de acordo dela por escrito (ou previsão em convenção). Guarde o papel assinado; na dúvida, confirme com a contabilidade.";
+
+/**
+ * O aviso de retenção alta, pronto para a tela — ou nada.
+ *
+ * Os tetos e as frases vêm do servidor (`avisos_da_retencao`, do mais grave
+ * para o mais leve): aqui só se escolhe qual cabe ao percentual, para o
+ * aviso acompanhar o que o gestor digita. É alerta, não trava — o regime e
+ * a convenção de cada casa são com a contabilidade.
+ */
+function avisoDeRetencao(avisos, percentualRepasse) {
+  const retencao = Math.round((100 - Number(percentualRepasse)) * 100) / 100;
+  if (!Number.isFinite(retencao)) return null;
+  const aviso = (avisos ?? []).find((a) => retencao > a.acima_de);
+  if (!aviso) return null;
+  return el("p", { classe: `aviso ${aviso.nivel === "alto" ? "aviso-perigo" : "aviso-alerta"}`, role: aviso.nivel === "alto" ? "alert" : "note" }, [
+    el("strong", { texto: `A casa está retendo ${numeroCurto(retencao)}% da gorjeta. ` }),
+    document.createTextNode(aviso.texto),
+  ]);
 }
 
 /** 10.00 vira "10"; 12.50 continua "12,5". Percentual redondo não precisa de casa. */

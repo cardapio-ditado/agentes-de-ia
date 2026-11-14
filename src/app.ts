@@ -209,6 +209,8 @@ import {
   participantesDoTurno,
 } from "./rhGorjeta.js";
 import {
+  AVISOS_DA_RETENCAO,
+  AVISO_DO_DESCONTO,
   CRITERIOS_DE_RATEIO,
   METODOS,
   acertoDaSemana,
@@ -3145,6 +3147,10 @@ async function roteasApi(
             .map((e) => ({ atendente_id: e.id, nome: e.apelido || e.nome, funcao: e.funcao })),
           metodos: METODOS,
           criterios: CRITERIOS_DE_RATEIO,
+          // Os tetos e as frases vão junto: a tela avisa enquanto o gestor
+          // digita o percentual, sem ter uma cópia dos números.
+          avisos_da_retencao: AVISOS_DA_RETENCAO,
+          aviso_do_desconto: AVISO_DO_DESCONTO,
         });
       }
 
