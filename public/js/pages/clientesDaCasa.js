@@ -531,7 +531,7 @@ export async function clientesDaCasa(raiz, ctx) {
             el("h2", { texto: "Clientes" }),
             el("p", {
               classe: "muted",
-              texto: "Quem já esteve na casa. A base enche sozinha pela Zig, pelo WhatsApp do agente e pela pesquisa — e você cadastra à mão quem faltar.",
+              texto: "Quem já esteve na casa. A base enche sozinha pela Zig, pelo WhatsApp do atendente virtual e pela pesquisa — e você cadastra à mão quem faltar.",
             }),
           ]),
           el("div", { classe: "linha-campos" }, [
@@ -1338,7 +1338,7 @@ export async function clientesDaCasa(raiz, ctx) {
           classe: "btn btn-peq",
           href: "#conversas",
           texto: "Ver as conversas",
-          title: "Quem respondeu está falando com o agente em Conversas",
+          title: "Quem respondeu está falando com o atendente virtual em Conversas",
         }));
       }
 

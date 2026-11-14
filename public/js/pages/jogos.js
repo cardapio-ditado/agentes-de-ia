@@ -85,7 +85,7 @@ export async function jogos(raiz, ctx) {
           el("h2", { texto: "Jogos" }),
           el("p", {
             classe: "muted",
-            texto: "Marque os que a casa vai transmitir. Só o que você marcar entra na programação e o agente passa a contar.",
+            texto: "Marque os que a casa vai transmitir. Só o que você marcar entra na programação e o atendente virtual passa a contar.",
           }),
         ]),
         el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Competição" }), seletor]),
@@ -146,7 +146,7 @@ export async function jogos(raiz, ctx) {
         avisar(
           r.jaExistiam > 0
             ? `${r.criados} incluído(s); ${r.jaExistiam} já estava(m) na agenda.`
-            : `${r.criados} jogo(s) na programação. O agente já sabe contar.`,
+            : `${r.criados} jogo(s) na programação. O atendente virtual já sabe contar.`,
           "ok",
         );
         desenhar();

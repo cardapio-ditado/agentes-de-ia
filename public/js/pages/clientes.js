@@ -148,7 +148,7 @@ export async function clientes(raiz, ctx) {
         ]),
         el("div", { style: "display:flex;gap:6px;align-items:center;flex-wrap:wrap" }, [
           c.estado_do_plano === "bloqueado"
-            ? etiqueta("agente pausado", "etiqueta-perigo")
+            ? etiqueta("atendente virtual pausado", "etiqueta-perigo")
             : c.estado_do_plano === "cortesia"
               ? etiqueta("em cortesia", "etiqueta-alerta")
               : null,
@@ -183,7 +183,7 @@ export async function clientes(raiz, ctx) {
                   ev.target.disabled = true;
                   try {
                     await patch(`/v1/admin/clientes/${c.org_id}`, { pontos_adicionar: n });
-                    avisar(`${numeroBr(n)} pontos adicionados. O agente volta a responder em instantes.`, "ok");
+                    avisar(`${numeroBr(n)} pontos adicionados. O atendente virtual volta a responder em instantes.`, "ok");
                     await listar();
                   } catch (e) {
                     avisar(e.message, "erro");
@@ -199,7 +199,7 @@ export async function clientes(raiz, ctx) {
                 onchange: async (ev) => {
                   try {
                     await patch(`/v1/admin/clientes/${c.org_id}`, { plano_travar: ev.target.checked });
-                    avisar(ev.target.checked ? "Trava ligada: o agente pausa quando os pontos acabarem." : "Trava desligada: o agente nunca pausa (teste ou cortesia).", "ok");
+                    avisar(ev.target.checked ? "Trava ligada: o atendente virtual pausa quando os pontos acabarem." : "Trava desligada: o atendente virtual nunca pausa (teste ou cortesia).", "ok");
                     await listar();
                   } catch (e) {
                     avisar(e.message, "erro");
@@ -207,7 +207,7 @@ export async function clientes(raiz, ctx) {
                   }
                 },
               }),
-              el("span", { texto: "Pausar o agente quando os pontos acabarem" }),
+              el("span", { texto: "Pausar o atendente virtual quando os pontos acabarem" }),
             ]),
           ])
         : null,
@@ -332,7 +332,7 @@ export async function clientes(raiz, ctx) {
           el("h2", { texto: "Novo cliente" }),
           el("p", {
             classe: "muted",
-            texto: "Cria a organização, o estabelecimento, o agente, o acesso do dono e a chave do conector.",
+            texto: "Cria a organização, o estabelecimento, o atendente virtual, o acesso do dono e a chave do conector.",
           }),
         ]),
       ]),
@@ -387,7 +387,7 @@ export async function clientes(raiz, ctx) {
           linha("Endereço do painel", `${location.origin}/app`),
           linha("Estabelecimento", `${c.estabelecimento.nome} (${c.estabelecimento.slug})`),
           linha("Fuso horário", c.estabelecimento.timezone),
-          linha("Agente criado", c.agente.slug),
+          linha("Atendente virtual criado", c.agente.slug),
         ]),
         el("p", {
           classe: "muted",

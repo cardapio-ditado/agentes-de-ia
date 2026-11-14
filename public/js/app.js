@@ -136,7 +136,7 @@ const PAGINAS = [
   { id: "hoje", modulo: "hoje", rotulo: "Hoje", icone: SOL, render: hoje, subtitulo: "O que precisa de você e se está tudo funcionando" },
 
   { id: "painel", modulo: "agentes-ia", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
-  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente conversou com cada cliente" },
+  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente virtual conversou com cada cliente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
   {
     id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, subtitulo: "Shows, jogos e promoções",
@@ -146,9 +146,9 @@ const PAGINAS = [
     ]),
   },
   {
-    id: "atendente", modulo: "agentes-ia", grupo: "configurar", rotulo: "Atendente", icone: ICONES.agente, subtitulo: "Quem ele é, o que ele sabe da casa — e um teste antes de soltar para o cliente",
+    id: "atendente", modulo: "agentes-ia", grupo: "configurar", rotulo: "Atendente virtual", icone: ICONES.agente, subtitulo: "Quem ele é, o que ele sabe da casa — e um teste antes de soltar para o cliente",
     render: comAbas("atendente", [
-      { id: "agentes", rotulo: "Jeito e regras", render: agentes, subtitulo: "A personalidade e as regras do atendente" },
+      { id: "agentes", rotulo: "Jeito e regras", render: agentes, subtitulo: "A personalidade e as regras do atendente virtual" },
       { id: "sabe", rotulo: "O que ele sabe", render: agenteSabe, subtitulo: "Endereço, horários e as respostas às perguntas do cliente" },
       { id: "testar", rotulo: "Testar", render: agente, subtitulo: "Converse como se fosse um cliente" },
     ]),
@@ -172,7 +172,7 @@ const PAGINAS = [
   // A Zig e os outros sistemas que a casa já usa. Nada aqui é premissa: cada
   // uso tem a sua chave, e a casa sem integração nenhuma usa o painel igual.
   { id: "integracoes", modulo: "ajustes", rotulo: "Integrações", icone: ICONES.plugue, render: integracoes, subtitulo: "Zig e os outros sistemas que a casa já usa — ligue só o que tiver" },
-  { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
+  { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, atendentes virtuais e chaves de acesso" },
 
   // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link
   // externo por cliente. Uma tela só, com abas — é o que a casa mexe todo dia.
@@ -456,6 +456,12 @@ const ctx = {
   aba: null,
   /** Esta pessoa mexe na configuração da casa? (falso = perfil Equipe) */
   podeConfigurar: true,
+  /**
+   * É da equipe Brasa Food? Para a tela esconder do dono o que só interessa
+   * a quem opera a plataforma (consumo de tokens, por exemplo). Nasce falso:
+   * na dúvida, o dono não vê.
+   */
+  souPlataforma: false,
   definirAgente(slug) {
     ctx.agente = slug;
   },
@@ -1263,7 +1269,9 @@ async function iniciar() {
   }
 
   if (venues.length === 0) {
-    return pedirChave("A chave é válida, mas não há estabelecimento nesta organização. Rode `npm run seed`.");
+    // Quem lê isto é o dono no primeiro acesso, não quem instala o sistema:
+    // um comando de terminal aqui não é coisa que ele consiga fazer.
+    return pedirChave("Seu acesso está certo, mas ainda não há nenhuma casa cadastrada nesta conta. Avise o suporte da Brasa Food para terminar o cadastro.");
   }
 
   telaAcesso.hidden = true;
@@ -1305,6 +1313,7 @@ async function iniciar() {
     meusModulos = null;
   }
   ctx.podeConfigurar = podeConfigurar;
+  ctx.souPlataforma = souPlataforma;
   document.getElementById("btn-plataforma").hidden = !souPlataforma;
   document.getElementById("btn-ajustes").hidden = !podeConfigurar;
   barra.querySelector('[data-barra="ajustes"]').hidden = !podeConfigurar;
