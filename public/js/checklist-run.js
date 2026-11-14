@@ -140,7 +140,8 @@ async function comprimirFoto(arquivo) {
 function erroFatal(mensagem) {
   titulo.textContent = "Ops.";
   subtitulo.textContent = "";
-  conteudo.innerHTML = `<div class="final"><h2>Não deu para abrir</h2><p>${mensagem}</p></div>`;
+  // A mensagem pode ter vindo do servidor: entra como texto, nunca como HTML.
+  conteudo.innerHTML = `<div class="final"><h2>Não deu para abrir</h2><p>${seguro(mensagem)}</p></div>`;
 }
 
 function avisar(mensagem) {
@@ -272,7 +273,15 @@ function cartaoDoItem(item, indice) {
 
   const pergunta = document.createElement("p");
   pergunta.className = "pergunta";
-  pergunta.innerHTML = `${indice + 1}. ${item.pergunta} ${item.obrigatorio ? "" : "<small>(opcional)</small>"}`;
+  // A pergunta é texto que alguém digitou no painel — entra por textContent.
+  // Com innerHTML, um "<img onerror=…>" escrito ali rodava no celular de
+  // cada funcionário que abrisse o checklist.
+  pergunta.textContent = `${indice + 1}. ${item.pergunta} `;
+  if (!item.obrigatorio) {
+    const opcional = document.createElement("small");
+    opcional.textContent = "(opcional)";
+    pergunta.append(opcional);
+  }
   cartao.append(pergunta);
 
   if (item.tipo === "sim_nao") cartao.append(cartaoSimNao(item));
@@ -415,7 +424,7 @@ function telaRodadaFeita(r) {
       <div class="final">
         <div style="font-size:52px">🔥</div>
         <h2>Noite encerrada!</h2>
-        <p>Rodada ${r.rodada?.numero ?? ""} feita${feitaAs ? ` às ${feitaAs}` : ""}. Era a última — o resumo já foi para o gerente.</p>
+        <p>Rodada ${seguro(r.rodada?.numero ?? "")} feita${feitaAs ? ` às ${feitaAs}` : ""}. Era a última — o resumo já foi para o gerente.</p>
         ${r.resumo ? `<p style="margin-top:10px">${seguro(r.resumo)}</p>` : ""}
         ${alertas.length > 0 ? `<div class="alertas"><strong>A IA marcou para o gerente:</strong><ul style="margin:8px 0 0;padding-left:18px">${alertas.map((a) => `<li>${seguro(a)}</li>`).join("")}</ul></div>` : ""}
       </div>`;
@@ -428,9 +437,9 @@ function telaRodadaFeita(r) {
   conteudo.innerHTML = `
     <div class="final" style="padding-top:36px">
       <div style="font-size:52px">✅</div>
-      <h2>Rodada ${r.rodada?.numero ?? ""} feita${feitaAs ? ` às ${feitaAs}` : ""}</h2>
-      <p>${r.proxima ? `A próxima é a das <strong>${r.proxima.prevista}</strong>. Pode deixar esta página aberta.` : "Não há mais rodadas hoje."}</p>
-      ${r.proxima ? `<button class="enviar" id="btn-proxima" type="button" style="margin-top:22px;width:100%;max-width:360px">Começar a rodada das ${r.proxima.prevista}</button>` : ""}
+      <h2>Rodada ${seguro(r.rodada?.numero ?? "")} feita${feitaAs ? ` às ${feitaAs}` : ""}</h2>
+      <p>${r.proxima ? `A próxima é a das <strong>${seguro(r.proxima.prevista)}</strong>. Pode deixar esta página aberta.` : "Não há mais rodadas hoje."}</p>
+      ${r.proxima ? `<button class="enviar" id="btn-proxima" type="button" style="margin-top:22px;width:100%;max-width:360px">Começar a rodada das ${seguro(r.proxima.prevista)}</button>` : ""}
     </div>`;
   conteudo.prepend(faixaDasRodadas(noite.rodadas, r.proxima?.numero ?? null));
   subtitulo.textContent = `${noite.rodadas.filter((x) => x.estado === "feita").length} de ${noite.rodadas.length} rodadas feitas`;
@@ -459,7 +468,7 @@ function telaNoite(dados) {
     <div class="final" style="padding:28px 20px 10px">
       <div style="font-size:44px">${alertas.length > 0 || puladas.length > 0 ? "⚠️" : "✅"}</div>
       <h2>${feitas} de ${rodadas.length} rodadas feitas</h2>
-      <p>${puladas.length > 0 ? `Pulada(s): ${puladas.map((r) => r.prevista).join(", ")}` : "Nenhuma rodada pulada"}</p>
+      <p>${puladas.length > 0 ? `Pulada(s): ${puladas.map((r) => seguro(r.prevista)).join(", ")}` : "Nenhuma rodada pulada"}</p>
       ${dados.resumo ? `<p style="margin-top:10px">${seguro(dados.resumo)}</p>` : ""}
       ${alertas.length > 0 ? `<div class="alertas"><strong>A IA marcou:</strong><ul style="margin:8px 0 0;padding-left:18px">${alertas.map((a) => `<li>${seguro(a)}</li>`).join("")}</ul></div>` : ""}
     </div>`;
@@ -468,7 +477,7 @@ function telaNoite(dados) {
     const feitaAs = r.concluida_em
       ? new Date(r.concluida_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
       : null;
-    const titulo = `<p class="pergunta" style="margin-bottom:6px">Rodada ${r.numero} · ${r.prevista}${feitaAs ? ` · feita ${feitaAs}${r.executor_nome ? ` por ${seguro(r.executor_nome)}` : ""}` : ""}</p>`;
+    const titulo = `<p class="pergunta" style="margin-bottom:6px">Rodada ${seguro(r.numero)} · ${seguro(r.prevista)}${feitaAs ? ` · feita ${feitaAs}${r.executor_nome ? ` por ${seguro(r.executor_nome)}` : ""}` : ""}</p>`;
     if (!r.concluida_em) {
       return `<section class="cartao" style="border-color:rgba(226,86,95,.55)">${titulo}<p style="margin:0;color:#ff9aa1;font-weight:600">Ninguém fez</p></section>`;
     }
@@ -495,7 +504,7 @@ function htmlDasRespostas(respostas) {
         <div style="padding:10px 0;border-top:1px solid var(--borda)">
           <p class="pergunta" style="margin-bottom:4px">${i + 1}. ${seguro(r.pergunta)}</p>
           <p style="margin:0;font-weight:600;color:${ruim ? "#ff9aa1" : "var(--creme)"}">${comoTexto(r)}</p>
-          ${r.foto ? `<a href="${r.foto}" target="_blank" rel="noopener"><img src="${r.foto}" alt="Foto de ${seguro(r.pergunta)}" loading="lazy" style="width:100%;border-radius:12px;margin-top:8px;display:block"></a>` : ""}
+          ${enderecoDaFoto(r.foto) ? `<a href="${enderecoDaFoto(r.foto)}" target="_blank" rel="noopener"><img src="${enderecoDaFoto(r.foto)}" alt="Foto de ${seguro(r.pergunta)}" loading="lazy" style="width:100%;border-radius:12px;margin-top:8px;display:block"></a>` : ""}
           ${r.observacao ? `<p style="margin:8px 0 0;color:var(--creme-2);font-size:14px">💬 ${seguro(r.observacao)}</p>` : ""}
         </div>`;
     })
@@ -513,11 +522,11 @@ function telaFinal(resultado) {
     <div class="final">
       <div style="font-size:52px">🔥</div>
       <h2>Checklist concluído!</h2>
-      <p>${resultado?.resumo ? resultado.resumo : "Registro enviado. Bom serviço!"}</p>
+      <p>${resultado?.resumo ? seguro(resultado.resumo) : "Registro enviado. Bom serviço!"}</p>
       ${
         alertas.length > 0
           ? `<div class="alertas"><strong>A IA marcou para o gerente:</strong><ul style="margin:8px 0 0;padding-left:18px">${alertas
-              .map((a) => `<li>${a}</li>`)
+              .map((a) => `<li>${seguro(a)}</li>`)
               .join("")}</ul></div>`
           : ""
       }
@@ -525,11 +534,27 @@ function telaFinal(resultado) {
   scrollTo({ top: 0, behavior: "smooth" });
 }
 
-/** Escapa o que veio do banco: resposta escrita à mão não pode virar HTML. */
+/**
+ * Escapa o que veio do banco: resposta escrita à mão não pode virar HTML.
+ *
+ * As aspas também: este texto entra em atributo (`alt="Foto de …"`), e o
+ * escape do navegador para conteúdo de elemento deixa a aspa passar — uma
+ * pergunta com `" onerror="…` fechava o atributo e abria outro.
+ */
 function seguro(texto) {
   const d = document.createElement("div");
   d.textContent = texto ?? "";
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/**
+ * O endereço da foto, pronto para atributo — ou vazio se não for http(s).
+ * Quem gera o endereço é o servidor; a conferência é para que um valor
+ * estranho (`javascript:…`) nunca vire link clicável.
+ */
+function enderecoDaFoto(endereco) {
+  const texto = String(endereco ?? "");
+  return /^https?:\/\//i.test(texto) ? seguro(texto) : "";
 }
 
 /**
@@ -584,9 +609,9 @@ function telaResultado(dados) {
           <p class="pergunta">${i + 1}. ${seguro(r.pergunta)}</p>
           <p style="margin:0;font-weight:600;color:${ruim ? "#ff9aa1" : "var(--creme)"}">${comoTexto(r)}</p>
           ${
-            r.foto
-              ? `<a href="${r.foto}" target="_blank" rel="noopener">
-                   <img src="${r.foto}" alt="Foto de ${seguro(r.pergunta)}" loading="lazy"
+            enderecoDaFoto(r.foto)
+              ? `<a href="${enderecoDaFoto(r.foto)}" target="_blank" rel="noopener">
+                   <img src="${enderecoDaFoto(r.foto)}" alt="Foto de ${seguro(r.pergunta)}" loading="lazy"
                         style="width:100%;border-radius:12px;margin-top:10px;display:block">
                  </a>`
               : ""
