@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { corpoDoMake, eRecente, ErroDoMake, lerAvaliacaoDoMake, lerPaginaDoGoogle, limparComentario, notaDaEstrela, segredoConfere } from "./avaliacoesMake.js";
+import { corpoDoMake, eRecente, ErroDoMake, lerAvaliacaoDoMake, lerPaginaDoGoogle, limparComentario, notaDaEstrela, segredoConfere, webhookDoMakeValido } from "./avaliacoesMake.js";
 
 test("a nota vem como o Google escreve (FIVE) ou como número", () => {
   assert.equal(notaDaEstrela("FIVE"), 5);
@@ -129,4 +129,39 @@ test("avaliação dos últimos 14 dias é nova de verdade; mais velha é histór
   assert.equal(eRecente("2026-09-20T12:00:01Z", agora), true);
   assert.equal(eRecente(null, agora), false);
   assert.equal(eRecente("não é data", agora), false);
+});
+
+test("o webhook do Make só vale nos hosts de gancho do Make", () => {
+  for (const bom of [
+    "https://hook.eu1.make.com/abc123def456",
+    "https://hook.eu2.make.com/abc123def456",
+    "https://hook.us1.make.com/abc123def456",
+    "https://hook.us2.make.com/abc123def456?x=1",
+    "https://hook.make.com/abc123def456",
+  ]) {
+    assert.equal(webhookDoMakeValido(bom), true, bom);
+  }
+  for (const ruim of [
+    // O caso que motivou a troca: o regex antigo, sem âncora, aceitava estes.
+    "https://hook.evilmake.com/abc",
+    "https://hook.eu1.evilmake.com/abc",
+    "https://hook.-make.com/abc",
+    // Host do Make só na aparência.
+    "https://hook.eu1.make.com.evil.com/abc",
+    "https://hook.eu1.make.com@evil.com/abc",
+    "https://evil.com/hook.eu1.make.com/abc",
+    "https://evil.com/?https://hook.eu1.make.com/abc",
+    "https://www.make.com/abc",
+    "https://hook.eu1.make.co/abc",
+    // Com usuário, com porta, sem https, sem caminho.
+    "https://dono:senha@hook.eu1.make.com/abc",
+    "https://hook.eu1.make.com:8443/abc",
+    "http://hook.eu1.make.com/abc",
+    "https://hook.eu1.make.com/",
+    "https://hook.eu1.make.com",
+    "hook.eu1.make.com/abc",
+    "",
+  ]) {
+    assert.equal(webhookDoMakeValido(ruim), false, ruim);
+  }
 });

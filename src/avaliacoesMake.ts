@@ -490,6 +490,28 @@ export async function publicarPeloMake(venueId: string, avaliacao: Avaliacao): P
   }
 }
 
+/**
+ * O endereço é mesmo um webhook do Make?
+ *
+ * O servidor faz POST neste endereço levando o segredo da casa, então ele
+ * não pode ser "qualquer coisa que termine em make.com": a conferência antiga
+ * (um regex sem âncora no host) aceitava `hook.evilmake.com`. Aqui o endereço
+ * é desmontado pelo `URL` e o HOST inteiro é conferido: `hook.<região>.make.com`
+ * (eu1, eu2, us1, us2…) ou `hook.make.com`. Sem usuário, sem porta, só https.
+ */
+export function webhookDoMakeValido(endereco: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endereco);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
+  // O webhook tem sempre um caminho (o id do gancho); só o host não liga nada.
+  if (url.pathname.length <= 1) return false;
+  return /^hook\.(?:[a-z]{2}\d{1,2}\.)?make\.com$/.test(url.hostname);
+}
+
 /** Liga a casa ao Make: gera o segredo (uma vez) e guarda o webhook. */
 export async function ligarAoMake(venueId: string, makeWebhookUrl: string | null): Promise<{ segredo: string }> {
   const perfil = await perfilDoVenue(venueId);

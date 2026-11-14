@@ -223,9 +223,6 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
       instrucoesDaCasa = INSTRUCOES_DE_DELIVERY;
     }
   }
-  let stopReason: string | null = null;
-  let textoFinal = "";
-
   for (let iteracao = 0; iteracao < MAX_ITERACOES; iteracao++) {
     const inicio = Date.now();
     // Sempre em streaming: com max_tokens alto a requisição não-streaming
@@ -238,7 +235,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     }
     const response = await stream.finalMessage();
     const latencia = Date.now() - inicio;
-    stopReason = response.stop_reason;
+    const stopReason = response.stop_reason;
 
     const assistantMessage = await insertMessage({
       conversation_id: conversation.id,
@@ -278,7 +275,7 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
     );
 
     if (toolUses.length === 0) {
-      textoFinal = extractText(response.content);
+      const textoFinal = extractText(response.content);
       onEvent?.({ type: "done", conversationId: conversation.id, text: textoFinal });
       if (response.stop_reason === "max_tokens") {
         await logEvent({

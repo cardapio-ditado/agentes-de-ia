@@ -961,7 +961,7 @@
             ${i.descricao ? `<p class="desc">${escapar(i.descricao)}</p>` : ""}
             <div class="meta">
               ${c ? `<span>${escapar(c.nome)}</span>` : ""}
-              ${i.serve ? `<span>serve ${i.serve}</span>` : ""}
+              ${i.serve ? `<span>serve ${escapar(i.serve)}</span>` : ""}
               ${i.etiquetas.map((t) => `<span>${escapar(t)}</span>`).join("")}
               ${i.alergenicos.map((a) => `<span class="alerg">contém ${escapar(a)}</span>`).join("")}
             </div>

@@ -285,6 +285,7 @@ import {
   lerAvaliacaoDoMake,
   lerPaginaDoGoogle,
   ligarAoMake,
+  webhookDoMakeValido,
   PAGINA_UNICA,
   pedirPaginaAoMake,
   publicarPeloMake,
@@ -353,6 +354,10 @@ import {
   papelValido,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
+import { rodarCiclo } from "./ciclos.js";
+import { chamadaLocal } from "./origemLocal.js";
+import { LIMITES_DURAVEIS, type LimiteDuravel } from "./limiteDeRitmo.js";
+import { cicloValido, segredoDoCronConfere, ultimasBatidas } from "./rotinas.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
   avisarAumentoDePreco,
@@ -710,16 +715,18 @@ async function diagnosticoDoBanco(): Promise<Record<string, unknown>> {
     if (erroGrave) return { projeto, alcancavel: false, erro: erroGrave.message };
 
     const total = (orgs.count ?? 0) + (chaves.count ?? 0);
+    // As contagens ficam AQUI DENTRO e não saem na resposta: o /health é
+    // público, e "quantos clientes e quantas chaves a plataforma tem" não é
+    // assunto de quem não se identificou. O que o diagnóstico precisa dizer
+    // é só "responde" e "responde com o poder certo".
     return {
       projeto,
       alcancavel: true,
-      organizacoes: orgs.count ?? 0,
-      chaves_de_api: chaves.count ?? 0,
-      // Tabelas do login por e-mail e senha. Erro aqui (e não zero) significa
-      // que a migração não rodou NESTE projeto, ou que o PostgREST ainda não
+      // Tabelas do login por e-mail e senha. Erro aqui significa que a
+      // migração não rodou NESTE projeto, ou que o PostgREST ainda não
       // recarregou o schema.
-      vinculos: membros.error ? `erro: ${membros.error.message}` : (membros.count ?? 0),
-      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : (admins.count ?? 0),
+      vinculos: membros.error ? `erro: ${membros.error.message}` : "ok",
+      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : "ok",
       // Zero nas duas primeiras num banco em uso é o sintoma do RLS bloqueando
       // tudo. Nunca é o estado normal: sem organização e sem chave, ninguém
       // teria conseguido usar o sistema para chegar até aqui.
@@ -1044,6 +1051,8 @@ async function conferirDocumento(
   if (!["rg", "cpf", "ctps"].includes(tipo) || !["image/jpeg", "image/png", "image/webp"].includes(media)) return null;
   try {
     const lido = await lerDocumento(arquivo, media);
+    // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: ficha } = await (db() as any)
       .from("rh_fichas")
       .select("nome_completo, cpf, rg, nascimento")
@@ -1214,6 +1223,16 @@ function ipDe(req: IncomingMessage): string {
   const encaminhado = req.headers["x-forwarded-for"];
   const primeiro = (Array.isArray(encaminhado) ? encaminhado[0] : encaminhado)?.split(",")[0]?.trim();
   return primeiro || req.socket?.remoteAddress || "desconhecido";
+}
+
+/**
+ * Barra a rota pública que passou do ritmo — com o limite que vale entre
+ * instâncias (ver src/limiteDeRitmo.ts). Cada par é (limite, quem bate);
+ * basta um estourar. Banco fora do ar não tranca: o limite cai na memória.
+ */
+async function exigirRitmo(mensagem: string, ...baldes: Array<[LimiteDuravel, string]>): Promise<void> {
+  const vereditos = await Promise.all(baldes.map(([limite, quem]) => limite.permitir(quem)));
+  if (vereditos.includes(false)) throw erro(429, "rate_limited", mensagem);
 }
 
 /**
@@ -1471,6 +1490,10 @@ async function rotear(
       // e fuso horário resolvendo. Um curl responde o que antes era palpite.
       agora: contextoDeAgora("America/Cuiaba"),
       banco: await diagnosticoDoBanco(),
+      // Há quanto tempo cada ciclo de fundo terminou. É o que um monitor de
+      // fora vigia: `minuto.ok_ha_segundos` passando de uns 300 (ou vindo
+      // null) quer dizer que checklist, lembrete e delivery pararam.
+      ultima_rotina: await ultimasBatidas(),
       trace_id: traceId,
     });
   }
@@ -1493,6 +1516,28 @@ async function roteasApi(
   p: string[],
   url: URL,
 ): Promise<void> {
+  // GET|POST /v1/rotinas/ciclo/minuto e /hora (ou ?qual=…) — um ciclo de fundo
+  // A rede de segurança das rotinas: o cron da Vercel bate aqui, e o ciclo
+  // roda mesmo com o processo do VPS fora do ar (ver src/ciclos.ts). Quem
+  // autentica é o segredo CRON_SECRET, no formato que a Vercel manda. O cron
+  // dela chama com GET; o POST fica para quem dispara à mão ou de outro
+  // agendador.
+  if ((metodo === "GET" || metodo === "POST") && p[0] === "rotinas" && p[1] === "ciclo" && p.length <= 3) {
+    const segredo = process.env.CRON_SECRET;
+    if (!segredo?.trim()) {
+      throw erro(503, "nao_configurado", "CRON_SECRET não está configurado neste ambiente.");
+    }
+    if (!segredoDoCronConfere(req.headers.authorization, segredo)) {
+      throw erro(401, "unauthorized", "Segredo do cron ausente ou inválido.");
+    }
+    const qual = cicloValido(p[2] ?? url.searchParams.get("qual"));
+    if (!qual) throw erro(400, "invalid_request", 'Diga qual ciclo: "minuto" ou "hora".');
+    const resultado = await rodarCiclo(qual);
+    // Rotina que falhou vira 500: é assim que aparece vermelha no painel de
+    // crons da Vercel, em vez de se perder num 200 que ninguém lê.
+    return ok(res, { qual, ...resultado }, resultado.falhas.length > 0 ? 500 : 200);
+  }
+
   // POST /v1/runs
   if (metodo === "POST" && p[0] === "runs" && p.length === 1) {
     const chave = await exigirChave(req, "runs:write");
@@ -3534,7 +3579,11 @@ async function roteasApi(
         const link = `${enderecoBase()}/${tipo === "portal" ? "eu" : tipo}/${convite.token}`;
         let enviadoPara: string | null = null;
         if (corpo.enviar === true) {
+          // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: ficha } = await (db() as any).from("rh_fichas").select("telefone").eq("atendente_id", p[3]!).maybeSingle();
+          // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: pessoa } = await (db() as any).from("pesquisa_atendentes").select("nome, apelido").eq("id", p[3]!).maybeSingle();
           const telefone = normalizarTelefone(String(ficha?.telefone ?? ""));
           if (!telefone) throw erro(400, "sem_telefone", "Anote o telefone da pessoa na ficha antes, ou copie o link e mande você mesmo.");
@@ -4987,7 +5036,7 @@ async function roteasApi(
       // cenário manda no cabeçalho.
       if ("make_webhook_url" in corpo) {
         const url = textoOpcional(corpo, "make_webhook_url") ?? null;
-        if (url && !/^https:\/\/hook\.[a-z0-9.-]*make\.com\//.test(url)) {
+        if (url && !webhookDoMakeValido(url)) {
           throw erro(400, "invalid_request", "O webhook do Make começa com https://hook.…make.com/");
         }
         const { segredo } = await ligarAoMake(venue.id, url);
@@ -5228,6 +5277,13 @@ async function roteasApi(
     // POST /v1/auth/login — e-mail e senha em troca do par de tokens
     if (metodo === "POST" && p[1] === "login" && p.length === 2) {
       const corpo = await lerJson(req);
+      // Antes de conferir a senha: por IP e por e-mail. Sem isto a rota
+      // aceitava tentativa de senha em série, sem fim.
+      await exigirRitmo(
+        "Muitas tentativas de login. Espere alguns minutos e tente de novo.",
+        [LIMITES_DURAVEIS.loginPorIp, ipDe(req)],
+        [LIMITES_DURAVEIS.loginPorEmail, texto(corpo, "email")],
+      );
       try {
         const tokens = await entrar(texto(corpo, "email"), texto(corpo, "senha"));
         return ok(res, tokens);
@@ -6015,6 +6071,12 @@ async function roteasApi(
       if (!itemId || !itensDe(checklist).some((i) => i.id === itemId)) {
         throw erro(400, "invalid_request", "Item da foto não encontrado neste checklist.");
       }
+      // Antes de ler o arquivo: cada foto é upload para o bucket.
+      await exigirRitmo(
+        "Muitas fotos seguidas. Espere um pouco e tente de novo.",
+        [LIMITES_DURAVEIS.fotoPorExecucao, run.id],
+        [LIMITES_DURAVEIS.fotoPorIp, ipDe(req)],
+      );
       const arquivo = await lerBinario(req, LIMITE_FOTO_BYTES);
       if (arquivo.length === 0) throw erro(400, "invalid_request", "Foto vazia.");
       const contentType = req.headers["content-type"] ?? "image/jpeg";
@@ -6075,6 +6137,13 @@ async function roteasApi(
     }
     if (metodo === "POST" && p.length === 3 && p[2] === "documento") {
       const c = await comErroDoRh(() => abrirConvite(token));
+      // Antes de ler o arquivo: cada documento vira uma chamada à IA
+      // (`conferirDocumento`), e o link vive dias no WhatsApp de alguém.
+      await exigirRitmo(
+        "Muitos documentos seguidos. Espere alguns minutos e tente de novo.",
+        [LIMITES_DURAVEIS.documentoPorConvite, token],
+        [LIMITES_DURAVEIS.documentoPorIp, ipDe(req)],
+      );
       const arquivo = await lerBinario(req, LIMITE_DOCUMENTO_BYTES);
       const documento = await comErroDoRh(() =>
         guardarDocumento({
@@ -6115,6 +6184,12 @@ async function roteasApi(
     if (!venue || !(await temModulo(venue.id, "rh"))) throw erro(404, "not_found", "Esta página não existe.");
     if (metodo === "GET") return ok(res, { casa: venue.name });
     if (metodo === "POST") {
+      // A armadilha de robô (abaixo) pega o robô bobo; este pega o insistente,
+      // que encheria a lista de candidatos da casa.
+      await exigirRitmo("Muitos envios seguidos. Espere alguns minutos e tente de novo.", [
+        LIMITES_DURAVEIS.vaga,
+        `${ipDe(req)}:${venue.id}`,
+      ]);
       const corpo = (await lerJson(req, 20_000)) as Record<string, unknown>;
       if (String(corpo.site ?? "")) return ok(res, { ok: true }); // armadilha de robô
       await comErroDoRh(() =>
@@ -6133,6 +6208,8 @@ async function roteasApi(
   if (p[0] === "eu" && p.length >= 2) {
     const token = p[1]!;
     const c = await comErroDoRh(() => abrirConvite(token, "portal"));
+    // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: casa } = await (db() as any).from("venues").select("timezone").eq("id", c.venue_id).maybeSingle();
     const fuso = casa?.timezone ?? "America/Cuiaba";
     if (metodo === "GET" && p.length === 2) {
@@ -6176,6 +6253,13 @@ async function roteasApi(
   if (p[0] === "webhooks" && p[1] === "mercadopago" && p.length === 3 && metodo === "POST") {
     const venue = await venueDaPesquisa(p[2]!);
     if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    // Cada aviso aceito vira uma consulta à API do Mercado Pago com o token
+    // da casa. O 429 não perde pagamento: o Mercado Pago reentrega.
+    await exigirRitmo(
+      "Muitos avisos seguidos.",
+      [LIMITES_DURAVEIS.mercadoPagoPorIp, `${ipDe(req)}:${venue.id}`],
+      [LIMITES_DURAVEIS.mercadoPagoPorCasa, venue.id],
+    );
     const corpo = await lerJson(req, 100_000).catch(() => ({}) as Record<string, unknown>);
     const dados = corpo.data && typeof corpo.data === "object" ? (corpo.data as Record<string, unknown>) : {};
     const q = url.searchParams;
@@ -6711,9 +6795,18 @@ async function roteasApi(
     // Ligar e desligar um número é configuração da casa.
     if (metodo === "POST") exigirQuemConfigura(chave);
 
+    // O atalho "responde direto do conector deste processo" não confere de
+    // que casa o conector é — só vale para quem chama da própria máquina
+    // (ver src/origemLocal.ts). Quem chega de fora (rede do bar, proxy,
+    // internet) cai no mesmo caminho da Vercel: a ponte pelo banco, que
+    // confere a organização e só mostra a casa de quem pediu. O conector
+    // daqui publica o estado e consome os comandos dessa ponte de qualquer
+    // jeito, então nada deixa de funcionar — só deixa de vazar.
+    const conectorDaqui = chamadaLocal(req) ? conectorWhatsapp : null;
+
     if (metodo === "GET" && p[1] === "status") {
-      if (conectorWhatsapp) {
-        const estado = conectorWhatsapp.estado() as Record<string, unknown>;
+      if (conectorDaqui) {
+        const estado = conectorDaqui.estado() as Record<string, unknown>;
         return ok(res, { ...estado, versao: versaoDoCodigo(), fonte: "local" });
       }
       const slug = url.searchParams.get("venue");
@@ -6767,9 +6860,9 @@ async function roteasApi(
     }
 
     if (metodo === "POST" && p[1] === "desconectar") {
-      if (conectorWhatsapp) {
-        await conectorWhatsapp.parar();
-        return ok(res, conectorWhatsapp.estado());
+      if (conectorDaqui) {
+        await conectorDaqui.parar();
+        return ok(res, conectorDaqui.estado());
       }
       const corpo = await lerJson(req);
       const slug = textoOpcional(corpo, "venue");

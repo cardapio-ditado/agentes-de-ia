@@ -6,6 +6,16 @@
       "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/v1/rotinas/ciclo/minuto",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/v1/rotinas/ciclo/hora",
+      "schedule": "7 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/v1/:caminho*",
