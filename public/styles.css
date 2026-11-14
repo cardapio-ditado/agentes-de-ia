@@ -13,6 +13,11 @@
   --texto: #221714; /* Carvão */
   --texto-2: #6b5a50;
   --texto-3: #9b8878;
+  /* Usado em dezenas de lugares (abas, ajuda, Hoje, trilha) e nunca tinha
+     sido definido: a cor caía na herdada, e o texto "suave" saía tão forte
+     quanto o principal. É o mesmo tom do .muted — e acompanha o tema escuro,
+     porque aponta para o token em vez de repetir a cor. */
+  --texto-suave: var(--texto-2);
 
   --marca: #ff6b35; /* Brasa */
   --marca-forte: #c1121f; /* Fogo */
@@ -1615,6 +1620,35 @@ textarea:focus {
 }
 .aviso-erro {
   border-left-color: var(--perigo);
+}
+/* O erro não some sozinho: ganha um botão de fechar ao lado do texto. */
+.avisos .aviso-erro {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.aviso-texto {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.aviso-fechar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px -6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto-2);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.aviso-fechar:hover {
+  background: var(--superficie-2);
+  color: var(--texto);
 }
 
 /* ============ Tabelas simples ============ */
@@ -3722,7 +3756,8 @@ a.btn { text-decoration: none; }
     min-width: 44px;
     min-height: 44px;
   }
-  .btn-ajuda {
+  .btn-ajuda,
+  .aviso-fechar {
     width: 44px;
     height: 44px;
   }

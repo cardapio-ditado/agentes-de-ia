@@ -76,12 +76,47 @@ export const ICONES = {
   caixa: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
 };
 
-/** Aviso temporário no canto — some sozinho. */
+/** Quantos erros ficam na tela ao mesmo tempo: mais que isso cobre o trabalho. */
+const ERROS_NA_TELA = 3;
+
+/**
+ * Aviso no canto. "Salvou" e informação somem sozinhos; ERRO fica até a
+ * pessoa fechar.
+ *
+ * Todo aviso sumia em cinco segundos. Para o "salvo" está certo; para o erro,
+ * não: quem está no balcão olha para o cliente, volta para o celular e a
+ * mensagem já foi embora — e ela acredita que a reserva foi aprovada. Erro é
+ * a única coisa que a pessoa PRECISA ler, então é ela quem decide quando some.
+ *
+ * O mesmo erro repetido (uma tela que tenta de novo sozinha) troca o aviso
+ * anterior em vez de empilhar outro igual.
+ */
 export function avisar(texto, tipo = "info") {
   const caixa = document.getElementById("avisos");
-  const aviso = el("div", { classe: `aviso aviso-${tipo}`, texto });
+  if (tipo !== "erro") {
+    const aviso = el("div", { classe: `aviso aviso-${tipo}`, texto });
+    caixa.append(aviso);
+    setTimeout(() => aviso.remove(), 5200);
+    return;
+  }
+
+  const abertos = [...caixa.querySelectorAll(".aviso-erro")];
+  for (const a of abertos) if (a.dataset.texto === String(texto)) a.remove();
+  for (const a of abertos.filter((x) => x.isConnected).slice(0, -(ERROS_NA_TELA - 1))) a.remove();
+
+  // role="alert": o leitor de tela fala na hora, sem esperar a vez.
+  const aviso = el("div", { classe: "aviso aviso-erro", role: "alert", "data-texto": String(texto) }, [
+    el("span", { classe: "aviso-texto", texto }),
+    el("button", {
+      classe: "aviso-fechar",
+      type: "button",
+      "aria-label": "Fechar aviso",
+      title: "Fechar",
+      texto: "×",
+      onclick: () => aviso.remove(),
+    }),
+  ]);
   caixa.append(aviso);
-  setTimeout(() => aviso.remove(), 5200);
 }
 
 export function etiqueta(texto, variante = "") {
