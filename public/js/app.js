@@ -290,6 +290,12 @@ let modulosDoCliente = new Map();
 let moduloAtual = "agentes-ia";
 
 /**
+ * A conta tem mais de uma casa? Só então o seletor de estabelecimento
+ * aparece no topo. Preenchido no login, com a lista de casas.
+ */
+let variasCasas = false;
+
+/**
  * Módulos do hub: cada solução do Brasa Food é uma porta.
  *
  * Aqui só está o que o módulo É — nome, ícone, lugar na colmeia. Se ele acende
@@ -568,7 +574,10 @@ function montarNav() {
   // Escolher estabelecimento não faz sentido enquanto se olha a carteira
   // inteira: o módulo de administração é sobre TODOS os clientes, e um
   // seletor dizendo "Ditado Popular" ali é só ruído que confunde.
-  seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
+  //
+  // E com uma casa só não há o que escolher: no celular o seletor tomava
+  // metade do topo e espremia o título numa coluna de uma palavra por linha.
+  seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma" || !variasCasas;
   marcarBarra();
 
   limpar(nav);
@@ -1278,6 +1287,7 @@ async function iniciar() {
 
   limpar(seletorVenue);
   for (const v of venues) seletorVenue.append(el("option", { value: v.slug, texto: v.name }));
+  variasCasas = venues.length > 1;
 
   const nomeDoVenue = () => venues.find((v) => v.slug === ctx.venue)?.name ?? "";
   const salvo = localStorage.getItem("agentes.venue");

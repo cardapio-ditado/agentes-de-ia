@@ -1854,6 +1854,12 @@ textarea:focus {
   .pagina .cartao-total {
     bottom: var(--barra-total);
   }
+  /* Rede com várias casas: o seletor cede espaço ao título, e o nome
+     comprido se corta dentro dele em vez de espremer o resto do topo. */
+  .topo .select {
+    min-width: 0;
+    max-width: 38vw;
+  }
   /* A ajuda desceu para a barra: o "?" do topo devolve o espaço ao título. */
   .topo .btn-ajuda {
     display: none;
