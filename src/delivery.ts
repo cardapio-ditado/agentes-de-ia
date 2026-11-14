@@ -1302,5 +1302,22 @@ export async function receberAvisoDoMercadoPago(
     console.error(`[delivery] pagamento ${pagamento.id} menor que o pedido #${pedido.numero}: ${pagamento.centavos} < ${pedido.total_centavos}`);
     return { liberado: false, motivo: "valor menor que o pedido" };
   }
+  // DINHEIRO QUE ENTROU DE UM PEDIDO JÁ CANCELADO.
+  //
+  // O cliente pagou no último segundo, ou depois que a rotina derrubou o
+  // pedido. Reabrir sozinho não é seguro (a cozinha pode ter fechado, o cupom
+  // já voltou). O que não pode é o dinheiro entrar em silêncio: o pagamento
+  // fica gravado no pedido, e o painel mostra "pago depois de cancelado" para
+  // a casa estornar ou combinar com o cliente.
+  if (pedido.status === "cancelado") {
+    console.error(`[delivery] pagamento ${pagamento.id} aprovado para o pedido #${pedido.numero}, que já estava cancelado.`);
+    const { error } = await cliente()
+      .from("delivery_pedidos")
+      .update({ pago_em: new Date().toISOString(), mp_ref: pagamento.id })
+      .eq("id", pedido.id)
+      .is("pago_em", null);
+    if (error) falhar("Falha ao registrar o pagamento tardio", error.message);
+    return { liberado: false, motivo: "pago depois de cancelado" };
+  }
   return { liberado: await marcarPago(venue, pedido.id, pagamento.id) };
 }

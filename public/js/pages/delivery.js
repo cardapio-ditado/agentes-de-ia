@@ -156,7 +156,8 @@ export async function delivery(raiz, ctx) {
       if (!dados.length) return void preencher(lista, vazio("Nenhum pedido ainda", "Divulgue o link do cardápio (na aba “Como a casa entrega”) e os pedidos aparecem aqui."));
       preencher(lista, dados.map((p) => {
         const [rotulo, variante] = SITUACAO[p.status] ?? [p.status, ""];
-        const encerrado = p.status === "entregue" || p.status === "cancelado" || p.status === "aguardando_pagamento";
+        const pagoAposCancelar = p.status === "cancelado" && Boolean(p.pago_em);
+        const encerrado = !pagoAposCancelar && (p.status === "entregue" || p.status === "cancelado" || p.status === "aguardando_pagamento");
         const mover = async (status) => {
           // Só o cancelamento pergunta: é o único passo que não tem volta e
           // mexe com dinheiro. Avançar o pedido é o gesto de toda hora de quem
@@ -183,6 +184,11 @@ export async function delivery(raiz, ctx) {
             ]),
             etiqueta(rotulo, variante),
           ]),
+          // O cliente pagou depois que o pedido caiu: o dinheiro está na conta
+          // da casa e ninguém vai entregar nada. Não pode passar batido.
+          p.status === "cancelado" && p.pago_em
+            ? el("p", { style: "margin:0;font-weight:600;color:var(--perigo, #b91c1c)", texto: "⚠ Este pedido foi pago depois de cancelado. Devolva o valor no Mercado Pago ou combine com o cliente." })
+            : null,
           el("ul", { style: "margin:0;padding-left:1.2rem" }, p.itens.map((i) =>
             el("li", { texto: `${i.quantidade}x ${i.nome}${i.opcoes ? ` (${i.opcoes})` : ""}${i.observacao ? ` — ${i.observacao}` : ""}` }))),
           el("p", { classe: "muted", style: "margin:0", texto: [

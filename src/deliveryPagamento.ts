@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Mercado Pago do delivery: Pix (QR + copia e cola) e link de cartão.
@@ -88,8 +88,10 @@ export async function criarCobranca(
     }
     const p = await chamar(credenciais.accessToken, "/v1/payments", {
       method: "POST",
-      // Sem a chave, um reenvio por timeout criaria duas cobranças.
-      headers: { "X-Idempotency-Key": randomUUID() },
+      // A chave é o PEDIDO: um reenvio por timeout devolve a mesma cobrança
+      // em vez de criar a segunda. (Chave sorteada a cada chamada não
+      // protegeria nada — cada tentativa seria "nova".)
+      headers: { "X-Idempotency-Key": pedido.id },
       body: JSON.stringify(corpoDoPix({ pedido, casa: dados, emailPagador: credenciais.emailPagador })),
     });
     const td = p.point_of_interaction?.transaction_data ?? {};
@@ -105,6 +107,10 @@ export async function criarCobranca(
       notification_url: `${enderecoPublico()}/v1/webhooks/mercadopago/${encodeURIComponent(casa.slug)}`,
       // Boleto compensa em dias; comida não espera.
       payment_methods: { excluded_payment_types: [{ id: "ticket" }] },
+      // O link morre junto com o prazo do pedido. Sem isto o cliente pagava
+      // uma hora depois um pedido que a rotina já tinha cancelado.
+      expires: true,
+      expiration_date_to: new Date(Date.now() + 30 * 60_000).toISOString().replace("Z", "+00:00"),
       back_urls: { success: volta, pending: volta, failure: volta },
     }),
   });
