@@ -4,6 +4,9 @@ import { registrarClienteSeDer, telefoneDaBase } from "./clientes.js";
 import {
   assinaturaConfere,
   consultarPagamento,
+  toleranciaDoWebhookMs,
+  tsDaAssinatura,
+  tsDentroDoPrazo,
   criarCobranca,
   enderecoPublico,
   type Cobranca,
@@ -1291,6 +1294,14 @@ export async function receberAvisoDoMercadoPago(
   const cfg = await configDoDelivery(venue.id);
   if (!cfg.mp_access_token) return { liberado: false, motivo: "casa sem Mercado Pago" };
   if (cfg.mp_webhook_secret && !assinaturaConfere(cfg.mp_webhook_secret, aviso.assinatura, aviso.requestId, aviso.pagamentoId)) {
+    // Recusa por prazo não pode ser muda: se for a reentrega legítima do
+    // Mercado Pago chegando com a hora do aviso original, é aqui que aparece
+    // (e MP_WEBHOOK_TOLERANCIA_MINUTOS resolve). Assinatura errada também cai
+    // aqui, mas com `ts` de agora — o log deixa ver a diferença.
+    const ts = tsDaAssinatura(aviso.assinatura);
+    if (ts && !tsDentroDoPrazo(ts, Date.now(), toleranciaDoWebhookMs())) {
+      console.error(`[delivery] aviso velho do Mercado Pago recusado (casa ${venue.slug}, pagamento ${aviso.pagamentoId}, ts ${ts}).`);
+    }
     throw new ErroDoDelivery(401, "Assinatura do webhook inválida.");
   }
 

@@ -136,22 +136,74 @@ export async function consultarPagamento(accessToken: string, pagamentoId: strin
 }
 
 /**
+ * Quanto tempo depois de assinado um aviso ainda vale.
+ *
+ * Sem prazo, um aviso verdadeiro capturado hoje (num log, num proxy) podia
+ * ser reapresentado daqui a um mês e passar na assinatura. Dez minutos cobrem
+ * a fila do Mercado Pago e o relógio torto de um servidor.
+ *
+ * Ajustável por MP_WEBHOOK_TOLERANCIA_MINUTOS, e 0 desliga o prazo. Existe
+ * porque não está confirmado se a REENTREGA do Mercado Pago (quando a nossa
+ * resposta falha) vem assinada com hora nova ou com a do aviso original; se
+ * for a original, o log abaixo ("aviso velho") vai mostrar, e a casa alarga
+ * o prazo sem precisar de versão nova.
+ */
+export function toleranciaDoWebhookMs(valor: string | undefined = process.env.MP_WEBHOOK_TOLERANCIA_MINUTOS): number {
+  const minutos = Number(valor);
+  return valor !== undefined && valor.trim() !== "" && Number.isFinite(minutos) && minutos >= 0 ? minutos * 60_000 : 10 * 60_000;
+}
+
+/**
+ * O `ts` do cabeçalho, em milissegundos. A documentação do Mercado Pago
+ * mostra o valor ora em segundos, ora em milissegundos; um número de
+ * segundos de hoje tem 10 dígitos e um de milissegundos tem 13, então o
+ * tamanho resolve (1e11 segundos seria o ano 5138).
+ */
+export function tsDoWebhookEmMs(ts: string | undefined): number | null {
+  if (!ts || !/^\d{1,16}$/.test(ts)) return null;
+  const n = Number(ts);
+  return n < 1e11 ? n * 1000 : n;
+}
+
+/** O `ts` está dentro do prazo? Vale para os dois lados: velho demais, ou do futuro. */
+export function tsDentroDoPrazo(ts: string | undefined, agora: number, toleranciaMs: number): boolean {
+  if (toleranciaMs <= 0) return true;
+  const quando = tsDoWebhookEmMs(ts);
+  return quando !== null && Math.abs(agora - quando) <= toleranciaMs;
+}
+
+function partesDaAssinatura(cabecalho: string | undefined): Record<string, string> {
+  if (!cabecalho) return {};
+  return Object.fromEntries(
+    cabecalho.split(",").map((par) => par.split("=").map((s) => s.trim()) as [string, string]),
+  );
+}
+
+/** Só o `ts` do cabeçalho — para o log dizer por que um aviso foi recusado. */
+export function tsDaAssinatura(cabecalho: string | undefined): string | undefined {
+  return partesDaAssinatura(cabecalho).ts;
+}
+
+/**
  * Confere o cabeçalho x-signature do webhook:
  * HMAC-SHA256 de "id:<data.id>;request-id:<x-request-id>;ts:<ts>;".
+ *
+ * A assinatura é conferida ANTES do prazo: o `ts` faz parte do que foi
+ * assinado, então só depois dela dá para confiar na hora que ele diz.
  */
 export function assinaturaConfere(
   segredo: string,
   cabecalho: string | undefined,
   requestId: string | undefined,
   dataId: string,
+  agora: number = Date.now(),
+  toleranciaMs: number = toleranciaDoWebhookMs(),
 ): boolean {
-  if (!cabecalho) return false;
-  const partes = Object.fromEntries(
-    cabecalho.split(",").map((par) => par.split("=").map((s) => s.trim()) as [string, string]),
-  );
+  const partes = partesDaAssinatura(cabecalho);
   if (!partes.ts || !partes.v1) return false;
   const manifesto = `id:${dataId.toLowerCase()};request-id:${requestId ?? ""};ts:${partes.ts};`;
   const esperado = Buffer.from(createHmac("sha256", segredo).update(manifesto).digest("hex"));
   const recebido = Buffer.from(partes.v1);
-  return esperado.length === recebido.length && timingSafeEqual(esperado, recebido);
+  if (esperado.length !== recebido.length || !timingSafeEqual(esperado, recebido)) return false;
+  return tsDentroDoPrazo(partes.ts, agora, toleranciaMs);
 }

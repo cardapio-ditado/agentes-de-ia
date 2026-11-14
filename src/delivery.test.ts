@@ -18,7 +18,7 @@ import {
   type Bairro,
   type Cupom,
 } from "./delivery.js";
-import { assinaturaConfere, corpoDoPix } from "./deliveryPagamento.js";
+import { assinaturaConfere, corpoDoPix, toleranciaDoWebhookMs, tsDentroDoPrazo, tsDoWebhookEmMs } from "./deliveryPagamento.js";
 import { comDelivery, FERRAMENTAS_PADRAO, resolveTools } from "./tools/index.js";
 
 const item = (campos: Partial<ItemPublico> & { id: string; nome: string; preco: number }): ItemPublico => ({
@@ -197,10 +197,54 @@ test("configParaATela nunca devolve o token nem o segredo do Mercado Pago", () =
 
 test("assinatura do webhook do Mercado Pago", () => {
   const v1 = createHmac("sha256", "seg").update("id:123;request-id:req-1;ts:1700000000;").digest("hex");
-  assert.equal(assinaturaConfere("seg", `ts=1700000000,v1=${v1}`, "req-1", "123"), true);
-  assert.equal(assinaturaConfere("seg", `ts=1700000000,v1=${v1}`, "req-1", "124"), false);
-  assert.equal(assinaturaConfere("outro", `ts=1700000000,v1=${v1}`, "req-1", "123"), false);
-  assert.equal(assinaturaConfere("seg", undefined, "req-1", "123"), false);
+  // O relógio do teste: um minuto depois de o aviso ser assinado.
+  const agora = 1700000060_000;
+  assert.equal(assinaturaConfere("seg", `ts=1700000000,v1=${v1}`, "req-1", "123", agora), true);
+  assert.equal(assinaturaConfere("seg", `ts=1700000000,v1=${v1}`, "req-1", "124", agora), false);
+  assert.equal(assinaturaConfere("outro", `ts=1700000000,v1=${v1}`, "req-1", "123", agora), false);
+  assert.equal(assinaturaConfere("seg", undefined, "req-1", "123", agora), false);
+});
+
+test("aviso do Mercado Pago com assinatura certa mas velho é recusado", () => {
+  const assinar = (ts: string) => `ts=${ts},v1=${createHmac("sha256", "seg").update(`id:123;request-id:req-1;ts:${ts};`).digest("hex")}`;
+  const DEZ_MIN = 10 * 60_000;
+  const agora = 1700000000_000;
+
+  // Em segundos: 9 minutos atrás passa, 11 não.
+  assert.equal(assinaturaConfere("seg", assinar(String(1700000000 - 9 * 60)), "req-1", "123", agora, DEZ_MIN), true);
+  assert.equal(assinaturaConfere("seg", assinar(String(1700000000 - 11 * 60)), "req-1", "123", agora, DEZ_MIN), false);
+  // Em milissegundos: a mesma régua.
+  assert.equal(assinaturaConfere("seg", assinar(String(agora - 9 * 60_000)), "req-1", "123", agora, DEZ_MIN), true);
+  assert.equal(assinaturaConfere("seg", assinar(String(agora - 11 * 60_000)), "req-1", "123", agora, DEZ_MIN), false);
+  // Do futuro além do prazo também não: relógio torto tem limite.
+  assert.equal(assinaturaConfere("seg", assinar(String(1700000000 + 11 * 60)), "req-1", "123", agora, DEZ_MIN), false);
+  assert.equal(assinaturaConfere("seg", assinar(String(1700000000 + 60)), "req-1", "123", agora, DEZ_MIN), true);
+  // `ts` que não é número: assinado ou não, não vale.
+  assert.equal(assinaturaConfere("seg", assinar("ontem"), "req-1", "123", agora, DEZ_MIN), false);
+  // Prazo desligado (0): só a assinatura decide, como era antes.
+  assert.equal(assinaturaConfere("seg", assinar("1500000000"), "req-1", "123", agora, 0), true);
+  // E o prazo nunca salva assinatura errada.
+  assert.equal(assinaturaConfere("outro", assinar(String(1700000000)), "req-1", "123", agora, DEZ_MIN), false);
+});
+
+test("o ts do webhook vale em segundos e em milissegundos", () => {
+  assert.equal(tsDoWebhookEmMs("1700000000"), 1700000000_000);
+  assert.equal(tsDoWebhookEmMs("1700000000123"), 1700000000123);
+  assert.equal(tsDoWebhookEmMs(""), null);
+  assert.equal(tsDoWebhookEmMs(undefined), null);
+  assert.equal(tsDoWebhookEmMs("17e8"), null);
+  assert.equal(tsDoWebhookEmMs("-5"), null);
+  assert.equal(tsDentroDoPrazo("1700000000", 1700000000_000 + 599_000, 600_000), true);
+  assert.equal(tsDentroDoPrazo("1700000000", 1700000000_000 + 601_000, 600_000), false);
+});
+
+test("o prazo do webhook: 10 minutos por padrão, ajustável, e 0 desliga", () => {
+  assert.equal(toleranciaDoWebhookMs(undefined), 600_000);
+  assert.equal(toleranciaDoWebhookMs(""), 600_000);
+  assert.equal(toleranciaDoWebhookMs("abc"), 600_000);
+  assert.equal(toleranciaDoWebhookMs("-3"), 600_000);
+  assert.equal(toleranciaDoWebhookMs("30"), 1_800_000);
+  assert.equal(toleranciaDoWebhookMs("0"), 0);
 });
 
 test("corpoDoPix: valor em reais, pedido como referência, webhook da casa e 30 minutos de validade", () => {

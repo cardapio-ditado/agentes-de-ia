@@ -285,6 +285,7 @@ import {
   lerAvaliacaoDoMake,
   lerPaginaDoGoogle,
   ligarAoMake,
+  webhookDoMakeValido,
   PAGINA_UNICA,
   pedirPaginaAoMake,
   publicarPeloMake,
@@ -354,6 +355,7 @@ import {
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
 import { rodarCiclo } from "./ciclos.js";
+import { chamadaLocal } from "./origemLocal.js";
 import { cicloValido, segredoDoCronConfere, ultimasBatidas } from "./rotinas.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
@@ -5023,7 +5025,7 @@ async function roteasApi(
       // cenário manda no cabeçalho.
       if ("make_webhook_url" in corpo) {
         const url = textoOpcional(corpo, "make_webhook_url") ?? null;
-        if (url && !/^https:\/\/hook\.[a-z0-9.-]*make\.com\//.test(url)) {
+        if (url && !webhookDoMakeValido(url)) {
           throw erro(400, "invalid_request", "O webhook do Make começa com https://hook.…make.com/");
         }
         const { segredo } = await ligarAoMake(venue.id, url);
@@ -6746,9 +6748,18 @@ async function roteasApi(
     // Ligar e desligar um número é configuração da casa.
     if (metodo === "POST") exigirQuemConfigura(chave);
 
+    // O atalho "responde direto do conector deste processo" não confere de
+    // que casa o conector é — só vale para quem chama da própria máquina
+    // (ver src/origemLocal.ts). Quem chega de fora (rede do bar, proxy,
+    // internet) cai no mesmo caminho da Vercel: a ponte pelo banco, que
+    // confere a organização e só mostra a casa de quem pediu. O conector
+    // daqui publica o estado e consome os comandos dessa ponte de qualquer
+    // jeito, então nada deixa de funcionar — só deixa de vazar.
+    const conectorDaqui = chamadaLocal(req) ? conectorWhatsapp : null;
+
     if (metodo === "GET" && p[1] === "status") {
-      if (conectorWhatsapp) {
-        const estado = conectorWhatsapp.estado() as Record<string, unknown>;
+      if (conectorDaqui) {
+        const estado = conectorDaqui.estado() as Record<string, unknown>;
         return ok(res, { ...estado, versao: versaoDoCodigo(), fonte: "local" });
       }
       const slug = url.searchParams.get("venue");
@@ -6802,9 +6813,9 @@ async function roteasApi(
     }
 
     if (metodo === "POST" && p[1] === "desconectar") {
-      if (conectorWhatsapp) {
-        await conectorWhatsapp.parar();
-        return ok(res, conectorWhatsapp.estado());
+      if (conectorDaqui) {
+        await conectorDaqui.parar();
+        return ok(res, conectorDaqui.estado());
       }
       const corpo = await lerJson(req);
       const slug = textoOpcional(corpo, "venue");
