@@ -359,3 +359,12 @@ $$;
 revoke all on function public.delivery_fechar_pedido(jsonb) from public, anon, authenticated;
 revoke all on function public.delivery_cancelar_pedido(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.delivery_entregar_pedido(uuid, integer) from public, anon, authenticated;
+
+-- As tabelas também: o RLS sem política já barra, mas o navegador não tem
+-- motivo nenhum para sequer enxergar estas tabelas pela API do banco.
+revoke all on table
+  public.delivery_config, public.delivery_bairros, public.delivery_cupons, public.delivery_sacolas,
+  public.delivery_pedidos, public.delivery_pedido_itens, public.delivery_cashback
+from anon, authenticated;
+
+notify pgrst, 'reload schema';
