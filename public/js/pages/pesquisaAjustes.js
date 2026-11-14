@@ -962,6 +962,12 @@ async function telaPremio(ctx, recarregar) {
       max: "10",
       value: String(config.detrator_nota_maxima ?? 6),
     }),
+    google_avaliacao_url: el("input", {
+      type: "url",
+      inputmode: "url",
+      value: config.google_avaliacao_url ?? "",
+      placeholder: "https://g.page/r/…/review — vazio não mostra o botão",
+    }),
   };
 
   const form = el("form", {
@@ -984,6 +990,7 @@ async function telaPremio(ctx, recarregar) {
           premio_validade_dias: Number(campos.premio_validade_dias.value),
           detrator_avisar_whatsapp: campos.detrator_avisar_whatsapp.value.trim(),
           detrator_nota_maxima: Number(campos.detrator_nota_maxima.value),
+          google_avaliacao_url: campos.google_avaliacao_url.value.trim(),
         });
         avisar("Ajustes salvos.", "ok");
         await recarregar();
@@ -1057,6 +1064,24 @@ async function telaPremio(ctx, recarregar) {
       texto:
         "6 é a régua do NPS: de 0 a 6 o cliente é considerado detrator. Aumente para saber de mais casos, " +
         "diminua para receber só os graves. Campo do WhatsApp vazio desliga o aviso.",
+    }),
+
+    el("h3", { texto: "Quem adorou, avalia no Google", style: "margin-top:22px" }),
+    el("p", {
+      classe: "muted",
+      texto:
+        "Quem dá 9 ou 10 vê, na tela de agradecimento, um botão “Avaliar no Google” que abre este link. " +
+        "Quem deu nota menor não vê o botão: a reclamação dele já veio para você, que é onde dá para resolver.",
+    }),
+    el("div", { classe: "grade", style: "margin-top:12px" }, [
+      campo("Link de avaliação no Google (opcional)", campos.google_avaliacao_url),
+    ]),
+    el("p", {
+      classe: "muted",
+      style: "margin-top:8px",
+      texto:
+        "Onde pegar: no Perfil da Empresa no Google, em “Pedir avaliações”, copie o link e cole aqui. " +
+        "Vale link de google.com, g.page ou maps.app.goo.gl. Campo vazio: a pesquisa termina como sempre terminou.",
     }),
     el("button", { classe: "btn btn-primario", type: "submit", texto: "Salvar", style: "margin-top:12px" }),
   ]);

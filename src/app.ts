@@ -491,6 +491,14 @@ import {
   salvarConfig,
 } from "./pesquisa.js";
 import {
+  LinkDeAvaliacaoInvalido,
+  aniversarioInformado,
+  linkDeAvaliacaoDaCasa,
+  linkDeAvaliacaoValido,
+  linkParaQuemRespondeu,
+  salvarLinkDeAvaliacao,
+} from "./pesquisaFim.js";
+import {
   configZig,
   convidarEscolhidos,
   listarVisitantes,
@@ -2635,15 +2643,30 @@ async function roteasApi(
       if (metodo === "GET") {
         const chave = await exigirChave(req, "reservations:read");
         const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-        return ok(res, await comErroDePesquisa(() => configDaPesquisa(venue.id)));
+        // O link de avaliação mora na casa (venues.settings), não em
+        // pesquisa_config; a tela de ajustes não precisa saber disso.
+        return ok(res, {
+          ...(await comErroDePesquisa(() => configDaPesquisa(venue.id))),
+          google_avaliacao_url: linkDeAvaliacaoDaCasa(venue.settings),
+        });
       }
       if (metodo === "PUT") {
         const chave = await exigirChave(req, "reservations:write");
         const venue = await findVenueBySlugInOrg(chave.org_id, slug);
         const corpo = (await lerJson(req)) as Record<string, unknown>;
-        return ok(
-          res,
-          await comErroDePesquisa(() =>
+        // Conferido ANTES de salvar o resto: link recusado não pode deixar
+        // metade do formulário gravada e a outra metade não. Ausente = não
+        // mexe; "" = apaga.
+        let linkDoGoogle = linkDeAvaliacaoDaCasa(venue.settings);
+        if (corpo.google_avaliacao_url !== undefined) {
+          try {
+            linkDoGoogle = linkDeAvaliacaoValido(corpo.google_avaliacao_url);
+          } catch (e) {
+            if (e instanceof LinkDeAvaliacaoInvalido) throw erro(400, "invalid_request", e.message);
+            throw e;
+          }
+        }
+        const salva = await comErroDePesquisa(() =>
             salvarConfig(venue.id, {
               ativa: corpo.ativa === undefined ? undefined : Boolean(corpo.ativa),
               saudacao: textoOpcional(corpo, "saudacao") ?? null,
@@ -2676,8 +2699,11 @@ async function roteasApi(
               convite_modelo_variaveis:
                 corpo.convite_modelo_variaveis === undefined ? undefined : variaveisValidas(corpo.convite_modelo_variaveis),
             }),
-          ),
         );
+        // Depois do resto, pelo mesmo motivo: se os outros ajustes forem
+        // recusados, o link também não muda.
+        if (linkDoGoogle !== linkDeAvaliacaoDaCasa(venue.settings)) await salvarLinkDeAvaliacao(venue.id, linkDoGoogle);
+        return ok(res, { ...salva, google_avaliacao_url: linkDoGoogle });
       }
     }
 
@@ -6547,9 +6573,7 @@ async function roteasApi(
 
     if (metodo === "POST") {
       const corpo = (await lerJson(req)) as Record<string, unknown>;
-      return ok(
-        res,
-        await comErroDePesquisa(() =>
+      const registrada = await comErroDePesquisa(() =>
           registrarResposta({
             venueId: venue.id,
             fuso: venue.timezone,
@@ -6566,10 +6590,13 @@ async function roteasApi(
             conviteId: convite?.id ?? null,
             clienteNome: textoOpcional(corpo, "cliente_nome") ?? null,
             clienteContato: textoOpcional(corpo, "cliente_contato") ?? null,
+            clienteNascimento: aniversarioInformado(corpo.cliente_nascimento),
           }),
-        ),
-        201,
       );
+      // O convite para avaliar no Google só existe na resposta de quem deu
+      // 9 ou 10, e só se a casa configurou o link. Para os outros o campo
+      // vem null — a tela não tem o que mostrar nem por engano.
+      return ok(res, { ...registrada, google_avaliacao_url: linkParaQuemRespondeu(registrada.nota, venue.settings) }, 201);
     }
 
     throw erro(405, "method_not_allowed", "Método não suportado aqui.");
