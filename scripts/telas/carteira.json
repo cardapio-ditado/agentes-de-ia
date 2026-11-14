@@ -1,0 +1,109 @@
+{
+  "rotulo": "Carteira — os clientes do Brasa e o cadastro de um novo",
+  "modulo": "/js/pages/clientes.js",
+  "funcao": "clientes",
+  "rotas": {
+    "GET /v1/admin/clientes": [
+      {
+        "org_id": "o1",
+        "venue_id": "v1",
+        "slug": "ditado",
+        "nome": "Ditado Brasa & Bar",
+        "email_contato": "dono@ditado.com",
+        "criado_em": "2026-08-01T12:00:00Z",
+        "estabelecimentos": 1,
+        "plano": "profissional",
+        "pontos_mensais": 2500,
+        "pontos_extras": 0,
+        "plano_travar": false,
+        "pontos_usados": 900,
+        "pontos_restantes": 1600,
+        "estado_do_plano": "ok",
+        "status_pagamento": "ativo",
+        "mensalidade": 297,
+        "vencimento_dia": 10,
+        "primeiro_acesso_em": "2026-08-02T12:00:00Z",
+        "modulos": [
+          {
+            "modulo": "agentes-ia",
+            "ativo": true,
+            "url": null
+          },
+          {
+            "modulo": "checklist",
+            "ativo": true,
+            "url": null
+          }
+        ]
+      },
+      {
+        "org_id": "o2",
+        "venue_id": "v2",
+        "slug": "the-20",
+        "nome": "THE 20",
+        "email_contato": "dono@ditado.com",
+        "criado_em": "2026-08-01T12:00:00Z",
+        "estabelecimentos": 1,
+        "plano": "profissional",
+        "pontos_mensais": 2500,
+        "pontos_extras": 0,
+        "plano_travar": false,
+        "pontos_usados": 0,
+        "pontos_restantes": 2500,
+        "estado_do_plano": "ok",
+        "status_pagamento": "ativo",
+        "mensalidade": 297,
+        "vencimento_dia": 10,
+        "primeiro_acesso_em": null,
+        "modulos": [
+          {
+            "modulo": "agentes-ia",
+            "ativo": true,
+            "url": null
+          },
+          {
+            "modulo": "checklist",
+            "ativo": true,
+            "url": null
+          }
+        ]
+      }
+    ],
+    "POST /v1/admin/clientes": {
+      "organizacao": {
+        "id": "o9",
+        "slug": "delliris",
+        "nome": "Delliris"
+      },
+      "estabelecimento": {
+        "id": "v9",
+        "slug": "delliris",
+        "nome": "Delliris",
+        "timezone": "America/Sao_Paulo"
+      },
+      "agente": {
+        "id": "a9",
+        "slug": "recepcionista-delliris"
+      },
+      "modulos": [
+        "agentes-ia",
+        "cardapio-digital",
+        "delivery"
+      ],
+      "chave": "brasa_live_exemplo_de_chave_que_aparece_uma_vez",
+      "senhaInicial": "sol-mesa-4821",
+      "dono": {
+        "userId": "u9",
+        "email": "dono@delliris.com.br"
+      }
+    }
+  },
+  "variacoes": {
+    "novo": {
+      "rotulo": "o formulário de cliente novo, já como delivery em SP",
+      "cliques": [
+        ".cabecalho-secao .btn-primario"
+      ]
+    }
+  }
+}

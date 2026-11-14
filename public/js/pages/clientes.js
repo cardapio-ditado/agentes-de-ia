@@ -69,6 +69,31 @@ const FUSOS = [
   ["America/Noronha", "Fernando de Noronha (GMT-2)"],
 ];
 
+// O que a casa é. Escolher o tipo já marca os módulos que costumam ir junto
+// e dá ao atendente o jeito certo — a equipe só ajusta o que foi vendido de
+// diferente. A mesma tabela vive no servidor (TIPOS_DE_CASA em tenants.ts),
+// que é quem vale; aqui é só para a tela marcar as caixas na hora.
+const TIPOS_DE_CASA = [
+  ["bar", "Bar ou casa com programação", ["agentes-ia", "cardapio-digital", "checklist", "pesquisa", "avaliacoes"]],
+  ["restaurante", "Restaurante", ["agentes-ia", "cardapio-digital", "checklist", "pesquisa", "avaliacoes"]],
+  ["delivery", "Delivery", ["agentes-ia", "cardapio-digital", "delivery"]],
+];
+
+// O estado decide o fuso. Perguntar "America/Cuiaba" era pedir o erro no
+// campo mais perigoso do cadastro; o estado todo mundo sabe.
+const FUSO_DA_UF = {
+  AC: "America/Rio_Branco", AL: "America/Maceio", AP: "America/Belem", AM: "America/Manaus", BA: "America/Bahia",
+  CE: "America/Fortaleza", DF: "America/Sao_Paulo", ES: "America/Sao_Paulo", GO: "America/Sao_Paulo",
+  MA: "America/Fortaleza", MT: "America/Cuiaba", MS: "America/Campo_Grande", MG: "America/Sao_Paulo",
+  PA: "America/Belem", PB: "America/Fortaleza", PR: "America/Sao_Paulo", PE: "America/Recife", PI: "America/Fortaleza",
+  RJ: "America/Sao_Paulo", RN: "America/Fortaleza", RS: "America/Sao_Paulo", RO: "America/Porto_Velho",
+  RR: "America/Boa_Vista", SC: "America/Sao_Paulo", SP: "America/Sao_Paulo", SE: "America/Maceio", TO: "America/Araguaina",
+};
+
+/** A hora que é AGORA naquele fuso — a prova de que o fuso está certo. */
+const horaAgoraEm = (fuso) =>
+  new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, hour: "2-digit", minute: "2-digit" }).format(new Date());
+
 export async function clientes(raiz, ctx) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
@@ -282,7 +307,14 @@ export async function clientes(raiz, ctx) {
 
     const campos = {
       nome: el("input", { placeholder: "Ditado Popular", required: true }),
-      cidade: el("input", { placeholder: "Cuiabá / MT" }),
+      tipo: el("select", {}, TIPOS_DE_CASA.map(([v, r]) => el("option", { value: v, texto: r }))),
+      cidade: el("input", { placeholder: "Cuiabá" }),
+      uf: el("select", { required: true }, [
+        el("option", { value: "", texto: "Escolha o estado" }),
+        ...Object.keys(FUSO_DA_UF).map((uf) => el("option", { value: uf, texto: uf })),
+      ]),
+      // Fica escondido: só aparece para quem precisar contrariar o estado
+      // (oeste do Amazonas, Fernando de Noronha).
       timezone: el(
         "select",
         {},
@@ -300,24 +332,63 @@ export async function clientes(raiz, ctx) {
 
     const btn = el("button", { classe: "btn btn-primario", type: "submit", texto: "Cadastrar cliente" });
 
+    // Os módulos: já marcados pelo tipo de casa, e a equipe ajusta.
+    const caixas = new Map(
+      MODULOS_VENDAVEIS.map(([id, rotulo]) => {
+        const caixa = el("input", { type: "checkbox", value: id });
+        return [id, { caixa, linha: el("label", { style: "display:inline-flex;gap:.4rem;align-items:center;margin:0 1rem .4rem 0" }, [caixa, el("span", { texto: rotulo })]) }];
+      }),
+    );
+    const marcarDoTipo = () => {
+      const doTipo = TIPOS_DE_CASA.find(([v]) => v === campos.tipo.value)?.[2] ?? [];
+      for (const [id, { caixa }] of caixas) caixa.checked = doTipo.includes(id);
+    };
+    campos.tipo.addEventListener("change", marcarDoTipo);
+    marcarDoTipo();
+    // Delivery sem cardápio não tem o que vender: marcar um marca o outro.
+    caixas.get("delivery").caixa.addEventListener("change", (e) => {
+      if (e.target.checked) caixas.get("cardapio-digital").caixa.checked = true;
+    });
+
+    // O fuso sai do estado, e a tela mostra a hora de lá como conferência.
+    const avisoDoFuso = el("small", { classe: "muted", texto: "O horário das reservas, dos checklists e do delivery segue o estado da casa." });
+    const trocarFuso = el("button", { classe: "btn btn-peq", type: "button", texto: "Trocar o fuso na mão" });
+    const campoDoFuso = el("div", { classe: "campo", hidden: true }, [el("label", { texto: "Fuso horário" }), campos.timezone]);
+    const mostrarFuso = () => {
+      avisoDoFuso.textContent = `Agora são ${horaAgoraEm(campos.timezone.value)} na casa. Se não bater, troque o fuso.`;
+    };
+    campos.uf.addEventListener("change", () => {
+      const fuso = FUSO_DA_UF[campos.uf.value];
+      if (fuso) campos.timezone.value = fuso;
+      mostrarFuso();
+    });
+    campos.timezone.addEventListener("change", mostrarFuso);
+    trocarFuso.addEventListener("click", () => {
+      campoDoFuso.hidden = false;
+      trocarFuso.hidden = true;
+    });
+
     const form = el("form", { classe: "cartao", onsubmit: enviar }, [
       el("div", { classe: "grade" }, [
-        campo("Nome do restaurante", campos.nome),
+        campo("Nome da casa", campos.nome),
+        campo("O que ela é", campos.tipo),
         campo("Cidade", campos.cidade),
-        campo("Fuso horário", campos.timezone),
+        campo("Estado", campos.uf),
+        campoDoFuso,
         campo("Plano", campos.plano),
         campo("E-mail do responsável", campos.email),
-        campo("WhatsApp", campos.telefone),
+        campo("WhatsApp do responsável", campos.telefone),
+        // Em linha própria: dentro da célula do estado, o aviso esticava a
+        // fileira inteira e os outros campos cresciam junto.
+        el("div", { classe: "campo campo-largo", style: "display:flex;gap:.6rem;align-items:center;flex-wrap:wrap" }, [avisoDoFuso, trocarFuso]),
+        el("div", { classe: "campo campo-largo" }, [
+          el("label", { texto: "Módulos contratados" }),
+          el("div", {}, [...caixas.values()].map((c) => c.linha)),
+          el("small", { classe: "muted", texto: "Já vêm marcados os do tipo de casa. Marque só o que foi vendido — dá para ligar outros depois, na carteira." }),
+        ]),
         el("div", { classe: "campo campo-largo" }, [
           el("label", { texto: "Observações (só a equipe vê)" }),
           campos.observacoes,
-        ]),
-        el("div", { classe: "campo campo-largo" }, [
-          el("p", {
-            classe: "muted",
-            texto:
-              "O fuso é o campo mais importante: ele governa o horário das reservas, o disparo dos checklists e a virada do ciclo de pontos. Confirme a cidade antes de salvar.",
-          }),
         ]),
       ]),
       el("div", { classe: "acoes-form" }, [
@@ -332,7 +403,7 @@ export async function clientes(raiz, ctx) {
           el("h2", { texto: "Novo cliente" }),
           el("p", {
             classe: "muted",
-            texto: "Cria a organização, o estabelecimento, o agente, o acesso do dono e a chave do conector.",
+            texto: "Um formulário e a casa está pronta: painel, módulos ligados, atendente virtual com o jeito dela e o acesso do dono.",
           }),
         ]),
       ]),
@@ -348,13 +419,16 @@ export async function clientes(raiz, ctx) {
         const criado = await post("/v1/admin/clientes", {
           nome: campos.nome.value.trim(),
           cidade: campos.cidade.value.trim() || undefined,
+          uf: campos.uf.value,
           timezone: campos.timezone.value,
+          tipo: campos.tipo.value,
+          modulos: [...caixas].filter(([, c]) => c.caixa.checked).map(([id]) => id),
           plano: campos.plano.value,
           email: campos.email.value.trim(),
           telefone: campos.telefone.value.trim() || undefined,
           observacoes: campos.observacoes.value.trim() || undefined,
         });
-        entrega(criado);
+        entrega(criado, campos.telefone.value.trim());
       } catch (e) {
         avisar(e.message, "erro");
         btn.disabled = false;
@@ -370,8 +444,23 @@ export async function clientes(raiz, ctx) {
    * e a chave só existe no banco como hash. Quem fechar esta tela sem copiar
    * precisa gerar de novo, e isso é preferível a ter os dois recuperáveis.
    */
-  function entrega(c) {
+  function entrega(c, telefoneDoDono = "") {
     limpar(conteudo);
+    // A mensagem de boas-vindas, pronta. Leva o painel, o e-mail e a senha —
+    // e NÃO leva a chave do conector, que é só da máquina do WhatsApp.
+    const boasVindas = [
+      `Olá! Seu painel do Brasa Food está pronto 🔥`,
+      ``,
+      `${c.organizacao.nome}`,
+      `Painel: ${location.origin}/app`,
+      `E-mail: ${c.dono.email}`,
+      `Senha inicial: ${c.senhaInicial}`,
+      ``,
+      `No primeiro acesso o painel pede para você criar a sua senha. Depois, siga o passo a passo da tela "Implantação".`,
+    ].join("\n");
+    const digitos = telefoneDoDono.replace(/\D/g, "");
+    const numero = digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
+    const nomesDosModulos = (c.modulos ?? []).map((id) => MODULOS_VENDAVEIS.find(([m]) => m === id)?.[1] ?? id);
     conteudo.append(
       el("section", { classe: "cartao pontos-borda-atencao" }, [
         el("h2", { texto: `${c.organizacao.nome} está no ar 🔥` }),
@@ -386,8 +475,9 @@ export async function clientes(raiz, ctx) {
           copiavel("Chave do conector (WhatsApp)", c.chave),
           linha("Endereço do painel", `${location.origin}/app`),
           linha("Estabelecimento", `${c.estabelecimento.nome} (${c.estabelecimento.slug})`),
-          linha("Fuso horário", c.estabelecimento.timezone),
-          linha("Agente criado", c.agente.slug),
+          linha("Fuso horário", `${c.estabelecimento.timezone} — agora são ${horaAgoraEm(c.estabelecimento.timezone)} lá`),
+          linha("Módulos ligados", nomesDosModulos.join(", ") || "nenhum"),
+          linha("Atendente virtual criado", c.agente.slug),
         ]),
         el("p", {
           classe: "muted",
@@ -396,10 +486,30 @@ export async function clientes(raiz, ctx) {
             "Peça para o dono trocar a senha no primeiro acesso, em Esqueci minha senha. A chave do conector é só para o computador que roda o WhatsApp — ela não deve circular no grupo da equipe.",
         }),
         el("div", { classe: "acoes-form" }, [
+          // O jeito mais rápido de entregar: a conversa do dono já abre com
+          // a mensagem escrita. Sem telefone no cadastro, fica o copiar.
+          numero.length >= 12
+            ? el("a", {
+                classe: "btn btn-primario",
+                href: `https://wa.me/${numero}?text=${encodeURIComponent(boasVindas)}`,
+                target: "_blank",
+                rel: "noopener",
+                texto: "Enviar o acesso pelo WhatsApp",
+              })
+            : null,
           el("button", {
-            classe: "btn btn-primario",
+            classe: numero.length >= 12 ? "btn" : "btn btn-primario",
             type: "button",
-            texto: "Copiar tudo",
+            texto: "Copiar mensagem de boas-vindas",
+            onclick: (ev) => {
+              navigator.clipboard.writeText(boasVindas);
+              ev.target.textContent = "Copiado ✓";
+            },
+          }),
+          el("button", {
+            classe: "btn",
+            type: "button",
+            texto: "Copiar tudo (com a chave)",
             onclick: (ev) => {
               const texto = [
                 `Acesso ao Brasa Food — ${c.organizacao.nome}`,

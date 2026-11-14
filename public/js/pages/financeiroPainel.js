@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
+import { dinheiro, el, etiqueta, hojeNaCasa, indicador, preencher, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { graficoDeResultado, graficoDeSaldo, reaisCurtos } from "./financeiroGraficos.js";
 
@@ -8,7 +8,7 @@ import { graficoDeResultado, graficoDeSaldo, reaisCurtos } from "./financeiroGra
  * faltar dinheiro?).
  */
 
-const hojeIso = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date());
+const hojeIso = () => hojeNaCasa();
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const nomeDoMes = (iso) => `${MESES[Number(iso.slice(5, 7)) - 1]}/${iso.slice(2, 4)}`;
 const pctBr = (v) => (v === null || v === undefined ? "—" : `${String(v).replace(".", ",")}%`);

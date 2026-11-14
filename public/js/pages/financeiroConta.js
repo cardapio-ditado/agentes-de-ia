@@ -1,5 +1,5 @@
 import { del, post, put } from "../api.js";
-import { avisar, dinheiro, el, limpar, preencher } from "../ui.js";
+import { avisar, dinheiro, el, hojeNaCasa, limpar, preencher } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 
 /**
@@ -12,7 +12,7 @@ import { dataBr } from "../relatorio.js";
  * bate com o total.
  */
 
-const hojeIso = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date());
+const hojeIso = () => hojeNaCasa();
 
 export const NOME_DO_TIPO = {
   pagar: { conta: "conta a pagar", quem: "Fornecedor", acao: "Pagar", feito: "Pago", saiu: "De qual conta saiu" },

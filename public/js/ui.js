@@ -115,21 +115,47 @@ export function indicador({ rotulo, valor, nota, iconePath, destaque }) {
  * conferindo a agenda de outro estado precisa ver o horário em que o show
  * começa no bar dele, não no relógio do celular dele.
  *
- * Só há um estabelecimento hoje; se isso mudar, isto precisa vir do venue.
+ * O fuso vem do estabelecimento aberto (`definirFusoDaCasa`, chamado quando
+ * o painel carrega a casa e quando troca de casa). Era um valor fixo de
+ * Cuiabá, do tempo em que só havia uma casa — e uma casa de São Paulo veria
+ * todas as reservas uma hora adiantadas, sem erro nenhum na tela.
  */
-export const FUSO_DA_CASA = "America/Cuiaba";
+export let FUSO_DA_CASA = "America/Cuiaba";
 
-const DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: FUSO_DA_CASA,
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+function formatadoresDo(fuso) {
+  return {
+    dataHora: new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+    diaIso: new Intl.DateTimeFormat("en-CA", { timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit" }),
+    hora: new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+    diaCurto: new Intl.DateTimeFormat("pt-BR", { timeZone: fuso, weekday: "short", day: "2-digit", month: "2-digit" }),
+  };
+}
+let formatos = formatadoresDo(FUSO_DA_CASA);
+
+/**
+ * Passa o painel para o relógio de outra casa.
+ *
+ * Fuso que o navegador não conhece é ignorado (fica o anterior): mostrar a
+ * hora de Cuiabá é ruim, a tela em branco por um RangeError é pior.
+ */
+export function definirFusoDaCasa(fuso) {
+  if (!fuso || fuso === FUSO_DA_CASA) return;
+  try {
+    formatos = formatadoresDo(fuso);
+    FUSO_DA_CASA = fuso;
+  } catch {
+    console.warn(`[painel] fuso desconhecido: ${fuso}`);
+  }
+}
+
+/** O dia de hoje no relógio da casa, como "2026-08-22" — para o valor padrão de um campo de data. */
+export function hojeNaCasa() {
+  return formatos.diaIso.format(new Date());
+}
 
 export function dataHora(iso) {
   if (!iso) return "—";
-  return DATA_HORA.format(new Date(iso));
+  return formatos.dataHora.format(new Date(iso));
 }
 
 /** "agora", "12 min", "3 h", "5 d" — a caixa de entrada precisa ser curta. */
@@ -150,35 +176,17 @@ export function desde(iso) {
  * domingo 02h em UTC, e cairia na casinha errada do calendário para quem
  * abrisse o painel de um servidor ou de outro país.
  */
-const DIA_ISO = new Intl.DateTimeFormat("en-CA", {
-  timeZone: FUSO_DA_CASA,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
 export function diaNaCasa(iso) {
-  return DIA_ISO.format(new Date(iso));
+  return formatos.diaIso.format(new Date(iso));
 }
 
-const HORA = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: FUSO_DA_CASA,
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
 export function horaNaCasa(iso) {
-  return HORA.format(new Date(iso));
+  return formatos.hora.format(new Date(iso));
 }
 
-const DIA_CURTO = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: FUSO_DA_CASA,
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-});
 /** "sáb., 22/08" — o suficiente para reconhecer o dia numa lista. */
 export function diaCurtoNaCasa(iso) {
-  return DIA_CURTO.format(new Date(iso)).replace(".,", "");
+  return formatos.diaCurto.format(new Date(iso)).replace(".,", "");
 }
 
 export function dinheiro(valor) {
