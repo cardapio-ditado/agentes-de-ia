@@ -158,12 +158,17 @@ export async function delivery(raiz, ctx) {
         const [rotulo, variante] = SITUACAO[p.status] ?? [p.status, ""];
         const encerrado = p.status === "entregue" || p.status === "cancelado" || p.status === "aguardando_pagamento";
         const mover = async (status) => {
-          const texto = status === "cancelado"
-            ? `Cancelar o pedido #${p.numero}? O cliente é avisado${p.pago_em ? ", e o estorno do pagamento é feito por você no Mercado Pago" : ""}.`
-            : `Marcar o pedido #${p.numero} como "${ACAO[status]}"? O cliente é avisado.`;
-          if (!confirm(texto)) return;
+          // Só o cancelamento pergunta: é o único passo que não tem volta e
+          // mexe com dinheiro. Avançar o pedido é o gesto de toda hora de quem
+          // está no balcão com a mão ocupada — uma pergunta a cada toque vira
+          // o motivo de ninguém atualizar a fila.
+          if (status === "cancelado") {
+            const estorno = p.pago_em ? " O estorno do pagamento é feito por você, no Mercado Pago." : "";
+            if (!confirm(`Cancelar o pedido #${p.numero}? O cliente é avisado.${estorno}`)) return;
+          }
           try {
             await patch(`${base}/pedidos/${p.id}`, { status });
+            avisar(status === "cancelado" ? `Pedido #${p.numero} cancelado.` : `Pedido #${p.numero}: ${ACAO[status].toLowerCase()}. O cliente foi avisado.`, "ok");
           } catch (e) {
             avisar(e.message, "erro");
           }
@@ -212,6 +217,11 @@ export async function delivery(raiz, ctx) {
       const salvar = el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: c ? "Salvar" : "Criar cupom" });
       salvar.addEventListener("click", async () => {
         const numero = tipo.value === "percentual" ? Math.round(parseFloat(String(valor.value).replace(",", "."))) : paraCentavos(valor.value);
+        // Dito aqui, ao lado do campo, e não devolvido pelo servidor como "valor inválido".
+        if (!Number.isFinite(numero) || numero <= 0) {
+          valor.focus();
+          return avisar(tipo.value === "percentual" ? "Informe o desconto em %, de 1 a 100." : "Informe o desconto em reais. Ex.: 10,00", "erro");
+        }
         try {
           await put(`${base}/cupons`, {
             codigo: codigo.value, tipo: tipo.value, valor: numero, minimo_centavos: paraCentavos(minimo.value) || 0,

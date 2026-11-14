@@ -644,6 +644,20 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
 
 addEventListener("hashchange", () => irPara(location.hash.slice(1), { podeTrocarDeModulo: true }));
 
+// Link para o endereço que JÁ é o atual não dispara hashchange — e o toque
+// parece não fazer nada. Acontece com as linhas do Hoje e da Implantação
+// quando a pessoa volta para elas por um caminho que não mexe no endereço
+// (a colmeia, por exemplo). Aqui o toque leva à tela do mesmo jeito.
+document.addEventListener("click", (e) => {
+  if (e.defaultPrevented) return;
+  const link = e.target instanceof Element ? e.target.closest('a[href^="#"]') : null;
+  const destino = link?.getAttribute("href") ?? "";
+  if (destino.length > 1 && destino === location.hash) {
+    e.preventDefault();
+    irPara(destino.slice(1), { podeTrocarDeModulo: true });
+  }
+});
+
 // ============ Acesso ============
 
 /**

@@ -1023,7 +1023,9 @@ export async function mudarStatus(venue: Venue, pedidoId: string, novo: string):
     if (error) falhar("Falha ao concluir o pedido", error.message);
     if (data?.id) {
       const bonus = ganho > 0 ? `\n💰 Você ganhou ${dinheiro(ganho)} de cashback para o próximo pedido pelo nosso WhatsApp.` : "";
-      await avisarCliente(venue, pedido, "entregue", `Pedido #${pedido.numero} entregue. Obrigado pela preferência! 💛${bonus}`);
+      // O link de volta fecha o ciclo: a mensagem que agradece é a que o
+      // cliente relê na próxima vez que der fome.
+      await avisarCliente(venue, pedido, "entregue", `Pedido #${pedido.numero} entregue. Obrigado pela preferência! 💛${bonus}\nPara pedir de novo: ${enderecoDoCardapio(venue)}`);
     }
     return lerPedido(venue.id, pedidoId);
   }

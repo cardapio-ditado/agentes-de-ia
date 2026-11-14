@@ -315,6 +315,11 @@ function desenharSacola() {
       campo("Nome", "nome", { autocomplete: "name", maxLength: 80 }),
       // Quem veio pelo WhatsApp já é conhecido: o telefone é o da conversa.
       !sacola.verificada && campo("WhatsApp com DDD", "telefone", { type: "tel", autocomplete: "tel", placeholder: "(65) 99999-9999", maxLength: 20 }),
+      // Dito antes de pedir, e não escondido num rodapé: o telefone é dado
+      // pessoal, e a pessoa precisa saber para que ele serve.
+      el("p", { classe: "apoio pequeno" },
+        "Usamos seu nome, telefone e endereço para entregar o pedido e avisar o andamento pelo WhatsApp. ",
+        el("a", { href: "/privacidade", target: "_blank", rel: "noopener", texto: "Privacidade" }), "."),
       el("h3", { texto: "Pagamento" }),
       escolha("pagamento", [["pix", "Pix"], ["cartao", "Cartão"]]),
       el("p", { classe: "apoio pequeno", texto: "O pagamento é feito agora, online. O preparo começa assim que ele é confirmado." }),
