@@ -6,16 +6,9 @@ import {
   pararWhatsapp,
   temSessaoSalva,
 } from "./channels/whatsapp.js";
-import { cuidarDasRodadas, dispararChecklistsAgendados } from "./checklists.js";
-import { lembrarReservasProximas } from "./lembretes.js";
 import { varrerAniversarios } from "./aniversarios.js";
 import { varrerAvisosEncalhados } from "./avisosEncalhados.js";
-import { cuidarDosDisparos } from "./disparos.js";
-import { cuidarDoDelivery } from "./delivery.js";
-import { enviarPendentesPeloOficial } from "./filaOficial.js";
-import { reivindicar } from "./rotinas.js";
-import { renovarTokens as renovarTokensDoInstagram } from "./instagramOficial.js";
-import { sincronizarRecentes as sincronizarAvaliacoesDoGoogle } from "./avaliacoesMake.js";
+import { cicloDaHora, cicloDasAvaliacoesDoGoogle, cicloDoMinuto } from "./ciclos.js";
 import { cicloDasVendasDaZig } from "./cmv/vendasZig.js";
 import { varrerHistorico } from "./historicoZig.js";
 import { cicloDiarioDoCmv } from "./cmv/avisos.js";
@@ -209,143 +202,28 @@ setInterval(() => void cicloDaPonte(), CICLO_PONTE_MS);
 void religarSeJaPareado().then(() => cicloDaPonte());
 
 // ============================================================
-// Agendador de checklists e lembretes de reserva
+// Os ciclos de fundo: de minuto em minuto e de hora em hora
 // ============================================================
-// A cada minuto: cria as execuções cujo horário chegou e enfileira o link
-// no WhatsApp do responsável — a fila de notificações (acima) entrega.
-// Vive aqui porque a Vercel não tem processo de pé; é o mesmo motivo da
-// fila. Idempotente: rodar de novo no mesmo dia não duplica nada.
-
-let agendadorEmAndamento = false;
-async function cicloDosChecklists(): Promise<void> {
-  if (agendadorEmAndamento) return;
-  agendadorEmAndamento = true;
-  // UM processo por minuto faz o minuto inteiro: os quatro conectores do VPS
-  // faziam as mesmas leituras no mesmo minuto, e tudo aqui é global e
-  // idempotente (nada depende do WhatsApp deste processo).
-  let souOAgendador = true;
-  try {
-    souOAgendador = await reivindicar("minuto", 1);
-  } catch {
-    // Sem a trava, roda: melhor repetir a leitura do que não disparar.
-  }
-  if (!souOAgendador) {
-    agendadorEmAndamento = false;
-    return;
-  }
-  try {
-    await dispararChecklistsAgendados();
-  } catch (e) {
-    console.error("[checklists] agendador falhou:", e instanceof Error ? e.message : e);
-  }
-  // As rodadas têm o seu próprio relógio: cutucar quem atrasou e fechar a
-  // noite. Em falha separada, pelo mesmo motivo dos lembretes abaixo.
-  try {
-    const r = await cuidarDasRodadas();
-    if (r.cutucadas || r.fechadas) {
-      console.log(`[checklists] rodadas: ${r.cutucadas} cutucada(s), ${r.fechadas} noite(s) fechada(s).`);
-    }
-  } catch (e) {
-    console.error("[checklists] relógio das rodadas falhou:", e instanceof Error ? e.message : e);
-  }
-  // Fora do try do checklist de propósito: uma falha lá não pode impedir o
-  // lembrete de reserva de sair, e vice-versa. São dois trabalhos que só
-  // dividem o relógio.
-  try {
-    const quantos = await lembrarReservasProximas();
-    if (quantos > 0) console.log(`[lembretes] ${quantos} lembrete(s) na fila.`);
-  } catch (e) {
-    console.error("[lembretes] varredura falhou:", e instanceof Error ? e.message : e);
-  }
-  // E os disparos pelo número oficial: um lote por disparo por minuto, que
-  // é o ritmo que protege o número. Falha separada, pelo mesmo motivo.
-  try {
-    const r = await cuidarDosDisparos();
-    if (r.concluidos) console.log(`[disparos] ${r.concluidos} disparo(s) concluído(s).`);
-  } catch (e) {
-    console.error("[disparos] relógio falhou:", e instanceof Error ? e.message : e);
-  }
-  // O delivery: derruba o pedido que ninguém pagou (devolvendo cupom e
-  // cashback) e lembra, uma vez, a sacola esquecida no WhatsApp.
-  try {
-    const r = await cuidarDoDelivery();
-    if (r.expirados || r.lembrados) {
-      console.log(`[delivery] ${r.expirados} pedido(s) sem pagamento cancelado(s), ${r.lembrados} sacola(s) lembrada(s).`);
-    }
-  } catch (e) {
-    console.error("[delivery] relógio falhou:", e instanceof Error ? e.message : e);
-  }
-  // E os avisos com modelo (parabéns, convite da pesquisa) pelo oficial,
-  // sem depender do conector estar conectado.
-  try {
-    await enviarPendentesPeloOficial();
-  } catch (e) {
-    console.error("[fila-oficial] relógio falhou:", e instanceof Error ? e.message : e);
-  } finally {
-    agendadorEmAndamento = false;
-  }
-}
-setInterval(() => void cicloDosChecklists(), 60_000);
+// O QUE cada ciclo faz mora em `src/ciclos.ts` — saiu daqui para que a rota
+// `/v1/rotinas/ciclo/…` (batida pelo cron da Vercel) rode exatamente a mesma
+// coisa quando este processo estiver fora do ar. Aqui ficou só o relógio.
+// Os dois lados podem bater ao mesmo tempo: a trava (`reivindicar`) deixa
+// passar um só por janela.
+//
+// O que NÃO foi para lá, e não pode ir: a ponte com o painel (acima) e a
+// entrega da fila de avisos pelo número conectado por QR
+// (`channels/whatsapp.ts`). As duas precisam do socket do Baileys aberto
+// neste processo — coisa que uma função serverless não tem.
+setInterval(() => void cicloDoMinuto().catch((e) => console.error("[ciclo] minuto:", e instanceof Error ? e.message : e)), 60_000);
 
 // De hora em hora: a foto diária do estoque e o lembrete de contagem. Pode
 // rodar mais de uma vez por dia sem estrago — o snapshot é upsert por dia e o
 // lembrete tem índice único; a repetição é a resiliência contra o conector
 // ter estado fora do ar na hora "certa".
-setInterval(() => void cicloDaHora(), 60 * 60_000);
+setInterval(() => void cicloDaHora().catch((e) => console.error("[ciclo] hora:", e instanceof Error ? e.message : e)), 60 * 60_000);
 
-async function cicloDaHora(): Promise<void> {
-  // Um processo por hora faz a hora inteira (janela de 50 min: o relógio de
-  // cada processo anda um pouco diferente). Antes, os quatro faziam tudo.
-  if (!(await reivindicar("hora", 50).catch(() => true))) return;
-  cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
-  // No mesmo relógio, em falha separada: quem esteve na casa ontem (segundo
-  // a Zig) recebe o convite da pesquisa. `ultimo_dia` + índice único seguram
-  // a repetição — rodar de hora em hora é resiliência, não risco.
-  cicloDaPesquisaZig().catch((e) => console.error("[pesquisa-zig] varredura:", e));
-  // E o parabéns de aniversário, também em falha separada. A trava de um por
-  // ano é índice único no banco: rodar de hora em hora não manda de novo.
-  varrerAniversarios().catch((e) => console.error("[aniversarios] varredura:", e));
-  // E a base de clientes enche sozinha pela Zig, sem mandar nada e sem
-  // depender do módulo da pesquisa: a trava (cliente, dia) no banco absorve a
-  // repetição, então rodar de hora em hora é resiliência.
-  varrerBaseDeClientes().catch((e) => console.error("[clientes-zig] varredura:", e));
-  // E o histórico da base de clientes: enquanto há dia faltando na janela de
-  // um ano, ela carrega o passado; depois vira a rede de segurança do dia a
-  // dia. Antes disto, dia em que o servidor esteve fora do ar era perdido
-  // para sempre — a varredura diária só sabe pedir "ontem".
-  varrerHistorico().catch((e) => console.error("[historico-zig] varredura:", e));
-  // E, no mesmo relógio, a fila de avisos olha para si mesma: o que não
-  // chegou ao cliente vira mensagem para o dono. A casa já perdeu uma
-  // confirmação de reserva que ficou trinta dias parada sem ninguém saber.
-  varrerAvisosEncalhados().catch((e) => console.error("[encalhados] varredura:", e));
-  // E os tokens do Instagram conectado por login: a Meta dá 60 dias, e o
-  // relógio renova quando faltam 30. Token vencido é agente mudo sem
-  // ninguém saber — e o dono só descobre pela reclamação do cliente.
-  renovarTokensDoInstagram().catch((e) => console.error("[instagram] renovação de tokens:", e));
-  // E as avaliações do Google: a cada tantas horas, pede ao Make a primeira
-  // página de cada casa ligada. Avaliação nova entra e é respondida pela
-  // regra. O gatilho "vigiar" do Make não serve: percorre o histórico
-  // inteiro desde 2014 e come a cota do plano antes de chegar na de hoje.
-  cicloDasAvaliacoesDoGoogle().catch((e) => console.error("[google] sincronização das recentes:", e));
-  // E as vendas de ontem, pela API da Zig, direto no estoque: a partir das 6h
-  // da casa, uma importação por dia, casada com o vocabulário da casa e
-  // baixada sozinha quando não sobra nada para alguém decidir.
-  cicloDasVendasDaZig().catch((e) => console.error("[vendas-zig] varredura:", e));
-  // E o contrato de experiência: a partir das 9h da casa, quem vence em até
-  // 7 dias vira uma mensagem para o gestor. Uma por dia, trava na fila.
-  cicloDaExperiencia().catch((e) => console.error("[rh] aviso de experiência:", e));
-}
-
-const HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE = Math.max(1, Number(process.env.GOOGLE_SINCRONIZAR_CADA_HORAS) || 4);
-let ultimaSincronizacaoDoGoogle = 0;
-async function cicloDasAvaliacoesDoGoogle(): Promise<void> {
-  const agora = Date.now();
-  if (agora - ultimaSincronizacaoDoGoogle < HORAS_ENTRE_SINCRONIZACOES_DO_GOOGLE * 60 * 60_000 - 60_000) return;
-  ultimaSincronizacaoDoGoogle = agora;
-  const r = await sincronizarAvaliacoesDoGoogle();
-  if (r.pedidas) console.log(`[google] pedi as avaliações recentes de ${r.pedidas} casa(s) ao Make.`);
-  for (const f of r.falhas) console.error(`[google] sincronização não pedida — ${f}`);
-}
+// Na subida, sem esperar a primeira hora (e sem trava: reiniciar é raro, e
+// tudo abaixo é idempotente).
 void cicloDasAvaliacoesDoGoogle().catch((e) => console.error("[google] sincronização das recentes:", e));
 
 void cicloDiarioDoCmv().catch((e) => console.error("[cmv] varredura diária:", e));
@@ -356,7 +234,7 @@ void varrerAvisosEncalhados().catch((e) => console.error("[encalhados] varredura
 void varrerHistorico().catch((e) => console.error("[historico-zig] varredura:", e));
 void cicloDasVendasDaZig().catch((e) => console.error("[vendas-zig] varredura:", e));
 void cicloDaExperiencia().catch((e) => console.error("[rh] aviso de experiência:", e));
-void cicloDosChecklists();
+void cicloDoMinuto().catch((e) => console.error("[ciclo] minuto:", e instanceof Error ? e.message : e));
 
 const server = createServer(criarHandler({ servirEstaticos: true }));
 

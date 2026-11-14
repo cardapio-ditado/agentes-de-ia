@@ -353,6 +353,8 @@ import {
   papelValido,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
+import { rodarCiclo } from "./ciclos.js";
+import { cicloValido, segredoDoCronConfere, ultimasBatidas } from "./rotinas.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
   avisarAumentoDePreco,
@@ -710,16 +712,18 @@ async function diagnosticoDoBanco(): Promise<Record<string, unknown>> {
     if (erroGrave) return { projeto, alcancavel: false, erro: erroGrave.message };
 
     const total = (orgs.count ?? 0) + (chaves.count ?? 0);
+    // As contagens ficam AQUI DENTRO e não saem na resposta: o /health é
+    // público, e "quantos clientes e quantas chaves a plataforma tem" não é
+    // assunto de quem não se identificou. O que o diagnóstico precisa dizer
+    // é só "responde" e "responde com o poder certo".
     return {
       projeto,
       alcancavel: true,
-      organizacoes: orgs.count ?? 0,
-      chaves_de_api: chaves.count ?? 0,
-      // Tabelas do login por e-mail e senha. Erro aqui (e não zero) significa
-      // que a migração não rodou NESTE projeto, ou que o PostgREST ainda não
+      // Tabelas do login por e-mail e senha. Erro aqui significa que a
+      // migração não rodou NESTE projeto, ou que o PostgREST ainda não
       // recarregou o schema.
-      vinculos: membros.error ? `erro: ${membros.error.message}` : (membros.count ?? 0),
-      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : (admins.count ?? 0),
+      vinculos: membros.error ? `erro: ${membros.error.message}` : "ok",
+      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : "ok",
       // Zero nas duas primeiras num banco em uso é o sintoma do RLS bloqueando
       // tudo. Nunca é o estado normal: sem organização e sem chave, ninguém
       // teria conseguido usar o sistema para chegar até aqui.
@@ -1471,6 +1475,10 @@ async function rotear(
       // e fuso horário resolvendo. Um curl responde o que antes era palpite.
       agora: contextoDeAgora("America/Cuiaba"),
       banco: await diagnosticoDoBanco(),
+      // Há quanto tempo cada ciclo de fundo terminou. É o que um monitor de
+      // fora vigia: `minuto.ok_ha_segundos` passando de uns 300 (ou vindo
+      // null) quer dizer que checklist, lembrete e delivery pararam.
+      ultima_rotina: await ultimasBatidas(),
       trace_id: traceId,
     });
   }
@@ -1493,6 +1501,28 @@ async function roteasApi(
   p: string[],
   url: URL,
 ): Promise<void> {
+  // GET|POST /v1/rotinas/ciclo/minuto e /hora (ou ?qual=…) — um ciclo de fundo
+  // A rede de segurança das rotinas: o cron da Vercel bate aqui, e o ciclo
+  // roda mesmo com o processo do VPS fora do ar (ver src/ciclos.ts). Quem
+  // autentica é o segredo CRON_SECRET, no formato que a Vercel manda. O cron
+  // dela chama com GET; o POST fica para quem dispara à mão ou de outro
+  // agendador.
+  if ((metodo === "GET" || metodo === "POST") && p[0] === "rotinas" && p[1] === "ciclo" && p.length <= 3) {
+    const segredo = process.env.CRON_SECRET;
+    if (!segredo?.trim()) {
+      throw erro(503, "nao_configurado", "CRON_SECRET não está configurado neste ambiente.");
+    }
+    if (!segredoDoCronConfere(req.headers.authorization, segredo)) {
+      throw erro(401, "unauthorized", "Segredo do cron ausente ou inválido.");
+    }
+    const qual = cicloValido(p[2] ?? url.searchParams.get("qual"));
+    if (!qual) throw erro(400, "invalid_request", 'Diga qual ciclo: "minuto" ou "hora".');
+    const resultado = await rodarCiclo(qual);
+    // Rotina que falhou vira 500: é assim que aparece vermelha no painel de
+    // crons da Vercel, em vez de se perder num 200 que ninguém lê.
+    return ok(res, { qual, ...resultado }, resultado.falhas.length > 0 ? 500 : 200);
+  }
+
   // POST /v1/runs
   if (metodo === "POST" && p[0] === "runs" && p.length === 1) {
     const chave = await exigirChave(req, "runs:write");
