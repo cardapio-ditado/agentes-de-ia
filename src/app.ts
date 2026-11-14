@@ -356,6 +356,7 @@ import {
 import { db } from "./supabase.js";
 import { rodarCiclo } from "./ciclos.js";
 import { chamadaLocal } from "./origemLocal.js";
+import { LIMITES_DURAVEIS, type LimiteDuravel } from "./limiteDeRitmo.js";
 import { cicloValido, segredoDoCronConfere, ultimasBatidas } from "./rotinas.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
@@ -1222,6 +1223,16 @@ function ipDe(req: IncomingMessage): string {
   const encaminhado = req.headers["x-forwarded-for"];
   const primeiro = (Array.isArray(encaminhado) ? encaminhado[0] : encaminhado)?.split(",")[0]?.trim();
   return primeiro || req.socket?.remoteAddress || "desconhecido";
+}
+
+/**
+ * Barra a rota pública que passou do ritmo — com o limite que vale entre
+ * instâncias (ver src/limiteDeRitmo.ts). Cada par é (limite, quem bate);
+ * basta um estourar. Banco fora do ar não tranca: o limite cai na memória.
+ */
+async function exigirRitmo(mensagem: string, ...baldes: Array<[LimiteDuravel, string]>): Promise<void> {
+  const vereditos = await Promise.all(baldes.map(([limite, quem]) => limite.permitir(quem)));
+  if (vereditos.includes(false)) throw erro(429, "rate_limited", mensagem);
 }
 
 /**
@@ -5266,6 +5277,13 @@ async function roteasApi(
     // POST /v1/auth/login — e-mail e senha em troca do par de tokens
     if (metodo === "POST" && p[1] === "login" && p.length === 2) {
       const corpo = await lerJson(req);
+      // Antes de conferir a senha: por IP e por e-mail. Sem isto a rota
+      // aceitava tentativa de senha em série, sem fim.
+      await exigirRitmo(
+        "Muitas tentativas de login. Espere alguns minutos e tente de novo.",
+        [LIMITES_DURAVEIS.loginPorIp, ipDe(req)],
+        [LIMITES_DURAVEIS.loginPorEmail, texto(corpo, "email")],
+      );
       try {
         const tokens = await entrar(texto(corpo, "email"), texto(corpo, "senha"));
         return ok(res, tokens);
@@ -6050,6 +6068,12 @@ async function roteasApi(
       if (!itemId || !itensDe(checklist).some((i) => i.id === itemId)) {
         throw erro(400, "invalid_request", "Item da foto não encontrado neste checklist.");
       }
+      // Antes de ler o arquivo: cada foto é upload para o bucket.
+      await exigirRitmo(
+        "Muitas fotos seguidas. Espere um pouco e tente de novo.",
+        [LIMITES_DURAVEIS.fotoPorExecucao, run.id],
+        [LIMITES_DURAVEIS.fotoPorIp, ipDe(req)],
+      );
       const arquivo = await lerBinario(req, LIMITE_FOTO_BYTES);
       if (arquivo.length === 0) throw erro(400, "invalid_request", "Foto vazia.");
       const contentType = req.headers["content-type"] ?? "image/jpeg";
@@ -6110,6 +6134,13 @@ async function roteasApi(
     }
     if (metodo === "POST" && p.length === 3 && p[2] === "documento") {
       const c = await comErroDoRh(() => abrirConvite(token));
+      // Antes de ler o arquivo: cada documento vira uma chamada à IA
+      // (`conferirDocumento`), e o link vive dias no WhatsApp de alguém.
+      await exigirRitmo(
+        "Muitos documentos seguidos. Espere alguns minutos e tente de novo.",
+        [LIMITES_DURAVEIS.documentoPorConvite, token],
+        [LIMITES_DURAVEIS.documentoPorIp, ipDe(req)],
+      );
       const arquivo = await lerBinario(req, LIMITE_DOCUMENTO_BYTES);
       const documento = await comErroDoRh(() =>
         guardarDocumento({
@@ -6150,6 +6181,12 @@ async function roteasApi(
     if (!venue || !(await temModulo(venue.id, "rh"))) throw erro(404, "not_found", "Esta página não existe.");
     if (metodo === "GET") return ok(res, { casa: venue.name });
     if (metodo === "POST") {
+      // A armadilha de robô (abaixo) pega o robô bobo; este pega o insistente,
+      // que encheria a lista de candidatos da casa.
+      await exigirRitmo("Muitos envios seguidos. Espere alguns minutos e tente de novo.", [
+        LIMITES_DURAVEIS.vaga,
+        `${ipDe(req)}:${venue.id}`,
+      ]);
       const corpo = (await lerJson(req, 20_000)) as Record<string, unknown>;
       if (String(corpo.site ?? "")) return ok(res, { ok: true }); // armadilha de robô
       await comErroDoRh(() =>
@@ -6213,6 +6250,13 @@ async function roteasApi(
   if (p[0] === "webhooks" && p[1] === "mercadopago" && p.length === 3 && metodo === "POST") {
     const venue = await venueDaPesquisa(p[2]!);
     if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    // Cada aviso aceito vira uma consulta à API do Mercado Pago com o token
+    // da casa. O 429 não perde pagamento: o Mercado Pago reentrega.
+    await exigirRitmo(
+      "Muitos avisos seguidos.",
+      [LIMITES_DURAVEIS.mercadoPagoPorIp, `${ipDe(req)}:${venue.id}`],
+      [LIMITES_DURAVEIS.mercadoPagoPorCasa, venue.id],
+    );
     const corpo = await lerJson(req, 100_000).catch(() => ({}) as Record<string, unknown>);
     const dados = corpo.data && typeof corpo.data === "object" ? (corpo.data as Record<string, unknown>) : {};
     const q = url.searchParams;
