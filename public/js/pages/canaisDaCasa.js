@@ -155,7 +155,7 @@ export async function canaisDaCasa(raiz, ctx) {
     // Atendimento: o WhatsApp Web do atendente e/ou o oficial com agente.
     const quemAtende = [];
     if (atendente?.status === "conectado") quemAtende.push(`${telefoneBonito(atendente.telefone) ?? "WhatsApp Web"}${nomeDoAgente(atendente.agentSlug) ? ` · ${nomeDoAgente(atendente.agentSlug)}` : ""}`);
-    if (oficialAtende) quemAtende.push(`${oficial.telefone} (oficial) · ${nomeDoAgente(oficial.agent_slug) ?? "agente"}`);
+    if (oficialAtende) quemAtende.push(`${oficial.telefone} (oficial) · ${nomeDoAgente(oficial.agent_slug) ?? "atendente virtual"}`);
     linhas.push({
       tarefa: "Atendimento ao cliente",
       detalhe: atendente === null && oficial === null ? "Consultando…" : quemAtende.join(" e ") || "Ninguém responde o cliente no WhatsApp",
@@ -291,7 +291,7 @@ export async function canaisDaCasa(raiz, ctx) {
         ? ["Autorização vencida", "etiqueta-perigo"]
         : conexao.agent_slug
           ? ["Ativo", "etiqueta-ok"]
-          : ["Conectado, sem agente", "etiqueta-alerta"];
+          : ["Conectado, sem atendente virtual", "etiqueta-alerta"];
 
     const seletorAgente = el("select", { classe: "select" }, [
       el("option", { value: "", texto: "Ninguém — os DMs ficam sem resposta automática" }),
@@ -329,7 +329,7 @@ export async function canaisDaCasa(raiz, ctx) {
 
     const descricao = conectado
       ? `Conectado como @${conexao.usuario ?? conexao.ig_user_id}${conexao.nome ? ` (${conexao.nome})` : ""} · ${agenteAtual ? `DMs atendidos por ${agenteAtual.name}` : "ninguém responde ainda"}`
-      : "Os DMs do Instagram do bar atendidos pelo agente, direto na nuvem: sem QR, sem computador ligado, sem risco de banimento. Clique em conectar e entre com a conta do bar.";
+      : "Os DMs do Instagram do bar atendidos pelo atendente virtual, direto na nuvem: sem QR, sem computador ligado, sem risco de banimento. Clique em conectar e entre com a conta do bar.";
 
     limpar(areaInstagram).append(
       el("section", { classe: "cartao" }, [
@@ -344,7 +344,7 @@ export async function canaisDaCasa(raiz, ctx) {
         conectado && conexao.vencido
           ? el("p", { classe: "aviso aviso-perigo", texto: "A autorização do Instagram venceu e os DMs não estão sendo respondidos. Clique em “Conectar de novo”." })
           : conectado && !conexao.agent_slug
-            ? el("p", { classe: "aviso aviso-alerta", texto: "Quem mandar DM fala com o vazio. Escolha um agente abaixo e salve." })
+            ? el("p", { classe: "aviso aviso-alerta", texto: "Quem mandar DM fala com o vazio. Escolha um atendente virtual abaixo e salve." })
             : null,
 
         conectado
@@ -359,7 +359,7 @@ export async function canaisDaCasa(raiz, ctx) {
           ? el("p", {
               classe: "muted",
               style: "margin-top:6px",
-              texto: "Quem comenta com pergunta, interesse ou reclamação recebe o agente no direct — a Meta permite isso por 7 dias depois do comentário. Elogio e emoji ganham um obrigado curto no post (a Meta não deixa curtir comentário). Marcação de amigo e spam ficam quietos. O agente nunca conversa em público.",
+              texto: "Quem comenta com pergunta, interesse ou reclamação recebe o atendente virtual no direct — a Meta permite isso por 7 dias depois do comentário. Elogio e emoji ganham um obrigado curto no post (a Meta não deixa curtir comentário). Marcação de amigo e spam ficam quietos. O agente nunca conversa em público.",
             })
           : null,
 
@@ -396,7 +396,7 @@ export async function canaisDaCasa(raiz, ctx) {
                 classe: conectado ? "btn" : "btn btn-primario",
                 type: "button",
                 texto: conectado ? "Conectar de novo" : "Conectar Instagram",
-                title: conectado ? "Refaz a autorização com a conta do bar, sem perder o agente escolhido." : "Abre o Instagram para você entrar com a conta do bar e autorizar.",
+                title: conectado ? "Refaz a autorização com a conta do bar, sem perder o atendente virtual escolhido." : "Abre o Instagram para você entrar com a conta do bar e autorizar.",
                 onclick: conectar,
               })
             : null,
@@ -603,7 +603,7 @@ export async function canaisDaCasa(raiz, ctx) {
           el("summary", { texto: "Detalhes técnicos (equipe Brasa Food)" }),
           el("p", {
             classe: "muted",
-            texto: "O app da Meta é um só para o sistema; o webhook dele já aponta para cá. O que muda por casa é o token, os IDs e o agente — tudo nesta tela.",
+            texto: "O app da Meta é um só para o sistema; o webhook dele já aponta para cá. O que muda por casa é o token, os IDs e o atendente virtual — tudo nesta tela.",
           }),
           el("pre", { classe: "bloco-codigo", texto: `${location.origin}/v1/whatsapp/webhook` }),
           el("p", {
@@ -657,7 +657,7 @@ export async function canaisDaCasa(raiz, ctx) {
       limpar(areaAtendente).append(
         el("section", { classe: "cartao" }, [
           el("h2", { texto: "Atendimento ao cliente" }),
-          el("p", { classe: "muted", texto: "Crie o atendente primeiro, em Atendente virtual → Atendente. Depois volte aqui para ligar o número dele." }),
+          el("p", { classe: "muted", texto: "Crie o atendente virtual primeiro, no módulo Atendente virtual, em Atendente virtual → Jeito e regras. Depois volte aqui para ligar o número dele." }),
         ]),
       );
       return;
@@ -702,7 +702,7 @@ export async function canaisDaCasa(raiz, ctx) {
             : estado.status === "conectado"
               ? null
               : el("div", { classe: "area-qr" }, [
-                  el("p", { classe: "muted", texto: "Escolha o atendente e clique em conectar para gerar o QR." }),
+                  el("p", { classe: "muted", texto: "Escolha o atendente virtual e clique em conectar para gerar o QR." }),
                 ]),
 
         el("div", { classe: "campo", style: "max-width:320px;margin-top:10px" }, [

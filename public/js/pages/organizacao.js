@@ -15,7 +15,7 @@ export async function organizacao(raiz, ctx) {
           ]),
         ]),
         venues.length === 0
-          ? vazio("Nenhum estabelecimento", "Rode `npm run seed` para criar o primeiro.")
+          ? vazio("Nenhuma casa cadastrada", "Avise o suporte da Brasa Food para cadastrar a primeira.")
           : el(
               "div",
               { classe: "lista" },
@@ -34,19 +34,21 @@ export async function organizacao(raiz, ctx) {
       ]),
 
       el("section", { classe: "cartao" }, [
-        el("h2", { texto: "Agentes" }),
+        el("h2", { texto: "Atendentes virtuais" }),
         el("p", {
           classe: "muted",
-          texto: `${agentes.length} agente(s) habilitado(s). A criação e a edição ficam na seção Agentes, na barra lateral.`,
+          texto: `${agentes.length === 1 ? "1 atendente virtual ligado" : `${agentes.length} atendentes virtuais ligados`}. Para mudar o jeito e as regras, abra o módulo Atendente virtual, em Atendente virtual → Jeito e regras.`,
         }),
       ]),
 
       el("section", { classe: "cartao" }, [
-        el("h2", { texto: "Chaves de API" }),
+        // Criar e cancelar chave ainda é comando de quem cuida do servidor.
+        // O dono precisa saber a quem pedir, não o nome do comando.
+        el("h2", { texto: "Chaves de acesso de máquinas" }),
         el("p", {
           classe: "muted",
           texto:
-            "O banco guarda só o SHA-256 de cada chave — não há como exibir uma chave existente, nem mesmo aqui. Para criar outra, rode `npm run criar-chave`; para revogar, preencha revoked_at na tabela api_keys.",
+            "Por segurança, uma chave só aparece no momento em que é criada — depois ninguém consegue ver de novo, nem a Brasa Food. Para criar uma nova ou cancelar uma antiga, avise o suporte da Brasa Food.",
         }),
       ]),
     ]),

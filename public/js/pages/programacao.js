@@ -181,7 +181,7 @@ export async function programacao(raiz, ctx) {
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
             el("h2", { texto: "Agenda" }),
-            el("p", { classe: "muted", texto: "O agente cita estes itens quando o cliente pergunta." }),
+            el("p", { classe: "muted", texto: "O atendente virtual cita estes itens quando o cliente pergunta." }),
           ]),
           el("div", { classe: "abas" }, [botaoVisao("lista", "Lista"), botaoVisao("calendario", "Calendário")]),
         ]),
@@ -248,7 +248,7 @@ export async function programacao(raiz, ctx) {
     if (eventos.length === 0) {
       lista.append(
         eventosCarregados.length === 0
-          ? vazio("Nada cadastrado", "Sem programação, o agente não tem o que contar da casa.")
+          ? vazio("Nada cadastrado", "Sem programação, o atendente virtual não tem o que contar da casa.")
           : vazio("Nada neste recorte", "Nenhum item bate com o tipo e o período escolhidos."),
       );
       return;

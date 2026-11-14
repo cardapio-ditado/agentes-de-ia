@@ -80,7 +80,7 @@ export async function conversas(raiz, ctx) {
   const selAgente = el(
     "select",
     { classe: "select", onchange: (e) => ((filtros.agente = e.target.value), carregarLista()) },
-    [el("option", { value: "", texto: "Todos os agentes" })],
+    [el("option", { value: "", texto: "Todos os atendentes virtuais" })],
   );
   get("/v1/agents?all=1")
     .then((agentes) => {
@@ -98,7 +98,7 @@ export async function conversas(raiz, ctx) {
     ]),
   );
 
-  vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o agente.");
+  vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o atendente virtual.");
   await carregarLista();
 
   // Aba escondida não pergunta nada: no celular, ficar batendo na API com o
@@ -184,7 +184,7 @@ export async function conversas(raiz, ctx) {
     return el("div", { classe: `balao ${classe}`, title: dataHora(m.em) }, [
       el("span", {
         classe: "balao-meta",
-        texto: m.papel === "user" ? "Cliente" : humana ? "Você" : "Agente",
+        texto: m.papel === "user" ? "Cliente" : humana ? "Pessoa da equipe" : "Atendente virtual",
       }),
       el("span", { texto: m.texto ?? "" }),
     ]);
@@ -221,7 +221,7 @@ export async function conversas(raiz, ctx) {
       itens.append(
         vazio(
           "Nenhuma conversa",
-          "Quando alguém falar com o agente pelo WhatsApp ou pela aba Testar agente, aparece aqui.",
+          "Quando alguém falar com o atendente virtual pelo WhatsApp ou pela aba Testar, aparece aqui.",
         ),
       );
       return;
@@ -305,7 +305,7 @@ export async function conversas(raiz, ctx) {
     const btnAssumir = el("button", {
       classe: assumida ? "btn btn-peq" : "btn btn-primario btn-peq",
       type: "button",
-      texto: assumida ? "Devolver ao agente" : "Assumir atendimento",
+      texto: assumida ? "Devolver ao atendente virtual" : "Assumir atendimento",
       onclick: alternar,
     });
 
@@ -343,8 +343,8 @@ export async function conversas(raiz, ctx) {
         encerrada
           ? etiqueta("encerrada")
           : assumida
-            ? etiqueta("você está respondendo", "etiqueta-alerta")
-            : etiqueta("agente ativo", "etiqueta-ok"),
+            ? etiqueta("pessoa da equipe respondendo", "etiqueta-alerta")
+            : etiqueta("atendente virtual respondendo", "etiqueta-ok"),
         btnAssumir,
         btnEncerrar,
         btnApagar,
@@ -356,7 +356,7 @@ export async function conversas(raiz, ctx) {
           ? el("p", {
               classe: "muted",
               texto:
-                "Enquanto o agente responde, uma mensagem sua sairia junto com a dele e o cliente veria duas vozes.",
+                "Enquanto o atendente virtual responde, uma mensagem sua sairia junto com a dele e o cliente veria duas vozes.",
             })
           : null,
       ]),
@@ -387,7 +387,7 @@ export async function conversas(raiz, ctx) {
         avisar("Conversa apagada. Se o cliente escrever de novo, começa do zero.", "ok");
         selecionada = null;
         aberta = null;
-        vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o agente.");
+        vazioThread("Escolha uma conversa", "A lista à esquerda mostra quem falou com o atendente virtual.");
         await carregarLista();
       } catch (e) {
         avisar(e.message, "erro");
@@ -400,7 +400,7 @@ export async function conversas(raiz, ctx) {
       try {
         await post(`/v1/conversations/${id}/close`, { reabrir: encerrada });
         avisar(
-          encerrada ? "Conversa reaberta." : "Conversa encerrada e devolvida ao agente.",
+          encerrada ? "Conversa reaberta." : "Conversa encerrada e devolvida ao atendente virtual.",
           "ok",
         );
         await carregarLista();
@@ -415,7 +415,7 @@ export async function conversas(raiz, ctx) {
       btnAssumir.disabled = true;
       try {
         await post(`/v1/conversations/${id}/takeover`, { devolver: assumida });
-        avisar(assumida ? "Agente reassumiu a conversa." : "Atendimento assumido.", "ok");
+        avisar(assumida ? "O atendente virtual voltou a responder." : "Atendimento assumido.", "ok");
         await carregarLista();
         await abrir(id);
       } catch (e) {

@@ -1,3 +1,5 @@
+import { WHATSAPP_COMERCIAL } from "./contato.js";
+
 /**
  * Página de vendas: fagulhas, barra do topo e o formulário de contato.
  *
@@ -36,7 +38,6 @@ if (topo) {
 // responsabilidade que pede consentimento e um lugar seguro para o dado. Até
 // isso existir, o formulário monta uma mensagem de WhatsApp — o que aliás
 // converte melhor, porque a conversa começa no canal em que o dono já vive.
-const WHATSAPP_COMERCIAL = "5565981382139";
 
 const form = document.getElementById("lp-form");
 form?.addEventListener("submit", (evento) => {

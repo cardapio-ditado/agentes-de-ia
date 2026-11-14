@@ -192,11 +192,11 @@ export function avisarSeAcabou(e) {
 
   const caixa = el("div", { classe: `pontos-modal ${bloqueado ? "pontos-modal-grave" : ""}` }, [
     el("div", { classe: "pontos-modal-icone", texto: bloqueado ? "🔒" : "🔥" }),
-    el("h2", { texto: bloqueado ? "Agente pausado" : "Seus pontos acabaram" }),
+    el("h2", { texto: bloqueado ? "Atendente virtual pausado" : "Seus pontos acabaram" }),
     el("p", {
       texto: bloqueado
-        ? "O período de cortesia terminou e o agente parou de responder sozinho. As mensagens que chegarem continuam aparecendo em Conversas para a equipe atender na mão."
-        : `O agente continua atendendo por mais ${quanto}, no motor mais econômico (Haiku), para o WhatsApp não ficar mudo. Depois disso ele pausa até a renovação.`,
+        ? "O período de cortesia terminou e o atendente virtual parou de responder sozinho. As mensagens que chegarem continuam aparecendo em Conversas para a equipe atender na mão."
+        : `O atendente virtual continua atendendo por mais ${quanto}, no motor mais econômico (Haiku), para o WhatsApp não ficar mudo. Depois disso ele pausa até a renovação.`,
     }),
     el("div", { classe: "pontos-modal-dados" }, [
       el("div", {}, [

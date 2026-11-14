@@ -52,15 +52,15 @@ export async function agentes(raiz, ctx) {
   async function excluir(a) {
     if (
       !confirm(
-        `Excluir o agente "${a.name}"?\n\n` +
-          "Só funciona para agente que nunca atendeu ninguém. " +
+        `Excluir o atendente virtual "${a.name}"?\n\n` +
+          "Só funciona para atendente virtual que nunca atendeu ninguém. " +
           "Se ele já conversou com clientes, o caminho é abrir em Editar e desligar — " +
           "assim ele para de atender e o histórico fica guardado.",
       )
     ) return;
     try {
       await del(`/v1/agents/${a.slug}`);
-      avisar(`Agente "${a.name}" excluído.`, "ok");
+      avisar(`Atendente virtual "${a.name}" excluído.`, "ok");
       await listar();
     } catch (e) {
       avisar(e.message, "erro");
@@ -75,16 +75,16 @@ export async function agentes(raiz, ctx) {
     conteudo.append(
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: "Seus agentes" }),
+          el("h2", { texto: "Seus atendentes virtuais" }),
           el("p", {
             classe: "muted",
-            texto: "Cada agente tem personalidade, modelo e esforço próprios.",
+            texto: "Cada atendente virtual tem personalidade, modelo e esforço próprios.",
           }),
         ]),
         el("button", {
           classe: "btn btn-primario",
           type: "button",
-          texto: "+ Novo agente",
+          texto: "+ Novo atendente virtual",
           onclick: () => editor(null),
         }),
       ]),
@@ -92,7 +92,7 @@ export async function agentes(raiz, ctx) {
 
     if (lista.length === 0) {
       conteudo.append(
-        vazio("Nenhum atendente ainda", "Comece por um modelo pronto abaixo — é só trocar o nome da casa e a cidade."),
+        vazio("Nenhum atendente virtual ainda", "Comece por um modelo pronto abaixo — é só trocar o nome da casa e a cidade."),
         modelosProntos(lista),
       );
       return;
@@ -118,7 +118,7 @@ export async function agentes(raiz, ctx) {
               el("button", {
                 classe: "btn-icone",
                 type: "button",
-                title: "Excluir agente",
+                title: "Excluir atendente virtual",
                 texto: "🗑",
                 onclick: () => excluir(a),
               }),
@@ -232,7 +232,7 @@ export async function agentes(raiz, ctx) {
     const btnSalvar = el("button", {
       classe: "btn btn-primario",
       type: "submit",
-      texto: criando ? "Criar agente" : "Salvar alterações",
+      texto: criando ? "Criar atendente virtual" : "Salvar alterações",
     });
 
     // Trocar de motor muda a velocidade com que os pontos somem. O cliente vê
@@ -266,16 +266,16 @@ export async function agentes(raiz, ctx) {
           el("p", {
             classe: "muted",
             texto:
-              "Todo agente já vem com as ferramentas da casa: consultar data/hora, informações do estabelecimento, programação, registrar e consultar reservas.",
+              "Todo atendente virtual já vem com as ferramentas da casa: consultar data/hora, informações do estabelecimento, programação, registrar e consultar reservas.",
           }),
         ]),
         el("div", { classe: "campo campo-largo" }, [
-          el("label", { texto: "Personalidade e regras (system prompt)" }),
+          el("label", { texto: "Personalidade e regras" }),
           campos.system_prompt,
           el("p", {
             classe: "muted",
             texto:
-              "Este texto define quem o agente é. A regra de nunca confirmar reserva também é imposta pelo código — mas mantê-la aqui deixa o agente coerente ao conversar.",
+              "Este texto define quem o atendente virtual é. Ele nunca confirma reserva sozinho, mesmo que o texto diga outra coisa — mas manter essa regra aqui deixa a conversa coerente.",
           }),
         ]),
       ]),
@@ -284,7 +284,7 @@ export async function agentes(raiz, ctx) {
         el("button", { classe: "btn", type: "button", texto: "Voltar", onclick: listar }),
         el("label", { style: "display:flex;align-items:center;gap:7px;margin-left:auto;font-size:14px" }, [
           campos.enabled,
-          el("span", { texto: "Agente ativo" }),
+          el("span", { texto: "Atendente virtual ativo" }),
         ]),
       ]),
     ]);
@@ -292,11 +292,11 @@ export async function agentes(raiz, ctx) {
     limpar(conteudo).append(
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: criando ? "Novo agente" : `Editando ${atual.name}` }),
+          el("h2", { texto: criando ? "Novo atendente virtual" : `Editando ${atual.name}` }),
           el("p", {
             classe: "muted",
             texto: criando
-              ? "Defina a personalidade e as regras. Depois teste na aba Testar agente."
+              ? "Defina a personalidade e as regras. Depois teste na aba Testar."
               : "As mudanças valem para as próximas mensagens, inclusive no WhatsApp.",
           }),
         ]),
@@ -323,7 +323,7 @@ export async function agentes(raiz, ctx) {
       try {
         if (criando) {
           await post("/v1/agents", { ...dados, slug: campos.slug.value.trim() });
-          avisar("Agente criado. Teste na aba Testar agente.", "ok");
+          avisar("Atendente virtual criado. Teste na aba Testar.", "ok");
         } else {
           await api(`/v1/agents/${slug}`, { method: "PATCH", body: JSON.stringify(dados) });
           avisar("Alterações salvas.", "ok");
@@ -377,7 +377,7 @@ export async function agentes(raiz, ctx) {
           el("p", {
             classe: "muted",
             texto:
-              "Tudo aqui vira conhecimento do agente: cardápio, regras da casa, promoções. PDF e imagem são lidos e transcritos na hora.",
+              "Tudo aqui vira conhecimento do atendente virtual: cardápio, regras da casa, promoções. PDF e imagem são lidos e transcritos na hora.",
           }),
         ]),
       ]),
@@ -393,7 +393,7 @@ export async function agentes(raiz, ctx) {
           inputArquivo,
           el("p", {
             classe: "muted",
-            texto: "Máx. 20 MB. PDF e imagem passam pelo agente para ler; Word e Excel são lidos direto — mais rápido.",
+            texto: "Máx. 20 MB. PDF e imagem passam pela IA para ler; Word e Excel são lidos direto — mais rápido.",
           }),
           el("div", {}, [btnArquivo]),
         ]),
@@ -408,7 +408,7 @@ export async function agentes(raiz, ctx) {
       limpar(lista);
       const itens = await get(`/v1/agents/${slug}/training`);
       if (itens.length === 0) {
-        lista.append(vazio("Nenhum treinamento ainda", "O agente só sabe o que o prompt e a Programação dizem."));
+        lista.append(vazio("Nenhum treinamento ainda", "O atendente virtual só sabe o que está em Jeito e regras e na Programação."));
         return;
       }
       for (const i of itens) {
