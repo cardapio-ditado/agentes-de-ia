@@ -1612,6 +1612,9 @@ textarea:focus {
 .apenas-movel {
   display: none;
 }
+.barra-movel {
+  display: none;
+}
 
 @media (max-width: 1000px) {
   .inbox {
@@ -1660,6 +1663,69 @@ textarea:focus {
   }
   .balao {
     max-width: 88%;
+  }
+
+  /* Barra de baixo: Hoje, Módulos, Ajustes e Ajuda ao alcance do polegar.
+     Fica ABAIXO da cortina (20) e da gaveta (30): menu aberto cobre a barra,
+     e não o contrário. O env() é o recorte do aparelho (a faixa do gesto de
+     início no iPhone) — sem ele o rótulo fica embaixo da faixa. */
+  :root {
+    --barra-a: 58px;
+    --barra-total: calc(var(--barra-a) + env(safe-area-inset-bottom, 0px));
+  }
+  .barra-movel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    height: var(--barra-total);
+    padding: 0 max(6px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
+      max(6px, env(safe-area-inset-left, 0px));
+    background: var(--superficie);
+    border-top: 1px solid var(--borda);
+    box-shadow: 0 -4px 14px rgba(34, 23, 20, 0.06);
+  }
+  .barra-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--texto-2);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .barra-item[aria-current="page"] {
+    color: var(--marca-forte);
+  }
+  /* O fim da tela não pode ficar atrás da barra — nem o aviso, nem o total
+     grudado no rodapé do recebimento. */
+  .pagina {
+    padding-bottom: calc(16px + var(--barra-total));
+  }
+  .avisos {
+    bottom: calc(12px + var(--barra-total));
+  }
+  .pagina .cartao-total {
+    bottom: var(--barra-total);
+  }
+  /* A ajuda desceu para a barra: o "?" do topo devolve o espaço ao título. */
+  .topo .btn-ajuda {
+    display: none;
+  }
+}
+@media print {
+  .barra-movel {
+    display: none !important;
   }
 }
 

@@ -511,12 +511,48 @@ document.getElementById("btn-sair").addEventListener("click", () => {
   location.reload();
 });
 
+// ============ Barra de baixo (celular) ============
+//
+// No celular a lateral é uma gaveta atrás do ☰, e os Ajustes só se alcançavam
+// voltando à colmeia. Quem está com uma mão ocupada não acha. Os quatro
+// destinos que valem em qualquer módulo ficam fixos embaixo; as telas DO
+// módulo continuam na gaveta. O CSS só mostra a barra em tela estreita.
+const barra = document.getElementById("barra-movel");
+const ITENS_DA_BARRA = [
+  { id: "hoje", rotulo: "Hoje", icone: SOL, acao: () => entrarNoModulo("hoje") },
+  { id: "modulos", rotulo: "Módulos", icone: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z", acao: () => mostrarHub() },
+  { id: "ajustes", rotulo: "Ajustes", icone: MODULOS.find((m) => m.id === "ajustes").icone, acao: () => entrarNoModulo("ajustes") },
+  { id: "ajuda", rotulo: "Ajuda", icone: "M12 22a10 10 0 100-20 10 10 0 000 20zM9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01", acao: () => ajudaDaTela() },
+];
+for (const item of ITENS_DA_BARRA) {
+  barra.append(
+    el("button", { classe: "barra-item", type: "button", "data-barra": item.id, onclick: item.acao }, [
+      icone(item.icone, 22),
+      el("span", { texto: item.rotulo }),
+    ]),
+  );
+}
+
+/** Acende na barra o lugar onde a pessoa está (Hoje ou Ajustes). */
+function marcarBarra() {
+  for (const b of barra.querySelectorAll(".barra-item")) {
+    if (b.dataset.barra === moduloAtual) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  }
+}
+
+/** A ajuda da tela aberta — o "?" do topo e o "Ajuda" da barra de baixo. */
+function ajudaDaTela() {
+  if (paginaAtual) abrirAjuda({ pagina: paginaAtual.id, rotulo: paginaAtual.rotulo, admin: souPlataforma });
+}
+
 // ============ Navegação ============
 function montarNav() {
   // Escolher estabelecimento não faz sentido enquanto se olha a carteira
   // inteira: o módulo de administração é sobre TODOS os clientes, e um
   // seletor dizendo "Ditado Popular" ali é só ruído que confunde.
   seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
+  marcarBarra();
 
   limpar(nav);
   const atalhos = (MODULOS.find((m) => m.id === moduloAtual)?.atalhos ?? []).filter((a) => podeConfigurar || a.grupo !== "configurar").map((a) => ({
@@ -906,9 +942,7 @@ document.getElementById("btn-sair-hub").addEventListener("click", () => {
 // Os dois que não são favo: configuração da casa e a mesa da equipe.
 document.getElementById("btn-ajustes").addEventListener("click", () => entrarNoModulo("ajustes"));
 document.getElementById("btn-hoje").addEventListener("click", () => entrarNoModulo("hoje"));
-document.getElementById("btn-ajuda").addEventListener("click", () => {
-  if (paginaAtual) abrirAjuda({ pagina: paginaAtual.id, rotulo: paginaAtual.rotulo, admin: souPlataforma });
-});
+document.getElementById("btn-ajuda").addEventListener("click", ajudaDaTela);
 document.getElementById("btn-hoje-lateral").addEventListener("click", () => entrarNoModulo("hoje"));
 document.getElementById("btn-plataforma").addEventListener("click", () => entrarNoModulo("plataforma"));
 
@@ -1205,6 +1239,7 @@ async function iniciar() {
   ctx.podeConfigurar = podeConfigurar;
   document.getElementById("btn-plataforma").hidden = !souPlataforma;
   document.getElementById("btn-ajustes").hidden = !podeConfigurar;
+  barra.querySelector('[data-barra="ajustes"]').hidden = !podeConfigurar;
 
   await carregarModulos();
 

@@ -247,7 +247,15 @@
         <main id="pagina" class="pagina" tabindex="-1"></main>
       </div>
 
-      <div id="cortina" class="cortina" hidden></div>
+      <!-- Sem o atributo hidden: a regra global [hidden] ganha de tudo, e a
+           cortina nunca aparecia — a gaveta abria e não tinha onde tocar
+           para fechar. Quem esconde e mostra é só o CSS (.cortina). -->
+      <div id="cortina" class="cortina"></div>
+
+      <!-- Barra de baixo, só no celular: o que não depende do módulo aberto
+           fica ao alcance do polegar. A gaveta (☰) continua sendo o menu das
+           telas do módulo. Os botões nascem via JS (montarBarra). -->
+      <nav id="barra-movel" class="barra-movel" aria-label="Atalhos"></nav>
     </div>
 
     <div id="avisos" class="avisos" aria-live="polite"></div>
