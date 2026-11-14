@@ -150,6 +150,42 @@ export function ordenarPendencias(lista: Pendencia[]): Pendencia[] {
     .sort((a, b) => Number(b.urgente) - Number(a.urgente) || b.quantidade - a.quantidade);
 }
 
+/**
+ * As férias que estão para vencer — ou já venceram — viram uma linha do dia.
+ *
+ * A conta do prazo NÃO é feita aqui: vem pronta do módulo de férias (o
+ * `alerta` de cada pessoa em `situacaoDaEquipe`), que é quem sabe de período
+ * aquisitivo e concessivo. Aqui só se escolhe a frase. Vencida é urgente
+ * porque férias concedidas fora do prazo são pagas em dobro; a que vence em
+ * menos de um mês também, porque já não cabem 30 dias de descanso antes do
+ * limite.
+ */
+export function pendenciaDeFerias(
+  pessoas: Array<{ nome: string; alerta: { limite: string; dias_para_vencer: number; vencido: boolean } | null }>,
+): Pendencia {
+  const emRisco = pessoas
+    .filter((p) => p.alerta)
+    .map((p) => ({ nome: p.nome, ...p.alerta! }))
+    .sort((a, b) => a.dias_para_vencer - b.dias_para_vencer);
+  const vencidas = emRisco.filter((p) => p.vencido);
+  const aVencer = emRisco.filter((p) => !p.vencido);
+  const br = (iso: string) => iso.split("-").reverse().join("/");
+
+  const partes: string[] = [];
+  if (vencidas.length) partes.push(`Já passou do prazo: ${vencidas.map((p) => p.nome).join(", ")} — fale com a contabilidade, férias fora do prazo são pagas em dobro.`);
+  if (aVencer.length) partes.push(`${aVencer.map((p) => `${p.nome} (até ${br(p.limite)})`).join(", ")} — marque as férias antes dessa data.`);
+
+  return {
+    id: "ferias",
+    modulo: "rh",
+    titulo: vencidas.length ? "Férias vencidas ou vencendo" : "Férias para marcar antes que vençam",
+    quantidade: emRisco.length,
+    detalhe: partes.join(" "),
+    destino: "rh:ferias",
+    urgente: emRisco.some((p) => p.vencido || p.dias_para_vencer <= 30),
+  };
+}
+
 // ============================================================
 // Coleta
 // ============================================================
@@ -339,6 +375,11 @@ export async function hojeDaCasa(params: {
       destino: "rh",
       urgente: true,
     };
+  });
+
+  pendencia("rh", "ferias", async () => {
+    const { situacaoDaEquipe } = await import("./rhFerias.js");
+    return pendenciaDeFerias((await situacaoDaEquipe({ venueId: venue.id, hoje: dia })).pessoas);
   });
 
   pendencia("rh", "integracao", async () => {
