@@ -60,7 +60,9 @@ export function editorDeLacunas(area, modelo, valoresSalvos, aoMudar, padrao = [
       area.append(el("small", { classe: "muted", texto: modelo.botao_url_dinamico
         ? "Este modelo não tem lacunas no texto; o link vai no botão."
         : "Este modelo não tem lacunas." }));
-      area.append(notaDoBotao(modelo));
+      // append(null) escreveria a palavra "null" na tela.
+      const nota = notaDoBotao(modelo);
+      if (nota) area.append(nota);
     }
     return () => [];
   }
@@ -82,7 +84,8 @@ export function editorDeLacunas(area, modelo, valoresSalvos, aoMudar, padrao = [
       ]),
     );
   }
-  area.append(notaDoBotao(modelo));
+  const nota = notaDoBotao(modelo);
+  if (nota) area.append(nota);
   return () => linhas.map(({ tipo, texto }) => (tipo.value === "fixo" ? { tipo: "fixo", texto: texto.value } : { tipo: tipo.value }));
 }
 

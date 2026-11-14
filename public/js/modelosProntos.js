@@ -186,3 +186,127 @@ Regras:
     },
   },
 ];
+
+/**
+ * Campanhas prontas: o primeiro disparo sem a página em branco.
+ *
+ * Casa com cinquenta mil clientes na base e nenhuma campanha enviada não
+ * está sem público — está sem texto. Estas são as mensagens que bar e
+ * restaurante mandam de verdade, já no formato que a Meta aprova.
+ *
+ * COMO ENCAIXAM NO NÚMERO OFICIAL. Mensagem que a casa inicia só sai por
+ * modelo aprovado pela Meta, então a campanha pronta não é "o texto do
+ * disparo": é o texto de um MODELO (para mandar aprovar uma vez) mais o
+ * público sugerido e o que vai em cada lacuna. As lacunas são sempre as
+ * mesmas três, de propósito:
+ *
+ *   {{1}} o primeiro nome · {{2}} o nome da casa · {{3}} um texto fixo
+ *
+ * O {{3}} é o que muda de uma semana para a outra (a oferta, a atração, o
+ * jogo). Fica FORA do texto aprovado para a casa não esperar a Meta toda
+ * vez que a programação muda: aprova uma vez, reusa sempre.
+ *
+ * O QUE OS TEXTOS EVITAM, porque a Meta rejeita: caixa alta, exclamações
+ * em série, lacuna abrindo ou fechando a mensagem, bebida alcoólica. E não
+ * prometem nada sozinhos — a oferta é a casa que escreve, no {{3}}.
+ *
+ * `publico` é o valor do seletor "Quem recebe" da tela; só existem os
+ * grupos que o servidor conhece (selos do CRM, aniversariantes do mês, a
+ * base inteira). "mes:atual" vira o mês corrente na hora de usar.
+ *
+ * Nada aqui é enviado sozinho: a campanha só preenche o formulário.
+ */
+
+const SAIR = "Responda SAIR para não receber mais mensagens.";
+const NOME_CASA_E_TEXTO = [{ tipo: "primeiro_nome" }, { tipo: "casa" }, { tipo: "fixo", texto: "" }];
+
+const campanha = (chave, titulo, resumo, publico, lacuna, exemplo, corpo, botoes = ["Quero reservar", "Agora não"]) => ({
+  chave,
+  titulo,
+  resumo,
+  publico,
+  /** O que a casa escreve no {{3}} — a pergunta que o campo faz a ela. */
+  lacuna,
+  variaveis: NOME_CASA_E_TEXTO,
+  modelo: {
+    name: chave,
+    corpo,
+    // A Meta exige um exemplo por lacuna para revisar. O do {{3}} também
+    // serve de dica na tela; não é enviado a ninguém.
+    exemplos: ["Maria", "Casa de Exemplo", exemplo],
+    botoes,
+    rodape: SAIR,
+  },
+});
+
+export const CAMPANHAS_PRONTAS = [
+  campanha(
+    "cliente_sumido",
+    "Cliente sumido",
+    "Chamar de volta quem vinha e parou. Costuma ser a campanha que mais traz gente.",
+    "sumido",
+    "O motivo para voltar, com a condição",
+    "sobremesa por conta da casa na quinta-feira, para mesas a partir de 2 pessoas",
+    "Oi, {{1}}, tudo bem? Faz um tempo que você não aparece no {{2}} e a gente sentiu a sua falta. Para te ver de novo, esta semana tem {{3}}. Quer que a gente guarde uma mesa para você?",
+  ),
+  campanha(
+    "convite_vip",
+    "Convite para os VIPs",
+    "Avisar primeiro quem mais gasta na casa: novidade, noite especial, lugar garantido.",
+    "vip",
+    "A novidade, com dia e condição",
+    "na sexta-feira tem menu novo do chef, com lugares limitados e reserva antecipada",
+    "Oi, {{1}}. Você está entre os clientes que o {{2}} mais gosta de receber, e por isso fica sabendo antes: {{3}}. Quer que a gente reserve a sua mesa?",
+  ),
+  campanha(
+    "veio_uma_vez",
+    "Novo que não voltou",
+    "Quem veio uma vez ainda não decidiu se volta. Um convite para a segunda visita.",
+    "novo",
+    "O que a pessoa ganha na segunda visita, com a condição",
+    "a entrada é por nossa conta, de terça a quinta-feira, mostrando esta mensagem",
+    "Oi, {{1}}. Obrigado por ter vindo conhecer o {{2}}. A gente quer te receber de novo, e na sua próxima visita {{3}}. Quer deixar uma mesa reservada?",
+  ),
+  campanha(
+    "programacao_da_semana",
+    "Programação da semana",
+    "O que tem na casa nos próximos dias. Aprova uma vez e reusa toda semana, trocando só a programação.",
+    "todos",
+    "A programação, numa linha só",
+    "quinta-feira tem música ao vivo, sexta-feira tem samba e domingo tem almoço em família",
+    "Oi, {{1}}. A programação desta semana no {{2}} já saiu: {{3}}. Quer garantir a sua mesa?",
+  ),
+  campanha(
+    "dia_de_jogo",
+    "Dia de jogo",
+    "Jogo no telão para quem é de casa. Troque só o jogo a cada rodada.",
+    "fiel",
+    "O jogo, o dia e a hora",
+    "Brasil x Argentina, na terça-feira às 21h",
+    "Oi, {{1}}. Tem jogo chegando e o {{2}} vai passar no telão: {{3}}. Quer que a gente guarde uma mesa para você e para a turma?",
+  ),
+  campanha(
+    "aniversariante_do_mes",
+    "Aniversariante do mês",
+    "Um convite para quem faz aniversário neste mês comemorar na casa.",
+    "mes:atual",
+    "O que o aniversariante ganha, com a condição",
+    "o aniversariante ganha a sobremesa, em mesas a partir de 4 pessoas, em qualquer dia do mês",
+    "Oi, {{1}}. Este é o mês do seu aniversário e o {{2}} quer comemorar com você: {{3}}. Quer reservar a sua mesa?",
+  ),
+  campanha(
+    "delivery_da_casa",
+    "Delivery",
+    "Contar a quem já é de casa que dá para pedir sem sair de casa.",
+    "fiel",
+    "O link do cardápio de delivery da casa",
+    "https://exemplo.com.br/delivery",
+    "Oi, {{1}}. Agora dá para pedir o {{2}} sem sair de casa. O pedido é feito direto com a gente, por aqui: {{3}} — é só escolher e acompanhar a entrega pelo celular.",
+    [],
+  ),
+];
+
+/** O valor do seletor "Quem recebe" para esta campanha, hoje. */
+export function publicoDaCampanha(c, hoje = new Date()) {
+  return c.publico === "mes:atual" ? `mes:${hoje.getMonth() + 1}` : c.publico;
+}
