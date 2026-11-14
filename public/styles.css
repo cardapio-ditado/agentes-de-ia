@@ -649,6 +649,95 @@ h3 {
   color: rgba(255, 248, 240, 0.4);
 }
 
+/* A lista do celular: os mesmos módulos, um cartão por linha. Escondida até
+   a tela ficar estreita (logo abaixo) — a colmeia é a vitrine do computador. */
+.hub-lista {
+  display: none;
+  width: 100%;
+  max-width: 460px;
+  gap: 10px;
+  margin: 12px 0 4px;
+  text-align: left;
+}
+.hub-cartao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 248, 240, 0.16);
+  background: rgba(28, 18, 16, 0.55);
+  color: #fff8f0;
+  font: inherit;
+  text-align: left;
+}
+button.hub-cartao {
+  cursor: pointer;
+}
+button.hub-cartao:active {
+  background: rgba(255, 107, 53, 0.28);
+}
+.hub-cartao .hex-icone {
+  flex: none;
+}
+.hub-cartao-texto {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.hub-cartao-nome {
+  font-family: var(--fonte-display);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.2;
+}
+.hub-cartao-resumo {
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: rgba(255, 248, 240, 0.72);
+}
+.hub-cartao-entrar {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff6b35, #c1121f);
+  font-size: 13px;
+  font-weight: 700;
+}
+.hub-cartao-apagado {
+  border-style: dashed;
+  background: rgba(28, 18, 16, 0.35);
+}
+.hub-cartao-apagado .hub-cartao-nome {
+  color: rgba(255, 248, 240, 0.78);
+}
+.hub-cartao-apagado .hex-icone {
+  background: rgba(255, 248, 240, 0.09);
+  box-shadow: none;
+  color: rgba(255, 248, 240, 0.5);
+}
+.hub-cartao-estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: rgba(255, 248, 240, 0.6);
+}
+/* O link é pequeno no texto e grande no toque: a altura de 44px é do dedo. */
+.hub-cartao-conhecer {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ambar);
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
 @media (max-width: 860px) {
   .colmeia {
     --hw: 152px;
@@ -683,6 +772,19 @@ h3 {
   }
   .hub-org {
     display: none;
+  }
+  /* Daqui para baixo a colmeia dá lugar à lista: o favo de 85px não se lê,
+     e a legenda dependia de passar o mouse. */
+  .colmeia,
+  .hub-desc,
+  .hub-nota {
+    display: none;
+  }
+  .hub-lista {
+    display: grid;
+  }
+  .hub-conteudo {
+    justify-content: flex-start;
   }
   .celula {
     padding: 0 12px;

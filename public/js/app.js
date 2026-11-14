@@ -4,6 +4,7 @@ import { painel } from "./pages/painel.js";
 import { hoje } from "./pages/hoje.js";
 import { trilha } from "./pages/trilha.js";
 import { abrirAjuda } from "./ajuda.js";
+import { WHATSAPP_COMERCIAL } from "./contato.js";
 import { clientes } from "./pages/clientes.js";
 import { plataforma } from "./pages/plataforma.js";
 import { conversas } from "./pages/conversas.js";
@@ -300,6 +301,9 @@ const MODULOS = [
   {
     id: "agentes-ia",
     nome: "Atendente virtual",
+    // Uma linha só, para a lista do celular — a `descricao` inteira é a
+    // legenda da colmeia e não cabe num cartão.
+    resumo: "Responde o cliente no WhatsApp e no Instagram",
     descricao:
       "Atendimento no WhatsApp e Instagram: reservas, programação e dúvidas respondidas na hora.",
     // O número do atendente mora nos Ajustes da casa, junto com os outros —
@@ -314,6 +318,7 @@ const MODULOS = [
   {
     id: "cardapio-digital",
     nome: "Cardápio Digital",
+    resumo: "Cardápio com foto e QR code na mesa",
     descricao:
       "QR code na mesa, cardápio com foto e vídeo, curtidas e comentários dos clientes — e o garçom chamado pelo celular.",
     icone: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z",
@@ -325,6 +330,7 @@ const MODULOS = [
   {
     id: "delivery",
     nome: "Delivery",
+    resumo: "Pedidos direto com a casa, sem comissão",
     descricao:
       "Canal próprio de pedidos, sem comissão: cardápio com link, sacola e pagamento por Pix ou cartão, e o atendente virtual fechando pedido pelo WhatsApp.",
     icone: "M5 17a2 2 0 104 0 2 2 0 00-4 0zm10 0a2 2 0 104 0 2 2 0 00-4 0zM3 17V6h11v11M14 9h4l3 4v4h-2M9 17h6",
@@ -334,6 +340,7 @@ const MODULOS = [
   {
     id: "rh",
     nome: "RH",
+    resumo: "A ficha da equipe, a escala e as férias",
     descricao:
       "A equipe organizada: ficha de cada um, documento com aviso de vencimento, admissão guiada e desligamento registrado. A folha continua com a contabilidade.",
     icone: ICONES.pessoa,
@@ -342,6 +349,7 @@ const MODULOS = [
   {
     id: "financeiro",
     nome: "Financeiro",
+    resumo: "Contas a pagar, a receber e o caixa",
     descricao:
       "Contas a pagar e a receber com parcelas do jeito que o fornecedor dá, bancos e caixas com saldo, e a ficha de cada fornecedor.",
     icone: "M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",
@@ -350,6 +358,7 @@ const MODULOS = [
   {
     id: "checklist",
     nome: "Checklist Inteligente",
+    resumo: "Rotinas da equipe, com foto como prova",
     descricao:
       "Rotinas de abertura e fechamento com link no WhatsApp, fotos como prova e a IA conferindo cada resposta.",
     icone: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
@@ -358,6 +367,7 @@ const MODULOS = [
   {
     id: "cmv",
     nome: "Custos e estoque",
+    resumo: "Estoque, compras e o custo de cada prato",
     descricao:
       "Estoque, compras e receitas. Foto da nota vira entrada, e o custo de cada prato aparece sozinho.",
     icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
@@ -366,6 +376,7 @@ const MODULOS = [
   {
     id: "clientes",
     nome: "Clientes",
+    resumo: "Quem veio à casa e o que achou dela",
     descricao:
       "Quem já esteve na casa e o que ele diz dela: a base (à mão, Zig, WhatsApp), o parabéns de aniversário, a pesquisa com QR na mesa e as avaliações do Google respondidas no tom da casa.",
     icone: ICONES.pessoa,
@@ -897,6 +908,63 @@ function montarHub() {
 
   colmeia.addEventListener("mouseleave", () => contar(DICA_PADRAO));
   contar(DICA_PADRAO);
+
+  montarListaDoHub(visiveis);
+}
+
+/**
+ * Os mesmos módulos da colmeia, em lista — é o que o celular mostra.
+ *
+ * Em tela estreita o favo fica com 85px e letra de 10px, e a descrição só
+ * aparecia ao passar o mouse, que no celular não existe. Na lista cada módulo
+ * diz o que é e em que estado está sem precisar de toque nenhum. Os que a
+ * casa tem vêm primeiro: é por eles que a pessoa entrou.
+ */
+function montarListaDoHub(visiveis) {
+  const lista = limpar(document.getElementById("hub-lista"));
+  const casa = document.getElementById("hub-org").textContent.trim();
+  const acesos = visiveis.filter((m) => moduloAceso(m));
+  const apagados = visiveis.filter((m) => !moduloAceso(m));
+
+  const miolo = (m, estado) => [
+    el("span", { classe: "hex-icone" }, [icone(m.icone, 20)]),
+    el("span", { classe: "hub-cartao-texto" }, [
+      el("strong", { classe: "hub-cartao-nome", texto: m.nome }),
+      el("span", { classe: "hub-cartao-resumo", texto: m.resumo ?? m.descricao }),
+      estado,
+    ]),
+  ];
+
+  for (const m of acesos) {
+    lista.append(
+      el("button", { classe: "hub-cartao", type: "button", onclick: () => entrarNoModulo(m.id) }, [
+        ...miolo(m, null),
+        el("span", { classe: "hub-cartao-entrar", texto: "Entrar" }),
+      ]),
+    );
+  }
+
+  for (const m of apagados) {
+    // Neutro de propósito: "ativar" prometia um botão que liga na hora, e o
+    // que existe é uma conversa com a Brasa Food. O link já leva a mensagem
+    // escrita — quem recebe sabe de que casa e de que módulo se trata.
+    const mensagem = `Olá! ${casa ? `Sou da casa ${casa}. ` : ""}Quero conhecer o módulo ${m.nome} do Brasa Food.`;
+    lista.append(
+      el("div", { classe: "hub-cartao hub-cartao-apagado" }, miolo(
+        m,
+        el("span", { classe: "hub-cartao-estado" }, [
+          el("span", { texto: "Não faz parte do seu plano" }),
+          el("a", {
+            classe: "hub-cartao-conhecer",
+            href: `https://wa.me/${WHATSAPP_COMERCIAL}?text=${encodeURIComponent(mensagem)}`,
+            target: "_blank",
+            rel: "noopener",
+            texto: "Quero conhecer",
+          }),
+        ]),
+      )),
+    );
+  }
 }
 
 function mostrarHub() {
