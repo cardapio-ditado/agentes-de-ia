@@ -50,6 +50,8 @@ import { fluxoDeCaixa, painelFinanceiro } from "./financeiroFluxo.js";
 import {
   MODELOS_DE_TREINAMENTO,
   arquivarTreinamento,
+  atestadosAConfirmar,
+  decidirAtestado,
   definirPadrinho,
   espacoDoFuncionario,
   integracaoDaPessoa,
@@ -3357,10 +3359,12 @@ async function roteasApi(
       // GET /v1/venues/:slug/rh — a lista e o cabeçalho da tela
       if (metodo === "GET" && p.length === 3) {
         const incluirDesligados = url.searchParams.get("desligados") === "1";
-        const [pessoas, resumo] = await comErroDoRh(() =>
-          Promise.all([listarPessoas(venue.id, { incluirDesligados }), resumoDoRh(venue.id)]),
+        // Os atestados a conferir vêm junto, mas não derrubam a lista: se
+        // essa busca falhar, a equipe abre do mesmo jeito.
+        const [pessoas, resumo, atestados] = await comErroDoRh(() =>
+          Promise.all([listarPessoas(venue.id, { incluirDesligados }), resumoDoRh(venue.id), atestadosAConfirmar(venue.id).catch(() => [])]),
         );
-        return ok(res, { pessoas, resumo, vinculos: VINCULOS, tipos_de_documento: TIPOS_DE_DOCUMENTO });
+        return ok(res, { pessoas, resumo, atestados_a_confirmar: atestados, vinculos: VINCULOS, tipos_de_documento: TIPOS_DE_DOCUMENTO });
       }
 
       // POST /v1/venues/:slug/rh — admite alguém
@@ -3602,6 +3606,19 @@ async function roteasApi(
       // GET /v1/venues/:slug/rh/documentos/:id/link — endereço que expira
       if (metodo === "GET" && p.length === 6 && ehDocumentoSolto && p[5] === "link") {
         return ok(res, await comErroDoRh(() => linkDoDocumento({ venueId: venue.id, id: p[4]! })));
+      }
+
+      // POST /v1/venues/:slug/rh/documentos/:id/atestado — {aceitar, inicio?, dias?}
+      // O toque do gestor no atestado que o funcionário mandou por foto: é
+      // só aqui que a escala muda.
+      if (metodo === "POST" && p.length === 6 && ehDocumentoSolto && p[5] === "atestado") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDoRh(() =>
+            decidirAtestado({ venueId: venue.id, documentoId: p[4]!, aceitar: corpo.aceitar === true, inicio: corpo.inicio, dias: corpo.dias, quem: chave.name }),
+          ),
+        );
       }
 
       // DELETE /v1/venues/:slug/rh/documentos/:id

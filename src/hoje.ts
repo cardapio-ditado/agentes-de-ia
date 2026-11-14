@@ -326,6 +326,21 @@ export async function hojeDaCasa(params: {
     };
   });
 
+  pendencia("rh", "atestados", async () => {
+    const { atestadosAConfirmar } = await import("./rhIntegracao.js");
+    const lista = await atestadosAConfirmar(venue.id);
+    return {
+      id: "atestados",
+      modulo: "rh",
+      titulo: "Atestados para conferir",
+      quantidade: lista.length,
+      // Urgente: enquanto ninguém confirma, a escala ainda conta com a pessoa.
+      detalhe: lista.length ? `${[...new Set(lista.map((a) => a.nome))].join(", ")} — a escala só muda quando você confirmar.` : "",
+      destino: "rh",
+      urgente: true,
+    };
+  });
+
   pendencia("rh", "integracao", async () => {
     const { integracoesAtrasadas } = await import("./rhIntegracao.js");
     const lista = await integracoesAtrasadas(venue.id, fuso);

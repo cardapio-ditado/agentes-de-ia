@@ -194,9 +194,81 @@ export async function rh(raiz, ctx) {
     });
   }
 
+  /**
+   * Os atestados que a equipe mandou por foto e ninguém conferiu.
+   *
+   * Fica no topo da lista porque é a única coisa desta tela que tem pressa:
+   * enquanto ninguém confirma, a escala continua contando com a pessoa. A
+   * IA só SUGERE o período — os dois campos já vêm preenchidos com o que ela
+   * leu, e quem confere com o documento e toca em Confirmar é o gestor.
+   */
+  function cartaoDeAtestados() {
+    const lista = dados.atestados_a_confirmar ?? [];
+    if (!lista.length) return null;
+    return el("section", { classe: "cartao alerta", style: "margin-bottom:16px" }, [
+      el("strong", { texto: lista.length === 1 ? "1 atestado para conferir" : `${lista.length} atestados para conferir` }),
+      el("p", {
+        classe: "muted",
+        style: "margin:4px 0 10px",
+        texto: "A escala só muda quando você confirmar. Abra o documento, confira o primeiro dia e quantos dias, e decida.",
+      }),
+      ...lista.map((a) => {
+        const inicio = el("input", { classe: "input", type: "date", value: a.inicio ?? "", "aria-label": "Primeiro dia do afastamento", style: "max-width:160px" });
+        const dias = el("input", { classe: "input", type: "number", min: "1", max: "30", value: a.dias ?? "", placeholder: "dias", "aria-label": "Quantos dias", style: "max-width:84px" });
+        const decidir = (aceitar) => async (e) => {
+          if (!aceitar && !confirm(`Não aceitar o atestado de ${a.nome}? A escala fica como está, e o documento continua guardado na ficha.`)) return;
+          e.target.disabled = true;
+          try {
+            const r = await post(`/v1/venues/${ctx.venue}/rh/documentos/${a.documento_id}/atestado`, { aceitar, inicio: inicio.value, dias: dias.value });
+            avisar(aceitar ? `Atestado confirmado: ${r.dias} dia(s) marcados na escala de ${a.nome}.` : "Atestado não aceito. A escala não mudou.", "ok");
+            await recarregar();
+          } catch (err) {
+            avisar(err.message, "erro");
+            e.target.disabled = false;
+          }
+        };
+        return el("div", { style: "border-top:1px solid var(--borda);padding:10px 0 2px" }, [
+          el("div", {}, [
+            el("strong", { texto: a.nome }),
+            el("span", {
+              classe: "muted",
+              texto: a.inicio && a.dias
+                ? ` · lido da foto: ${a.dias} dia(s) a partir de ${diaBr(a.inicio)}`
+                : " · não deu para ler o período: preencha olhando o documento",
+            }),
+          ]),
+          el("div", { classe: "reserva-acoes", style: "margin-top:8px" }, [
+            el("button", {
+              classe: "btn btn-peq",
+              type: "button",
+              texto: "Ver o atestado",
+              onclick: async (e) => {
+                e.target.disabled = true;
+                try {
+                  const { url } = await get(`/v1/venues/${ctx.venue}/rh/documentos/${a.documento_id}/link`);
+                  window.open(url, "_blank", "noopener");
+                } catch (err) {
+                  avisar(err.message, "erro");
+                } finally {
+                  e.target.disabled = false;
+                }
+              },
+            }),
+            inicio,
+            dias,
+            el("button", { classe: "btn btn-peq btn-primario", type: "button", texto: "Confirmar", onclick: decidir(true) }),
+            el("button", { classe: "btn btn-peq", type: "button", texto: "Não aceitar", onclick: decidir(false) }),
+          ]),
+        ]);
+      }),
+    ]);
+  }
+
   function desenharLista() {
     abertaId = null;
     limpar(corpo);
+    const atestados = cartaoDeAtestados();
+    if (atestados) corpo.append(atestados);
 
     // O mês do contador: por padrão o anterior, que é o que se fecha.
     const mesPassado = new Date();
@@ -260,7 +332,7 @@ export async function rh(raiz, ctx) {
                 const mapa = await get(`/v1/venues/${ctx.venue}/rh/disc-equipe`);
                 const cartao = cartaoDoMapaDisc(mapa);
                 corpo.querySelector(".disc-mapa")?.closest("section")?.remove();
-                corpo.children[0]?.after(cartao);
+                corpo.querySelector(".cabecalho-secao")?.after(cartao);
                 cartao.scrollIntoView({ behavior: "smooth", block: "start" });
               } catch (err) {
                 avisar(err.message, "erro");

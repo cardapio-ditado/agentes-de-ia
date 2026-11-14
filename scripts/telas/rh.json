@@ -1808,6 +1808,297 @@
           ]
         }
       }
+    },
+    "atestado-a-conferir": {
+      "rotulo": "um atestado esperando o gestor",
+      "guarda": {
+        "brasa.rh.aba": "equipe"
+      },
+      "rotas": {
+        "GET /rh": {
+          "pessoas": [
+            {
+              "id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete",
+              "apelido": "Ju",
+              "ativo": true,
+              "documentos_alerta": 0,
+              "pendencias": [],
+              "ficha": {
+                "atendente_id": "p1",
+                "nome_completo": "Juliana Barbosa dos Santos",
+                "cpf": "123.456.789-09",
+                "rg": null,
+                "nascimento": null,
+                "telefone": "65999990001",
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Garçonete",
+                "admissao": "2022-08-01",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 1850,
+                "forma_pagamento": "pix",
+                "chave_pix": "65999990001",
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "apelido": null,
+              "ativo": true,
+              "documentos_alerta": 1,
+              "pendencias": [
+                "Exame periódico vence em 12 dias"
+              ],
+              "ficha": {
+                "atendente_id": "p2",
+                "nome_completo": "Maria Aparecida Nogueira",
+                "cpf": "987.654.321-00",
+                "rg": null,
+                "nascimento": null,
+                "telefone": "65999990002",
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Cozinha",
+                "admissao": "2023-01-10",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 2400,
+                "forma_pagamento": "pix",
+                "chave_pix": "65999990002",
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança",
+              "apelido": null,
+              "ativo": true,
+              "documentos_alerta": 0,
+              "pendencias": [
+                "Sem CPF na ficha",
+                "Sem carteira de trabalho"
+              ],
+              "ficha": {
+                "atendente_id": "p3",
+                "nome_completo": null,
+                "cpf": null,
+                "rg": null,
+                "nascimento": null,
+                "telefone": null,
+                "endereco": null,
+                "vinculo": "mei",
+                "cargo": "Segurança",
+                "admissao": "2026-08-01",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 2100,
+                "forma_pagamento": "pix",
+                "chave_pix": null,
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "apelido": null,
+              "ativo": true,
+              "documentos_alerta": 0,
+              "pendencias": [
+                "Sem data de admissão"
+              ],
+              "ficha": {
+                "atendente_id": "p4",
+                "nome_completo": "Rosemary da Silva",
+                "cpf": null,
+                "rg": null,
+                "nascimento": null,
+                "telefone": null,
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Copa",
+                "admissao": null,
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 1620,
+                "forma_pagamento": "pix",
+                "chave_pix": null,
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman",
+              "apelido": "Tiago",
+              "ativo": true,
+              "documentos_alerta": 2,
+              "pendencias": [],
+              "ficha": {
+                "atendente_id": "p5",
+                "nome_completo": "Tiago Menezes Lima",
+                "cpf": "111.222.333-44",
+                "rg": null,
+                "nascimento": null,
+                "telefone": "65999990005",
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Barman",
+                "admissao": "2023-06-01",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 2200,
+                "forma_pagamento": "pix",
+                "chave_pix": "65999990005",
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p9",
+              "nome": "Wanderson Alves",
+              "apelido": null,
+              "funcao": "Garçom",
+              "ativo": false,
+              "documentos_alerta": 0,
+              "pendencias": [],
+              "ficha": {
+                "atendente_id": "p9",
+                "nome_completo": "Wanderson Alves",
+                "cpf": null,
+                "rg": null,
+                "nascimento": null,
+                "telefone": null,
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Garçom",
+                "admissao": "2021-03-15",
+                "desligamento": "2026-05-30",
+                "motivo_desligamento": "Pediu demissão",
+                "salario": 1850,
+                "forma_pagamento": "pix",
+                "chave_pix": null,
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            }
+          ],
+          "resumo": {
+            "ativos": 5,
+            "desligados": 1,
+            "com_pendencia": 3,
+            "documentos_em_alerta": 3
+          },
+          "vinculos": [
+            {
+              "id": "clt",
+              "nome": "CLT"
+            },
+            {
+              "id": "mei",
+              "nome": "MEI"
+            },
+            {
+              "id": "diarista",
+              "nome": "Diarista"
+            },
+            {
+              "id": "freelancer",
+              "nome": "Freelancer"
+            },
+            {
+              "id": "estagio",
+              "nome": "Estágio"
+            },
+            {
+              "id": "socio",
+              "nome": "Sócio"
+            }
+          ],
+          "tipos_de_documento": [
+            {
+              "id": "rg",
+              "nome": "RG"
+            },
+            {
+              "id": "cpf",
+              "nome": "CPF"
+            },
+            {
+              "id": "ctps",
+              "nome": "Carteira de trabalho"
+            },
+            {
+              "id": "comprovante_endereco",
+              "nome": "Comprovante de endereço"
+            },
+            {
+              "id": "exame_admissional",
+              "nome": "Exame admissional"
+            },
+            {
+              "id": "exame_periodico",
+              "nome": "Exame periódico"
+            },
+            {
+              "id": "exame_demissional",
+              "nome": "Exame demissional"
+            },
+            {
+              "id": "aso",
+              "nome": "ASO"
+            },
+            {
+              "id": "atestado",
+              "nome": "Atestado"
+            },
+            {
+              "id": "contrato",
+              "nome": "Contrato"
+            }
+          ],
+          "atestados_a_confirmar": [
+            {
+              "documento_id": "d1",
+              "atendente_id": "p1",
+              "nome": "Juliana",
+              "inicio": "2026-09-10",
+              "dias": 3,
+              "enviado_em": "2026-09-10T12:00:00Z"
+            },
+            {
+              "documento_id": "d2",
+              "atendente_id": "p2",
+              "nome": "Marcos",
+              "inicio": null,
+              "dias": null,
+              "enviado_em": "2026-09-10T13:00:00Z"
+            }
+          ]
+        }
+      }
     }
   }
 }
