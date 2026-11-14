@@ -1048,6 +1048,8 @@ async function conferirDocumento(
   if (!["rg", "cpf", "ctps"].includes(tipo) || !["image/jpeg", "image/png", "image/webp"].includes(media)) return null;
   try {
     const lido = await lerDocumento(arquivo, media);
+    // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: ficha } = await (db() as any)
       .from("rh_fichas")
       .select("nome_completo, cpf, rg, nascimento")
@@ -3564,7 +3566,11 @@ async function roteasApi(
         const link = `${enderecoBase()}/${tipo === "portal" ? "eu" : tipo}/${convite.token}`;
         let enviadoPara: string | null = null;
         if (corpo.enviar === true) {
+          // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: ficha } = await (db() as any).from("rh_fichas").select("telefone").eq("atendente_id", p[3]!).maybeSingle();
+          // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: pessoa } = await (db() as any).from("pesquisa_atendentes").select("nome, apelido").eq("id", p[3]!).maybeSingle();
           const telefone = normalizarTelefone(String(ficha?.telefone ?? ""));
           if (!telefone) throw erro(400, "sem_telefone", "Anote o telefone da pessoa na ficha antes, ou copie o link e mande você mesmo.");
@@ -6160,6 +6166,8 @@ async function roteasApi(
   if (p[0] === "eu" && p.length >= 2) {
     const token = p[1]!;
     const c = await comErroDoRh(() => abrirConvite(token, "portal"));
+    // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: casa } = await (db() as any).from("venues").select("timezone").eq("id", c.venue_id).maybeSingle();
     const fuso = casa?.timezone ?? "America/Cuiaba";
     if (metodo === "GET" && p.length === 2) {

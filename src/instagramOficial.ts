@@ -483,7 +483,6 @@ export async function concluirLogin(params: {
  */
 export async function renovarTokens(agora = new Date()): Promise<{ renovados: number; falharam: number }> {
   const total = { renovados: 0, falharam: 0 };
-  const app = appDoInstagram();
   const { data, error } = await cliente().from("instagram_oficial").select("*");
   if (error) {
     if (!ehMigracaoPendente(error.message)) console.error(`[instagram] não li as conexões para renovar: ${error.message}`);

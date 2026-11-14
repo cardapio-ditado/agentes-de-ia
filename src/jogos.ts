@@ -195,6 +195,8 @@ const DURACAO_JOGO_MIN = 120;
 export function converter(bruto: unknown[]): JogoDaApi[] {
   const jogos: JogoDaApi[] = [];
 
+  // A resposta da API de jogos vem sem tipo; cada campo é conferido abaixo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const item of bruto as Array<Record<string, any>>) {
     const id = item?.id;
     // O jogo de verdade vive em competitions[0]; o objeto de fora é o
@@ -203,7 +205,9 @@ export function converter(bruto: unknown[]): JogoDaApi[] {
     const quando = partida?.date ?? item?.date;
 
     const times = Array.isArray(partida?.competitors) ? partida.competitors : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const casa = times.find((t: any) => t?.homeAway === "home");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fora = times.find((t: any) => t?.homeAway === "away");
 
     const nomeCasa = casa?.team?.displayName ?? casa?.team?.name;

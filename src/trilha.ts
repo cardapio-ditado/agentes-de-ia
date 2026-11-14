@@ -107,6 +107,8 @@ export function montarTrilha(params: {
 // Coleta
 // ============================================================
 
+// Tabelas ainda fora do database.types.ts: o mesmo `any` deliberado de rotinas.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cliente = () => db() as any;
 const CONTAGEM = { count: "exact" as const, head: true };
 const CHAVE = "trilha_manual";

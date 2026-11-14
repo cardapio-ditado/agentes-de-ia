@@ -57,6 +57,8 @@ export interface Hoje {
   tudo_certo: boolean;
 }
 
+// Tabelas ainda fora do database.types.ts: o mesmo `any` deliberado de rotinas.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cliente = () => db() as any;
 
 // ============================================================

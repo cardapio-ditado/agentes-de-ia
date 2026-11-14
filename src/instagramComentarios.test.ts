@@ -59,3 +59,17 @@ test("a peneira barata manda emoji para o obrigado, marcação de amigo para o n
   assert.match(promptDaPeneira({ casa: "Ditado", legenda: null }), /"direct", "agradecer" ou "ignorar"/);
   assert.match(promptDoAgradecimento("Ditado"), /até 10 palavras/);
 });
+
+test("a classe de \"só emoji\" aceita os mesmos caracteres de antes da reescrita dos corações", () => {
+  // A classe trazia "❤️" e "♥️" escritos direto; hoje traz os códigos
+  // (U+2764, U+2665 e o seletor U+FE0F). O que tem de continuar igual:
+  for (const so of ["❤️", "♥️", "\u2764", "\u2665", "\uFE0F", "❤️❤️ ♥️", "😍🔥", "👏🏽👏🏽", "!!!", "?", " ❤️ !"]) {
+    assert.equal(peneiraBarata(so), "agradecer", JSON.stringify(so));
+  }
+  // E o que nunca foi "só emoji" continua indo adiante.
+  assert.equal(peneiraBarata("lindo ❤️"), null);
+  assert.equal(peneiraBarata("❤️ quero reservar"), null);
+  assert.equal(peneiraBarata("ok ♥️"), null);
+  // Dígito e # são Emoji_Component (teclas "1️⃣", "#️⃣") — já passavam, e seguem passando.
+  assert.equal(peneiraBarata("10"), "agradecer");
+});
