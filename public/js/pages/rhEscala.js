@@ -116,8 +116,39 @@ export function criarEscala(corpo, ctx) {
       return;
     }
 
+    const alertas = cartaoDeAlertas();
+    if (alertas) corpo.append(alertas);
     corpo.append(grade());
     if (editando) corpo.append(editorDaCelula());
+  }
+
+  /**
+   * O que conferir antes de publicar: sétimo dia seguido, descanso curto,
+   * semana acima de 44h, menor à noite.
+   *
+   * Fica ACIMA da grade, e não num canto: quem monta a escala com pressa só
+   * lê o que está no caminho do botão de publicar. É aviso, não trava — a
+   * regra de cada casa (convenção, 12x36, banco de horas) pode ser outra, e
+   * quem sabe disso é o gestor com a contabilidade.
+   */
+  function cartaoDeAlertas() {
+    const lista = dados.alertas ?? [];
+    if (!lista.length) return null;
+    return el("section", { classe: "cartao alerta", style: "margin-bottom:16px" }, [
+      el("strong", {
+        texto: lista.length === 1 ? "1 ponto para conferir antes de publicar" : `${lista.length} pontos para conferir antes de publicar`,
+      }),
+      el(
+        "ul",
+        { style: "padding-left:18px;line-height:1.5;margin:8px 0" },
+        lista.map((a) => el("li", { style: "margin-bottom:6px", texto: a.texto })),
+      ),
+      el("p", {
+        classe: "muted",
+        style: "margin:0",
+        texto: "É um aviso, não uma trava: você pode publicar assim mesmo. A regra da sua casa pode ser diferente (convenção coletiva, 12x36, banco de horas) — na dúvida, confira com a contabilidade.",
+      }),
+    ]);
   }
 
   /* ================= Cabeçalho: semana, status, ações ================= */
@@ -198,10 +229,22 @@ export function criarEscala(corpo, ctx) {
   }
 
   async function publicar(botao) {
+    // Com alerta na tela, publicar pede um "sim" consciente — e só isso:
+    // quem decide é o gestor.
+    const pontos = (dados.alertas ?? []).length;
+    if (
+      pontos &&
+      !confirm(
+        `Esta semana tem ${pontos} ${pontos === 1 ? "ponto" : "pontos"} para conferir (folga, descanso ou horas) — a lista está acima da grade.\n\nPublicar e avisar a equipe assim mesmo?`,
+      )
+    ) {
+      return;
+    }
     botao.disabled = true;
     try {
       const r = await post(`/v1/venues/${ctx.venue}/rh/escala/publicar`, { semana: dados.semana });
       const partes = [`${r.avisados} aviso(s) na fila do WhatsApp.`];
+      if (r.alertas) partes.push(`Publicada com ${r.alertas} ponto(s) de descanso para conferir.`);
       if (r.sem_telefone.length) {
         partes.push(`Sem telefone na ficha: ${r.sem_telefone.join(", ")}.`);
       }

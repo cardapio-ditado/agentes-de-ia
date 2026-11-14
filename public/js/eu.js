@@ -104,8 +104,10 @@ function cartaoDoAtestado() {
       const corpo = f.type.startsWith("image/") ? await reduzir(f) : f;
       const r = await api("/atestado", { method: "POST", headers: { "content-type": corpo.type || f.type }, body: corpo });
       resultado.className = "ok";
+      // Quem muda a escala é a casa, depois de conferir: aqui não se promete
+      // o que ainda não aconteceu.
       resultado.textContent = r.dias
-        ? `Recebido: ${r.dias} dia(s), de ${dataBr(r.inicio)} a ${dataBr(r.fim)}. A casa já foi avisada e a sua escala foi marcada.`
+        ? `Recebido: ${r.dias} dia(s), de ${dataBr(r.inicio)} a ${dataBr(r.fim)}. A casa foi avisada e vai conferir; a sua escala muda quando ela confirmar.`
         : "Recebido! A casa foi avisada e vai conferir o período.";
     } catch (e) {
       resultado.className = "aviso";
@@ -117,7 +119,7 @@ function cartaoDoAtestado() {
   });
   return el("section", { classe: "cartao" }, [
     el("h2", { texto: "Atestado médico" }),
-    el("p", { classe: "apoio", texto: "Tire uma foto do atestado. Ele vai direto para a casa, que já fica sabendo dos dias." }),
+    el("p", { classe: "apoio", texto: "Tire uma foto do atestado. Ele vai direto para a casa, que confere e confirma os dias." }),
     botao,
     arquivo,
     resultado,

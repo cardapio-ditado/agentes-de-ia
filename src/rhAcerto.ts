@@ -20,8 +20,9 @@ import { minutosDoTurno } from "./rhJornada.js";
  *                pontuação da casa) ou pelas horas da escala.
  *
  * Nos dois casos vale a mesma régua: nem tudo que é arrecadado é repassado.
- * A diferença cobre taxa de cartão e quebra, e aparece na tela — porque
- * "cadê o resto?" é a pergunta que azeda equipe.
+ * A diferença aparece na tela — porque "cadê o resto?" é a pergunta que
+ * azeda equipe — e, pela lei da gorjeta, só pode ser retida para encargos e
+ * até um teto: a tela avisa quando passa (ver `AVISOS_DA_RETENCAO`).
  *
  * A unidade é a SEMANA porque é assim que bar acerta gorjeta. Os lançamentos
  * continuam sendo por dia e turno; a semana só soma.
@@ -50,6 +51,64 @@ export const CRITERIOS_DE_RATEIO = [
   { id: "peso", nome: "Por peso da função (pontuação)" },
   { id: "horas", nome: "Pelas horas da escala" },
 ] as const;
+
+/**
+ * Quanto da gorjeta a casa pode segurar — o que a tela avisa.
+ *
+ * A lei da gorjeta (13.419/2017, art. 457 da CLT) não deixa a casa "ficar"
+ * com parte do serviço: a retenção existe só para custear os encargos sobre
+ * a própria gorjeta, com previsão em convenção ou acordo coletivo, e tem
+ * teto — 20% para empresa do Simples, 33% para as demais.
+ *
+ * O sistema NÃO trava o percentual: não sabe o regime da casa nem o que a
+ * convenção dela diz, e não é parecer jurídico. Ele avisa, do mais grave
+ * para o mais leve, e manda conferir com a contabilidade. Os números ficam
+ * aqui, num lugar só, para serem conferidos e corrigidos sem caçar na tela.
+ */
+export const AVISOS_DA_RETENCAO = [
+  {
+    acima_de: 33,
+    nivel: "alto",
+    texto:
+      "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, " +
+      "e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. " +
+      "Confirme com a contabilidade antes de pagar a semana.",
+  },
+  {
+    acima_de: 20,
+    nivel: "atencao",
+    texto:
+      "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. " +
+      "Confirme com a contabilidade em qual caso a casa está.",
+  },
+] as const;
+
+export type AvisoDaRetencao = (typeof AVISOS_DA_RETENCAO)[number] & { retencao: number };
+
+/** O aviso que cabe a este percentual de repasse, ou `null` se está dentro do menor teto. */
+export function avisoDaRetencao(percentualRepasse: number): AvisoDaRetencao | null {
+  const retencao = Math.round((100 - Number(percentualRepasse)) * 100) / 100;
+  if (!Number.isFinite(retencao)) return null;
+  const aviso = AVISOS_DA_RETENCAO.find((a) => retencao > a.acima_de);
+  return aviso ? { ...aviso, retencao } : null;
+}
+
+/** O aviso que acompanha todo desconto lançado no acerto de alguém. */
+export const AVISO_DO_DESCONTO =
+  "Desconto no que a pessoa recebe pede o de acordo dela por escrito (ou previsão em convenção). Guarde o papel assinado; na dúvida, confirme com a contabilidade.";
+
+/**
+ * A descrição de um lançamento avulso. No adicional é opcional; no DESCONTO
+ * é obrigatória: "tirei R$ 80 do João" sem dizer por quê é o que a casa não
+ * consegue explicar depois — nem para o João, nem para um juiz.
+ */
+export function descricaoDoExtra(tipo: string, descricao: unknown): string | null {
+  const texto = String(descricao ?? "").trim().slice(0, 300);
+  if (tipo === "desconto" && texto.length < 3) {
+    throw new ErroDoRh(400, "Escreva o motivo do desconto (por exemplo: consumo no bar em 12/11, combinado com a pessoa).");
+  }
+  return texto || null;
+}
 
 const IDS_DE_METODO = new Set<string>(METODOS.map((m) => m.id));
 const IDS_DE_CRITERIO = new Set<string>(CRITERIOS_DE_RATEIO.map((c) => c.id));
@@ -405,6 +464,7 @@ export async function lancarExtra(params: {
   }
   const valor = Number(params.valor);
   if (!Number.isFinite(valor) || valor <= 0) throw new ErroDoRh(400, "Informe um valor maior que zero.");
+  const descricao = descricaoDoExtra(params.tipo, params.descricao);
 
   const { data, error } = await cliente()
     .from("rh_gorjeta_extras")
@@ -413,7 +473,7 @@ export async function lancarExtra(params: {
       dia: params.dia,
       atendente_id: params.atendenteId,
       tipo: params.tipo,
-      descricao: String(params.descricao ?? "").trim() || null,
+      descricao,
       valor,
       criado_por: params.quem,
     } as never)
