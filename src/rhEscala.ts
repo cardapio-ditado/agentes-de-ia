@@ -170,6 +170,202 @@ export function mensagemDaSemana(params: {
 }
 
 // ============================================================
+// Alertas de descanso — conta pura, sem banco
+// ============================================================
+//
+// A grade aceita qualquer coisa: sete dias seguidos, fechar às 2h e abrir às
+// 9h, o menor de idade no fechamento. Quem monta a escala com pressa não faz
+// essa conta de cabeça — e é exatamente o que aparece numa fiscalização ou
+// numa ação trabalhista.
+//
+// Isto AVISA, não proíbe e não é parecer jurídico: convenção coletiva,
+// escala 12x36, banco de horas e compensação mudam a regra de cada casa. O
+// gestor vê a lista antes de publicar e publica se quiser — a frase diz o
+// que olhar e manda conferir com a contabilidade.
+
+/** Um turno de trabalho de uma pessoa: o dia em que começa e os horários. */
+export interface TurnoEscalado {
+  data: string;
+  inicio: string;
+  fim: string;
+}
+
+export interface AlertaDeDescanso {
+  tipo: "setimo_dia" | "entre_jornadas" | "horas_da_semana" | "menor_a_noite";
+  texto: string;
+}
+
+/** Os números de referência (CLT e Constituição). Num lugar só, para a contabilidade conferir. */
+export const LIMITES_DE_DESCANSO = {
+  /** Dias seguidos de trabalho a partir dos quais falta a folga semanal. */
+  dias_seguidos: 7,
+  /** Horas de descanso entre o fim de uma jornada e o começo da outra. */
+  horas_entre_jornadas: 11,
+  /** Horas de trabalho na semana. */
+  horas_na_semana: 44,
+  /** Turno de mais de tantas horas tem 1h de intervalo, que não conta como trabalho. */
+  horas_que_pedem_intervalo: 6,
+  /** Menor de 18 não trabalha entre estas horas. */
+  noite_do_menor: { de: 22, ate: 5 },
+} as const;
+
+const minutosDe = (hora: string): number => {
+  const [h, m] = String(hora ?? "").split(":");
+  return Number(h) * 60 + (Number(m) || 0);
+};
+
+/** Dias desde 1970 — é o que permite comparar instantes sem tocar em fuso. */
+const diaCorrido = (iso: string): number => Math.round(new Date(`${iso}T12:00:00Z`).getTime() / 86_400_000);
+
+/** "9h" ou "9h30", de uma quantidade de minutos. */
+function horasEmTexto(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = Math.round(minutos % 60);
+  return m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
+
+/** Idade completa num dia. `null` se a data de nascimento não serve. */
+function idadeEm(nascimento: string | null | undefined, dia: string): number | null {
+  const n = String(nascimento ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(n)) return null;
+  const anos = Number(dia.slice(0, 4)) - Number(n.slice(0, 4));
+  return dia.slice(5) < n.slice(5) ? anos - 1 : anos;
+}
+
+/**
+ * O que a escala de UMA pessoa tem de estranho nesta semana.
+ *
+ * Recebe os turnos da semana E dos dias vizinhos que a casa já lançou (na
+ * prática, a semana anterior): o sétimo dia seguido e o descanso curto
+ * quase sempre atravessam a virada da semana. Dia sem lançamento conta
+ * como folga — só dá para avisar do que está na grade.
+ *
+ * Só fala do que CAI nesta semana, para a mesma frase não aparecer em duas.
+ */
+export function alertasDeDescanso(params: {
+  nome: string;
+  /** A segunda-feira da semana que está na tela. */
+  semana: string;
+  turnos: TurnoEscalado[];
+  /** Da ficha, se tiver. Sem ela, o aviso do menor simplesmente não sai. */
+  nascimento?: string | null;
+}): AlertaDeDescanso[] {
+  const L = LIMITES_DE_DESCANSO;
+  const { nome, semana } = params;
+  const domingo = somarDias(semana, 6);
+  const naSemana = (dia: string) => dia >= semana && dia <= domingo;
+
+  // Cada turno vira um intervalo em minutos corridos; o que vira a noite
+  // termina no dia seguinte. Turno com horário ilegível fica de fora.
+  const turnos = params.turnos
+    .filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.data) && /^\d{1,2}:\d{2}/.test(t.inicio) && /^\d{1,2}:\d{2}/.test(t.fim))
+    .map((t) => {
+      const base = diaCorrido(t.data) * 1440;
+      const comeca = base + minutosDe(t.inicio);
+      const termina = base + minutosDe(t.fim) + (viraODia(t) ? 1440 : 0);
+      return { ...t, comeca, termina };
+    })
+    .sort((a, b) => a.comeca - b.comeca);
+  if (!turnos.length) return [];
+
+  // A JORNADA do dia: do primeiro turno que começa nele ao último que
+  // termina. Quem dobra almoço e noite tem uma jornada só — as horas entre
+  // um turno e outro são intervalo, não o descanso entre jornadas.
+  const jornadas = new Map<string, { data: string; comeca: number; termina: number; fim: string; inicio: string }>();
+  for (const t of turnos) {
+    const j = jornadas.get(t.data);
+    if (!j) jornadas.set(t.data, { data: t.data, comeca: t.comeca, termina: t.termina, inicio: t.inicio, fim: t.fim });
+    else if (t.termina > j.termina) Object.assign(j, { termina: t.termina, fim: t.fim });
+  }
+  const dias = [...jornadas.values()].sort((a, b) => a.comeca - b.comeca);
+  const alertas: AlertaDeDescanso[] = [];
+
+  // ---- 7º dia seguido ----
+  // Uma frase por sequência, no primeiro dia que estoura dentro da semana.
+  let seguidos = 0;
+  let primeiro = "";
+  let avisouDestaSequencia = false;
+  dias.forEach((d, i) => {
+    const emenda = i > 0 && diaCorrido(d.data) - diaCorrido(dias[i - 1]!.data) === 1;
+    if (!emenda) {
+      seguidos = 0;
+      primeiro = d.data;
+      avisouDestaSequencia = false;
+    }
+    seguidos += 1;
+    if (seguidos >= L.dias_seguidos && naSemana(d.data) && !avisouDestaSequencia) {
+      avisouDestaSequencia = true;
+      alertas.push({
+        tipo: "setimo_dia",
+        texto:
+          `${nome} chega ao ${seguidos}º dia seguido de trabalho em ${diaCurto(d.data)} (sem folga desde ${diaCurto(primeiro)}). ` +
+          `Toda semana precisa de uma folga de 24h: dê uma folga antes desse dia.`,
+      });
+    }
+  });
+
+  // ---- Menos de 11h entre uma jornada e a outra ----
+  for (let i = 1; i < dias.length; i += 1) {
+    const antes = dias[i - 1]!;
+    const depois = dias[i]!;
+    const descanso = depois.comeca - antes.termina;
+    if (descanso >= L.horas_entre_jornadas * 60) continue;
+    if (!naSemana(depois.data)) continue;
+    alertas.push({
+      tipo: "entre_jornadas",
+      texto:
+        descanso > 0
+          ? `${nome} sai às ${horaCurta(antes.fim)} do turno de ${diaCurto(antes.data)} e volta às ${horaCurta(depois.inicio)} de ${diaCurto(depois.data)}: ` +
+            `só ${horasEmTexto(descanso)} de descanso. O mínimo entre um dia de trabalho e o outro é ${L.horas_entre_jornadas}h.`
+          : `${nome} começa às ${horaCurta(depois.inicio)} de ${diaCurto(depois.data)} sem ter saído do turno de ${diaCurto(antes.data)} (que vai até ${horaCurta(antes.fim)}): ` +
+            `os horários se atropelam. O mínimo entre um dia de trabalho e o outro é ${L.horas_entre_jornadas}h de descanso.`,
+    });
+  }
+
+  // ---- Mais de 44h na semana ----
+  // Conta o turno pelo dia em que COMEÇA (o de domingo que acaba na segunda
+  // é desta semana) e tira 1h de intervalo dos turnos de mais de 6h — sem
+  // isso, a semana comum de seis noites de 8h daria alarme falso toda vez.
+  const minutosDaSemana = turnos
+    .filter((t) => naSemana(t.data))
+    .reduce((soma, t) => {
+      const duracao = t.termina - t.comeca;
+      return soma + (duracao > L.horas_que_pedem_intervalo * 60 ? duracao - 60 : duracao);
+    }, 0);
+  if (minutosDaSemana > L.horas_na_semana * 60) {
+    alertas.push({
+      tipo: "horas_da_semana",
+      texto:
+        `${nome} está com ${horasEmTexto(minutosDaSemana)} na semana (já tirando 1h de intervalo dos turnos longos). ` +
+        `Acima de ${L.horas_na_semana}h é hora extra: tire um turno ou confira com a contabilidade.`,
+    });
+  }
+
+  // ---- Menor de 18 depois das 22h ----
+  // Uma frase por dia. A noite proibida vai das 22h às 5h, e pega tanto o
+  // turno que entra nela quanto o que já começa de madrugada.
+  const noite = L.noite_do_menor;
+  const avisados = new Set<string>();
+  for (const t of turnos) {
+    if (!naSemana(t.data) || avisados.has(t.data)) continue;
+    const idade = idadeEm(params.nascimento, t.data);
+    if (idade === null || idade >= 18) continue;
+    const base = diaCorrido(t.data) * 1440;
+    const pegaANoite = t.termina > base + noite.de * 60 || t.comeca < base + noite.ate * 60;
+    if (!pegaANoite) continue;
+    avisados.add(t.data);
+    alertas.push({
+      tipo: "menor_a_noite",
+      texto:
+        `${nome} tem ${idade} anos e está no turno de ${diaCurto(t.data)} (${horaCurta(t.inicio)} → ${horaCurta(t.fim)}). ` +
+        `Menor de 18 não pode trabalhar entre ${noite.de}h e ${noite.ate}h: troque o turno.`,
+    });
+  }
+
+  return alertas;
+}
+
+// ============================================================
 // Turnos da casa
 // ============================================================
 
@@ -301,6 +497,8 @@ export interface SemanaDaEscala {
   avisos_enviados: number;
   /** Mudou alguma coisa depois de publicar? A tela avisa para republicar. */
   mudou_depois_de_publicar: boolean;
+  /** O que conferir antes de publicar: folga, descanso, horas, menor à noite. */
+  alertas: Array<AlertaDeDescanso & { atendente_id: string }>;
 }
 
 export async function escalaDaSemana(venueId: string, qualquerDia: string): Promise<SemanaDaEscala> {
@@ -313,6 +511,13 @@ export async function escalaDaSemana(venueId: string, qualquerDia: string): Prom
     linhasDaSemana(venueId, semana),
     publicacaoDaSemana(venueId, semana),
   ]);
+
+  // Os alertas ajudam, mas não seguram a grade: se a conta falhar, a
+  // escala abre sem eles (e o servidor anota o porquê).
+  const alertas = await alertasDaSemana({ venueId, semana, turnos, pessoas }).catch((e) => {
+    console.warn(`[rh] alertas da escala não saíram: ${(e as Error).message}`);
+    return [];
+  });
 
   const ultimaMexida = linhas.reduce<string | null>((maior, l) => {
     const q = (l as LinhaDaEscala & { atualizada_em?: string }).atualizada_em ?? null;
@@ -333,6 +538,7 @@ export async function escalaDaSemana(venueId: string, qualquerDia: string): Prom
     mudou_depois_de_publicar: Boolean(
       publicacao?.publicada_em && ultimaMexida && ultimaMexida > publicacao.publicada_em,
     ),
+    alertas,
   };
 }
 
@@ -346,6 +552,54 @@ async function pessoasEscalaveis(venueId: string) {
     .order("nome", { ascending: true });
   if (error) falhar(500, "Falha ao listar a equipe", error.message);
   return (data ?? []) as Array<{ id: string; nome: string; apelido: string | null; funcao: string | null }>;
+}
+
+/**
+ * Os alertas de descanso de todo mundo que está na grade desta semana.
+ *
+ * Busca também a semana anterior — o que a casa já lançou — porque é na
+ * virada que o sétimo dia e o descanso curto se escondem. A data de nascimento vem da ficha só para o aviso do menor.
+ */
+async function alertasDaSemana(params: {
+  venueId: string;
+  semana: string;
+  turnos: Turno[];
+  pessoas: Array<{ id: string; nome: string; apelido: string | null }>;
+}): Promise<Array<AlertaDeDescanso & { atendente_id: string }>> {
+  const [{ data: linhas, error }, { data: fichas }] = await Promise.all([
+    cliente()
+      .from("rh_escala")
+      .select("data, atendente_id, turno_id, situacao")
+      .eq("venue_id", params.venueId)
+      .eq("situacao", "trabalha")
+      .gte("data", somarDias(params.semana, -7))
+      .lte("data", somarDias(params.semana, 6)),
+    cliente().from("rh_fichas").select("atendente_id, nascimento").eq("venue_id", params.venueId),
+  ]);
+  if (error) throw new Error(error.message);
+
+  const turnoDe = new Map(params.turnos.map((t) => [t.id, t]));
+  const nascimentoDe = new Map(
+    ((fichas ?? []) as Array<{ atendente_id: string; nascimento: string | null }>).map((f) => [f.atendente_id, f.nascimento]),
+  );
+  const porPessoa = new Map<string, TurnoEscalado[]>();
+  for (const l of (linhas ?? []) as Array<{ data: string; atendente_id: string; turno_id: string | null }>) {
+    const turno = l.turno_id ? turnoDe.get(l.turno_id) : null;
+    if (!turno) continue;
+    const lista = porPessoa.get(l.atendente_id) ?? [];
+    lista.push({ data: l.data, inicio: turno.inicio, fim: turno.fim });
+    porPessoa.set(l.atendente_id, lista);
+  }
+
+  // Na ordem da grade (por nome), para a lista bater com o que está na tela.
+  return params.pessoas.flatMap((p) =>
+    alertasDeDescanso({
+      nome: p.apelido || p.nome,
+      semana: params.semana,
+      turnos: porPessoa.get(p.id) ?? [],
+      nascimento: nascimentoDe.get(p.id),
+    }).map((a) => ({ atendente_id: p.id, ...a })),
+  );
 }
 
 async function linhasDaSemana(venueId: string, semana: string): Promise<LinhaDaEscala[]> {
@@ -489,6 +743,8 @@ export interface ResultadoDaPublicacao {
   avisados: number;
   sem_telefone: string[];
   sem_escala: number;
+  /** Quantos alertas de descanso a semana tinha ao publicar. Não impede: informa. */
+  alertas: number;
 }
 
 export async function publicarSemana(params: {
@@ -579,10 +835,15 @@ export async function publicarSemana(params: {
     );
   if (erroSemana) falhar(500, "Falha ao registrar a publicação", erroSemana.message);
 
+  // Publicar com alerta é decisão do gestor (ele viu a lista na tela); a
+  // resposta só repete quantos eram, para a confirmação não esconder nada.
+  const alertas = await alertasDaSemana({ venueId: params.venue.id, semana, turnos, pessoas }).catch(() => []);
+
   return {
     semana,
     avisados: avisos.length,
     sem_telefone: semTelefone,
     sem_escala: pessoas.length - porPessoa.size,
+    alertas: alertas.length,
   };
 }

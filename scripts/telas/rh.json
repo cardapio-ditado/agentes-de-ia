@@ -2099,6 +2099,212 @@
           ]
         }
       }
+    },
+    "escala-alertas": {
+      "rotulo": "a grade com alertas de descanso",
+      "guarda": {
+        "brasa.rh.aba": "escala"
+      },
+      "rotas": {
+        "GET /rh/escala": {
+          "semana": "2026-09-07",
+          "dias": [
+            "2026-09-07",
+            "2026-09-08",
+            "2026-09-09",
+            "2026-09-10",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13"
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "pessoas": [
+            {
+              "id": "p1",
+              "nome": "Juliana Barbosa",
+              "apelido": null,
+              "funcao": "Garçonete"
+            },
+            {
+              "id": "p2",
+              "nome": "Cida Nogueira",
+              "apelido": null,
+              "funcao": "Cozinha"
+            },
+            {
+              "id": "p3",
+              "nome": "Marcos Aurélio",
+              "apelido": null,
+              "funcao": "Segurança"
+            },
+            {
+              "id": "p4",
+              "nome": "Rose da Silva",
+              "apelido": null,
+              "funcao": "Copa"
+            },
+            {
+              "id": "p5",
+              "nome": "Tiago Menezes",
+              "apelido": null,
+              "funcao": "Barman"
+            }
+          ],
+          "linhas": [
+            {
+              "id": "e1",
+              "data": "2026-09-07",
+              "atendente_id": "p1",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Garçonete",
+              "observacao": null
+            },
+            {
+              "id": "e2",
+              "data": "2026-09-08",
+              "atendente_id": "p1",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Garçonete",
+              "observacao": null
+            },
+            {
+              "id": "e3",
+              "data": "2026-09-09",
+              "atendente_id": "p1",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Garçonete",
+              "observacao": null
+            },
+            {
+              "id": "e4",
+              "data": "2026-09-10",
+              "atendente_id": "p1",
+              "turno_id": null,
+              "situacao": "folga",
+              "funcao": null,
+              "observacao": null
+            },
+            {
+              "id": "e5",
+              "data": "2026-09-07",
+              "atendente_id": "p2",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Cozinha",
+              "observacao": null
+            },
+            {
+              "id": "e6",
+              "data": "2026-09-08",
+              "atendente_id": "p2",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Cozinha",
+              "observacao": null
+            },
+            {
+              "id": "e7",
+              "data": "2026-09-09",
+              "atendente_id": "p2",
+              "turno_id": "t1",
+              "situacao": "atestado",
+              "funcao": null,
+              "observacao": null
+            },
+            {
+              "id": "e8",
+              "data": "2026-09-07",
+              "atendente_id": "p5",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Barman",
+              "observacao": null
+            },
+            {
+              "id": "e9",
+              "data": "2026-09-08",
+              "atendente_id": "p5",
+              "turno_id": "t2",
+              "situacao": "ferias",
+              "funcao": null,
+              "observacao": null
+            },
+            {
+              "id": "e10",
+              "data": "2026-09-11",
+              "atendente_id": "p3",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Segurança",
+              "observacao": null
+            },
+            {
+              "id": "e11",
+              "data": "2026-09-12",
+              "atendente_id": "p3",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Segurança",
+              "observacao": null
+            },
+            {
+              "id": "e12",
+              "data": "2026-09-12",
+              "atendente_id": "p4",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Copa",
+              "observacao": null
+            }
+          ],
+          "publicada_em": "2026-09-06T14:20:00.000Z",
+          "publicada_por": "kadu@brasafood.app",
+          "avisos_enviados": 5,
+          "mudou_depois_de_publicar": true,
+          "alertas": [
+            {
+              "atendente_id": "p1",
+              "tipo": "setimo_dia",
+              "texto": "Juliana chega ao 7º dia seguido de trabalho em dom 13/09 (sem folga desde seg 07/09). Toda semana precisa de uma folga de 24h: dê uma folga antes desse dia."
+            },
+            {
+              "atendente_id": "p5",
+              "tipo": "entre_jornadas",
+              "texto": "Tiago sai às 2h do turno de sex 11/09 e volta às 11h de sáb 12/09: só 9h de descanso. O mínimo entre um dia de trabalho e o outro é 11h."
+            },
+            {
+              "atendente_id": "p5",
+              "tipo": "horas_da_semana",
+              "texto": "Tiago está com 54h na semana (já tirando 1h de intervalo dos turnos longos). Acima de 44h é hora extra: tire um turno ou confira com a contabilidade."
+            },
+            {
+              "atendente_id": "p4",
+              "tipo": "menor_a_noite",
+              "texto": "Rose tem 17 anos e está no turno de sex 11/09 (18h → 0h). Menor de 18 não pode trabalhar entre 22h e 5h: troque o turno."
+            }
+          ]
+        }
+      }
     }
   }
 }
