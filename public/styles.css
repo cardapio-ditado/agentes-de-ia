@@ -13,6 +13,11 @@
   --texto: #221714; /* Carvão */
   --texto-2: #6b5a50;
   --texto-3: #9b8878;
+  /* Usado em dezenas de lugares (abas, ajuda, Hoje, trilha) e nunca tinha
+     sido definido: a cor caía na herdada, e o texto "suave" saía tão forte
+     quanto o principal. É o mesmo tom do .muted — e acompanha o tema escuro,
+     porque aponta para o token em vez de repetir a cor. */
+  --texto-suave: var(--texto-2);
 
   --marca: #ff6b35; /* Brasa */
   --marca-forte: #c1121f; /* Fogo */
@@ -649,6 +654,95 @@ h3 {
   color: rgba(255, 248, 240, 0.4);
 }
 
+/* A lista do celular: os mesmos módulos, um cartão por linha. Escondida até
+   a tela ficar estreita (logo abaixo) — a colmeia é a vitrine do computador. */
+.hub-lista {
+  display: none;
+  width: 100%;
+  max-width: 460px;
+  gap: 10px;
+  margin: 12px 0 4px;
+  text-align: left;
+}
+.hub-cartao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 248, 240, 0.16);
+  background: rgba(28, 18, 16, 0.55);
+  color: #fff8f0;
+  font: inherit;
+  text-align: left;
+}
+button.hub-cartao {
+  cursor: pointer;
+}
+button.hub-cartao:active {
+  background: rgba(255, 107, 53, 0.28);
+}
+.hub-cartao .hex-icone {
+  flex: none;
+}
+.hub-cartao-texto {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.hub-cartao-nome {
+  font-family: var(--fonte-display);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.2;
+}
+.hub-cartao-resumo {
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: rgba(255, 248, 240, 0.72);
+}
+.hub-cartao-entrar {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff6b35, #c1121f);
+  font-size: 13px;
+  font-weight: 700;
+}
+.hub-cartao-apagado {
+  border-style: dashed;
+  background: rgba(28, 18, 16, 0.35);
+}
+.hub-cartao-apagado .hub-cartao-nome {
+  color: rgba(255, 248, 240, 0.78);
+}
+.hub-cartao-apagado .hex-icone {
+  background: rgba(255, 248, 240, 0.09);
+  box-shadow: none;
+  color: rgba(255, 248, 240, 0.5);
+}
+.hub-cartao-estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: rgba(255, 248, 240, 0.6);
+}
+/* O link é pequeno no texto e grande no toque: a altura de 44px é do dedo. */
+.hub-cartao-conhecer {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ambar);
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
 @media (max-width: 860px) {
   .colmeia {
     --hw: 152px;
@@ -683,6 +777,19 @@ h3 {
   }
   .hub-org {
     display: none;
+  }
+  /* Daqui para baixo a colmeia dá lugar à lista: o favo de 85px não se lê,
+     e a legenda dependia de passar o mouse. */
+  .colmeia,
+  .hub-desc,
+  .hub-nota {
+    display: none;
+  }
+  .hub-lista {
+    display: grid;
+  }
+  .hub-conteudo {
+    justify-content: flex-start;
   }
   .celula {
     padding: 0 12px;
@@ -1514,6 +1621,35 @@ textarea:focus {
 .aviso-erro {
   border-left-color: var(--perigo);
 }
+/* O erro não some sozinho: ganha um botão de fechar ao lado do texto. */
+.avisos .aviso-erro {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.aviso-texto {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.aviso-fechar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px -6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto-2);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.aviso-fechar:hover {
+  background: var(--superficie-2);
+  color: var(--texto);
+}
 
 /* ============ Tabelas simples ============ */
 .linha-dado {
@@ -1612,6 +1748,9 @@ textarea:focus {
 .apenas-movel {
   display: none;
 }
+.barra-movel {
+  display: none;
+}
 
 @media (max-width: 1000px) {
   .inbox {
@@ -1660,6 +1799,75 @@ textarea:focus {
   }
   .balao {
     max-width: 88%;
+  }
+
+  /* Barra de baixo: Hoje, Módulos, Ajustes e Ajuda ao alcance do polegar.
+     Fica ABAIXO da cortina (20) e da gaveta (30): menu aberto cobre a barra,
+     e não o contrário. O env() é o recorte do aparelho (a faixa do gesto de
+     início no iPhone) — sem ele o rótulo fica embaixo da faixa. */
+  :root {
+    --barra-a: 58px;
+    --barra-total: calc(var(--barra-a) + env(safe-area-inset-bottom, 0px));
+  }
+  .barra-movel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    height: var(--barra-total);
+    padding: 0 max(6px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
+      max(6px, env(safe-area-inset-left, 0px));
+    background: var(--superficie);
+    border-top: 1px solid var(--borda);
+    box-shadow: 0 -4px 14px rgba(34, 23, 20, 0.06);
+  }
+  .barra-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--texto-2);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .barra-item[aria-current="page"] {
+    color: var(--marca-forte);
+  }
+  /* O fim da tela não pode ficar atrás da barra — nem o aviso, nem o total
+     grudado no rodapé do recebimento. */
+  .pagina {
+    padding-bottom: calc(16px + var(--barra-total));
+  }
+  .avisos {
+    bottom: calc(12px + var(--barra-total));
+  }
+  .pagina .cartao-total {
+    bottom: var(--barra-total);
+  }
+  /* Rede com várias casas: o seletor cede espaço ao título, e o nome
+     comprido se corta dentro dele em vez de espremer o resto do topo. */
+  .topo .select {
+    min-width: 0;
+    max-width: 38vw;
+  }
+  /* A ajuda desceu para a barra: o "?" do topo devolve o espaço ao título. */
+  .topo .btn-ajuda {
+    display: none;
+  }
+}
+@media print {
+  .barra-movel {
+    display: none !important;
   }
 }
 
@@ -3520,6 +3728,46 @@ a.btn { text-decoration: none; }
 }
 .tema-opcao { border: 1.5px solid var(--borda); }
 .tema-escolhido { border-color: var(--marca); background: var(--marca-suave); }
+
+/* ============ Toque ============
+   O painel é usado em pé, no celular, com o dedo. Duas coisas que só valem
+   para tela pequena ou de toque — no computador a densidade fica como está.
+
+   Campo com letra menor que 16px faz o iPhone dar zoom na página ao focar, e
+   a pessoa passa o resto do turno arrastando a tela de lado. O !important é
+   de propósito: há uma dúzia de campos compactos (.select-peq, .campo-numero,
+   .campo-celula) com tamanho próprio, e basta um escapar para o zoom voltar.
+
+   44px é o menor alvo que um dedo acerta sem olhar. Só a ALTURA mínima muda:
+   o texto e o desenho dos botões continuam os mesmos. */
+@media (max-width: 820px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  /* A letra maior alarga o seletor de opção comprida, e ele empurrava a
+     página para o lado. Cortar o texto dentro dele é melhor que rolar a tela.
+     O limite é em vw (a tela menos as margens da página e do cartão) porque
+     porcentagem não vale aqui: o seletor mora em grades que medem a coluna
+     pelo conteúdo, e nelas "100%" ainda não tem do que ser 100%. */
+  select {
+    max-width: calc(100vw - 66px);
+  }
+  .btn-peq,
+  .nav-item {
+    min-height: 44px;
+  }
+  .btn-icone {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .btn-ajuda,
+  .aviso-fechar {
+    width: 44px;
+    height: 44px;
+  }
+}
 
 /* ============ Revisão de UX: menos rolagem, nada estourando ============ */
 

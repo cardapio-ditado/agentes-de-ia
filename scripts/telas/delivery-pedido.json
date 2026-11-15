@@ -1,0 +1,367 @@
+{
+  "rotulo": "Delivery no celular — o acompanhamento do pedido (esperando o Pix)",
+  "pagina": "/delivery.html?casa=casa-de-teste&pedido=tok-1",
+  "rotas": {
+    "GET /v1/delivery-publico/casa-de-teste": {
+      "casa": {
+        "id": "v1",
+        "slug": "casa-de-teste",
+        "nome": "Casa de Teste",
+        "cidade": "Cuiabá",
+        "horario_hoje": "18h às 2h",
+        "logo_url": null,
+        "cor_marca": "#c2401a",
+        "cor_texto": "#ffffff",
+        "cor_fundo": "#fff6ea",
+        "cor_traco": "#ff6b35",
+        "aberto": true,
+        "previsao": "40 a 60 minutos",
+        "endereco_retirada": "Av. Brasil, 500 — Centro",
+        "taxa_unica_centavos": 700,
+        "cashback_percentual": 5,
+        "cobranca_pronta": true,
+        "bairros": [
+          {
+            "id": "b1",
+            "nome": "Centro",
+            "taxa_centavos": 500
+          },
+          {
+            "id": "b2",
+            "nome": "Jardim Itália",
+            "taxa_centavos": 900
+          }
+        ]
+      },
+      "categorias": [
+        {
+          "id": "k1",
+          "nome": "Lanches",
+          "grupo": "comer",
+          "descricao": "",
+          "imagem": null
+        },
+        {
+          "id": "k2",
+          "nome": "Porções",
+          "grupo": "comer",
+          "descricao": "",
+          "imagem": null
+        },
+        {
+          "id": "k3",
+          "nome": "Bebidas",
+          "grupo": "beber",
+          "descricao": "",
+          "imagem": null
+        }
+      ],
+      "itens": [
+        {
+          "id": "i1",
+          "categoria_id": "k1",
+          "nome": "X-Burger",
+          "descricao": "Pão, hambúrguer 150g, queijo e molho da casa",
+          "preco": 22,
+          "promocao": null,
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [
+            {
+              "id": "g1",
+              "nome": "Ponto da carne",
+              "obrigatorio": true,
+              "opcoes": [
+                {
+                  "id": "o1",
+                  "nome": "Mal passado",
+                  "adicional": 0
+                },
+                {
+                  "id": "o2",
+                  "nome": "Ao ponto",
+                  "adicional": 0
+                },
+                {
+                  "id": "o3",
+                  "nome": "Bem passado",
+                  "adicional": 0
+                }
+              ]
+            },
+            {
+              "id": "g2",
+              "nome": "Adicionais",
+              "obrigatorio": false,
+              "opcoes": [
+                {
+                  "id": "o4",
+                  "nome": "Bacon",
+                  "adicional": 5
+                },
+                {
+                  "id": "o5",
+                  "nome": "Cheddar",
+                  "adicional": 4
+                },
+                {
+                  "id": "o6",
+                  "nome": "Ovo",
+                  "adicional": 3
+                }
+              ]
+            }
+          ],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        },
+        {
+          "id": "i2",
+          "categoria_id": "k1",
+          "nome": "X-Bacon",
+          "descricao": "Pão, hambúrguer 150g, queijo e bacon crocante",
+          "preco": 29,
+          "promocao": null,
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [
+            {
+              "id": "g1",
+              "nome": "Ponto da carne",
+              "obrigatorio": true,
+              "opcoes": [
+                {
+                  "id": "o1",
+                  "nome": "Mal passado",
+                  "adicional": 0
+                },
+                {
+                  "id": "o2",
+                  "nome": "Ao ponto",
+                  "adicional": 0
+                },
+                {
+                  "id": "o3",
+                  "nome": "Bem passado",
+                  "adicional": 0
+                }
+              ]
+            },
+            {
+              "id": "g2",
+              "nome": "Adicionais",
+              "obrigatorio": false,
+              "opcoes": [
+                {
+                  "id": "o4",
+                  "nome": "Bacon",
+                  "adicional": 5
+                },
+                {
+                  "id": "o5",
+                  "nome": "Cheddar",
+                  "adicional": 4
+                },
+                {
+                  "id": "o6",
+                  "nome": "Ovo",
+                  "adicional": 3
+                }
+              ]
+            }
+          ],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        },
+        {
+          "id": "i3",
+          "categoria_id": "k2",
+          "nome": "Batata frita",
+          "descricao": "Porção de 400g",
+          "preco": 18,
+          "promocao": {
+            "nome": "Sábado da batata",
+            "preco": 15.9
+          },
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        },
+        {
+          "id": "i4",
+          "categoria_id": "k3",
+          "nome": "Refrigerante lata",
+          "descricao": "350ml",
+          "preco": 7,
+          "promocao": null,
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [
+            {
+              "id": "g3",
+              "nome": "Sabor",
+              "obrigatorio": true,
+              "opcoes": [
+                {
+                  "id": "o7",
+                  "nome": "Cola",
+                  "adicional": 0
+                },
+                {
+                  "id": "o8",
+                  "nome": "Guaraná",
+                  "adicional": 0
+                }
+              ]
+            }
+          ],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        }
+      ],
+      "chat": true
+    },
+    "GET /v1/delivery-publico/casa-de-teste/pedidos/tok-1": {
+      "numero": 1503,
+      "token": "tok-1",
+      "status": "aguardando_pagamento",
+      "criado_em": "2026-11-14T23:35:00.000Z",
+      "tipo": "entrega",
+      "endereco": "Rua das Flores, 100, ap 12",
+      "bairro": "Centro",
+      "pagamento": "pix",
+      "subtotal_centavos": 6100,
+      "taxa_centavos": 500,
+      "desconto_centavos": 0,
+      "cupom": null,
+      "cashback_usado_centavos": 0,
+      "cashback_ganho_centavos": 0,
+      "total_centavos": 6600,
+      "pix_codigo": "00020126580014br.gov.bcb.pix0136a1b2c3d4-e5f6-7890-abcd-ef12345678905204000053039865406066.005802BR5913CASA DE TESTE6006CUIABA62070503***6304ABCD",
+      "pix_qr": null,
+      "link_pagamento": null,
+      "itens": [
+        {
+          "nome": "X-Burger",
+          "opcoes": "Mal passado, Bacon",
+          "preco_centavos": 2700,
+          "quantidade": 2,
+          "observacao": "sem cebola"
+        },
+        {
+          "nome": "Refrigerante lata",
+          "opcoes": "Guaraná",
+          "preco_centavos": 700,
+          "quantidade": 1,
+          "observacao": null
+        }
+      ]
+    }
+  },
+  "variacoes": {
+    "em-preparo": {
+      "rotulo": "acompanhando o pedido em preparo",
+      "rotas": {
+        "GET /v1/delivery-publico/casa-de-teste/pedidos/tok-1": {
+          "numero": 1503,
+          "token": "tok-1",
+          "status": "em_preparo",
+          "criado_em": "2026-11-14T23:35:00.000Z",
+          "tipo": "entrega",
+          "endereco": "Rua das Flores, 100, ap 12",
+          "bairro": "Centro",
+          "pagamento": "pix",
+          "subtotal_centavos": 6100,
+          "taxa_centavos": 500,
+          "desconto_centavos": 0,
+          "cupom": null,
+          "cashback_usado_centavos": 0,
+          "cashback_ganho_centavos": 0,
+          "total_centavos": 6600,
+          "pix_codigo": null,
+          "pix_qr": null,
+          "link_pagamento": null,
+          "itens": [
+            {
+              "nome": "X-Burger",
+              "opcoes": "Mal passado, Bacon",
+              "preco_centavos": 2700,
+              "quantidade": 2,
+              "observacao": "sem cebola"
+            },
+            {
+              "nome": "Refrigerante lata",
+              "opcoes": "Guaraná",
+              "preco_centavos": 700,
+              "quantidade": 1,
+              "observacao": null
+            }
+          ]
+        }
+      }
+    },
+    "entregue": {
+      "rotulo": "pedido entregue, com cashback",
+      "rotas": {
+        "GET /v1/delivery-publico/casa-de-teste/pedidos/tok-1": {
+          "numero": 1503,
+          "token": "tok-1",
+          "status": "entregue",
+          "criado_em": "2026-11-14T23:35:00.000Z",
+          "tipo": "entrega",
+          "endereco": "Rua das Flores, 100, ap 12",
+          "bairro": "Centro",
+          "pagamento": "pix",
+          "subtotal_centavos": 6100,
+          "taxa_centavos": 500,
+          "desconto_centavos": 0,
+          "cupom": null,
+          "cashback_usado_centavos": 0,
+          "cashback_ganho_centavos": 305,
+          "total_centavos": 6600,
+          "pix_codigo": null,
+          "pix_qr": null,
+          "link_pagamento": null,
+          "itens": [
+            {
+              "nome": "X-Burger",
+              "opcoes": "Mal passado, Bacon",
+              "preco_centavos": 2700,
+              "quantidade": 2,
+              "observacao": "sem cebola"
+            },
+            {
+              "nome": "Refrigerante lata",
+              "opcoes": "Guaraná",
+              "preco_centavos": 700,
+              "quantidade": 1,
+              "observacao": null
+            }
+          ]
+        }
+      }
+    }
+  }
+}

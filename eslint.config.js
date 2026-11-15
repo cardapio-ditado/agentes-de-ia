@@ -20,6 +20,10 @@ export default tseslint.config(
       // perigoso de mexer, não um portão. Nenhuma das 57 funções que já
       // estavam aqui barra publicação por causa desta regra.
       complexity: ["warn", 10],
+      // `const { id: _id, criado_em: _c, ...copia } = linha` é o jeito da casa
+      // de copiar uma linha SEM alguns campos: os nomes tirados existem só
+      // para não irem na cópia. Não são variável esquecida.
+      "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true }],
     },
   },
 );

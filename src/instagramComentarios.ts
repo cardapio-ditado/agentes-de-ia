@@ -50,6 +50,8 @@ export interface ComentarioRecebido {
 /** Os comentários de um `entry` do webhook. Puro, testável. */
 export function comentariosDoEntry(entry: { changes?: unknown[] } | undefined): ComentarioRecebido[] {
   const lista: ComentarioRecebido[] = [];
+  // O corpo do webhook da Meta vem sem tipo; cada campo é conferido abaixo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const mudanca of (entry?.changes ?? []) as Array<Record<string, any>>) {
     if (mudanca?.field !== "comments") continue;
     const v = mudanca.value ?? {};
@@ -70,7 +72,13 @@ export function comentariosDoEntry(entry: { changes?: unknown[] } | undefined): 
 // A peneira — barata, sem modelo
 // ============================================================
 
-const SO_EMOJI = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s!.?❤️♥️]+$/u;
+// O coração vermelho e o de naipe iam aqui como "❤️" e "♥️" — cada um é DOIS
+// códigos (o símbolo + o seletor de variação U+FE0F), e dentro de uma classe
+// o motor lê os dois soltos de qualquer jeito. Escritos pelo código, a classe
+// aceita exatamente os mesmos caracteres e ninguém lê "um emoji" onde há dois.
+// (O seletor vai na frente, longe dos corações: colado depois de um símbolo
+// ele volta a formar a dupla que confunde quem lê — e o lint reclama.)
+const SO_EMOJI = /^[\uFE0F\p{Extended_Pictographic}\p{Emoji_Component}\s!.?\u2764\u2665]+$/u;
 const SO_MARCACOES = /^(\s*@[\w.]+\s*)+$/;
 
 /** O que fazer com um comentário: direct do agente, agradecer no post, ou nada. */

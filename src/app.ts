@@ -50,6 +50,8 @@ import { fluxoDeCaixa, painelFinanceiro } from "./financeiroFluxo.js";
 import {
   MODELOS_DE_TREINAMENTO,
   arquivarTreinamento,
+  atestadosAConfirmar,
+  decidirAtestado,
   definirPadrinho,
   espacoDoFuncionario,
   integracaoDaPessoa,
@@ -140,7 +142,33 @@ import {
   type DadosDoItem,
   aparenciaDoCardapio,
   salvarAparenciaDoCardapio,
+  LimiteDeRitmo,
 } from "./cardapioDigital.js";
+import {
+  ErroDoDelivery,
+  abertoAgora,
+  abrirSacola,
+  adicionarASacola,
+  configDoDelivery,
+  configParaATela,
+  cotarPedido,
+  enderecoDoCardapio as enderecoDoDelivery,
+  fecharPedido,
+  lerSacola,
+  listarBairros,
+  listarCupons,
+  listarPedidos,
+  lojaPublica,
+  mudarQuantidade,
+  mudarStatus,
+  pedidoPublico,
+  receberAvisoDoMercadoPago,
+  relatorioDoDelivery,
+  sacolaParaATela,
+  salvarBairro,
+  salvarConfigDoDelivery,
+  salvarCupom,
+} from "./delivery.js";
 import {
   ErroDoRh,
   LIMITE_DOCUMENTO_BYTES,
@@ -181,6 +209,8 @@ import {
   participantesDoTurno,
 } from "./rhGorjeta.js";
 import {
+  AVISOS_DA_RETENCAO,
+  AVISO_DO_DESCONTO,
   CRITERIOS_DE_RATEIO,
   METODOS,
   acertoDaSemana,
@@ -259,6 +289,7 @@ import {
   lerAvaliacaoDoMake,
   lerPaginaDoGoogle,
   ligarAoMake,
+  webhookDoMakeValido,
   PAGINA_UNICA,
   pedirPaginaAoMake,
   publicarPeloMake,
@@ -327,6 +358,10 @@ import {
   papelValido,
 } from "./ponteWhatsapp.js";
 import { db } from "./supabase.js";
+import { rodarCiclo } from "./ciclos.js";
+import { chamadaLocal } from "./origemLocal.js";
+import { LIMITES_DURAVEIS, type LimiteDuravel } from "./limiteDeRitmo.js";
+import { cicloValido, segredoDoCronConfere, ultimasBatidas } from "./rotinas.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
   avisarAumentoDePreco,
@@ -464,6 +499,14 @@ import {
   resgatarPremio,
   salvarConfig,
 } from "./pesquisa.js";
+import {
+  LinkDeAvaliacaoInvalido,
+  aniversarioInformado,
+  linkDeAvaliacaoDaCasa,
+  linkDeAvaliacaoValido,
+  linkParaQuemRespondeu,
+  salvarLinkDeAvaliacao,
+} from "./pesquisaFim.js";
 import {
   configZig,
   convidarEscolhidos,
@@ -684,16 +727,18 @@ async function diagnosticoDoBanco(): Promise<Record<string, unknown>> {
     if (erroGrave) return { projeto, alcancavel: false, erro: erroGrave.message };
 
     const total = (orgs.count ?? 0) + (chaves.count ?? 0);
+    // As contagens ficam AQUI DENTRO e não saem na resposta: o /health é
+    // público, e "quantos clientes e quantas chaves a plataforma tem" não é
+    // assunto de quem não se identificou. O que o diagnóstico precisa dizer
+    // é só "responde" e "responde com o poder certo".
     return {
       projeto,
       alcancavel: true,
-      organizacoes: orgs.count ?? 0,
-      chaves_de_api: chaves.count ?? 0,
-      // Tabelas do login por e-mail e senha. Erro aqui (e não zero) significa
-      // que a migração não rodou NESTE projeto, ou que o PostgREST ainda não
+      // Tabelas do login por e-mail e senha. Erro aqui significa que a
+      // migração não rodou NESTE projeto, ou que o PostgREST ainda não
       // recarregou o schema.
-      vinculos: membros.error ? `erro: ${membros.error.message}` : (membros.count ?? 0),
-      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : (admins.count ?? 0),
+      vinculos: membros.error ? `erro: ${membros.error.message}` : "ok",
+      admins_da_plataforma: admins.error ? `erro: ${admins.error.message}` : "ok",
       // Zero nas duas primeiras num banco em uso é o sintoma do RLS bloqueando
       // tudo. Nunca é o estado normal: sem organização e sem chave, ninguém
       // teria conseguido usar o sistema para chegar até aqui.
@@ -1018,6 +1063,8 @@ async function conferirDocumento(
   if (!["rg", "cpf", "ctps"].includes(tipo) || !["image/jpeg", "image/png", "image/webp"].includes(media)) return null;
   try {
     const lido = await lerDocumento(arquivo, media);
+    // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: ficha } = await (db() as any)
       .from("rh_fichas")
       .select("nome_completo, cpf, rg, nascimento")
@@ -1076,6 +1123,32 @@ async function comErroDoRh<T>(acao: () => Promise<T>): Promise<T> {
     throw e;
   }
 }
+
+async function comErroDoDelivery<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (e) {
+    if (e instanceof ErroDoDelivery) {
+      const codigo =
+        e.status === 404 ? "not_found" : e.status === 503 ? "migracao_pendente" : e.status === 401 ? "forbidden" : e.status >= 500 ? "upstream_error" : "invalid_request";
+      throw erro(e.status, codigo, e.message);
+    }
+    throw e;
+  }
+}
+
+/**
+ * O ritmo das rotas públicas do delivery — a mesma rede de baixo do cardápio.
+ *
+ * Fechar pedido é o mais apertado: cada tentativa cria uma cobrança no
+ * Mercado Pago da casa.
+ */
+const LIMITES_DO_DELIVERY = {
+  sacola: new LimiteDeRitmo(20, 10 * 60_000),
+  itens: new LimiteDeRitmo(120, 60_000),
+  pedido: new LimiteDeRitmo(8, 10 * 60_000),
+  chat: new LimiteDeRitmo(20, 10 * 60_000),
+};
 
 async function comErroDoCardapio<T>(acao: () => Promise<T>): Promise<T> {
   try {
@@ -1162,6 +1235,16 @@ function ipDe(req: IncomingMessage): string {
   const encaminhado = req.headers["x-forwarded-for"];
   const primeiro = (Array.isArray(encaminhado) ? encaminhado[0] : encaminhado)?.split(",")[0]?.trim();
   return primeiro || req.socket?.remoteAddress || "desconhecido";
+}
+
+/**
+ * Barra a rota pública que passou do ritmo — com o limite que vale entre
+ * instâncias (ver src/limiteDeRitmo.ts). Cada par é (limite, quem bate);
+ * basta um estourar. Banco fora do ar não tranca: o limite cai na memória.
+ */
+async function exigirRitmo(mensagem: string, ...baldes: Array<[LimiteDuravel, string]>): Promise<void> {
+  const vereditos = await Promise.all(baldes.map(([limite, quem]) => limite.permitir(quem)));
+  if (vereditos.includes(false)) throw erro(429, "rate_limited", mensagem);
 }
 
 /**
@@ -1419,6 +1502,10 @@ async function rotear(
       // e fuso horário resolvendo. Um curl responde o que antes era palpite.
       agora: contextoDeAgora("America/Cuiaba"),
       banco: await diagnosticoDoBanco(),
+      // Há quanto tempo cada ciclo de fundo terminou. É o que um monitor de
+      // fora vigia: `minuto.ok_ha_segundos` passando de uns 300 (ou vindo
+      // null) quer dizer que checklist, lembrete e delivery pararam.
+      ultima_rotina: await ultimasBatidas(),
       trace_id: traceId,
     });
   }
@@ -1441,6 +1528,28 @@ async function roteasApi(
   p: string[],
   url: URL,
 ): Promise<void> {
+  // GET|POST /v1/rotinas/ciclo/minuto e /hora (ou ?qual=…) — um ciclo de fundo
+  // A rede de segurança das rotinas: o cron da Vercel bate aqui, e o ciclo
+  // roda mesmo com o processo do VPS fora do ar (ver src/ciclos.ts). Quem
+  // autentica é o segredo CRON_SECRET, no formato que a Vercel manda. O cron
+  // dela chama com GET; o POST fica para quem dispara à mão ou de outro
+  // agendador.
+  if ((metodo === "GET" || metodo === "POST") && p[0] === "rotinas" && p[1] === "ciclo" && p.length <= 3) {
+    const segredo = process.env.CRON_SECRET;
+    if (!segredo?.trim()) {
+      throw erro(503, "nao_configurado", "CRON_SECRET não está configurado neste ambiente.");
+    }
+    if (!segredoDoCronConfere(req.headers.authorization, segredo)) {
+      throw erro(401, "unauthorized", "Segredo do cron ausente ou inválido.");
+    }
+    const qual = cicloValido(p[2] ?? url.searchParams.get("qual"));
+    if (!qual) throw erro(400, "invalid_request", 'Diga qual ciclo: "minuto" ou "hora".');
+    const resultado = await rodarCiclo(qual);
+    // Rotina que falhou vira 500: é assim que aparece vermelha no painel de
+    // crons da Vercel, em vez de se perder num 200 que ninguém lê.
+    return ok(res, { qual, ...resultado }, resultado.falhas.length > 0 ? 500 : 200);
+  }
+
   // POST /v1/runs
   if (metodo === "POST" && p[0] === "runs" && p.length === 1) {
     const chave = await exigirChave(req, "runs:write");
@@ -1692,6 +1801,7 @@ async function roteasApi(
       clientes: "clientes",
       aniversariantes: "clientes",
       cardapio: "cardapio-digital",
+      delivery: "delivery",
       rh: "rh",
       financeiro: "financeiro",
     };
@@ -2582,15 +2692,30 @@ async function roteasApi(
       if (metodo === "GET") {
         const chave = await exigirChave(req, "reservations:read");
         const venue = await findVenueBySlugInOrg(chave.org_id, slug);
-        return ok(res, await comErroDePesquisa(() => configDaPesquisa(venue.id)));
+        // O link de avaliação mora na casa (venues.settings), não em
+        // pesquisa_config; a tela de ajustes não precisa saber disso.
+        return ok(res, {
+          ...(await comErroDePesquisa(() => configDaPesquisa(venue.id))),
+          google_avaliacao_url: linkDeAvaliacaoDaCasa(venue.settings),
+        });
       }
       if (metodo === "PUT") {
         const chave = await exigirChave(req, "reservations:write");
         const venue = await findVenueBySlugInOrg(chave.org_id, slug);
         const corpo = (await lerJson(req)) as Record<string, unknown>;
-        return ok(
-          res,
-          await comErroDePesquisa(() =>
+        // Conferido ANTES de salvar o resto: link recusado não pode deixar
+        // metade do formulário gravada e a outra metade não. Ausente = não
+        // mexe; "" = apaga.
+        let linkDoGoogle = linkDeAvaliacaoDaCasa(venue.settings);
+        if (corpo.google_avaliacao_url !== undefined) {
+          try {
+            linkDoGoogle = linkDeAvaliacaoValido(corpo.google_avaliacao_url);
+          } catch (e) {
+            if (e instanceof LinkDeAvaliacaoInvalido) throw erro(400, "invalid_request", e.message);
+            throw e;
+          }
+        }
+        const salva = await comErroDePesquisa(() =>
             salvarConfig(venue.id, {
               ativa: corpo.ativa === undefined ? undefined : Boolean(corpo.ativa),
               saudacao: textoOpcional(corpo, "saudacao") ?? null,
@@ -2623,8 +2748,11 @@ async function roteasApi(
               convite_modelo_variaveis:
                 corpo.convite_modelo_variaveis === undefined ? undefined : variaveisValidas(corpo.convite_modelo_variaveis),
             }),
-          ),
         );
+        // Depois do resto, pelo mesmo motivo: se os outros ajustes forem
+        // recusados, o link também não muda.
+        if (linkDoGoogle !== linkDeAvaliacaoDaCasa(venue.settings)) await salvarLinkDeAvaliacao(venue.id, linkDoGoogle);
+        return ok(res, { ...salva, google_avaliacao_url: linkDoGoogle });
       }
     }
 
@@ -2737,6 +2865,71 @@ async function roteasApi(
     // Financeiro — o dono, o gerente, ou a pessoa do financeiro com acesso só
     // a ele — entra. Quem só lê (contador) não escreve: a chave dele não tem
     // escrita.
+    // ---- Delivery ----
+    // Tudo aqui passa pela trava de módulo lá em cima (recurso "delivery").
+    if (recurso === "delivery") {
+      const escrita = metodo !== "GET";
+      const chave = await exigirChave(req, escrita ? "reservations:write" : "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const secao = p[3] ?? "";
+
+      // GET /v1/venues/:slug/delivery — o que a tela de ajustes desenha
+      if (metodo === "GET" && p.length === 3) {
+        const [cfg, bairros, cupons] = await comErroDoDelivery(() =>
+          Promise.all([configDoDelivery(venue.id), listarBairros(venue.id), listarCupons(venue.id)]),
+        );
+        return ok(res, {
+          config: configParaATela(cfg),
+          aberto: abertoAgora(cfg, venue.timezone),
+          bairros,
+          cupons,
+          link: enderecoDoDelivery(venue),
+          // O endereço que a casa cola no painel do Mercado Pago.
+          webhook: `${enderecoBase()}/v1/webhooks/mercadopago/${encodeURIComponent(venue.slug)}`,
+        });
+      }
+
+      // GET /delivery/pedidos — a fila da cozinha, do mais novo ao mais antigo
+      if (metodo === "GET" && secao === "pedidos" && p.length === 4) {
+        return ok(res, await comErroDoDelivery(() => listarPedidos(venue.id)));
+      }
+      // PATCH /delivery/pedidos/:id  { status } — a equipe move o pedido
+      if (metodo === "PATCH" && secao === "pedidos" && p.length === 5) {
+        const corpo = await lerJson(req);
+        const status = textoOpcional(corpo, "status");
+        if (!status) throw erro(400, "invalid_request", "Diga para qual situação o pedido vai.");
+        return ok(res, await comErroDoDelivery(() => mudarStatus(venue, p[4]!, status)));
+      }
+      // GET /delivery/relatorio?dias=7
+      if (metodo === "GET" && secao === "relatorio" && p.length === 4) {
+        return ok(res, await comErroDoDelivery(() => relatorioDoDelivery(venue, Number(url.searchParams.get("dias")) || 7)));
+      }
+
+      // Daqui para baixo é configuração: taxa, cupom e a conta que recebe o
+      // dinheiro não são coisa de quem só opera a fila.
+      if (escrita) exigirQuemConfigura(chave);
+
+      // PUT /delivery/config
+      if (metodo === "PUT" && secao === "config" && p.length === 4) {
+        const corpo = await lerJson(req);
+        return ok(res, configParaATela(await comErroDoDelivery(() => salvarConfigDoDelivery(venue.id, corpo))));
+      }
+      // POST /delivery/bairros · PUT /delivery/bairros/:id
+      if (secao === "bairros" && ((metodo === "POST" && p.length === 4) || (metodo === "PUT" && p.length === 5))) {
+        const corpo = await lerJson(req);
+        await comErroDoDelivery(() => salvarBairro(venue.id, corpo, p[4]));
+        return ok(res, await comErroDoDelivery(() => listarBairros(venue.id)), metodo === "POST" ? 201 : 200);
+      }
+      // PUT /delivery/cupons — cria ou edita pelo código
+      if (metodo === "PUT" && secao === "cupons" && p.length === 4) {
+        const corpo = await lerJson(req);
+        await comErroDoDelivery(() => salvarCupom(venue.id, corpo));
+        return ok(res, await comErroDoDelivery(() => listarCupons(venue.id)));
+      }
+
+      throw erro(404, "not_found", `Rota ${metodo} /v1/venues/${slug}/delivery/${p.slice(3).join("/")} não existe.`);
+    }
+
     if (recurso === "financeiro") {
       const escrita = metodo !== "GET";
       const chave = await exigirChave(req, escrita ? "reservations:write" : "reservations:read");
@@ -3025,6 +3218,10 @@ async function roteasApi(
             .map((e) => ({ atendente_id: e.id, nome: e.apelido || e.nome, funcao: e.funcao })),
           metodos: METODOS,
           criterios: CRITERIOS_DE_RATEIO,
+          // Os tetos e as frases vão junto: a tela avisa enquanto o gestor
+          // digita o percentual, sem ter uma cópia dos números.
+          avisos_da_retencao: AVISOS_DA_RETENCAO,
+          aviso_do_desconto: AVISO_DO_DESCONTO,
         });
       }
 
@@ -3239,10 +3436,12 @@ async function roteasApi(
       // GET /v1/venues/:slug/rh — a lista e o cabeçalho da tela
       if (metodo === "GET" && p.length === 3) {
         const incluirDesligados = url.searchParams.get("desligados") === "1";
-        const [pessoas, resumo] = await comErroDoRh(() =>
-          Promise.all([listarPessoas(venue.id, { incluirDesligados }), resumoDoRh(venue.id)]),
+        // Os atestados a conferir vêm junto, mas não derrubam a lista: se
+        // essa busca falhar, a equipe abre do mesmo jeito.
+        const [pessoas, resumo, atestados] = await comErroDoRh(() =>
+          Promise.all([listarPessoas(venue.id, { incluirDesligados }), resumoDoRh(venue.id), atestadosAConfirmar(venue.id).catch(() => [])]),
         );
-        return ok(res, { pessoas, resumo, vinculos: VINCULOS, tipos_de_documento: TIPOS_DE_DOCUMENTO });
+        return ok(res, { pessoas, resumo, atestados_a_confirmar: atestados, vinculos: VINCULOS, tipos_de_documento: TIPOS_DE_DOCUMENTO });
       }
 
       // POST /v1/venues/:slug/rh — admite alguém
@@ -3416,7 +3615,11 @@ async function roteasApi(
         const link = `${enderecoBase()}/${tipo === "portal" ? "eu" : tipo}/${convite.token}`;
         let enviadoPara: string | null = null;
         if (corpo.enviar === true) {
+          // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: ficha } = await (db() as any).from("rh_fichas").select("telefone").eq("atendente_id", p[3]!).maybeSingle();
+          // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: pessoa } = await (db() as any).from("pesquisa_atendentes").select("nome, apelido").eq("id", p[3]!).maybeSingle();
           const telefone = normalizarTelefone(String(ficha?.telefone ?? ""));
           if (!telefone) throw erro(400, "sem_telefone", "Anote o telefone da pessoa na ficha antes, ou copie o link e mande você mesmo.");
@@ -3484,6 +3687,19 @@ async function roteasApi(
       // GET /v1/venues/:slug/rh/documentos/:id/link — endereço que expira
       if (metodo === "GET" && p.length === 6 && ehDocumentoSolto && p[5] === "link") {
         return ok(res, await comErroDoRh(() => linkDoDocumento({ venueId: venue.id, id: p[4]! })));
+      }
+
+      // POST /v1/venues/:slug/rh/documentos/:id/atestado — {aceitar, inicio?, dias?}
+      // O toque do gestor no atestado que o funcionário mandou por foto: é
+      // só aqui que a escala muda.
+      if (metodo === "POST" && p.length === 6 && ehDocumentoSolto && p[5] === "atestado") {
+        const corpo = (await lerJson(req)) as Record<string, unknown>;
+        return ok(
+          res,
+          await comErroDoRh(() =>
+            decidirAtestado({ venueId: venue.id, documentoId: p[4]!, aceitar: corpo.aceitar === true, inicio: corpo.inicio, dias: corpo.dias, quem: chave.name }),
+          ),
+        );
       }
 
       // DELETE /v1/venues/:slug/rh/documentos/:id
@@ -4869,7 +5085,7 @@ async function roteasApi(
       // cenário manda no cabeçalho.
       if ("make_webhook_url" in corpo) {
         const url = textoOpcional(corpo, "make_webhook_url") ?? null;
-        if (url && !/^https:\/\/hook\.[a-z0-9.-]*make\.com\//.test(url)) {
+        if (url && !webhookDoMakeValido(url)) {
           throw erro(400, "invalid_request", "O webhook do Make começa com https://hook.…make.com/");
         }
         const { segredo } = await ligarAoMake(venue.id, url);
@@ -5110,6 +5326,13 @@ async function roteasApi(
     // POST /v1/auth/login — e-mail e senha em troca do par de tokens
     if (metodo === "POST" && p[1] === "login" && p.length === 2) {
       const corpo = await lerJson(req);
+      // Antes de conferir a senha: por IP e por e-mail. Sem isto a rota
+      // aceitava tentativa de senha em série, sem fim.
+      await exigirRitmo(
+        "Muitas tentativas de login. Espere alguns minutos e tente de novo.",
+        [LIMITES_DURAVEIS.loginPorIp, ipDe(req)],
+        [LIMITES_DURAVEIS.loginPorEmail, texto(corpo, "email")],
+      );
       try {
         const tokens = await entrar(texto(corpo, "email"), texto(corpo, "senha"));
         return ok(res, tokens);
@@ -5358,7 +5581,10 @@ async function roteasApi(
           nome: texto(corpo, "nome"),
           slug: textoOpcional(corpo, "slug"),
           cidade: textoOpcional(corpo, "cidade"),
-          timezone: texto(corpo, "timezone"),
+          uf: textoOpcional(corpo, "uf"),
+          timezone: textoOpcional(corpo, "timezone"),
+          tipo: textoOpcional(corpo, "tipo") as DadosDoCliente["tipo"],
+          modulos: Array.isArray(corpo.modulos) ? corpo.modulos.map(String) : undefined,
           plano: plano as DadosDoCliente["plano"],
           emailDono: texto(corpo, "email"),
           telefone: textoOpcional(corpo, "telefone"),
@@ -5894,6 +6120,12 @@ async function roteasApi(
       if (!itemId || !itensDe(checklist).some((i) => i.id === itemId)) {
         throw erro(400, "invalid_request", "Item da foto não encontrado neste checklist.");
       }
+      // Antes de ler o arquivo: cada foto é upload para o bucket.
+      await exigirRitmo(
+        "Muitas fotos seguidas. Espere um pouco e tente de novo.",
+        [LIMITES_DURAVEIS.fotoPorExecucao, run.id],
+        [LIMITES_DURAVEIS.fotoPorIp, ipDe(req)],
+      );
       const arquivo = await lerBinario(req, LIMITE_FOTO_BYTES);
       if (arquivo.length === 0) throw erro(400, "invalid_request", "Foto vazia.");
       const contentType = req.headers["content-type"] ?? "image/jpeg";
@@ -5954,6 +6186,13 @@ async function roteasApi(
     }
     if (metodo === "POST" && p.length === 3 && p[2] === "documento") {
       const c = await comErroDoRh(() => abrirConvite(token));
+      // Antes de ler o arquivo: cada documento vira uma chamada à IA
+      // (`conferirDocumento`), e o link vive dias no WhatsApp de alguém.
+      await exigirRitmo(
+        "Muitos documentos seguidos. Espere alguns minutos e tente de novo.",
+        [LIMITES_DURAVEIS.documentoPorConvite, token],
+        [LIMITES_DURAVEIS.documentoPorIp, ipDe(req)],
+      );
       const arquivo = await lerBinario(req, LIMITE_DOCUMENTO_BYTES);
       const documento = await comErroDoRh(() =>
         guardarDocumento({
@@ -5994,6 +6233,12 @@ async function roteasApi(
     if (!venue || !(await temModulo(venue.id, "rh"))) throw erro(404, "not_found", "Esta página não existe.");
     if (metodo === "GET") return ok(res, { casa: venue.name });
     if (metodo === "POST") {
+      // A armadilha de robô (abaixo) pega o robô bobo; este pega o insistente,
+      // que encheria a lista de candidatos da casa.
+      await exigirRitmo("Muitos envios seguidos. Espere alguns minutos e tente de novo.", [
+        LIMITES_DURAVEIS.vaga,
+        `${ipDe(req)}:${venue.id}`,
+      ]);
       const corpo = (await lerJson(req, 20_000)) as Record<string, unknown>;
       if (String(corpo.site ?? "")) return ok(res, { ok: true }); // armadilha de robô
       await comErroDoRh(() =>
@@ -6012,6 +6257,8 @@ async function roteasApi(
   if (p[0] === "eu" && p.length >= 2) {
     const token = p[1]!;
     const c = await comErroDoRh(() => abrirConvite(token, "portal"));
+    // Tabela/coluna fora do database.types.ts — o `any` deliberado do resto do código.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: casa } = await (db() as any).from("venues").select("timezone").eq("id", c.venue_id).maybeSingle();
     const fuso = casa?.timezone ?? "America/Cuiaba";
     if (metodo === "GET" && p.length === 2) {
@@ -6046,6 +6293,176 @@ async function roteasApi(
       const corpo = (await lerJson(req)) as Record<string, unknown>;
       return ok(res, await comErroDoRh(() => receberDisc(token, corpo.respostas)));
     }
+  }
+
+  // ---- Webhook do Mercado Pago: /v1/webhooks/mercadopago/:casa ----
+  // Sem chave de API: quem chama é o Mercado Pago. A casa vai no caminho
+  // porque cada uma tem a própria conta, e é com o token DELA que o pagamento
+  // é conferido (ver `receberAvisoDoMercadoPago`).
+  if (p[0] === "webhooks" && p[1] === "mercadopago" && p.length === 3 && metodo === "POST") {
+    const venue = await venueDaPesquisa(p[2]!);
+    if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    // Cada aviso aceito vira uma consulta à API do Mercado Pago com o token
+    // da casa. O 429 não perde pagamento: o Mercado Pago reentrega.
+    await exigirRitmo(
+      "Muitos avisos seguidos.",
+      [LIMITES_DURAVEIS.mercadoPagoPorIp, `${ipDe(req)}:${venue.id}`],
+      [LIMITES_DURAVEIS.mercadoPagoPorCasa, venue.id],
+    );
+    const corpo = await lerJson(req, 100_000).catch(() => ({}) as Record<string, unknown>);
+    const dados = corpo.data && typeof corpo.data === "object" ? (corpo.data as Record<string, unknown>) : {};
+    const q = url.searchParams;
+    const cabecalho = (nome: string) => {
+      const v = req.headers[nome];
+      return Array.isArray(v) ? v[0] : v;
+    };
+    const resultado = await comErroDoDelivery(() =>
+      receberAvisoDoMercadoPago(venue, {
+        tipo: String(corpo.type ?? q.get("type") ?? q.get("topic") ?? "") || null,
+        pagamentoId: String(dados.id ?? q.get("data.id") ?? q.get("id") ?? "") || null,
+        assinatura: cabecalho("x-signature"),
+        requestId: cabecalho("x-request-id"),
+      }),
+    );
+    return ok(res, resultado);
+  }
+
+  // ---- Cardápio de delivery: /v1/delivery-publico/:casa ----
+  // Sem login: é a vitrine da casa. O que identifica o cliente é o id da
+  // sacola (que só ele tem) e, no acompanhamento, o token do pedido.
+  if (p[0] === "delivery-publico" && p.length >= 2) {
+    const venue = await venueDaPesquisa(p[1]!);
+    if (!venue) throw erro(404, "not_found", "Casa não encontrada.");
+    if (!(await temModulo(venue.id, "delivery"))) {
+      throw erro(404, "not_found", "Esta casa não tem delivery pelo Brasa.");
+    }
+    const ritmo = (balde: keyof typeof LIMITES_DO_DELIVERY, mensagem: string) => {
+      if (!LIMITES_DO_DELIVERY[balde].permitir(`${ipDe(req)}:${venue.id}`)) throw erro(429, "rate_limited", mensagem);
+    };
+
+    // GET /v1/delivery-publico/:casa — a loja, o cardápio e como ela entrega
+    if (metodo === "GET" && p.length === 2) {
+      const [cardapio, loja, agente] = await Promise.all([
+        comErroDoCardapio(() => cardapioPublico(venue)),
+        comErroDoDelivery(() => lojaPublica(venue)),
+        agenteDaMesa(venue),
+      ]);
+      return ok(res, {
+        casa: { ...cardapio.casa, ...marcaDaCasa(venue), ...loja },
+        categorias: cardapio.categorias,
+        itens: cardapio.itens,
+        chat: agente !== null,
+      });
+    }
+
+    // POST /v1/delivery-publico/:casa/sacola — abre a sacola de quem chegou pelo site
+    if (metodo === "POST" && p[2] === "sacola" && p.length === 3) {
+      ritmo("sacola", "Muitas sacolas abertas em seguida. Espere um pouco.");
+      const sacola = await comErroDoDelivery(() => abrirSacola(venue.id));
+      return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, sacola)), 201);
+    }
+
+    if (p[2] === "sacola" && p.length >= 4) {
+      const sacola = await comErroDoDelivery(() => lerSacola(venue.id, p[3]!));
+
+      // GET /sacola/:id
+      if (metodo === "GET" && p.length === 4) {
+        return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, sacola)));
+      }
+      // POST /sacola/:id/itens  { item, quantidade, opcoes?, observacao? }
+      if (metodo === "POST" && p[4] === "itens" && p.length === 5) {
+        ritmo("itens", "Muitos toques em seguida. Espere um instante.");
+        const corpo = await lerJson(req);
+        const nova = await comErroDoDelivery(() =>
+          adicionarASacola(venue, sacola, {
+            item: textoOpcional(corpo, "item") ?? "",
+            quantidade: Number(corpo.quantidade),
+            opcoes: Array.isArray(corpo.opcoes) ? corpo.opcoes.slice(0, 40).map(String) : [],
+            observacao: textoOpcional(corpo, "observacao") ?? null,
+          }),
+        );
+        return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, nova)));
+      }
+      // PATCH /sacola/:id/itens/:linha  { quantidade } — zero tira a linha
+      if (metodo === "PATCH" && p[4] === "itens" && p.length === 6) {
+        ritmo("itens", "Muitos toques em seguida. Espere um instante.");
+        const corpo = await lerJson(req);
+        const nova = await comErroDoDelivery(() => mudarQuantidade(sacola, p[5]!, Number(corpo.quantidade) || 0));
+        return ok(res, await comErroDoDelivery(() => sacolaParaATela(venue, nova)));
+      }
+
+      const pedidoDaTela = (corpo: Record<string, unknown>) => ({
+        tipo: corpo.tipo === "retirada" ? ("retirada" as const) : ("entrega" as const),
+        bairro: textoOpcional(corpo, "bairro") ?? null,
+        cupom: textoOpcional(corpo, "cupom") ?? null,
+        usar_cashback: corpo.usar_cashback === true,
+      });
+      // POST /sacola/:id/cotacao — quanto fica, sem fechar
+      if (metodo === "POST" && p[4] === "cotacao" && p.length === 5) {
+        ritmo("itens", "Muitos toques em seguida. Espere um instante.");
+        const corpo = await lerJson(req);
+        return ok(res, await comErroDoDelivery(() => cotarPedido(venue, sacola, pedidoDaTela(corpo))));
+      }
+      // POST /sacola/:id/pedido — fecha e devolve a cobrança
+      if (metodo === "POST" && p[4] === "pedido" && p.length === 5) {
+        ritmo("pedido", "Muitas tentativas de fechar o pedido. Espere alguns minutos.");
+        const corpo = await lerJson(req);
+        const pedido = await comErroDoDelivery(() =>
+          fecharPedido(venue, sacola, {
+            ...pedidoDaTela(corpo),
+            origem: "cardapio",
+            nome: textoOpcional(corpo, "nome") ?? "",
+            telefone: textoOpcional(corpo, "telefone") ?? null,
+            endereco: textoOpcional(corpo, "endereco") ?? null,
+            pagamento: textoOpcional(corpo, "pagamento") ?? "",
+            observacoes: textoOpcional(corpo, "observacoes") ?? null,
+          }),
+        );
+        return ok(res, await comErroDoDelivery(() => pedidoPublico(venue.id, pedido.token)), 201);
+      }
+    }
+
+    // GET /v1/delivery-publico/:casa/pedidos/:token — o acompanhamento
+    if (metodo === "GET" && p[2] === "pedidos" && p.length === 4) {
+      return ok(res, await comErroDoDelivery(() => pedidoPublico(venue.id, p[3]!)));
+    }
+
+    // POST /v1/delivery-publico/:casa/chat  { sacola, mensagem }
+    // O atendente da casa, na própria página. A sacola é o interlocutor: é
+    // por ela que as ferramentas de delivery acham o que o cliente montou.
+    if (metodo === "POST" && p[2] === "chat" && p.length === 3) {
+      ritmo("chat", "Muitas mensagens seguidas. Espere um minuto.");
+      const agentSlug = await agenteDaMesa(venue);
+      if (!agentSlug) throw erro(404, "not_found", "Esta casa não tem atendimento por chat.");
+      const corpo = await lerJson(req);
+      const mensagem = textoOpcional(corpo, "mensagem");
+      if (!mensagem) throw erro(400, "invalid_request", "Escreva a mensagem.");
+      if (mensagem.length > 1000) throw erro(400, "invalid_request", "Mensagem longa demais (máximo 1000 caracteres).");
+      const sacola = await comErroDoDelivery(() => lerSacola(venue.id, textoOpcional(corpo, "sacola") ?? ""));
+      // Sacola que veio do WhatsApp conversa no WhatsApp: abrir uma segunda
+      // conversa aqui daria ao cliente dois atendentes para a mesma sacola.
+      if (sacola.conversation_id) throw erro(400, "invalid_request", "Continue a conversa pelo WhatsApp.");
+      try {
+        const resultado = await runAgent({
+          agentSlug,
+          userMessage: mensagem,
+          channel: "delivery",
+          externalId: sacola.id,
+          venueSlug: venue.slug,
+          contato: { nome: sacola.nome ? `Delivery · ${sacola.nome}` : "Delivery (site)" },
+        });
+        // A conversa pode ter mexido na sacola: a página redesenha com o que volta.
+        const atual = await comErroDoDelivery(async () => sacolaParaATela(venue, await lerSacola(venue.id, sacola.id)));
+        return ok(res, { texto: resultado.respondeu ? resultado.text : null, humano: !resultado.respondeu, sacola: atual });
+      } catch (e) {
+        if (e instanceof PlanoBloqueadoError) {
+          return ok(res, { texto: "Nosso atendimento por chat está pausado agora. Você pode montar o pedido direto pelo cardápio.", humano: false });
+        }
+        throw e;
+      }
+    }
+
+    throw erro(404, "not_found", `Rota ${metodo} /v1/delivery-publico/${p.slice(1).join("/")} não existe.`);
   }
 
   if (p[0] === "cardapio-publico" && p.length >= 2) {
@@ -6266,9 +6683,7 @@ async function roteasApi(
 
     if (metodo === "POST") {
       const corpo = (await lerJson(req)) as Record<string, unknown>;
-      return ok(
-        res,
-        await comErroDePesquisa(() =>
+      const registrada = await comErroDePesquisa(() =>
           registrarResposta({
             venueId: venue.id,
             fuso: venue.timezone,
@@ -6285,10 +6700,13 @@ async function roteasApi(
             conviteId: convite?.id ?? null,
             clienteNome: textoOpcional(corpo, "cliente_nome") ?? null,
             clienteContato: textoOpcional(corpo, "cliente_contato") ?? null,
+            clienteNascimento: aniversarioInformado(corpo.cliente_nascimento),
           }),
-        ),
-        201,
       );
+      // O convite para avaliar no Google só existe na resposta de quem deu
+      // 9 ou 10, e só se a casa configurou o link. Para os outros o campo
+      // vem null — a tela não tem o que mostrar nem por engano.
+      return ok(res, { ...registrada, google_avaliacao_url: linkParaQuemRespondeu(registrada.nota, venue.settings) }, 201);
     }
 
     throw erro(405, "method_not_allowed", "Método não suportado aqui.");
@@ -6427,9 +6845,18 @@ async function roteasApi(
     // Ligar e desligar um número é configuração da casa.
     if (metodo === "POST") exigirQuemConfigura(chave);
 
+    // O atalho "responde direto do conector deste processo" não confere de
+    // que casa o conector é — só vale para quem chama da própria máquina
+    // (ver src/origemLocal.ts). Quem chega de fora (rede do bar, proxy,
+    // internet) cai no mesmo caminho da Vercel: a ponte pelo banco, que
+    // confere a organização e só mostra a casa de quem pediu. O conector
+    // daqui publica o estado e consome os comandos dessa ponte de qualquer
+    // jeito, então nada deixa de funcionar — só deixa de vazar.
+    const conectorDaqui = chamadaLocal(req) ? conectorWhatsapp : null;
+
     if (metodo === "GET" && p[1] === "status") {
-      if (conectorWhatsapp) {
-        const estado = conectorWhatsapp.estado() as Record<string, unknown>;
+      if (conectorDaqui) {
+        const estado = conectorDaqui.estado() as Record<string, unknown>;
         return ok(res, { ...estado, versao: versaoDoCodigo(), fonte: "local" });
       }
       const slug = url.searchParams.get("venue");
@@ -6483,9 +6910,9 @@ async function roteasApi(
     }
 
     if (metodo === "POST" && p[1] === "desconectar") {
-      if (conectorWhatsapp) {
-        await conectorWhatsapp.parar();
-        return ok(res, conectorWhatsapp.estado());
+      if (conectorDaqui) {
+        await conectorDaqui.parar();
+        return ok(res, conectorDaqui.estado());
       }
       const corpo = await lerJson(req);
       const slug = textoOpcional(corpo, "venue");
@@ -6610,7 +7037,9 @@ async function servirEstatico(res: ServerResponse, caminho: string): Promise<voi
   // /ficha/<token> é o link em que o funcionário preenche a própria ficha.
   const relativo = caminho.startsWith("/cardapio/")
     ? "cardapio.html"
-    : caminho.startsWith("/ficha/")
+    : caminho.startsWith("/delivery/")
+      ? "delivery.html"
+      : caminho.startsWith("/ficha/")
       ? "ficha.html"
       : caminho.startsWith("/disc/")
         ? "disc.html"

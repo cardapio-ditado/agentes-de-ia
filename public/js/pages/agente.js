@@ -30,10 +30,10 @@ export async function agente(raiz, ctx) {
     el("div", { classe: "pilha" }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: "Testar agente" }),
+          el("h2", { texto: "Testar o atendente virtual" }),
           el("p", {
             classe: "muted",
-            texto: "Fala com o agente como se fosse um cliente. As reservas criadas aqui vão para a fila de aprovação de verdade.",
+            texto: "Fale com o atendente virtual como se você fosse um cliente. As reservas criadas aqui vão para a fila de aprovação de verdade.",
           }),
         ]),
         seletor,
@@ -44,7 +44,7 @@ export async function agente(raiz, ctx) {
   );
 
   if (agentes.length === 0) {
-    limpar(chat).append(el("p", { classe: "muted", texto: "Nenhum agente habilitado nesta organização." }));
+    limpar(chat).append(el("p", { classe: "muted", texto: "Nenhum atendente virtual ligado nesta conta." }));
     campo.disabled = true;
   }
 
@@ -80,10 +80,10 @@ export async function agente(raiz, ctx) {
               el("span", { classe: "balao-meta", texto: `⚙ ${evento.name ?? "ferramenta"}` }),
             );
           }
-          if (evento.type === "error") avisar(evento.message ?? "Erro no agente.", "erro");
+          if (evento.type === "error") avisar(evento.message ?? "O atendente virtual teve um erro.", "erro");
         },
       );
-      if (!corpo.textContent) corpo.textContent = "(o agente não respondeu nada)";
+      if (!corpo.textContent) corpo.textContent = "(o atendente virtual não respondeu nada)";
     } catch (err) {
       corpo.textContent = "";
       resposta.remove();

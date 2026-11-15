@@ -125,7 +125,7 @@ export async function plataforma(raiz) {
         texto:
           usoPercentual < 40
             ? "Consumo baixo: há espaço para oferecer motores melhores sem estourar os planos."
-            : "Consumo alto: acompanhe quem está perto do limite antes que o agente pause.",
+            : "Consumo alto: acompanhe quem está perto do limite antes que o atendente virtual pause.",
       }),
     ]),
   );

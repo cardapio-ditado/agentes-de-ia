@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ErroDoRh } from "./rh.js";
-import { conferirComAFicha, montarOcorrencia, situacaoDaExperiencia } from "./rhPessoa.js";
+import { conferirComAFicha, jaDesligado, montarOcorrencia, situacaoDaExperiencia } from "./rhPessoa.js";
 
 const ficha = (extra: Record<string, unknown> = {}) => ({
   vinculo: "clt",
@@ -66,4 +66,16 @@ test("avaliação: nota de 1 a 5 em toda competência, média e até 3 combinado
   assert.deepEqual(a.combinados, ["a", "b", "c"]);
   assert.throws(() => montarAvaliacao({ momento: "avulsa", dia: "2026-11-01", notas: { ...notas, higiene: 0 } }), ErroDoRh);
   assert.throws(() => montarAvaliacao({ momento: "x", dia: "2026-11-01", notas }), ErroDoRh);
+});
+
+test("link pessoal: morre no dia do desligamento, e volta com a readmissão", () => {
+  assert.equal(jaDesligado(null, "2026-11-14"), false);
+  assert.equal(jaDesligado(undefined, "2026-11-14"), false);
+  // Desligou hoje: o acesso é cortado hoje.
+  assert.equal(jaDesligado("2026-11-14", "2026-11-14"), true);
+  assert.equal(jaDesligado("2026-05-30", "2026-11-14"), true);
+  // Aviso prévio trabalhado: a data ainda não chegou, a pessoa ainda é da equipe.
+  assert.equal(jaDesligado("2026-11-30", "2026-11-14"), false);
+  // Readmitir limpa a data — o mesmo link volta a abrir.
+  assert.equal(jaDesligado("", "2026-11-14"), false);
 });

@@ -62,7 +62,7 @@ export async function reservas(raiz, ctx) {
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Fila de aprovação" }),
-          el("p", { classe: "muted", texto: "Reservas coletadas pelo agente, aguardando decisão." }),
+          el("p", { classe: "muted", texto: "Reservas anotadas pelo atendente virtual, aguardando decisão." }),
         ]),
         el("button", {
           classe: "btn btn-peq",
@@ -422,7 +422,7 @@ async function blocoDeAvisos(ctx) {
         el("small", {
           classe: "muted",
           texto:
-            "Assim que o agente registrar uma reserva, esta pessoa recebe no WhatsApp o nome, o horário e a observação — sem precisar abrir o painel. Deixe vazio para não avisar ninguém.",
+            "Assim que o atendente virtual registrar uma reserva, esta pessoa recebe no WhatsApp o nome, o horário e a observação — sem precisar abrir o painel. Deixe vazio para não avisar ninguém.",
         }),
       ]),
       el("div", { classe: "campo" }, [

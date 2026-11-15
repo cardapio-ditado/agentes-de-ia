@@ -246,6 +246,8 @@
       .boas-vindas p { color: var(--apoio); margin: 6px 0 14px; font-size: 14px; }
       .boas-vindas input { width: 100%; font: 15px var(--fonte); padding: 12px 14px; border-radius: 10px; border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); outline: none; margin-bottom: 8px; }
       .boas-vindas input:focus { border-color: var(--brasa); }
+      .boas-vindas .para-que { display: block; color: var(--apoio); font-size: 12px; line-height: 1.45; margin: 0 0 4px; }
+      .boas-vindas .para-que a { color: inherit; }
       .boas-vindas .acoes { display: flex; gap: 8px; margin-top: 8px; }
       .boas-vindas .acoes .botao { flex: 1; }
 
@@ -546,7 +548,15 @@
           zap.placeholder = "WhatsApp, para novidades da casa (opcional)"; zap.type = "tel"; zap.inputMode = "tel";
           folha.className = "folha boas-vindas";
           folha.innerHTML = `<div class="alca"></div><div class="corpo"><h3>Boas-vindas! 👋</h3><p>${escapar(DADOS.casa.nome)}${MESA ? ` · mesa ${escapar(MESA)}` : ""}. Diga seu nome, se quiser: ajuda a equipe a te atender pelo nome.</p><div id="bv-campos"></div><div class="acoes"><button type="button" class="botao quieto" id="bv-pular">Pular</button><button type="button" class="botao" id="bv-entrar">Entrar</button></div></div>`;
-          $("bv-campos").append(nome, zap);
+          // Para que serve o WhatsApp, antes de a pessoa decidir. Sem caixinha
+          // para marcar: o campo é opcional, e "Pular" é o não.
+          const paraQue = document.createElement("small");
+          paraQue.className = "para-que";
+          const politica = document.createElement("a");
+          politica.href = "/privacidade"; politica.target = "_blank"; politica.rel = "noopener";
+          politica.textContent = "Política de privacidade";
+          paraQue.append(`Deixando o WhatsApp, ${DADOS.casa.nome} pode te mandar novidades e promoções por lá. Para parar, é só responder SAIR. `, politica, ".");
+          $("bv-campos").append(nome, zap, paraQue);
           const terminar = (dados) => { fecharFolha(); folha.className = "folha"; resolve(dados); };
           $("bv-pular").addEventListener("click", () => terminar(null));
           $("bv-entrar").addEventListener("click", () => terminar({ nome: nome.value.trim() || null, whatsapp: zap.value.trim() || null }));
@@ -961,7 +971,7 @@
             ${i.descricao ? `<p class="desc">${escapar(i.descricao)}</p>` : ""}
             <div class="meta">
               ${c ? `<span>${escapar(c.nome)}</span>` : ""}
-              ${i.serve ? `<span>serve ${i.serve}</span>` : ""}
+              ${i.serve ? `<span>serve ${escapar(i.serve)}</span>` : ""}
               ${i.etiquetas.map((t) => `<span>${escapar(t)}</span>`).join("")}
               ${i.alergenicos.map((a) => `<span class="alerg">contém ${escapar(a)}</span>`).join("")}
             </div>

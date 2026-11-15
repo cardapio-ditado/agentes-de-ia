@@ -976,6 +976,18 @@
           "id": "horas",
           "nome": "Pelas horas trabalhadas"
         }
+      ],
+      "avisos_da_retencao": [
+        {
+          "acima_de": 33,
+          "nivel": "alto",
+          "texto": "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. Confirme com a contabilidade antes de pagar a semana."
+        },
+        {
+          "acima_de": 20,
+          "nivel": "atencao",
+          "texto": "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. Confirme com a contabilidade em qual caso a casa está."
+        }
       ]
     },
     "GET /rh/resumo": {
@@ -1808,6 +1820,983 @@
           ]
         }
       }
+    },
+    "atestado-a-conferir": {
+      "rotulo": "um atestado esperando o gestor",
+      "guarda": {
+        "brasa.rh.aba": "equipe"
+      },
+      "rotas": {
+        "GET /rh": {
+          "pessoas": [
+            {
+              "id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete",
+              "apelido": "Ju",
+              "ativo": true,
+              "documentos_alerta": 0,
+              "pendencias": [],
+              "ficha": {
+                "atendente_id": "p1",
+                "nome_completo": "Juliana Barbosa dos Santos",
+                "cpf": "123.456.789-09",
+                "rg": null,
+                "nascimento": null,
+                "telefone": "65999990001",
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Garçonete",
+                "admissao": "2022-08-01",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 1850,
+                "forma_pagamento": "pix",
+                "chave_pix": "65999990001",
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "apelido": null,
+              "ativo": true,
+              "documentos_alerta": 1,
+              "pendencias": [
+                "Exame periódico vence em 12 dias"
+              ],
+              "ficha": {
+                "atendente_id": "p2",
+                "nome_completo": "Maria Aparecida Nogueira",
+                "cpf": "987.654.321-00",
+                "rg": null,
+                "nascimento": null,
+                "telefone": "65999990002",
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Cozinha",
+                "admissao": "2023-01-10",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 2400,
+                "forma_pagamento": "pix",
+                "chave_pix": "65999990002",
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança",
+              "apelido": null,
+              "ativo": true,
+              "documentos_alerta": 0,
+              "pendencias": [
+                "Sem CPF na ficha",
+                "Sem carteira de trabalho"
+              ],
+              "ficha": {
+                "atendente_id": "p3",
+                "nome_completo": null,
+                "cpf": null,
+                "rg": null,
+                "nascimento": null,
+                "telefone": null,
+                "endereco": null,
+                "vinculo": "mei",
+                "cargo": "Segurança",
+                "admissao": "2026-08-01",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 2100,
+                "forma_pagamento": "pix",
+                "chave_pix": null,
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "apelido": null,
+              "ativo": true,
+              "documentos_alerta": 0,
+              "pendencias": [
+                "Sem data de admissão"
+              ],
+              "ficha": {
+                "atendente_id": "p4",
+                "nome_completo": "Rosemary da Silva",
+                "cpf": null,
+                "rg": null,
+                "nascimento": null,
+                "telefone": null,
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Copa",
+                "admissao": null,
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 1620,
+                "forma_pagamento": "pix",
+                "chave_pix": null,
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman",
+              "apelido": "Tiago",
+              "ativo": true,
+              "documentos_alerta": 2,
+              "pendencias": [],
+              "ficha": {
+                "atendente_id": "p5",
+                "nome_completo": "Tiago Menezes Lima",
+                "cpf": "111.222.333-44",
+                "rg": null,
+                "nascimento": null,
+                "telefone": "65999990005",
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Barman",
+                "admissao": "2023-06-01",
+                "desligamento": null,
+                "motivo_desligamento": null,
+                "salario": 2200,
+                "forma_pagamento": "pix",
+                "chave_pix": "65999990005",
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            },
+            {
+              "id": "p9",
+              "nome": "Wanderson Alves",
+              "apelido": null,
+              "funcao": "Garçom",
+              "ativo": false,
+              "documentos_alerta": 0,
+              "pendencias": [],
+              "ficha": {
+                "atendente_id": "p9",
+                "nome_completo": "Wanderson Alves",
+                "cpf": null,
+                "rg": null,
+                "nascimento": null,
+                "telefone": null,
+                "endereco": null,
+                "vinculo": "clt",
+                "cargo": "Garçom",
+                "admissao": "2021-03-15",
+                "desligamento": "2026-05-30",
+                "motivo_desligamento": "Pediu demissão",
+                "salario": 1850,
+                "forma_pagamento": "pix",
+                "chave_pix": null,
+                "banco": null,
+                "emergencia_nome": null,
+                "emergencia_telefone": null,
+                "observacoes": null
+              }
+            }
+          ],
+          "resumo": {
+            "ativos": 5,
+            "desligados": 1,
+            "com_pendencia": 3,
+            "documentos_em_alerta": 3
+          },
+          "vinculos": [
+            {
+              "id": "clt",
+              "nome": "CLT"
+            },
+            {
+              "id": "mei",
+              "nome": "MEI"
+            },
+            {
+              "id": "diarista",
+              "nome": "Diarista"
+            },
+            {
+              "id": "freelancer",
+              "nome": "Freelancer"
+            },
+            {
+              "id": "estagio",
+              "nome": "Estágio"
+            },
+            {
+              "id": "socio",
+              "nome": "Sócio"
+            }
+          ],
+          "tipos_de_documento": [
+            {
+              "id": "rg",
+              "nome": "RG"
+            },
+            {
+              "id": "cpf",
+              "nome": "CPF"
+            },
+            {
+              "id": "ctps",
+              "nome": "Carteira de trabalho"
+            },
+            {
+              "id": "comprovante_endereco",
+              "nome": "Comprovante de endereço"
+            },
+            {
+              "id": "exame_admissional",
+              "nome": "Exame admissional"
+            },
+            {
+              "id": "exame_periodico",
+              "nome": "Exame periódico"
+            },
+            {
+              "id": "exame_demissional",
+              "nome": "Exame demissional"
+            },
+            {
+              "id": "aso",
+              "nome": "ASO"
+            },
+            {
+              "id": "atestado",
+              "nome": "Atestado"
+            },
+            {
+              "id": "contrato",
+              "nome": "Contrato"
+            }
+          ],
+          "atestados_a_confirmar": [
+            {
+              "documento_id": "d1",
+              "atendente_id": "p1",
+              "nome": "Juliana",
+              "inicio": "2026-09-10",
+              "dias": 3,
+              "enviado_em": "2026-09-10T12:00:00Z"
+            },
+            {
+              "documento_id": "d2",
+              "atendente_id": "p2",
+              "nome": "Marcos",
+              "inicio": null,
+              "dias": null,
+              "enviado_em": "2026-09-10T13:00:00Z"
+            }
+          ]
+        }
+      }
+    },
+    "escala-alertas": {
+      "rotulo": "a grade com alertas de descanso",
+      "guarda": {
+        "brasa.rh.aba": "escala"
+      },
+      "rotas": {
+        "GET /rh/escala": {
+          "semana": "2026-09-07",
+          "dias": [
+            "2026-09-07",
+            "2026-09-08",
+            "2026-09-09",
+            "2026-09-10",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13"
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "pessoas": [
+            {
+              "id": "p1",
+              "nome": "Juliana Barbosa",
+              "apelido": null,
+              "funcao": "Garçonete"
+            },
+            {
+              "id": "p2",
+              "nome": "Cida Nogueira",
+              "apelido": null,
+              "funcao": "Cozinha"
+            },
+            {
+              "id": "p3",
+              "nome": "Marcos Aurélio",
+              "apelido": null,
+              "funcao": "Segurança"
+            },
+            {
+              "id": "p4",
+              "nome": "Rose da Silva",
+              "apelido": null,
+              "funcao": "Copa"
+            },
+            {
+              "id": "p5",
+              "nome": "Tiago Menezes",
+              "apelido": null,
+              "funcao": "Barman"
+            }
+          ],
+          "linhas": [
+            {
+              "id": "e1",
+              "data": "2026-09-07",
+              "atendente_id": "p1",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Garçonete",
+              "observacao": null
+            },
+            {
+              "id": "e2",
+              "data": "2026-09-08",
+              "atendente_id": "p1",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Garçonete",
+              "observacao": null
+            },
+            {
+              "id": "e3",
+              "data": "2026-09-09",
+              "atendente_id": "p1",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Garçonete",
+              "observacao": null
+            },
+            {
+              "id": "e4",
+              "data": "2026-09-10",
+              "atendente_id": "p1",
+              "turno_id": null,
+              "situacao": "folga",
+              "funcao": null,
+              "observacao": null
+            },
+            {
+              "id": "e5",
+              "data": "2026-09-07",
+              "atendente_id": "p2",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Cozinha",
+              "observacao": null
+            },
+            {
+              "id": "e6",
+              "data": "2026-09-08",
+              "atendente_id": "p2",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Cozinha",
+              "observacao": null
+            },
+            {
+              "id": "e7",
+              "data": "2026-09-09",
+              "atendente_id": "p2",
+              "turno_id": "t1",
+              "situacao": "atestado",
+              "funcao": null,
+              "observacao": null
+            },
+            {
+              "id": "e8",
+              "data": "2026-09-07",
+              "atendente_id": "p5",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Barman",
+              "observacao": null
+            },
+            {
+              "id": "e9",
+              "data": "2026-09-08",
+              "atendente_id": "p5",
+              "turno_id": "t2",
+              "situacao": "ferias",
+              "funcao": null,
+              "observacao": null
+            },
+            {
+              "id": "e10",
+              "data": "2026-09-11",
+              "atendente_id": "p3",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Segurança",
+              "observacao": null
+            },
+            {
+              "id": "e11",
+              "data": "2026-09-12",
+              "atendente_id": "p3",
+              "turno_id": "t2",
+              "situacao": "trabalha",
+              "funcao": "Segurança",
+              "observacao": null
+            },
+            {
+              "id": "e12",
+              "data": "2026-09-12",
+              "atendente_id": "p4",
+              "turno_id": "t1",
+              "situacao": "trabalha",
+              "funcao": "Copa",
+              "observacao": null
+            }
+          ],
+          "publicada_em": "2026-09-06T14:20:00.000Z",
+          "publicada_por": "kadu@brasafood.app",
+          "avisos_enviados": 5,
+          "mudou_depois_de_publicar": true,
+          "alertas": [
+            {
+              "atendente_id": "p1",
+              "tipo": "setimo_dia",
+              "texto": "Juliana chega ao 7º dia seguido de trabalho em dom 13/09 (sem folga desde seg 07/09). Toda semana precisa de uma folga de 24h: dê uma folga antes desse dia."
+            },
+            {
+              "atendente_id": "p5",
+              "tipo": "entre_jornadas",
+              "texto": "Tiago sai às 2h do turno de sex 11/09 e volta às 11h de sáb 12/09: só 9h de descanso. O mínimo entre um dia de trabalho e o outro é 11h."
+            },
+            {
+              "atendente_id": "p5",
+              "tipo": "horas_da_semana",
+              "texto": "Tiago está com 54h na semana (já tirando 1h de intervalo dos turnos longos). Acima de 44h é hora extra: tire um turno ou confira com a contabilidade."
+            },
+            {
+              "atendente_id": "p4",
+              "tipo": "menor_a_noite",
+              "texto": "Rose tem 17 anos e está no turno de sex 11/09 (18h → 0h). Menor de 18 não pode trabalhar entre 22h e 5h: troque o turno."
+            }
+          ]
+        }
+      }
+    },
+    "gorjeta-retencao-alta": {
+      "rotulo": "a casa retém mais de 33%",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "rotas": {
+        "GET /rh/acerto": {
+          "ano": 2026,
+          "semana": 37,
+          "inicio": "2026-09-07",
+          "fim": "2026-09-13",
+          "regra": {
+            "metodo": "individual",
+            "percentual_servico": 10,
+            "percentual_repasse": 60,
+            "criterio_rateio": "peso",
+            "percentual_da_casa_para_apoio": 20,
+            "configurada": true
+          },
+          "linhas": [
+            {
+              "atendente_id": "p1",
+              "nome": "Ju",
+              "funcao": "Garçonete",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 20600,
+              "comandas": 140,
+              "comissao": 1483.2,
+              "rateio": 0,
+              "adicionais": 180,
+              "descontos": 0,
+              "a_receber": 1663.2
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "peso": 3,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 409.05,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 409.05
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago",
+              "funcao": "Barman",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 9700,
+              "comandas": 61,
+              "comissao": 698.4,
+              "rateio": 0,
+              "adicionais": 0,
+              "descontos": 64.5,
+              "a_receber": 633.9
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 136.35,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 136.35
+            }
+          ],
+          "totais": {
+            "vendas": 30300,
+            "arrecadado": 3030,
+            "repassado": 2727,
+            "retido": 1212.0,
+            "comissoes": 2181.6,
+            "rateio": 545.4,
+            "adicionais": 180,
+            "descontos": 64.5,
+            "a_receber": 2842.5
+          },
+          "vendas": [
+            {
+              "id": "v1",
+              "dia": "2026-09-08",
+              "turno_id": null,
+              "atendente_id": "p1",
+              "valor": 12400,
+              "comandas": 86,
+              "observacao": null
+            },
+            {
+              "id": "v2",
+              "dia": "2026-09-10",
+              "turno_id": "t1",
+              "atendente_id": "p1",
+              "valor": 8200,
+              "comandas": 54,
+              "observacao": null
+            },
+            {
+              "id": "v3",
+              "dia": "2026-09-09",
+              "turno_id": null,
+              "atendente_id": "p5",
+              "valor": 9700,
+              "comandas": 61,
+              "observacao": null
+            }
+          ],
+          "extras": [
+            {
+              "id": "x1",
+              "dia": "2026-09-12",
+              "atendente_id": "p1",
+              "tipo": "adicional",
+              "descricao": "Evento fechado",
+              "valor": 180
+            },
+            {
+              "id": "x2",
+              "dia": "2026-09-11",
+              "atendente_id": "p5",
+              "tipo": "desconto",
+              "descricao": "Consumo no bar",
+              "valor": 64.5
+            }
+          ],
+          "fechamentos": [],
+          "pesos": [
+            {
+              "id": "w1",
+              "funcao": "Cozinha",
+              "peso": 3
+            },
+            {
+              "id": "w2",
+              "funcao": "Copa",
+              "peso": 1
+            }
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "equipe": [
+            {
+              "atendente_id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete"
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha"
+            },
+            {
+              "atendente_id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança"
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa"
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman"
+            }
+          ],
+          "metodos": [
+            {
+              "id": "individual",
+              "nome": "Comissão individual",
+              "explicacao": "Cada um recebe um percentual sobre o que ele mesmo vendeu."
+            },
+            {
+              "id": "global",
+              "nome": "Bolo da casa",
+              "explicacao": "O serviço da casa inteira é repartido entre a equipe pelo critério escolhido."
+            }
+          ],
+          "criterios": [
+            {
+              "id": "igual",
+              "nome": "Igual para todos"
+            },
+            {
+              "id": "peso",
+              "nome": "Por peso da função (pontuação)"
+            },
+            {
+              "id": "horas",
+              "nome": "Pelas horas trabalhadas"
+            }
+          ],
+          "avisos_da_retencao": [
+            {
+              "acima_de": 33,
+              "nivel": "alto",
+              "texto": "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. Confirme com a contabilidade antes de pagar a semana."
+            },
+            {
+              "acima_de": 20,
+              "nivel": "atencao",
+              "texto": "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. Confirme com a contabilidade em qual caso a casa está."
+            }
+          ]
+        }
+      },
+      "cliques": [
+        "button:text-is(\"Regras\")"
+      ]
+    },
+    "gorjeta-retencao-atencao": {
+      "rotulo": "a casa retém entre 20% e 33%",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "rotas": {
+        "GET /rh/acerto": {
+          "ano": 2026,
+          "semana": 37,
+          "inicio": "2026-09-07",
+          "fim": "2026-09-13",
+          "regra": {
+            "metodo": "individual",
+            "percentual_servico": 10,
+            "percentual_repasse": 75,
+            "criterio_rateio": "peso",
+            "percentual_da_casa_para_apoio": 20,
+            "configurada": true
+          },
+          "linhas": [
+            {
+              "atendente_id": "p1",
+              "nome": "Ju",
+              "funcao": "Garçonete",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 20600,
+              "comandas": 140,
+              "comissao": 1483.2,
+              "rateio": 0,
+              "adicionais": 180,
+              "descontos": 0,
+              "a_receber": 1663.2
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha",
+              "peso": 3,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 409.05,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 409.05
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago",
+              "funcao": "Barman",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 9700,
+              "comandas": 61,
+              "comissao": 698.4,
+              "rateio": 0,
+              "adicionais": 0,
+              "descontos": 64.5,
+              "a_receber": 633.9
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa",
+              "peso": 1,
+              "minutos": 0,
+              "vendas": 0,
+              "comandas": 0,
+              "comissao": 0,
+              "rateio": 136.35,
+              "adicionais": 0,
+              "descontos": 0,
+              "a_receber": 136.35
+            }
+          ],
+          "totais": {
+            "vendas": 30300,
+            "arrecadado": 3030,
+            "repassado": 2727,
+            "retido": 757.5,
+            "comissoes": 2181.6,
+            "rateio": 545.4,
+            "adicionais": 180,
+            "descontos": 64.5,
+            "a_receber": 2842.5
+          },
+          "vendas": [
+            {
+              "id": "v1",
+              "dia": "2026-09-08",
+              "turno_id": null,
+              "atendente_id": "p1",
+              "valor": 12400,
+              "comandas": 86,
+              "observacao": null
+            },
+            {
+              "id": "v2",
+              "dia": "2026-09-10",
+              "turno_id": "t1",
+              "atendente_id": "p1",
+              "valor": 8200,
+              "comandas": 54,
+              "observacao": null
+            },
+            {
+              "id": "v3",
+              "dia": "2026-09-09",
+              "turno_id": null,
+              "atendente_id": "p5",
+              "valor": 9700,
+              "comandas": 61,
+              "observacao": null
+            }
+          ],
+          "extras": [
+            {
+              "id": "x1",
+              "dia": "2026-09-12",
+              "atendente_id": "p1",
+              "tipo": "adicional",
+              "descricao": "Evento fechado",
+              "valor": 180
+            },
+            {
+              "id": "x2",
+              "dia": "2026-09-11",
+              "atendente_id": "p5",
+              "tipo": "desconto",
+              "descricao": "Consumo no bar",
+              "valor": 64.5
+            }
+          ],
+          "fechamentos": [],
+          "pesos": [
+            {
+              "id": "w1",
+              "funcao": "Cozinha",
+              "peso": 3
+            },
+            {
+              "id": "w2",
+              "funcao": "Copa",
+              "peso": 1
+            }
+          ],
+          "turnos": [
+            {
+              "id": "t1",
+              "nome": "Almoço",
+              "inicio": "11:00",
+              "fim": "15:00",
+              "ordem": 1,
+              "ativo": true
+            },
+            {
+              "id": "t2",
+              "nome": "Noite",
+              "inicio": "18:00",
+              "fim": "00:00",
+              "ordem": 2,
+              "ativo": true
+            }
+          ],
+          "equipe": [
+            {
+              "atendente_id": "p1",
+              "nome": "Juliana Barbosa",
+              "funcao": "Garçonete"
+            },
+            {
+              "atendente_id": "p2",
+              "nome": "Cida Nogueira",
+              "funcao": "Cozinha"
+            },
+            {
+              "atendente_id": "p3",
+              "nome": "Marcos Aurélio",
+              "funcao": "Segurança"
+            },
+            {
+              "atendente_id": "p4",
+              "nome": "Rose da Silva",
+              "funcao": "Copa"
+            },
+            {
+              "atendente_id": "p5",
+              "nome": "Tiago Menezes",
+              "funcao": "Barman"
+            }
+          ],
+          "metodos": [
+            {
+              "id": "individual",
+              "nome": "Comissão individual",
+              "explicacao": "Cada um recebe um percentual sobre o que ele mesmo vendeu."
+            },
+            {
+              "id": "global",
+              "nome": "Bolo da casa",
+              "explicacao": "O serviço da casa inteira é repartido entre a equipe pelo critério escolhido."
+            }
+          ],
+          "criterios": [
+            {
+              "id": "igual",
+              "nome": "Igual para todos"
+            },
+            {
+              "id": "peso",
+              "nome": "Por peso da função (pontuação)"
+            },
+            {
+              "id": "horas",
+              "nome": "Pelas horas trabalhadas"
+            }
+          ],
+          "avisos_da_retencao": [
+            {
+              "acima_de": 33,
+              "nivel": "alto",
+              "texto": "A lei da gorjeta (13.419/2017) só deixa reter para pagar os encargos sobre a própria gorjeta, com convenção ou acordo coletivo, e no máximo 33% (20% se a empresa é do Simples). Acima disso a casa pode ter que devolver a diferença à equipe. Confirme com a contabilidade antes de pagar a semana."
+            },
+            {
+              "acima_de": 20,
+              "nivel": "atencao",
+              "texto": "Pela lei da gorjeta (13.419/2017), empresa do Simples pode reter até 20% e as demais até 33% — sempre para encargos e com convenção ou acordo coletivo. Confirme com a contabilidade em qual caso a casa está."
+            }
+          ]
+        }
+      }
+    },
+    "gorjeta-desconto": {
+      "rotulo": "lançando um desconto",
+      "guarda": {
+        "brasa.rh.aba": "fechamento"
+      },
+      "cliques": [
+        "button:text-is(\"Desconto\")"
+      ]
     }
   }
 }

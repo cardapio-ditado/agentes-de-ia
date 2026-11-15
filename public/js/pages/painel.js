@@ -37,15 +37,15 @@ export async function painel(raiz, ctx) {
         iconePath: ICONES.conversas,
       }),
       indicador({
-        rotulo: "Com atendente",
+        rotulo: "Com pessoa da equipe",
         valor: numero(m.conversas.com_humano),
-        nota: "assumidas por uma pessoa",
+        nota: "conversas que a equipe assumiu",
         iconePath: ICONES.pessoa,
       }),
       indicador({
         rotulo: "Mensagens (7 dias)",
         valor: numero(m.mensagens.total_7d),
-        nota: `${numero(m.mensagens.do_agente_7d)} respondidas pelo agente`,
+        nota: `${numero(m.mensagens.do_agente_7d)} respondidas pelo atendente virtual`,
         iconePath: ICONES.raio,
       }),
     ]),
@@ -81,7 +81,7 @@ export async function painel(raiz, ctx) {
         ]),
       ]),
       m.mensagens.total_7d === 0
-        ? vazio("Nenhuma mensagem ainda", "Conecte um canal ou teste o agente para ver movimento.")
+        ? vazio("Nenhuma mensagem ainda", "Conecte um canal ou teste o atendente virtual para ver movimento.")
         : barras,
     ]),
   );
@@ -96,19 +96,26 @@ export async function painel(raiz, ctx) {
           linha("Na fila agora", numero(m.reservas.pendentes)),
         ]),
       ]),
-      el("section", { classe: "cartao" }, [
-        el("h2", { texto: "Consumo do agente (7 dias)" }),
-        el("div", { style: "margin-top:10px" }, [
-          linha("Tokens de entrada", numero(m.tokens_7d.entrada)),
-          linha("Tokens de saída", numero(m.tokens_7d.saida)),
-          linha("Lidos do cache", numero(m.tokens_7d.cache_lido)),
-        ]),
-        el("p", {
-          classe: "muted",
-          texto:
-            "Cache alto é bom: é o prompt do estabelecimento sendo reaproveitado em vez de recobrado.",
-        }),
-      ]),
+      // Token e cache são a conta da PLATAFORMA. O dono paga em pontos, e o
+      // saldo dele já está no cartão do topo: mostrar isto a ele é um número
+      // que não sabe ler e não tem o que fazer com ele. Só a equipe Brasa
+      // Food vê — e `souPlataforma` nasce falso, então na dúvida some.
+      ctx.souPlataforma === true
+        ? el("section", { classe: "cartao" }, [
+            el("h2", { texto: "Consumo do atendente virtual (7 dias)" }),
+            el("p", { classe: "muted", texto: "Só a equipe Brasa Food vê este quadro." }),
+            el("div", { style: "margin-top:10px" }, [
+              linha("Tokens de entrada", numero(m.tokens_7d.entrada)),
+              linha("Tokens de saída", numero(m.tokens_7d.saida)),
+              linha("Lidos do cache", numero(m.tokens_7d.cache_lido)),
+            ]),
+            el("p", {
+              classe: "muted",
+              texto:
+                "Cache alto é bom: é o prompt do estabelecimento sendo reaproveitado em vez de recobrado.",
+            }),
+          ])
+        : null,
     ]),
   );
 
@@ -120,9 +127,20 @@ export async function painel(raiz, ctx) {
           icone(ICONES.alerta, 16),
           el("strong", { texto: "Mensagens não entregues" }),
         ]),
+        // Ainda não existe botão de reenviar (só um comando de quem cuida do
+        // servidor). Até existir, o que o dono PODE fazer é falar com o
+        // cliente e chamar o suporte — é isso que o texto diz.
         el("p", {
           classe: "muted",
-          texto: `${m.notificacoes_falhas} notificação(ões) falharam. O cliente pode ter sido aprovado sem saber. Rode "npm run reenviar-notificacoes" para tentar de novo.`,
+          texto:
+            m.notificacoes_falhas === 1
+              ? "1 aviso ao cliente não chegou. Ele pode ter tido a reserva aprovada ou recusada sem ficar sabendo."
+              : `${numero(m.notificacoes_falhas)} avisos ao cliente não chegaram. Eles podem ter tido a reserva aprovada ou recusada sem ficar sabendo.`,
+        }),
+        el("p", {
+          classe: "muted",
+          texto:
+            "Confira as últimas reservas e, se precisar, fale com o cliente pelo WhatsApp. Avise o suporte da Brasa Food para reenviarmos.",
         }),
       ]),
     );
@@ -135,8 +153,8 @@ export async function painel(raiz, ctx) {
         classe: "muted",
         texto:
           m.eventos_proximos > 0
-            ? `${m.eventos_proximos} evento(s) futuro(s) que o agente pode citar para os clientes.`
-            : "Nenhum evento futuro cadastrado. Sem isso o agente não tem o que contar sobre a casa.",
+            ? `${m.eventos_proximos} evento(s) futuro(s) que o atendente virtual pode citar para os clientes.`
+            : "Nenhum evento futuro cadastrado. Sem isso o atendente virtual não tem o que contar sobre a casa.",
       }),
     ]),
   );

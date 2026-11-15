@@ -40,7 +40,7 @@ export class ErroDeClientes extends Error {
   }
 }
 
-export type OrigemDeCliente = "manual" | "zig" | "agente" | "pesquisa" | "planilha" | "cardapio";
+export type OrigemDeCliente = "manual" | "zig" | "agente" | "pesquisa" | "planilha" | "cardapio" | "delivery";
 
 export interface Cliente {
   id: string;

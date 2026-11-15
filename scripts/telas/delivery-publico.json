@@ -1,0 +1,747 @@
+{
+  "rotulo": "Delivery no celular — o cardápio com link",
+  "pagina": "/delivery.html?casa=casa-de-teste",
+  "rotas": {
+    "GET /v1/delivery-publico/casa-de-teste": {
+      "casa": {
+        "id": "v1",
+        "slug": "casa-de-teste",
+        "nome": "Casa de Teste",
+        "cidade": "Cuiabá",
+        "horario_hoje": "18h às 2h",
+        "logo_url": null,
+        "cor_marca": "#c2401a",
+        "cor_texto": "#ffffff",
+        "cor_fundo": "#fff6ea",
+        "cor_traco": "#ff6b35",
+        "aberto": true,
+        "previsao": "40 a 60 minutos",
+        "endereco_retirada": "Av. Brasil, 500 — Centro",
+        "taxa_unica_centavos": 700,
+        "cashback_percentual": 5,
+        "cobranca_pronta": true,
+        "bairros": [
+          {
+            "id": "b1",
+            "nome": "Centro",
+            "taxa_centavos": 500
+          },
+          {
+            "id": "b2",
+            "nome": "Jardim Itália",
+            "taxa_centavos": 900
+          }
+        ]
+      },
+      "categorias": [
+        {
+          "id": "k1",
+          "nome": "Lanches",
+          "grupo": "comer",
+          "descricao": "",
+          "imagem": null
+        },
+        {
+          "id": "k2",
+          "nome": "Porções",
+          "grupo": "comer",
+          "descricao": "",
+          "imagem": null
+        },
+        {
+          "id": "k3",
+          "nome": "Bebidas",
+          "grupo": "beber",
+          "descricao": "",
+          "imagem": null
+        }
+      ],
+      "itens": [
+        {
+          "id": "i1",
+          "categoria_id": "k1",
+          "nome": "X-Burger",
+          "descricao": "Pão, hambúrguer 150g, queijo e molho da casa",
+          "preco": 22,
+          "promocao": null,
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [
+            {
+              "id": "g1",
+              "nome": "Ponto da carne",
+              "obrigatorio": true,
+              "opcoes": [
+                {
+                  "id": "o1",
+                  "nome": "Mal passado",
+                  "adicional": 0
+                },
+                {
+                  "id": "o2",
+                  "nome": "Ao ponto",
+                  "adicional": 0
+                },
+                {
+                  "id": "o3",
+                  "nome": "Bem passado",
+                  "adicional": 0
+                }
+              ]
+            },
+            {
+              "id": "g2",
+              "nome": "Adicionais",
+              "obrigatorio": false,
+              "opcoes": [
+                {
+                  "id": "o4",
+                  "nome": "Bacon",
+                  "adicional": 5
+                },
+                {
+                  "id": "o5",
+                  "nome": "Cheddar",
+                  "adicional": 4
+                },
+                {
+                  "id": "o6",
+                  "nome": "Ovo",
+                  "adicional": 3
+                }
+              ]
+            }
+          ],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        },
+        {
+          "id": "i2",
+          "categoria_id": "k1",
+          "nome": "X-Bacon",
+          "descricao": "Pão, hambúrguer 150g, queijo e bacon crocante",
+          "preco": 29,
+          "promocao": null,
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [
+            {
+              "id": "g1",
+              "nome": "Ponto da carne",
+              "obrigatorio": true,
+              "opcoes": [
+                {
+                  "id": "o1",
+                  "nome": "Mal passado",
+                  "adicional": 0
+                },
+                {
+                  "id": "o2",
+                  "nome": "Ao ponto",
+                  "adicional": 0
+                },
+                {
+                  "id": "o3",
+                  "nome": "Bem passado",
+                  "adicional": 0
+                }
+              ]
+            },
+            {
+              "id": "g2",
+              "nome": "Adicionais",
+              "obrigatorio": false,
+              "opcoes": [
+                {
+                  "id": "o4",
+                  "nome": "Bacon",
+                  "adicional": 5
+                },
+                {
+                  "id": "o5",
+                  "nome": "Cheddar",
+                  "adicional": 4
+                },
+                {
+                  "id": "o6",
+                  "nome": "Ovo",
+                  "adicional": 3
+                }
+              ]
+            }
+          ],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        },
+        {
+          "id": "i3",
+          "categoria_id": "k2",
+          "nome": "Batata frita",
+          "descricao": "Porção de 400g",
+          "preco": 18,
+          "promocao": {
+            "nome": "Sábado da batata",
+            "preco": 15.9
+          },
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        },
+        {
+          "id": "i4",
+          "categoria_id": "k3",
+          "nome": "Refrigerante lata",
+          "descricao": "350ml",
+          "preco": 7,
+          "promocao": null,
+          "destaque": false,
+          "capa": null,
+          "video": null,
+          "midias": [],
+          "variacoes": [
+            {
+              "id": "g3",
+              "nome": "Sabor",
+              "obrigatorio": true,
+              "opcoes": [
+                {
+                  "id": "o7",
+                  "nome": "Cola",
+                  "adicional": 0
+                },
+                {
+                  "id": "o8",
+                  "nome": "Guaraná",
+                  "adicional": 0
+                }
+              ]
+            }
+          ],
+          "etiquetas": [],
+          "alergenicos": [],
+          "serve": null,
+          "curtidas": 0,
+          "comentarios": 0
+        }
+      ],
+      "chat": true
+    }
+  },
+  "variacoes": {
+    "produto": {
+      "rotulo": "escolhendo as opções de um item",
+      "cliques": [
+        ".produto"
+      ]
+    },
+    "fechado": {
+      "rotulo": "a casa fora do horário",
+      "rotas": {
+        "GET /v1/delivery-publico/casa-de-teste": {
+          "casa": {
+            "id": "v1",
+            "slug": "casa-de-teste",
+            "nome": "Casa de Teste",
+            "cidade": "Cuiabá",
+            "horario_hoje": "18h às 2h",
+            "logo_url": null,
+            "cor_marca": "#c2401a",
+            "cor_texto": "#ffffff",
+            "cor_fundo": "#fff6ea",
+            "cor_traco": "#ff6b35",
+            "aberto": false,
+            "previsao": "40 a 60 minutos",
+            "endereco_retirada": "Av. Brasil, 500 — Centro",
+            "taxa_unica_centavos": 700,
+            "cashback_percentual": 5,
+            "cobranca_pronta": true,
+            "bairros": [
+              {
+                "id": "b1",
+                "nome": "Centro",
+                "taxa_centavos": 500
+              },
+              {
+                "id": "b2",
+                "nome": "Jardim Itália",
+                "taxa_centavos": 900
+              }
+            ]
+          },
+          "categorias": [
+            {
+              "id": "k1",
+              "nome": "Lanches",
+              "grupo": "comer",
+              "descricao": "",
+              "imagem": null
+            },
+            {
+              "id": "k2",
+              "nome": "Porções",
+              "grupo": "comer",
+              "descricao": "",
+              "imagem": null
+            },
+            {
+              "id": "k3",
+              "nome": "Bebidas",
+              "grupo": "beber",
+              "descricao": "",
+              "imagem": null
+            }
+          ],
+          "itens": [
+            {
+              "id": "i1",
+              "categoria_id": "k1",
+              "nome": "X-Burger",
+              "descricao": "Pão, hambúrguer 150g, queijo e molho da casa",
+              "preco": 22,
+              "promocao": null,
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [
+                {
+                  "id": "g1",
+                  "nome": "Ponto da carne",
+                  "obrigatorio": true,
+                  "opcoes": [
+                    {
+                      "id": "o1",
+                      "nome": "Mal passado",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o2",
+                      "nome": "Ao ponto",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o3",
+                      "nome": "Bem passado",
+                      "adicional": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "g2",
+                  "nome": "Adicionais",
+                  "obrigatorio": false,
+                  "opcoes": [
+                    {
+                      "id": "o4",
+                      "nome": "Bacon",
+                      "adicional": 5
+                    },
+                    {
+                      "id": "o5",
+                      "nome": "Cheddar",
+                      "adicional": 4
+                    },
+                    {
+                      "id": "o6",
+                      "nome": "Ovo",
+                      "adicional": 3
+                    }
+                  ]
+                }
+              ],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            },
+            {
+              "id": "i2",
+              "categoria_id": "k1",
+              "nome": "X-Bacon",
+              "descricao": "Pão, hambúrguer 150g, queijo e bacon crocante",
+              "preco": 29,
+              "promocao": null,
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [
+                {
+                  "id": "g1",
+                  "nome": "Ponto da carne",
+                  "obrigatorio": true,
+                  "opcoes": [
+                    {
+                      "id": "o1",
+                      "nome": "Mal passado",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o2",
+                      "nome": "Ao ponto",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o3",
+                      "nome": "Bem passado",
+                      "adicional": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "g2",
+                  "nome": "Adicionais",
+                  "obrigatorio": false,
+                  "opcoes": [
+                    {
+                      "id": "o4",
+                      "nome": "Bacon",
+                      "adicional": 5
+                    },
+                    {
+                      "id": "o5",
+                      "nome": "Cheddar",
+                      "adicional": 4
+                    },
+                    {
+                      "id": "o6",
+                      "nome": "Ovo",
+                      "adicional": 3
+                    }
+                  ]
+                }
+              ],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            },
+            {
+              "id": "i3",
+              "categoria_id": "k2",
+              "nome": "Batata frita",
+              "descricao": "Porção de 400g",
+              "preco": 18,
+              "promocao": {
+                "nome": "Sábado da batata",
+                "preco": 15.9
+              },
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            },
+            {
+              "id": "i4",
+              "categoria_id": "k3",
+              "nome": "Refrigerante lata",
+              "descricao": "350ml",
+              "preco": 7,
+              "promocao": null,
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [
+                {
+                  "id": "g3",
+                  "nome": "Sabor",
+                  "obrigatorio": true,
+                  "opcoes": [
+                    {
+                      "id": "o7",
+                      "nome": "Cola",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o8",
+                      "nome": "Guaraná",
+                      "adicional": 0
+                    }
+                  ]
+                }
+              ],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            }
+          ],
+          "chat": true
+        }
+      }
+    },
+    "sem-mercado-pago": {
+      "rotulo": "a casa ainda não conectou o Mercado Pago",
+      "rotas": {
+        "GET /v1/delivery-publico/casa-de-teste": {
+          "casa": {
+            "id": "v1",
+            "slug": "casa-de-teste",
+            "nome": "Casa de Teste",
+            "cidade": "Cuiabá",
+            "horario_hoje": "18h às 2h",
+            "logo_url": null,
+            "cor_marca": "#c2401a",
+            "cor_texto": "#ffffff",
+            "cor_fundo": "#fff6ea",
+            "cor_traco": "#ff6b35",
+            "aberto": true,
+            "previsao": "40 a 60 minutos",
+            "endereco_retirada": "Av. Brasil, 500 — Centro",
+            "taxa_unica_centavos": 700,
+            "cashback_percentual": 5,
+            "cobranca_pronta": false,
+            "bairros": [
+              {
+                "id": "b1",
+                "nome": "Centro",
+                "taxa_centavos": 500
+              },
+              {
+                "id": "b2",
+                "nome": "Jardim Itália",
+                "taxa_centavos": 900
+              }
+            ]
+          },
+          "categorias": [
+            {
+              "id": "k1",
+              "nome": "Lanches",
+              "grupo": "comer",
+              "descricao": "",
+              "imagem": null
+            },
+            {
+              "id": "k2",
+              "nome": "Porções",
+              "grupo": "comer",
+              "descricao": "",
+              "imagem": null
+            },
+            {
+              "id": "k3",
+              "nome": "Bebidas",
+              "grupo": "beber",
+              "descricao": "",
+              "imagem": null
+            }
+          ],
+          "itens": [
+            {
+              "id": "i1",
+              "categoria_id": "k1",
+              "nome": "X-Burger",
+              "descricao": "Pão, hambúrguer 150g, queijo e molho da casa",
+              "preco": 22,
+              "promocao": null,
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [
+                {
+                  "id": "g1",
+                  "nome": "Ponto da carne",
+                  "obrigatorio": true,
+                  "opcoes": [
+                    {
+                      "id": "o1",
+                      "nome": "Mal passado",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o2",
+                      "nome": "Ao ponto",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o3",
+                      "nome": "Bem passado",
+                      "adicional": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "g2",
+                  "nome": "Adicionais",
+                  "obrigatorio": false,
+                  "opcoes": [
+                    {
+                      "id": "o4",
+                      "nome": "Bacon",
+                      "adicional": 5
+                    },
+                    {
+                      "id": "o5",
+                      "nome": "Cheddar",
+                      "adicional": 4
+                    },
+                    {
+                      "id": "o6",
+                      "nome": "Ovo",
+                      "adicional": 3
+                    }
+                  ]
+                }
+              ],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            },
+            {
+              "id": "i2",
+              "categoria_id": "k1",
+              "nome": "X-Bacon",
+              "descricao": "Pão, hambúrguer 150g, queijo e bacon crocante",
+              "preco": 29,
+              "promocao": null,
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [
+                {
+                  "id": "g1",
+                  "nome": "Ponto da carne",
+                  "obrigatorio": true,
+                  "opcoes": [
+                    {
+                      "id": "o1",
+                      "nome": "Mal passado",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o2",
+                      "nome": "Ao ponto",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o3",
+                      "nome": "Bem passado",
+                      "adicional": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "g2",
+                  "nome": "Adicionais",
+                  "obrigatorio": false,
+                  "opcoes": [
+                    {
+                      "id": "o4",
+                      "nome": "Bacon",
+                      "adicional": 5
+                    },
+                    {
+                      "id": "o5",
+                      "nome": "Cheddar",
+                      "adicional": 4
+                    },
+                    {
+                      "id": "o6",
+                      "nome": "Ovo",
+                      "adicional": 3
+                    }
+                  ]
+                }
+              ],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            },
+            {
+              "id": "i3",
+              "categoria_id": "k2",
+              "nome": "Batata frita",
+              "descricao": "Porção de 400g",
+              "preco": 18,
+              "promocao": {
+                "nome": "Sábado da batata",
+                "preco": 15.9
+              },
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            },
+            {
+              "id": "i4",
+              "categoria_id": "k3",
+              "nome": "Refrigerante lata",
+              "descricao": "350ml",
+              "preco": 7,
+              "promocao": null,
+              "destaque": false,
+              "capa": null,
+              "video": null,
+              "midias": [],
+              "variacoes": [
+                {
+                  "id": "g3",
+                  "nome": "Sabor",
+                  "obrigatorio": true,
+                  "opcoes": [
+                    {
+                      "id": "o7",
+                      "nome": "Cola",
+                      "adicional": 0
+                    },
+                    {
+                      "id": "o8",
+                      "nome": "Guaraná",
+                      "adicional": 0
+                    }
+                  ]
+                }
+              ],
+              "etiquetas": [],
+              "alergenicos": [],
+              "serve": null,
+              "curtidas": 0,
+              "comentarios": 0
+            }
+          ],
+          "chat": true
+        }
+      }
+    }
+  }
+}

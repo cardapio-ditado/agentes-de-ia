@@ -369,6 +369,8 @@ export interface PremioEmitido {
 
 export interface RespostaRegistrada {
   id: string;
+  /** A nota que foi GRAVADA (0 a 10) — a da pergunta do NPS, quando há uma. */
+  nota: number;
   premio: PremioEmitido | null;
   agradecimento: string | null;
 }
@@ -412,6 +414,8 @@ export async function registrarResposta(params: {
   conviteId?: string | null;
   clienteNome?: string | null;
   clienteContato?: string | null;
+  /** "DD/MM" do aniversário, quando a pessoa quis contar. Só vale com contato. */
+  clienteNascimento?: string | null;
   /** As respostas às perguntas da pesquisa da casa. */
   itens?: unknown;
   /** Nome da casa, para o aviso de nota baixa não sair anônimo. */
@@ -506,6 +510,9 @@ export async function registrarResposta(params: {
       const pessoa = await registrarClienteSeDer(params.venueId, "pesquisa", {
         telefone: params.clienteContato,
         nome: params.clienteNome,
+        // O aniversário mora na base, não na resposta: é de lá que o
+        // parabéns sai. Em branco não apaga o que a base já sabia.
+        nascimento: params.clienteNascimento,
       });
       if (pessoa) await vincularRespostaAoCliente(respostaId, pessoa.id);
     } catch (e) {
@@ -576,7 +583,7 @@ export async function registrarResposta(params: {
     }
   }
 
-  return { id: respostaId, premio, agradecimento: config.agradecimento };
+  return { id: respostaId, nota: notaFinal, premio, agradecimento: config.agradecimento };
 }
 
 /**

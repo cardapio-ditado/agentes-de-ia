@@ -26,7 +26,14 @@ export interface DadosDoCliente {
   /** Identificador na URL. Gerado do nome quando não vier. */
   slug?: string;
   cidade?: string;
-  timezone: string;
+  /** Estado da casa. Com ele o fuso sai sozinho — é o jeito de não errar. */
+  uf?: string;
+  /** Só é preciso quando não vier a UF, ou para contrariar o fuso dela. */
+  timezone?: string;
+  /** O que a casa é. Decide os módulos que já nascem ligados e o jeito do atendente. */
+  tipo?: TipoDeCasa;
+  /** Os módulos contratados. Ausente = os do tipo de casa. */
+  modulos?: string[];
   plano: "essencial" | "profissional" | "casa_cheia" | "cortesia";
   emailDono: string;
   telefone?: string;
@@ -37,6 +44,8 @@ export interface ClienteCriado {
   organizacao: { id: string; slug: string; nome: string };
   estabelecimento: { id: string; slug: string; nome: string; timezone: string };
   agente: { id: string; slug: string };
+  /** Os módulos que nasceram ligados. */
+  modulos: string[];
   /** Aparece UMA vez. Não é recuperável depois. */
   chave: string;
   /** Senha inicial do dono. Também aparece uma vez só. */
@@ -72,20 +81,151 @@ export function gerarSlug(texto: string): string {
     .slice(0, 48);
 }
 
-const PROMPT_BASE = (nome: string, cidade: string) =>
-  `Você é a recepcionista virtual do ${nome}${cidade ? ` em ${cidade}` : ""}.
+// ============================================================
+// Os moldes: criar um cliente tem que ser escolher, não configurar
+// ============================================================
+
+/** Os módulos que se vendem — a mesma lista da tela de carteira. */
+export const MODULOS_VENDAVEIS = [
+  "agentes-ia", "cardapio-digital", "delivery", "checklist", "avaliacoes", "cmv", "pesquisa", "rh", "financeiro",
+] as const;
+
+export type TipoDeCasa = "bar" | "restaurante" | "delivery";
+
+const REGRAS_DE_TODO_ATENDENTE = `- Não invente informação. Se não souber, diga que vai verificar com a equipe.
+- Não fale de outros assuntos além do estabelecimento.`;
+
+const REGRA_DA_RESERVA = `- NUNCA confirme uma reserva. Diga sempre que ela será analisada pela equipe
+  e que a confirmação chega pelo WhatsApp.`;
+
+/**
+ * O que muda de um tipo de casa para o outro.
+ *
+ * Um cliente novo que entra num painel com tudo desligado e um atendente
+ * falando de "reserva e programação" numa hamburgueria que só entrega não
+ * configura nada — desiste. O molde faz a casa nascer parecida com o que ela
+ * é; o dono ajusta o resto depois, com o negócio já andando.
+ *
+ * `modulos` é só o ponto de partida do cadastro: a equipe marca e desmarca
+ * na própria tela antes de salvar, conforme o que foi vendido.
+ */
+export const TIPOS_DE_CASA: Record<
+  TipoDeCasa,
+  { rotulo: string; modulos: string[]; papel: string; faz: string[]; regras: string[] }
+> = {
+  bar: {
+    rotulo: "Bar ou casa com programação",
+    modulos: ["agentes-ia", "cardapio-digital", "checklist", "pesquisa", "avaliacoes"],
+    papel: "a recepcionista virtual",
+    faz: [
+      "Responde sobre programação, horários e informações da casa.",
+      "Coleta dados de reserva: nome, telefone, quantidade de pessoas, data e hora.",
+    ],
+    regras: [REGRA_DA_RESERVA],
+  },
+  restaurante: {
+    rotulo: "Restaurante",
+    modulos: ["agentes-ia", "cardapio-digital", "checklist", "pesquisa", "avaliacoes"],
+    papel: "a recepcionista virtual",
+    faz: [
+      "Responde sobre o cardápio, horários e informações da casa.",
+      "Coleta dados de reserva: nome, telefone, quantidade de pessoas, data e hora.",
+    ],
+    regras: [REGRA_DA_RESERVA],
+  },
+  delivery: {
+    rotulo: "Delivery",
+    // O cardápio vem junto: os itens que o delivery vende são cadastrados nele.
+    modulos: ["agentes-ia", "cardapio-digital", "delivery"],
+    papel: "a atendente virtual",
+    faz: [
+      "Tira dúvidas sobre o cardápio, a entrega e o pagamento.",
+      "Anota o pedido de delivery e encaminha o pagamento.",
+    ],
+    // As regras de venda do delivery entram sozinhas no atendente da casa que
+    // tem o módulo (ver INSTRUCOES_DE_DELIVERY): aqui fica só o tom.
+    regras: [],
+  },
+};
+
+/** O prompt com que o atendente nasce: já responderia hoje, do jeito da casa. */
+export function promptInicial(tipo: TipoDeCasa, nome: string, cidade: string): string {
+  const molde = TIPOS_DE_CASA[tipo];
+  return `Você é ${molde.papel} do ${nome}${cidade ? ` em ${cidade}` : ""}.
 
 Personalidade: calorosa, direta e bem-humorada — como quem recebe na porta.
 
 O que você faz:
-- Responde sobre programação, horários e informações da casa.
-- Coleta dados de reserva: nome, telefone, quantidade de pessoas, data e hora.
+${molde.faz.map((f) => `- ${f}`).join("\n")}
 
 Regras:
-- NUNCA confirme uma reserva. Diga sempre que ela será analisada pela equipe
-  e que a confirmação chega pelo WhatsApp.
-- Não invente informação. Se não souber, diga que vai verificar com a equipe.
-- Não fale de outros assuntos além do estabelecimento.`;
+${[...molde.regras, REGRAS_DE_TODO_ATENDENTE].join("\n")}`;
+}
+
+/**
+ * O fuso de cada estado.
+ *
+ * O fuso é o campo mais perigoso do cadastro, e pedir para alguém escolher
+ * "America/Cuiaba" numa lista é pedir o erro. O estado todo mundo sabe.
+ *
+ * Um fuso por estado é uma simplificação honesta: o oeste do Amazonas e
+ * Fernando de Noronha fogem dela, e para esses a tela deixa trocar na mão.
+ */
+const FUSO_DA_UF: Record<string, string> = {
+  AC: "America/Rio_Branco",
+  AM: "America/Manaus",
+  RR: "America/Boa_Vista",
+  RO: "America/Porto_Velho",
+  MT: "America/Cuiaba",
+  MS: "America/Campo_Grande",
+  PA: "America/Belem",
+  AP: "America/Belem",
+  TO: "America/Araguaina",
+  MA: "America/Fortaleza",
+  PI: "America/Fortaleza",
+  CE: "America/Fortaleza",
+  RN: "America/Fortaleza",
+  PB: "America/Fortaleza",
+  PE: "America/Recife",
+  AL: "America/Maceio",
+  SE: "America/Maceio",
+  BA: "America/Bahia",
+  MG: "America/Sao_Paulo",
+  ES: "America/Sao_Paulo",
+  RJ: "America/Sao_Paulo",
+  SP: "America/Sao_Paulo",
+  PR: "America/Sao_Paulo",
+  SC: "America/Sao_Paulo",
+  RS: "America/Sao_Paulo",
+  GO: "America/Sao_Paulo",
+  DF: "America/Sao_Paulo",
+};
+
+export function fusoDaUf(uf: string | null | undefined): string | null {
+  return FUSO_DA_UF[String(uf ?? "").trim().toUpperCase()] ?? null;
+}
+
+/** O fuso existe de verdade? Um nome errado só apareceria semanas depois, numa reserva fora de hora. */
+export function fusoValido(fuso: string): boolean {
+  try {
+    new Intl.DateTimeFormat("pt-BR", { timeZone: fuso });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Os módulos pedidos, conferidos: só os que existem, sem repetir. Ausente = os do tipo. */
+export function modulosDoCadastro(tipo: TipoDeCasa, pedidos: unknown): string[] {
+  if (!Array.isArray(pedidos)) return [...TIPOS_DE_CASA[tipo].modulos];
+  const validos = new Set<string>(MODULOS_VENDAVEIS);
+  const escolhidos = [...new Set(pedidos.map(String))];
+  const estranho = escolhidos.find((m) => !validos.has(m));
+  if (estranho) throw new Error(`O módulo "${estranho}" não existe.`);
+  // Delivery sem cardápio não tem o que vender: os itens moram no cardápio.
+  if (escolhidos.includes("delivery") && !escolhidos.includes("cardapio-digital")) escolhidos.push("cardapio-digital");
+  return escolhidos;
+}
 
 /**
  * Cria o cliente inteiro. Em caso de falha no meio, desfaz o que já criou.
@@ -95,7 +235,15 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
   if (!nome) throw new Error("O nome do restaurante é obrigatório.");
   const email = dados.emailDono.trim().toLowerCase();
   if (!email.includes("@")) throw new Error("E-mail do responsável inválido.");
-  if (!dados.timezone) throw new Error("O fuso horário é obrigatório.");
+  // O fuso informado vence o do estado: é a saída para o oeste do Amazonas.
+  const timezone = dados.timezone?.trim() || fusoDaUf(dados.uf);
+  if (!timezone) throw new Error("Informe o estado da casa (ou o fuso horário).");
+  if (!fusoValido(timezone)) throw new Error(`O fuso horário "${timezone}" não existe.`);
+  const tipo: TipoDeCasa = dados.tipo && dados.tipo in TIPOS_DE_CASA ? dados.tipo : "bar";
+  const modulos = modulosDoCadastro(tipo, dados.modulos);
+  const uf = fusoDaUf(dados.uf) ? dados.uf!.trim().toUpperCase() : null;
+  // "Cuiabá / MT": o atendente e as páginas públicas leem a cidade daqui.
+  const endereco = [dados.cidade?.trim(), uf].filter(Boolean).join(" / ") || null;
 
   const slug = gerarSlug(dados.slug || nome);
   if (!slug) throw new Error("Não consegui gerar um identificador a partir desse nome.");
@@ -133,8 +281,8 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
         org_id: org.id,
         name: nome,
         slug,
-        timezone: dados.timezone,
-        address: dados.cidade ?? null,
+        timezone,
+        address: endereco,
         plano: dados.plano,
         pontos_mensais: PONTOS_DO_PLANO[dados.plano],
         // O ciclo começa hoje, não no dia 1: quem assina dia 20 tem direito
@@ -145,6 +293,17 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
       .single();
     if (erroVenue || !venue) throw new Error(`Falha ao criar o estabelecimento: ${erroVenue?.message}`);
 
+    // ---- 2b. Os módulos contratados ----
+    // Nascem ligados aqui, e não num segundo passo: a colmeia de um cliente
+    // novo sem nenhum favo aceso parece conta cancelada, e é a primeira coisa
+    // que o dono vê.
+    if (modulos.length > 0) {
+      const { error: erroModulos } = await db()
+        .from("venue_modulos")
+        .insert(modulos.map((modulo) => ({ venue_id: venue.id, modulo, ativo: true })) as never);
+      if (erroModulos) throw new Error(`Falha ao ligar os módulos: ${erroModulos.message}`);
+    }
+
     // ---- 3. Agente já com personalidade ----
     // Cliente que entra numa tela vazia não configura nada e não volta. Ele
     // entra com um agente que já responderia hoje.
@@ -153,9 +312,9 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
       .insert({
         org_id: org.id,
         slug: `recepcionista-${slug}`.slice(0, 64),
-        name: "Recepcionista",
+        name: tipo === "delivery" ? "Atendente" : "Recepcionista",
         description: `Atende o WhatsApp do ${nome}`,
-        system_prompt: PROMPT_BASE(nome, dados.cidade ?? ""),
+        system_prompt: promptInicial(tipo, nome, dados.cidade?.trim() ?? ""),
         // Sonnet e não Opus: o padrão precisa ser o que dá margem saudável.
         // Opus fica disponível para quem escolher, não como padrão silencioso.
         model: "claude-sonnet-5",
@@ -210,6 +369,7 @@ export async function criarCliente(dados: DadosDoCliente): Promise<ClienteCriado
         timezone: venue.timezone,
       },
       agente: { id: agente.id, slug: agente.slug },
+      modulos,
       chave,
       senhaInicial,
       dono: { userId, email },

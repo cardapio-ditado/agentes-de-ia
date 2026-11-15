@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { montarSaude, ordenarPendencias, type EntradaDaSaude, type Pendencia } from "./hoje.js";
+import { montarSaude, ordenarPendencias, pendenciaDeFerias, type EntradaDaSaude, type Pendencia } from "./hoje.js";
 
 const LIGADO = { status: "conectado", qr: null, telefone: "5565999990000", agentSlug: "fernanda", venueSlug: "x", versao: null, atualizado_em: "2026-10-24T12:00:00Z" };
 const CAIU = { ...LIGADO, status: "sem_conector" };
@@ -58,4 +58,37 @@ test("pendências: zeradas somem, urgentes primeiro, maior pilha antes", () => {
   const p = (id: string, quantidade: number, urgente: boolean): Pendencia => ({ id, modulo: "x", titulo: id, quantidade, detalhe: "", destino: "", urgente });
   const lista = ordenarPendencias([p("a", 3, false), p("b", 0, true), p("c", 1, true), p("d", 9, false), p("e", 4, true)]);
   assert.deepEqual(lista.map((x) => x.id), ["e", "c", "d", "a"]);
+});
+
+test("férias: ninguém em risco não vira pendência", () => {
+  const p = pendenciaDeFerias([{ nome: "Ana", alerta: null }]);
+  assert.equal(p.quantidade, 0);
+  assert.deepEqual(ordenarPendencias([p]), []);
+});
+
+test("férias: a que vence em dois meses avisa sem urgência, com a data", () => {
+  const p = pendenciaDeFerias([
+    { nome: "Ana", alerta: { limite: "2027-01-10", dias_para_vencer: 57, vencido: false } },
+    { nome: "Bia", alerta: null },
+  ]);
+  assert.equal(p.quantidade, 1);
+  assert.equal(p.urgente, false);
+  assert.equal(p.titulo, "Férias para marcar antes que vençam");
+  assert.match(p.detalhe, /Ana \(até 10\/01\/2027\)/);
+  assert.equal(p.destino, "rh:ferias");
+});
+
+test("férias: vencida ou a menos de um mês é urgente, e a vencida vem primeiro", () => {
+  const perto = pendenciaDeFerias([{ nome: "Ana", alerta: { limite: "2026-12-01", dias_para_vencer: 17, vencido: false } }]);
+  assert.equal(perto.urgente, true);
+
+  const p = pendenciaDeFerias([
+    { nome: "Ana", alerta: { limite: "2027-01-10", dias_para_vencer: 57, vencido: false } },
+    { nome: "Caio", alerta: { limite: "2026-10-31", dias_para_vencer: -14, vencido: true } },
+  ]);
+  assert.equal(p.quantidade, 2);
+  assert.equal(p.urgente, true);
+  assert.equal(p.titulo, "Férias vencidas ou vencendo");
+  assert.match(p.detalhe, /^Já passou do prazo: Caio — fale com a contabilidade/);
+  assert.match(p.detalhe, /Ana \(até 10\/01\/2027\)/);
 });

@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
+import { avisar, dinheiro, el, etiqueta, hojeNaCasa, indicador, preencher, vazio } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 import { nomeDaCategoria, seletorDeCategoria } from "./financeiroConta.js";
 
@@ -128,7 +128,7 @@ function formConta(corpo, ctx, c, voltar) {
   const agencia = el("input", { classe: "input", value: c?.agencia ?? "" });
   const numero = el("input", { classe: "input", value: c?.numero ?? "" });
   const saldo = el("input", { classe: "input", inputmode: "decimal", value: valorNoCampo(c?.saldo_inicial ?? 0) });
-  const saldoEm = el("input", { classe: "input", type: "date", value: c?.saldo_inicial_em ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date()) });
+  const saldoEm = el("input", { classe: "input", type: "date", value: c?.saldo_inicial_em ?? hojeNaCasa() });
   preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: c ? c.nome : "Novo banco ou caixa" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
     el("section", { classe: "cartao pilha" }, [
@@ -163,7 +163,7 @@ function formTransferencia(corpo, ctx, cad, voltar) {
   const de = sel(ativas.find((c) => c.tipo === "caixa")?.id ?? ativas[0]?.id);
   const para = sel(ativas.find((c) => c.tipo !== "caixa")?.id ?? ativas[1]?.id);
   const valor = el("input", { classe: "input", inputmode: "decimal", placeholder: "0,00" });
-  const dia = el("input", { classe: "input", type: "date", value: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date()) });
+  const dia = el("input", { classe: "input", type: "date", value: hojeNaCasa() });
   const descricao = el("input", { classe: "input", placeholder: "Ex.: depósito do caixa de sábado" });
   preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: "Transferir entre contas" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),

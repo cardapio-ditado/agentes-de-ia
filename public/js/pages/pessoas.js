@@ -17,6 +17,7 @@ import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 const NOME_DO_MODULO = {
   "agentes-ia": "Atendente virtual",
   "cardapio-digital": "Cardápio Digital",
+  delivery: "Delivery",
   checklist: "Checklist",
   avaliacoes: "Avaliações",
   cmv: "Custos e estoque",

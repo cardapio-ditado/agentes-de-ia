@@ -597,7 +597,7 @@ export async function cardapioDigital(raiz, ctx) {
       serve: el("input", { placeholder: "2", inputmode: "numeric", value: item?.serve ?? "" }),
       etiquetas: el("input", { placeholder: "vegano, sem glúten, novo", value: (item?.etiquetas ?? []).join(", ") }),
       alergenicos: el("input", { placeholder: "glúten, lactose, ovo", value: (item?.alergenicos ?? []).join(", ") }),
-      descricaoAgente: el("textarea", { rows: 2, placeholder: "O que o agente de WhatsApp deve saber além da descrição pública (opcional)." }),
+      descricaoAgente: el("textarea", { rows: 2, placeholder: "O que o atendente virtual deve saber além da descrição pública (opcional)." }),
       destaque: el("input", { type: "checkbox", checked: item?.destaque || false }),
       ativo: el("input", { type: "checkbox", checked: item ? item.ativo : true }),
     };
@@ -677,7 +677,7 @@ export async function cardapioDigital(raiz, ctx) {
           campo("Etiquetas (separe por vírgula)", campos.etiquetas),
           campo("Contém (alergênicos, separe por vírgula)", campos.alergenicos),
         ]),
-        campo("Só para o agente de IA (opcional)", campos.descricaoAgente),
+        campo("Só para o atendente virtual (opcional)", campos.descricaoAgente),
         el("div", { classe: "linha-campos", style: "margin-top:8px;gap:20px" }, [
           el("label", { classe: "campo-caixa" }, [campos.destaque, el("span", { texto: "Destaque da categoria (cartão grande com foto)" })]),
           el("label", { classe: "campo-caixa" }, [campos.ativo, el("span", { texto: "Aparece no cardápio" })]),
@@ -1209,7 +1209,7 @@ export async function cardapioDigital(raiz, ctx) {
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h2", { texto: "Promoções" }),
-          el("p", { classe: "muted", texto: "Preço promocional por dia da semana. Nos dias marcados o item aparece com o preço riscado e o selo da promoção. O agente de WhatsApp também passa a saber." }),
+          el("p", { classe: "muted", texto: "Preço promocional por dia da semana. Nos dias marcados o item aparece com o preço riscado e o selo da promoção. O atendente virtual também passa a saber." }),
         ]),
         el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Nova promoção", onclick: () => editarPromocao(null) }),
       ]),

@@ -83,7 +83,7 @@ export async function agenteSabe(raiz, ctx) {
   });
 
   const form = el("form", { classe: "cartao", onsubmit: salvar }, [
-    el("h3", { texto: "O que o agente responde sobre a casa" }),
+    el("h3", { texto: "O que o atendente virtual responde sobre a casa" }),
     el("p", {
       classe: "muted",
       texto: "Estes campos viram resposta direta ao cliente. Escreva como você gostaria de ouvir.",
@@ -95,7 +95,7 @@ export async function agenteSabe(raiz, ctx) {
         campos.address,
       ]),
       el("div", { classe: "campo campo-largo" }, [
-        el("label", { texto: "Link do Google Maps (o agente envia ao cliente)" }),
+        el("label", { texto: "Link do Google Maps (o atendente virtual envia ao cliente)" }),
         campos.maps_url,
         areaMapa,
       ]),
@@ -142,7 +142,7 @@ export async function agenteSabe(raiz, ctx) {
             el("p", {
               classe: "muted",
               texto:
-                "Estacionamento, wi-fi, formas de pagamento, pets, acessibilidade… O agente responde com base nisto. Repetir um tópico atualiza o conteúdo.",
+                "Estacionamento, wi-fi, formas de pagamento, pets, acessibilidade… O atendente virtual responde com base nisto. Repetir um tópico atualiza o conteúdo.",
             }),
           ]),
         ]),
@@ -179,7 +179,7 @@ export async function agenteSabe(raiz, ctx) {
           opening_hours,
         }),
       });
-      avisar("Salvo. O agente já responde com as informações novas.", "ok");
+      avisar("Salvo. O atendente virtual já responde com as informações novas.", "ok");
       desenharMapa();
     } catch (err) {
       avisar(err.message, "erro");
@@ -249,7 +249,7 @@ export async function agenteSabe(raiz, ctx) {
         topic: infoTopico.value.trim(),
         content: infoConteudo.value.trim(),
       });
-      avisar("Informação salva. O agente já usa.", "ok");
+      avisar("Informação salva. O atendente virtual já usa.", "ok");
       infoTopico.value = "";
       infoConteudo.value = "";
       await carregarInfos();

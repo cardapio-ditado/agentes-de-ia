@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, grupoDeLista, indicador, preencher, vazio } from "../ui.js";
+import { dinheiro, el, etiqueta, grupoDeLista, hojeNaCasa, indicador, preencher, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { NOME_DO_TIPO, formularioDeBaixa, formularioDeConta, nomeDaCategoria } from "./financeiroConta.js";
 
@@ -11,7 +11,7 @@ import { NOME_DO_TIPO, formularioDeBaixa, formularioDeConta, nomeDaCategoria } f
  * botão da linha é o que se faz com ela (Pagar / Receber), sem abrir nada.
  */
 
-const hojeIso = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date());
+const hojeIso = () => hojeNaCasa();
 const inicioDoMes = (iso) => `${iso.slice(0, 7)}-01`;
 const fimDoMes = (iso) => {
   const [a, m] = iso.split("-").map(Number);
