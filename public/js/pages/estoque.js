@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { acaoIcone, avisar, buscador, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, ICONES, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, buscador, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { abrirKardex } from "./kardex.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
@@ -204,6 +204,8 @@ export async function estoque(raiz, ctx) {
      * principal por casa — marcar um novo rebaixa o atual.
      */
     function gerenciarLocais() {
+      // Etapa interna: as ações da posição saem do cabeçalho.
+      ctx.definirAcoes();
       limpar(conteudo);
 
       const ROTULO_DO_TIPO = {
@@ -226,7 +228,7 @@ export async function estoque(raiz, ctx) {
               el("h2", { texto: "Locais de estoque" }),
               el("p", { classe: "muted", texto: "Cada lugar tem saldo próprio: a garrafa do bar não conta para a cozinha." }),
             ]),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            botaoVoltar(desenhar),
           ]),
           el("div", { classe: "tabela" },
             locais.map((l) => {
@@ -318,6 +320,8 @@ export async function estoque(raiz, ctx) {
     }
 
     function movimentar(modo) {
+      // Etapa interna: as ações da posição saem do cabeçalho.
+      ctx.definirAcoes();
       limpar(conteudo);
       let insumo = null;
       const escolhido = el("p", { classe: "muted", texto: "Nenhum item escolhido ainda." });

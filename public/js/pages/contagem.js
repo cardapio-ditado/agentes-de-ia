@@ -1,5 +1,5 @@
 import { get, post } from "../api.js";
-import { ICONES, avisar, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -262,8 +262,7 @@ export async function contagem(raiz, ctx) {
     return raiz;
 
     function desenharDetalhe() {
-      const voltar = el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar" });
-      voltar.addEventListener("click", () => desenharAbertura());
+      const voltar = botaoVoltar(() => desenharAbertura());
 
       const corrigir = el("button", {
         classe: "btn btn-peq",

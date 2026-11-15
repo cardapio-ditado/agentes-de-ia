@@ -53,6 +53,7 @@ Para trocar uma cor: mude o tom na rampa ou o papel em `colors.json`, repita no 
 | Campo de busca | `campoDeBusca({ rotulo, placeholder, valor, aoMudar, espera })` | lupa, limpar e rótulo acessível |
 | Ação em ícone | `acaoIcone({ iconePath, rotulo, aoClicar, variante })` | `aria-label` + dica; variantes `principal`, `perigo` |
 | Botão com ícone | `comIcone(iconePath, texto)` | conteúdo de um `.btn` |
+| Voltar de etapa | `botaoVoltar(aoClicar)` | detalhe, formulário e conferência; fica à esquerda do título |
 | Etiqueta de situação | `etiqueta(texto, variante)` | ponto/visto + texto; nunca só a cor |
 | Vazio | `vazio(titulo, detalhe, acao)` | diz o que falta e oferece o próximo passo |
 | Erro | `estadoDeErro(titulo, detalhe, aoTentar)` | com "Tentar novamente" |
@@ -88,8 +89,8 @@ Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (J
 
 ## Ordem sugerida para os outros módulos
 
-1. ~~Estoque, Contagem, Produção e Vendas~~ (feito: visão principal de cada uma).
-2. Itens e fornecedores; Receitas e custo do prato; telas internas de Compras, Contagem e Vendas (formulários e conferência).
+1. ~~Estoque, Contagem, Produção e Vendas~~ (feito).
+2. ~~Itens e fornecedores; Receitas e custo do prato~~ (feito: visão principal). Etapas internas do módulo usam `botaoVoltar()`, `acaoIcone()` e limpam as ações do cabeçalho ao entrar; os formulários ainda têm a estrutura antiga.
 3. Financeiro (já usa a tabela e os indicadores; falta o Painel e o Fluxo).
 4. RH e Checklist.
 5. Clientes, Cardápio, Atendente e Ajustes.

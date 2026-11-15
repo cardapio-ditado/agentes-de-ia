@@ -104,7 +104,7 @@ export async function recebimento(raiz, ctx) {
           el("button", {
             classe: "btn btn-primario btn-grande",
             type: "button",
-            texto: "📷  Fotografar a nota",
+            texto: "Fotografar a nota",
             onclick: () => arquivo.click(),
           }),
 
@@ -254,7 +254,7 @@ export async function recebimento(raiz, ctx) {
       const seletorInsumo = buscador(
         insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
         {
-          placeholder: "🔍  Digite o nome do insumo…",
+          placeholder: "Digite o nome do insumo…",
           aoEscolher: (o) => {
             linha.insumoId = o.valor.id;
             linha.insumoNome = o.valor.nome;
@@ -407,7 +407,7 @@ export async function recebimento(raiz, ctx) {
         // Os avisos da leitura vêm antes da lista: são o que a pessoa
         // precisa saber ANTES de conferir, não depois.
         ...(ctxConferencia.avisos ?? []).map((a) =>
-          el("p", { classe: "aviso aviso-alerta", texto: `⚠ ${a}` }),
+          el("p", { classe: "aviso aviso-alerta", texto: a }),
         ),
 
         ctxConferencia.somaConfere === false
@@ -514,7 +514,7 @@ export async function recebimento(raiz, ctx) {
     limpar(conteudo).append(
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cartao" }, [
-          el("h2", { texto: "✓ Entrada registrada" }),
+          el("h2", { texto: "Entrada registrada" }),
           el("p", { classe: "muted", texto: "O estoque já está atualizado." }),
         ]),
 

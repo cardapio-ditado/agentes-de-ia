@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo } from "../api.js";
-import { ICONES, acaoIcone, avisar, buscador, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, buscador, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * Importação de vendas: o relatório do PDV baixa o estoque.
@@ -228,7 +228,7 @@ export async function vendas(raiz, ctx) {
               }`,
             }),
           ]),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+          botaoVoltar(desenhar),
         ]),
 
         // A verdade sobre a cobertura, à vista: 82% baixando é honesto; 100%
@@ -355,24 +355,20 @@ export async function vendas(raiz, ctx) {
                   ? el("button", {
                       classe: "btn btn-peq",
                       type: "button",
-                      texto: "✓ É isso",
+                      texto: "É isso",
                       onclick: () => aceitar(it),
                     })
                   : null,
-                el("button", {
-                  classe: "btn-icone",
-                  type: "button",
-                  title: "Apontar o que este produto baixa",
-                  texto: "✏️",
-                  onclick: () => escolherAlvo(it),
+                acaoIcone({
+                  iconePath: ICONES.editar,
+                  rotulo: "Apontar o que este produto baixa",
+                  aoClicar: () => escolherAlvo(it),
                 }),
                 pendente
-                  ? el("button", {
-                      classe: "btn-icone",
-                      type: "button",
-                      title: "Não baixa estoque (couvert, taxa, serviço)",
-                      texto: "✕",
-                      onclick: () => ignorar(it),
+                  ? acaoIcone({
+                      iconePath: ICONES.fechar,
+                      rotulo: "Não baixa estoque (couvert, taxa, serviço)",
+                      aoClicar: () => ignorar(it),
                     })
                   : null,
               ].filter(Boolean),
@@ -416,9 +412,9 @@ export async function vendas(raiz, ctx) {
       const opcoes = [
         ...fichas
           .filter((f) => f.confirmada_em)
-          .map((f) => ({ rotulo: `🍽 ${f.nome}`, valor: { fichaId: f.id, insumoId: null } })),
+          .map((f) => ({ rotulo: `Prato · ${f.nome}`, valor: { fichaId: f.id, insumoId: null } })),
         ...insumos.map((i) => ({
-          rotulo: `📦 ${i.nome} (${i.unidade})`,
+          rotulo: `Item · ${i.nome} (${i.unidade})`,
           valor: { fichaId: null, insumoId: i.id },
         })),
       ];
@@ -431,10 +427,10 @@ export async function vendas(raiz, ctx) {
               el("h2", { texto: it.produto_externo }),
               el("p", { classe: "muted", texto: "O que este produto tira do estoque?" }),
             ]),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => revisar(imp.id) }),
+            botaoVoltar(() => revisar(imp.id)),
           ]),
           el("div", { classe: "cartao pilha" }, [
-            el("p", { classe: "muted", texto: "🍽 prato: saem os insumos da ficha. 📦 item: sai ele mesmo (bebida, garrafa)." }),
+            el("p", { classe: "muted", texto: "Prato: saem os insumos da ficha. Item: sai ele mesmo (bebida, garrafa)." }),
             buscador(opcoes, {
               placeholder: "Buscar ficha ou item…",
               aoEscolher: (o) => salvarAlvo(it, o.valor.fichaId, o.valor.insumoId),

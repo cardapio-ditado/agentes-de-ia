@@ -215,7 +215,7 @@ export async function kardex(raiz, ctx) {
           buscador(
             insumos.map((i) => ({ rotulo: i.nome, valor: i })),
             {
-              placeholder: "🔍  Digite o nome do produto…",
+              placeholder: "Digite o nome do produto…",
               aoEscolher: (o) => extratoDoProduto(o.valor.id, o.valor.nome),
             },
           ),
@@ -312,7 +312,7 @@ export async function kardex(raiz, ctx) {
           buscador(
             fornecedores.map((f) => ({ rotulo: f.nome, valor: f })),
             {
-              placeholder: "🔍  Digite o nome do fornecedor…",
+              placeholder: "Digite o nome do fornecedor…",
               aoEscolher: (o) => contaDoFornecedor(o.valor.id, o.valor.nome),
             },
           ),

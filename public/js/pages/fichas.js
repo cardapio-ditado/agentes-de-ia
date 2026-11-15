@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, buscador, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, buscador, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -18,7 +18,7 @@ export async function fichas(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ cartoes: 3, linhas: 6 }));
     let lista, insumos;
     try {
       [lista, insumos] = await Promise.all([
@@ -26,39 +26,73 @@ export async function fichas(raiz, ctx) {
         get(`/v1/venues/${ctx.venue}/insumos`),
       ]);
     } catch (e) {
-      limpar(conteudo).append(vazio("Fichas indisponíveis", e.message));
+      limpar(conteudo).append(estadoDeErro("Não foi possível carregar as receitas", e.message, desenhar));
       return;
     }
     limpar(conteudo);
 
+    const margemDe = (f) => (f.custo_porcao !== null && f.preco_venda ? Math.round((1 - f.custo_porcao / Number(f.preco_venda)) * 100) : null);
+    const comMargem = lista.map(margemDe).filter((m) => m !== null);
+    const aConferir = lista.filter((f) => !f.confirmada_em).length;
+    const botaoNovaFicha = () =>
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formulario(null) }, comIcone(ICONES.mais, "Nova ficha"));
+
+    // As ações da tela, no cabeçalho.
+    ctx.definirAcoes(
+      lista.length ? botaoDePdf(() => imprimirFichas(lista, "Livro de receitas"), "Livro de receitas") : null,
+      el("button", { classe: "btn", type: "button", onclick: () => pedirSugestao() }, comIcone(ICONES.sugestao, "Sugerir com IA")),
+      botaoNovaFicha(),
+    );
+
     conteudo.append(
       el("section", { classe: "pilha" }, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Receitas e custo do prato" }),
-            el("p", { classe: "muted", texto: "O que cada prato consome — e quanto custa cada porção." }),
-          ]),
-          el("div", { classe: "linha-campos" }, [
-            lista.length ? botaoDePdf(() => imprimirFichas(lista, "Livro de receitas"), "Livro de receitas") : null,
-            el("button", {
-              classe: "btn",
-              type: "button",
-              texto: "✨ Sugerir com IA",
-              onclick: () => pedirSugestao(),
-            }),
-            el("button", {
-              classe: "btn btn-primario",
-              type: "button",
-              texto: "+ Nova ficha",
-              onclick: () => formulario(null),
-            }),
-          ]),
+        el("div", { classe: "grade" }, [
+          indicador({ rotulo: "Receitas", valor: String(lista.length), nota: `${lista.length - aConferir} conferida(s)`, iconePath: ICONES.checklist, cor: "areia" }),
+          indicador({
+            rotulo: "A conferir",
+            valor: String(aConferir),
+            nota: aConferir > 0 ? "sem conferir, o custo não aparece" : "todas com custo",
+            iconePath: ICONES.alerta,
+            cor: "marca",
+            tom: aConferir > 0 ? "alerta" : undefined,
+          }),
+          indicador({
+            rotulo: "Margem média",
+            valor: comMargem.length ? `${Math.round(comMargem.reduce((t, m) => t + m, 0) / comMargem.length)}%` : "—",
+            nota: comMargem.length ? `entre as ${comMargem.length} com custo e preço de venda` : "falta custo ou preço de venda",
+            iconePath: ICONES.cifrao,
+            cor: "musgo",
+          }),
         ]),
-        el("div", { classe: "lista" },
-          lista.length === 0
-            ? [vazio("Nenhuma ficha ainda", "Comece pelos pratos que mais saem — é onde o custo importa.")]
-            : lista.map(cartaoFicha),
-        ),
+        lista.length === 0
+          ? vazio("Nenhuma ficha ainda", "Comece pelos pratos que mais saem: é onde o custo importa.", botaoNovaFicha())
+          : tabelaDeDados({
+              colunas: [
+                { rotulo: "Receita", principal: true },
+                { rotulo: "Custo por porção", num: true, largura: "160px" },
+                { rotulo: "Preço de venda", num: true, largura: "150px" },
+                { rotulo: "Margem", num: true, largura: "110px" },
+                { rotulo: "Situação", largura: "150px", semRotulo: true },
+                { rotulo: "Ações", acoes: true, largura: "110px" },
+              ],
+              linhas: lista.map((f) => {
+                const margem = margemDe(f);
+                return {
+                  aoClicar: () => formulario(f),
+                  celulas: [
+                    f.nome,
+                    f.custo_porcao === null ? el("span", { classe: "muted", title: "Aparece depois de conferir os ingredientes", texto: "a conferir" }) : dinheiro(f.custo_porcao),
+                    f.preco_venda ? dinheiro(Number(f.preco_venda)) : null,
+                    margem === null ? null : `${margem}%`,
+                    f.confirmada_em ? etiqueta("Conferida", "etiqueta-ok") : etiqueta("Conferir", "etiqueta-alerta"),
+                    el("span", { classe: "grupo-acoes" }, [
+                      acaoIcone({ iconePath: ICONES.editar, rotulo: "Editar a receita", aoClicar: () => formulario(f) }),
+                      acaoIcone({ iconePath: ICONES.baixar, rotulo: "Baixar a receita em PDF", aoClicar: () => imprimirFichas([f], f.nome) }),
+                    ]),
+                  ],
+                };
+              }),
+            }),
       ]),
     );
 
@@ -96,35 +130,6 @@ export async function fichas(raiz, ctx) {
       });
     }
 
-    function cartaoFicha(f) {
-      const custo = f.custo_porcao;
-      const margem =
-        custo !== null && f.preco_venda
-          ? Math.round((1 - custo / Number(f.preco_venda)) * 100)
-          : null;
-      return el("article", { classe: "cartao" }, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("strong", { texto: f.nome }),
-            el("p", {
-              classe: "muted",
-              texto:
-                custo === null
-                  ? "Custo aparece depois de conferir os ingredientes."
-                  : `Custo por porção ${dinheiro(custo)}${
-                      f.preco_venda ? ` · vende a ${dinheiro(Number(f.preco_venda))}` : ""
-                    }${margem !== null ? ` · margem ${margem}%` : ""}`,
-            }),
-          ]),
-          el("div", {}, [
-            f.confirmada_em ? etiqueta("conferida", "etiqueta-ok") : etiqueta("conferir", "etiqueta-alerta"),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formulario(f) }),
-            botaoDePdf(() => imprimirFichas([f], f.nome), "PDF"),
-          ]),
-        ]),
-      ]);
-    }
-
     /**
      * Pede a receita à IA.
      *
@@ -134,6 +139,7 @@ export async function fichas(raiz, ctx) {
      */
     function pedirSugestao() {
       limpar(conteudo);
+      ctx.definirAcoes();
       const prato = el("input", { classe: "campo", placeholder: "Isca de tilápia" });
       const comoFaz = el("input", {
         classe: "campo",
@@ -147,7 +153,7 @@ export async function fichas(raiz, ctx) {
               el("h2", { texto: "Sugerir ficha com IA" }),
               el("p", { classe: "muted", texto: "Diga o prato; a IA propõe os ingredientes com o que a casa tem cadastrado." }),
             ]),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            botaoVoltar(desenhar),
           ]),
           el("div", { classe: "cartao pilha" }, [
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Nome do prato" }), prato]),
@@ -159,7 +165,7 @@ export async function fichas(raiz, ctx) {
             el("button", {
               classe: "btn btn-primario btn-grande",
               type: "button",
-              texto: "✨ Propor ficha",
+              texto: "Propor ficha",
               onclick: async (ev) => {
                 if (prato.value.trim().length < 2) return avisar("Diga o nome do prato.", "erro");
                 ev.target.disabled = true;
@@ -173,7 +179,7 @@ export async function fichas(raiz, ctx) {
                 } catch (e) {
                   avisar(e.message, "erro");
                   ev.target.disabled = false;
-                  ev.target.textContent = "✨ Propor ficha";
+                  ev.target.textContent = "Propor ficha";
                 }
               },
             }),
@@ -184,6 +190,7 @@ export async function fichas(raiz, ctx) {
 
     function formulario(existente, sugestao) {
       limpar(conteudo);
+      ctx.definirAcoes();
       const ingredientes = sugestao
         ? sugestao.ingredientes.map((i) => ({
             insumoId: i.insumoId,
@@ -252,7 +259,7 @@ export async function fichas(raiz, ctx) {
       const seletor = buscador(
         insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
         {
-          placeholder: "🔍  Adicionar ingrediente…",
+          placeholder: "Adicionar ingrediente…",
           aoEscolher: (o) => {
             ingredientes.push({ insumoId: o.valor.id, quantidade: null });
             desenharIngredientes();
@@ -335,12 +342,10 @@ export async function fichas(raiz, ctx) {
                     }
                   },
                 }),
-                el("button", {
-                  classe: "btn-icone",
-                  type: "button",
-                  title: "Não uso este ingrediente",
-                  texto: "✕",
-                  onclick: () => {
+                acaoIcone({
+                  iconePath: ICONES.fechar,
+                  rotulo: "Não uso este ingrediente",
+                  aoClicar: () => {
                     faltando.splice(i, 1);
                     desenharFaltando();
                   },
@@ -355,7 +360,7 @@ export async function fichas(raiz, ctx) {
         el("section", { classe: "pilha" }, [
           el("div", { classe: "cabecalho-secao" }, [
             el("h2", { texto: existente ? `Editar ${existente.nome}` : sugestao ? "Ficha proposta pela IA" : "Nova ficha" }),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            botaoVoltar(desenhar),
           ]),
           sugestao
             ? el("p", {

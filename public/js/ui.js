@@ -188,6 +188,7 @@ export const ICONES = {
   local: "M3 9l9-6 9 6v11a1 1 0 01-1 1H4a1 1 0 01-1-1zM9 21v-8h6v8",
   cifrao: "M12 2v20M17 6.5C17 4.6 14.8 4 12 4S7 5 7 7.5 9 11 12 11.5s5 1.5 5 4-2.2 4-5 4-5-.8-5-2.8",
   enviar: "M12 16V4M7 9l5-5 5 5M5 20h14",
+  voltar: "M15 18l-6-6 6-6",
 };
 
 /** Quantos erros ficam na tela ao mesmo tempo: mais que isso cobre o trabalho. */
@@ -357,6 +358,14 @@ export function campoDeBusca({ rotulo, placeholder = "Buscar…", valor = "", ao
  */
 export function acaoIcone({ iconePath, rotulo, aoClicar, variante = "" }) {
   return el("button", { classe: `acao-icone${variante ? ` acao-icone-${variante}` : ""}`, type: "button", "aria-label": rotulo, "data-dica": rotulo, onclick: aoClicar }, [icone(iconePath, 16)]);
+}
+
+/**
+ * "Voltar" de uma etapa interna (detalhe, formulário, conferência). Fica à
+ * esquerda do título da etapa: o CSS cuida da posição (`.btn-voltar`).
+ */
+export function botaoVoltar(aoClicar, texto = "Voltar") {
+  return el("button", { classe: "btn btn-peq btn-voltar", type: "button", onclick: aoClicar }, comIcone(ICONES.voltar, texto));
 }
 
 /** Texto com ícone à esquerda, para o conteúdo de um botão. */

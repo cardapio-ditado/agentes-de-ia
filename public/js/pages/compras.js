@@ -1,5 +1,5 @@
 import { del, get, patch, post, put } from "../api.js";
-import { acaoIcone, avisar, buscador, campoDeBusca, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, ICONES, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, buscador, campoDeBusca, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { analiseDasCompras, resumoPelaLista } from "./comprasAnalise.js";
 
 /**
@@ -135,6 +135,12 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
   let prePreenchimento = null;
   let filtroStatus = "";
   let filtroTexto = "";
+
+  /** Limpa a tela para uma etapa interna (detalhe, formulário): as ações da lista saem junto. */
+  const limparEtapa = () => {
+    definirAcoes?.();
+    return limpar(conteudo);
+  };
 
   await desenhar();
 
@@ -413,7 +419,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
     /* ---------- alterar os dados da compra ---------- */
 
     function editarDadosCompra(c) {
-      limpar(conteudo);
+      limparEtapa();
 
       let fornecedorEscolhido = null;
       const fornecedorAtual = el("p", { texto: `Fornecedor: ${c.fornecedor || "—"}` });
@@ -441,7 +447,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
         el("section", { classe: "pilha" }, [
           el("div", { classe: "cabecalho-secao" }, [
             el("h2", { texto: "Alterar dados da compra" }),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => detalheCompra(c.id) }),
+            botaoVoltar(() => detalheCompra(c.id)),
           ]),
           el("div", { classe: "cartao pilha" }, [
             el("label", { classe: "campo-rotulado" }, [
@@ -498,7 +504,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
      * custo. Divergiu, pede o motivo. Confirmou, entra no estoque.
      */
     async function receberInline(compraId) {
-      limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo a conferência…" }));
+      limparEtapa().append(el("p", { classe: "muted", texto: "Abrindo a conferência…" }));
       let c;
       try {
         c = await get(`/v1/venues/${ctx.venue}/compras/${compraId}`);
@@ -506,7 +512,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
         avisar(e.message, "erro");
         return desenhar();
       }
-      limpar(conteudo);
+      limparEtapa();
 
       const itens = (c.compra_itens ?? []).map((it) => ({
         insumoId: it.insumo_id,
@@ -575,12 +581,10 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
             ]),
             celulaTotal,
             el("td", { classe: "col-acoes" }, [
-              el("button", {
-                classe: "btn-icone",
-                type: "button",
-                title: "Tirar este item da nota",
-                texto: "✕",
-                onclick: () => {
+              acaoIcone({
+                iconePath: ICONES.fechar,
+                rotulo: "Tirar este item da nota",
+                aoClicar: () => {
                   itens.splice(idx, 1);
                   desenharItens();
                   recalcular();
@@ -623,7 +627,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
               el("h2", { texto: `Receber de ${c.fornecedor || "fornecedor"}` }),
               el("p", { classe: "muted", texto: `Pedido de ${dataCurta(c.data_compra)} · destino ${c.estoque_locais?.nome ?? ""}` }),
             ]),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            botaoVoltar(desenhar),
           ]),
           el("p", { classe: "aviso aviso-alerta", texto: "Confira o que CHEGOU. Zero significa \"não veio\" — e vira cobrança, não entrada." }),
           el("div", { classe: "rolagem-x" }, [
@@ -688,7 +692,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
     /* ---------- a compra por dentro ---------- */
 
     async function detalheCompra(compraId) {
-      limpar(conteudo).append(el("p", { classe: "muted", texto: "Abrindo a compra…" }));
+      limparEtapa().append(el("p", { classe: "muted", texto: "Abrindo a compra…" }));
       let c;
       try {
         c = await get(`/v1/venues/${ctx.venue}/compras/${compraId}`);
@@ -696,7 +700,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
         avisar(e.message, "erro");
         return desenhar();
       }
-      limpar(conteudo);
+      limparEtapa();
 
       const [rotulo, variante] = SITUACAO[c.status] ?? [c.status, ""];
       const itensCompra = c.compra_itens ?? [];
@@ -758,7 +762,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
             ]),
             el("div", {}, [
               etiqueta(rotulo, variante),
-              el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+              botaoVoltar(desenhar),
             ]),
           ]),
           el("div", { classe: "cartao" }, [
@@ -797,13 +801,13 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
                   el("button", {
                     classe: "btn btn-peq",
                     type: "button",
-                    texto: "✏️ Alterar itens",
+                    texto: "Alterar itens",
                     onclick: () => editarPedido(c),
                   }),
                   el("button", {
                     classe: "btn btn-peq",
                     type: "button",
-                    texto: "✏️ Alterar dados",
+                    texto: "Alterar dados",
                     onclick: () => editarDadosCompra(c),
                   }),
                   el("button", {
@@ -842,7 +846,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
      * razão, e razão não se reescreve.
      */
     function editarPedido(c) {
-      limpar(conteudo);
+      limparEtapa();
       const linhas = (c.compra_itens ?? []).map((it) => ({
         insumoId: it.insumo_id,
         nome: it.insumos?.nome ?? it.descricao_nota ?? "?",
@@ -893,12 +897,10 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
               ]),
               celulaTotal,
               el("td", { classe: "col-acoes" }, [
-                el("button", {
-                  classe: "btn-icone",
-                  type: "button",
-                  title: "Tirar este item do pedido",
-                  texto: "✕",
-                  onclick: () => {
+                acaoIcone({
+                  iconePath: ICONES.fechar,
+                  rotulo: "Tirar este item do pedido",
+                  aoClicar: () => {
                     linhas.splice(idx, 1);
                     desenharLinhas();
                     recalcular();
@@ -939,7 +941,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
               el("h2", { texto: `Alterar pedido — ${c.fornecedor || "sem fornecedor"}` }),
               el("p", { classe: "muted", texto: "Mude quantidades, tire ou acrescente itens. Vale até a entrega chegar." }),
             ]),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => detalheCompra(c.id) }),
+            botaoVoltar(() => detalheCompra(c.id)),
           ]),
           el("div", { classe: "rolagem-x" }, [
             el("table", { classe: "planilha" }, [
@@ -992,7 +994,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
     /* ---------- novo pedido ---------- */
 
     function formularioPedido(prePreenchidas) {
-      limpar(conteudo);
+      limparEtapa();
       const linhas = prePreenchidas ?? [];
 
       // Pedido só sai com fornecedor DO CADASTRO: pedido é compromisso com
@@ -1004,7 +1006,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
           el("section", { classe: "pilha" }, [
             el("div", { classe: "cabecalho-secao" }, [
               el("h2", { texto: "Novo pedido" }),
-              el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+              botaoVoltar(desenhar),
             ]),
             vazio(
               "Cadastre um fornecedor primeiro",
@@ -1169,7 +1171,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
    * quer — a sugestão preenche, não decide.
    */
   async function sugerirPedido() {
-    limpar(conteudo).append(
+    limparEtapa().append(
       el("p", { classe: "muted", texto: "Calculando pelo consumo das últimas 4 semanas…" }),
     );
     let sugestoes;
@@ -1183,7 +1185,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
       avisar("Nada a pedir por enquanto: o estoque cobre o consumo previsto.", "info");
       return desenhar();
     }
-    limpar(conteudo);
+    limparEtapa();
     conteudo.append(
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
@@ -1191,7 +1193,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
             el("h2", { texto: "Sugestão de pedido" }),
             el("p", { classe: "muted", texto: "Pelo consumo real, dia da semana a dia da semana. Corte o que não quiser." }),
           ]),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => desenhar() }),
+          botaoVoltar(() => desenhar()),
         ]),
         el("div", { classe: "lista" },
           sugestoes.map((s) =>
