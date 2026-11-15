@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { el, limpar, vazio } from "../ui.js";
+import { el, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * Hoje: a primeira tela de quem abre o painel.
@@ -40,7 +40,7 @@ export async function hoje(raiz, ctx) {
         ctx.podeConfigurar === false ? null : get(`/v1/venues/${encodeURIComponent(ctx.venue)}/trilha`).catch(() => null),
       ]);
     } catch (e) {
-      limpar(conteudo).append(vazio("Não deu para olhar a casa agora", e.message));
+    limpar(conteudo).append(vazio("Não deu para olhar a casa agora", e.message));
       return;
     }
 
@@ -51,21 +51,20 @@ export async function hoje(raiz, ctx) {
     const foraDoNormal = dados.saude.filter((s) => s.estado !== "ok");
     const funcionando = dados.saude.filter((s) => s.estado === "ok");
 
+    const podeAbrir = ctx.podeConfigurar !== false;
     limpar(conteudo).append(
-      el("section", { classe: `cartao hoje-topo ${dados.tudo_certo ? "hoje-topo-ok" : "hoje-topo-atencao"}` }, [
-        el("p", { classe: "hoje-dia", texto: DIA.format(new Date(`${dados.dia}T12:00:00`)) }),
-        el("h2", {
-          classe: "hoje-frase",
+      // Uma linha de situação, e não uma manchete: o que importa vem logo abaixo.
+      el("div", { classe: `hoje-barra${dados.tudo_certo ? " hoje-barra-ok" : ""}` }, [
+        el("strong", {
           texto: dados.tudo_certo
             ? "Tudo certo por aqui."
-            : `${quantas} ${quantas === 1 ? "coisa precisa" : "coisas precisam"} de você agora.`,
+            : `${quantas} ${quantas === 1 ? "pendência precisa" : "pendências precisam"} de você agora.`,
         }),
-        el("p", {
+        el("span", {
           classe: "muted",
-          texto: dados.tudo_certo
-            ? "Os números estão ligados e nada urgente está esperando. Veja abaixo o que dá para adiantar."
-            : "Comece pelo que está em vermelho: é o que perde cliente ou dinheiro hoje.",
+          texto: dados.tudo_certo ? "Nada urgente esperando. Abaixo, o que dá para adiantar." : "Comece pelo que está em vermelho.",
         }),
+        el("span", { classe: "hoje-dia", texto: DIA.format(new Date(`${dados.dia}T12:00:00`)) }),
       ]),
 
       // Enquanto a implantação não termina, ela lembra o próximo passo aqui.
@@ -77,50 +76,53 @@ export async function hoje(raiz, ctx) {
           ])
         : null,
 
-      // Lado a lado no computador: o que fazer à esquerda, a saúde à direita.
-      // Uma embaixo da outra, a saúde ficava duas telas abaixo do que importa.
       el("div", { classe: "hoje-colunas" }, [
-        el("section", { classe: "cartao pilha" }, [
-          el("h3", { texto: "O que precisa de você" }),
-          dados.pendencias.length === 0 ? el("p", { classe: "muted", texto: "Nada esperando por você. 🙌" }) : null,
-          urgentes.length
-            ? el("div", { classe: "pilha-fina" }, [
-                el("p", { classe: "hoje-rotulo hoje-rotulo-urgente", texto: "Resolver hoje" }),
-                el("div", { classe: "tabela" }, urgentes.map(linhaDePendencia)),
-              ])
-            : null,
-          semPressa.length
-            ? el("div", { classe: "pilha-fina" }, [
-                urgentes.length ? el("p", { classe: "hoje-rotulo", texto: "Dá para adiantar" }) : null,
-                el("div", { classe: "tabela" }, semPressa.map(linhaDePendencia)),
-              ])
-            : null,
+        el("section", { classe: "pilha-fina" }, [
+          el("h2", { texto: "Pendências" }),
+          dados.pendencias.length
+            ? tabelaDeDados({
+                colunas: [
+                  { rotulo: "O que precisa de você", principal: true, largura: "44%" },
+                  { rotulo: "Detalhe", quebra: true, larga: true, semRotulo: true },
+                  { rotulo: "", largura: "36px", acoes: true, someNoCelular: true },
+                ],
+                estreita: true,
+                // Urgente primeiro; o servidor já manda nessa ordem, a tela só garante.
+                linhas: [...urgentes, ...semPressa].map((p) => ({
+                  aoClicar: () => { location.hash = `#${p.destino}`; },
+                  celulas: [
+                    el("span", { classe: "cel-com-qtd" }, [
+                      el("span", { classe: `cel-qtd${p.urgente ? " cel-qtd-urgente" : ""}`, texto: String(p.quantidade) }),
+                      el("span", { texto: p.titulo }),
+                    ]),
+                    p.detalhe,
+                    el("span", { classe: "cel-seta", "aria-hidden": "true", texto: "›" }),
+                  ],
+                })),
+              })
+            : vazio("Nada esperando por você", "Quando uma reserva, conta ou documento precisar de decisão, aparece aqui."),
         ]),
 
-        el("section", { classe: "cartao pilha" }, [
-          el("h3", { texto: "Está tudo ligado?" }),
-          // Só o que está parado ou pedindo atenção ocupa linha. O que está
-          // funcionando cabe numa frase — e abre para quem quiser conferir.
-          foraDoNormal.length
-            ? el("div", { classe: "tabela" }, foraDoNormal.map((s) => linhaDeSinal(s, ctx.podeConfigurar !== false)))
-            : null,
-          funcionando.length
-            ? el("details", { classe: "hoje-ok" }, [
-                el("summary", {}, [
-                  el("span", { classe: "ponto-estado ponto-ok", "aria-hidden": "true" }),
-                  el("span", { classe: "hoje-ok-texto" }, [
-                    el("strong", {
-                      texto: foraDoNormal.length
-                        ? `${funcionando.length} funcionando normalmente`
-                        : `Tudo ligado: ${funcionando.length} de ${funcionando.length}`,
-                    }),
-                    el("span", { classe: "muted", texto: funcionando.map((s) => s.titulo).join(" · ") }),
-                  ]),
-                  el("span", { classe: "hoje-ok-ver", texto: "ver" }),
+        el("section", { classe: "pilha-fina" }, [
+          el("h2", { texto: "Conexões e integrações" }),
+          tabelaDeDados({
+            colunas: [
+              { rotulo: "Serviço", principal: true, largura: "42%" },
+              { rotulo: "Situação", quebra: true, larga: true, semRotulo: true },
+            ],
+            estreita: true,
+            // O que está parado sobe; o que funciona fica embaixo, numa linha cada.
+            linhas: [...foraDoNormal, ...funcionando].map((s) => ({
+              aoClicar: podeAbrir && s.estado !== "ok" ? () => { location.hash = `#${s.destino}`; } : null,
+              celulas: [
+                s.titulo,
+                el("span", {}, [
+                  etiqueta(s.estado === "ok" ? "funcionando" : s.estado === "alerta" ? "atenção" : "parado", s.estado === "ok" ? "etiqueta-ok" : s.estado === "alerta" ? "etiqueta-alerta" : "etiqueta-perigo"),
+                  el("span", { classe: "muted", texto: ` ${s.detalhe}` }),
                 ]),
-                el("div", { classe: "tabela" }, funcionando.map((s) => linhaDeSinal(s, ctx.podeConfigurar !== false))),
-              ])
-            : null,
+              ],
+            })),
+          }),
           ctx.podeConfigurar === false && problemas.length
             ? el("p", { classe: "muted", texto: "Avise o dono ou o gerente: o conserto é nos Ajustes da casa." })
             : null,
@@ -130,27 +132,3 @@ export async function hoje(raiz, ctx) {
   }
 }
 
-function linhaDePendencia(p) {
-  return el("a", { classe: "linha-tabela linha-tarefa hoje-linha", href: `#${p.destino}` }, [
-    el("span", { classe: `hoje-numero${p.urgente ? " hoje-numero-urgente" : ""}`, texto: String(p.quantidade) }),
-    el("div", { classe: "linha-tarefa-texto" }, [
-      el("strong", { texto: p.titulo }),
-      el("span", { classe: "muted", texto: p.detalhe }),
-    ]),
-    el("span", { classe: "hoje-seta", "aria-hidden": "true", texto: "›" }),
-  ]);
-}
-
-function linhaDeSinal(s, clicavel) {
-  const classe = { ok: "ponto-ok", alerta: "ponto-alerta", problema: "ponto-problema" }[s.estado] ?? "ponto-alerta";
-  // Quem é do dia a dia vê a saúde, mas o conserto é em tela que não é dele.
-  const comSeta = clicavel && s.estado !== "ok";
-  return el(clicavel ? "a" : "div", { classe: `linha-tabela linha-tarefa${clicavel ? " hoje-linha" : ""}`, href: clicavel ? `#${s.destino}` : null }, [
-    el("span", { classe: `ponto-estado ${classe}`, "aria-label": s.estado === "ok" ? "funcionando" : s.estado === "alerta" ? "atenção" : "parado" }),
-    el("div", { classe: "linha-tarefa-texto" }, [
-      el("strong", { texto: s.titulo }),
-      el("span", { classe: "muted", texto: s.detalhe }),
-    ]),
-    comSeta ? el("span", { classe: "hoje-seta", "aria-hidden": "true", texto: "›" }) : el("span", {}),
-  ]);
-}

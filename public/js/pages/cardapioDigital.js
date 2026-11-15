@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dataHora, desde, dinheiro, el, etiqueta, grupoDeLista, limpar, vazio } from "../ui.js";
+import { avisar, dataHora, desde, dinheiro, el, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * O cardápio digital, como a casa o mexe.
@@ -471,7 +471,7 @@ export async function cardapioDigital(raiz, ctx) {
     ];
     const busca = el("input", { classe: "input", type: "search", placeholder: "Buscar item pelo nome ou descrição…", value: filtroDeItens.busca, "aria-label": "Buscar item" });
     const chips = el("div", { classe: "chips" });
-    const lista = el("div", { classe: "grupos-lista" });
+    const lista = el("div", {});
 
     corpo.append(
       el("div", { classe: "cabecalho-secao" }, [
@@ -531,28 +531,40 @@ export async function cardapioDigital(raiz, ctx) {
       // Cardápio pequeno não precisa de gaveta: abre tudo.
       const tudoAberto = filtrando || visiveis.length <= 15 || grupos.length === 1;
 
+      const variasSecoes = new Set(grupos.map((g) => g.grupo).filter(Boolean)).size > 1;
+      const linhasDaTabela = [];
       let secao = null;
       for (const c of grupos) {
         const itens = porCategoria.get(c.id).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome, "pt-BR"));
-        if (c.grupo && c.grupo !== secao && new Set(grupos.map((g) => g.grupo).filter(Boolean)).size > 1) {
+        if (variasSecoes && c.grupo && c.grupo !== secao) {
           secao = c.grupo;
-          lista.append(el("h3", { classe: "grupos-lista-secao", texto: NOME_DO_GRUPO[c.grupo] ?? c.grupo }));
+          linhasDaTabela.push({ secao: NOME_DO_GRUPO[c.grupo] ?? c.grupo });
         }
         const fora = itens.filter((i) => !i.ativo).length;
         const precos = itens.filter((i) => !semPreco(i)).map((i) => Number(i.preco));
         const faixa = precos.length === 0 ? "sem preço" : Math.min(...precos) === Math.max(...precos) ? dinheiro(precos[0]) : `${dinheiro(Math.min(...precos))} a ${dinheiro(Math.max(...precos))}`;
-        lista.append(
-          grupoDeLista({
-            titulo: c.nome,
-            quantidade: itens.length,
-            selos: [fora ? etiqueta(fora === itens.length ? "toda fora do cardápio" : `${fora} fora`, "etiqueta-alerta") : null, c.ativa === false ? etiqueta("categoria escondida", "etiqueta-alerta") : null],
-            resumo: faixa,
-            aberto: tudoAberto || itensAbertos.has(c.id),
-            aoAlternar: filtrando ? null : (aberto) => (aberto ? itensAbertos.add(c.id) : itensAbertos.delete(c.id)),
-            filhos: itens.map(linhaDoItem),
-          }),
-        );
+        linhasDaTabela.push({
+          titulo: c.nome,
+          quantidade: itens.length,
+          selos: [fora ? etiqueta(fora === itens.length ? "toda fora do cardápio" : `${fora} fora`, "etiqueta-alerta") : null, c.ativa === false ? etiqueta("categoria escondida", "etiqueta-alerta") : null].filter(Boolean),
+          resumo: faixa,
+          aberto: tudoAberto || itensAbertos.has(c.id),
+          aoAlternar: filtrando ? null : (aberto) => (aberto ? itensAbertos.add(c.id) : itensAbertos.delete(c.id)),
+          linhas: itens.map(linhaDoItem),
+        });
       }
+      lista.append(
+        tabelaDeDados({
+          colunas: [
+            { rotulo: "Item", principal: true, largura: "30%" },
+            { rotulo: "Descrição", larga: true, semRotulo: true },
+            { rotulo: "Situação", largura: "170px", semRotulo: true },
+            { rotulo: "Curtidas", num: true, largura: "84px" },
+            { rotulo: "Preço", num: true, largura: "112px" },
+          ],
+          grupos: linhasDaTabela,
+        }),
+      );
     };
     let espera = null;
     busca.addEventListener("input", () => {
@@ -565,23 +577,25 @@ export async function cardapioDigital(raiz, ctx) {
 
   function linhaDoItem(i) {
     const semPreco = !(Number(i.preco) > 0);
-    return el(
-      "button",
-      { classe: `linha-tabela${i.ativo ? "" : " linha-apagada"}`, type: "button", onclick: () => editarItem(i) },
-      [
-        i.capa ? el("span", { classe: "cardapio-thumb" }, [el("img", { src: i.capa, alt: "", loading: "lazy" })]) : null,
-        el("span", { classe: "linha-principal" }, [
-          el("strong", { texto: i.nome }),
-          i.descricao ? el("span", { classe: "muted linha-uma", texto: i.descricao }) : null,
+    return {
+      classe: i.ativo ? null : "linha-fraca",
+      aoClicar: () => editarItem(i),
+      celulas: [
+        el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, [
+          i.capa ? el("span", { classe: "cardapio-thumb" }, [el("img", { src: i.capa, alt: "", loading: "lazy" })]) : null,
+          el("span", { texto: i.nome }),
         ]),
-        el("span", { classe: "linha-detalhes" }, [
-          i.destaque ? etiqueta("destaque", "etiqueta-info") : null,
-          !i.ativo ? etiqueta("fora do cardápio", "etiqueta-alerta") : null,
-          i.curtidas ? el("span", { classe: "muted", texto: `♥ ${i.curtidas}` }) : null,
-          el("strong", { classe: semPreco ? "muted" : "", texto: semPreco ? "sem preço" : dinheiro(i.preco) }),
-        ]),
+        i.descricao ? el("span", { classe: "linha-uma", title: i.descricao, texto: i.descricao }) : null,
+        i.destaque || !i.ativo
+          ? el("span", { style: "display:inline-flex;gap:4px;flex-wrap:wrap" }, [
+              !i.ativo ? etiqueta("fora do cardápio", "etiqueta-alerta") : null,
+              i.destaque ? etiqueta("destaque", "etiqueta-info") : null,
+            ])
+          : el("span", { classe: "muted", texto: "no cardápio" }),
+        i.curtidas ? String(i.curtidas) : null,
+        semPreco ? el("span", { classe: "muted", texto: "sem preço" }) : dinheiro(i.preco),
       ],
-    );
+    };
   }
 
   function editarItem(item) {

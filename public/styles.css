@@ -3943,176 +3943,247 @@ a.btn { text-decoration: none; }
 .grupo-lista .linha-tabela { padding-top: 8px; padding-bottom: 8px; }
 
 /* ============================================================
-   Identidade do painel — carvão, favo e brasa
+   Painel com cara de sistema de gestão
    ------------------------------------------------------------
-   A paleta é a do guia (Carvão, Fogo, Brasa, Âmbar, Creme). O que muda é
-   ONDE cada cor mora: o carvão do hub desce para a barra lateral, o creme
-   deixa de ser fundo de tudo e vira tinta sobre o carvão, e a tela de
-   trabalho fica em papel claro, plana, com fio fino no lugar de sombra.
+   O painel é ferramenta de trabalho de oito horas por dia, não página de
+   apresentação. Daqui para baixo: fundo neutro, letra de sistema, tabela
+   com coluna e cabeçalho, cantos quase retos, nenhuma sombra decorativa e
+   a cor da marca só onde há ação ou onde a pessoa está.
 
-   Três assinaturas, e só três:
-   · o favo (hexágono do hub) marca contagem e estado;
-   · número em serifada, como preço de cardápio;
-   · rótulo miúdo em caixa alta, como etiqueta de comanda.
+   O hub (a colmeia) e a tela de acesso continuam com a identidade da marca;
+   estas regras valem para dentro de `.app`.
    ============================================================ */
 :root {
-  --fundo: #f4f0ea; /* papel: o creme sem o pêssego */
-  --superficie: #fffefb;
-  --superficie-2: #ece5db;
-  --borda: #e4dbcf;
-  --borda-forte: #cbbcab;
-  --texto-2: #5f5048;
-  --texto-3: #8c7a6c;
-  --marca-suave: #fbe9df;
-  --raio: 6px;
-  --raio-g: 8px;
-  /* A sombra fica para o que flutua de verdade (aviso, dica de gráfico). */
-  --sombra: 0 6px 20px rgba(34, 23, 20, 0.14);
-  --carvao: #221714;
-  --creme: #fff8f0;
+  --fundo: #f3f4f6;
+  --superficie: #ffffff;
+  --superficie-2: #f1f3f5;
+  --borda: #e2e5e9;
+  --borda-forte: #c8cdd4;
+  --texto: #1c2127;
+  --texto-2: #56606b;
+  --texto-3: #87909b;
+  --texto-suave: var(--texto-2);
+
+  --marca: #e8590c;
+  --marca-forte: #c2410c;
+  --marca-suave: #fff1e8;
+  --marca-borda: #ffd0b0;
+  --cta: #d9480f;
+  --cta-hover: #b93c0b;
+  --cta-texto: #ffffff;
+
+  --ok: #1a7f37;
+  --ok-suave: #e6f4ea;
+  --alerta: #8a5a00;
+  --alerta-suave: #fff3d1;
+  --perigo: #c92a2a;
+  --perigo-suave: #fdebeb;
+  --info: #0b5cad;
+  --info-suave: #e6f0fb;
+
+  --fonte-ui: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --raio: 4px;
+  --raio-g: 4px;
+  /* Sombra só no que flutua sobre a tela (aviso, dica, menu). */
+  --sombra: 0 4px 16px rgba(20, 26, 33, 0.14);
+  --lateral-l: 232px;
+  --lateral-fundo: #1f242b;
+  --linha-realce: #f4f7fb;
 }
 [data-tema="escuro"] {
-  /* Repetidos aqui porque o :root logo acima vem depois do bloco escuro lá
-     do alto do arquivo e, com o mesmo peso, ganharia dele. */
-  --texto-2: #c9b4a6;
-  --texto-3: #9b8777;
-  --fundo: #150e0c;
-  --superficie: #1e1512;
-  --superficie-2: #2a1e19;
-  --borda: #33251f;
-  --borda-forte: #4a372e;
-  --marca-suave: #3a2117;
-  --sombra: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --fundo: #14171b;
+  --superficie: #1c2025;
+  --superficie-2: #252a31;
+  --borda: #2c323a;
+  --borda-forte: #404852;
+  --texto: #e7eaee;
+  --texto-2: #a9b1bb;
+  --texto-3: #7c8591;
+
+  --marca: #ff7a3d;
+  --marca-forte: #ff9a6b;
+  --marca-suave: #3a2418;
+  --marca-borda: #5e3620;
+  --cta: #e8590c;
+  --cta-hover: #ff7a3d;
+  --cta-texto: #ffffff;
+
+  --ok: #4cc38a;
+  --ok-suave: #15291f;
+  --alerta: #e2a93b;
+  --alerta-suave: #2e2512;
+  --perigo: #ff6b6b;
+  --perigo-suave: #341719;
+  --info: #6cb0f5;
+  --info-suave: #14263a;
+
+  --sombra: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --lateral-fundo: #101317;
+  --linha-realce: #222830;
 }
 
-/* ---------- Tipografia: serifada só no nome da tela e nos números ---------- */
+.app {
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.app h1,
 .app h2,
 .app h3 {
   font-family: var(--fonte-ui);
-  font-weight: 800;
-  letter-spacing: -0.015em;
-}
-.app h2 { font-size: 17px; }
-.app h3 { font-size: 14.5px; }
-#titulo-pagina {
-  font-size: 27px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: 0;
 }
+.app h2 { font-size: 15px; }
+.app h3 { font-size: 13.5px; }
+.app .muted { font-size: 12.5px; }
 
-/* ---------- Barra lateral: o carvão do hub ---------- */
+/* ---------- Barra lateral ---------- */
 .app .lateral {
-  /* Os tokens são redefinidos AQUI, e tudo o que mora na barra (itens,
-     botões, rótulos) acompanha sem regra própria. */
-  --texto: var(--creme);
-  --texto-2: #cdbbad;
-  --texto-3: #9a8778;
-  --texto-suave: #9a8778;
+  --texto: #f1f3f5;
+  --texto-2: #b6bec8;
+  --texto-3: #8a94a0;
+  --texto-suave: #8a94a0;
   --superficie: transparent;
-  --superficie-2: rgba(255, 248, 240, 0.08);
-  --borda: rgba(255, 248, 240, 0.12);
-  --borda-forte: rgba(255, 248, 240, 0.2);
+  --superficie-2: rgba(255, 255, 255, 0.07);
+  --borda: rgba(255, 255, 255, 0.1);
+  --borda-forte: rgba(255, 255, 255, 0.18);
+  background: var(--lateral-fundo);
   color: var(--texto);
   border-right: 0;
-  padding: 16px 12px;
-  background:
-    radial-gradient(130% 55% at 0% 100%, rgba(255, 107, 53, 0.2), transparent 62%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='48.5' viewBox='0 0 84 48.5'%3E%3Cpath d='M0 24.25L14 0h28l14 24.25L42 48.5H14zM56 24.25h28' fill='none' stroke='%23fff8f0' stroke-opacity='.055' stroke-width='1'/%3E%3C/svg%3E") left bottom / 84px 48.5px repeat,
-    #1c1210;
+  padding: 10px 8px;
+  gap: 2px;
 }
-.app .lateral .wordmark { color: var(--creme); }
+.app .lateral-topo { padding: 4px 6px 12px; border-bottom: 1px solid var(--borda); margin-bottom: 6px; }
+.app .lateral .wordmark { color: #fff; }
+.app .nav { gap: 1px; }
 .app .nav-item {
+  padding: 7px 10px;
+  gap: 10px;
   border-radius: var(--raio);
-  font-weight: 500;
-  position: relative;
+  font-size: 13px;
+  font-weight: 400;
 }
+.app .nav-item svg { width: 16px; height: 16px; }
 .app .nav-item[aria-current="page"] {
-  background: rgba(255, 107, 53, 0.16);
-  color: var(--creme);
-  font-weight: 700;
-}
-/* A brasa acesa do lado do item em que se está. */
-.app .nav-item[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  top: 8px;
-  bottom: 8px;
-  width: 4px;
-  border-radius: 0 4px 4px 0;
-  background: var(--marca);
-  box-shadow: 0 0 12px rgba(255, 107, 53, 0.8);
-}
-.app .nav-item[aria-current="page"] svg { color: var(--marca); }
-.app .nav-contador { background: var(--marca); color: var(--carvao); border-radius: 4px; }
-.app .nav-grupo { letter-spacing: 0.12em; font-size: 0.66rem; }
-
-/* ---------- Topo ---------- */
-.app .topo {
-  padding: 18px 26px 16px;
-  background: color-mix(in srgb, var(--fundo) 92%, transparent);
-  border-bottom: 1px solid var(--borda-forte);
-}
-.app .pagina { padding: 24px 26px 40px; }
-
-/* ---------- Superfícies planas: fio fino, sem sombra ---------- */
-.app .cartao,
-.app .indicador {
-  box-shadow: none;
-  border-color: var(--borda);
-}
-.app .tabela,
-.app .grupo-lista { border-radius: var(--raio-g); }
-
-/* ---------- Botões ---------- */
-.app .btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
   font-weight: 600;
-  border-color: var(--borda-forte);
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  box-shadow: inset 3px 0 0 var(--marca);
 }
-.app .btn:hover { border-color: var(--texto-3); }
-.app .btn-primario { border-color: var(--cta); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18); }
-.app .btn-primario:hover { border-color: var(--cta-hover); }
+.app .nav-contador { background: var(--marca); color: #fff; border-radius: 3px; font-size: 10.5px; padding: 0 6px; }
+.app .nav-grupo { margin: 14px 10px 4px; font-size: 10.5px; letter-spacing: 0.08em; font-weight: 600; }
+
+/* ---------- Topo: módulo › tela ---------- */
+.app .topo {
+  padding: 8px 20px;
+  min-height: 52px;
+  background: var(--superficie);
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--borda);
+}
+.trilha-pagina {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+  line-height: 1.2;
+}
+#titulo-pagina { font-size: 17px; font-weight: 600; line-height: 1.25; }
+/* A explicação da tela mora no "?": no topo ela só empurrava o trabalho para baixo. */
+#subtitulo-pagina { display: none; }
+.app .pagina { padding: 16px 20px 32px; max-width: 1440px; }
+.app .pilha { gap: 12px; }
+
+/* ---------- Painéis ---------- */
+.app .cartao {
+  border-radius: var(--raio-g);
+  border: 1px solid var(--borda);
+  box-shadow: none;
+  padding: 14px;
+}
+.app .cabecalho-secao { margin-bottom: 8px; gap: 8px; }
+.app .vazio { border-radius: var(--raio-g); padding: 28px 16px; }
+
+/* ---------- Controles ---------- */
+.app .btn {
+  min-height: 32px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--raio);
+  border-color: var(--borda-forte);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.app .btn:hover { background: var(--superficie-2); border-color: var(--texto-3); }
+.app .btn-primario { font-weight: 600; border-color: var(--cta); }
+.app .btn-primario:hover { background: var(--cta-hover); border-color: var(--cta-hover); }
+.app .btn-peq { min-height: 28px; padding: 3px 10px; font-size: 12.5px; }
 .app .btn:focus-visible,
 .app .aba:focus-visible,
-.app .nav-item:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+.app .chip:focus-visible,
+.app .nav-item:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+.app input,
+.app select,
+.app textarea {
+  padding: 6px 9px;
+  font-size: 13px;
+  border-radius: var(--raio);
+}
+.app input:focus,
+.app select:focus,
+.app textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--info) 35%, transparent);
+  outline-offset: 0;
+  border-color: var(--info);
+}
+.app .linha-campos { gap: 8px; margin: 8px 0; }
 
-/* ---------- Etiqueta: carimbo de comanda, não pílula ---------- */
+/* ---------- Etiqueta de situação ---------- */
 .app .etiqueta {
-  border-radius: 4px;
-  padding: 2px 7px;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  line-height: 1.5;
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* ---------- Abas ---------- */
-.app .abas { border-bottom: 1px solid var(--borda-forte); gap: 2px; }
+.app .abas { border-bottom: 1px solid var(--borda-forte); gap: 0; background: none; }
 .app .aba {
   font-family: var(--fonte-ui);
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
   margin-bottom: -1px;
-  padding: 10px 13px;
+  border-bottom-width: 2px;
+  color: var(--texto-2);
 }
-.app .aba-ativa { color: var(--texto); border-bottom-color: var(--marca); }
+.app .aba:hover { color: var(--texto); }
+.app .aba-ativa { color: var(--texto); font-weight: 600; border-bottom-color: var(--marca); }
+.app .abas-pagina { margin-bottom: 12px; }
 
-/* ---------- Filtros: o ligado é carvão cheio, não pastel ---------- */
-.app .chip { border-radius: var(--raio); font-weight: 600; }
+/* ---------- Filtros rápidos ---------- */
+.app .chip {
+  border-radius: var(--raio);
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  background: var(--superficie);
+}
 .app .chip-ativo {
   background: var(--texto);
   border-color: var(--texto);
-  color: var(--fundo);
-  font-weight: 700;
+  color: var(--superficie);
+  font-weight: 600;
 }
 
-/* ---------- Indicadores: uma régua de números, não quatro caixas ---------- */
+/* ---------- Indicadores: uma régua de números ---------- */
 .app .grade:has(> .indicador) {
   gap: 0;
-  border: 1px solid var(--borda-forte);
+  border: 1px solid var(--borda);
   border-radius: var(--raio-g);
   background: var(--superficie);
   overflow: hidden;
@@ -4121,105 +4192,229 @@ a.btn { text-decoration: none; }
   border: 0;
   border-radius: 0;
   background: none;
-  /* O fio entre as casas: a margem negativa esconde o da última coluna e o
-     da última linha embaixo da borda da régua. */
   box-shadow: 1px 0 0 var(--borda), 0 1px 0 var(--borda);
-  padding: 14px 18px 15px;
+  padding: 10px 14px 11px;
 }
-.app .indicador-rotulo {
+.app .indicador { box-shadow: none; border-radius: var(--raio-g); }
+.app .indicador-rotulo { font-size: 11.5px; font-weight: 500; color: var(--texto-2); }
+.app .indicador-valor {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.app .indicador-nota { font-size: 11.5px; }
+.app .indicador-destaque .indicador-valor { color: var(--perigo); }
+.app .crm-tira { border-radius: var(--raio); padding: 8px 12px; }
+.app .crm-tira-ligada { box-shadow: inset 0 -3px 0 var(--marca); border-color: var(--borda-forte); background: var(--superficie); }
+.app .crm-tira-numero { font-size: 18px; font-weight: 600; }
+.app .crm-tira-rotulo { font-size: 11.5px; }
+
+/* ---------- Tabela de dados ---------- */
+.app .rolagem-x { border-radius: var(--raio-g); border-color: var(--borda); }
+.app .planilha { font-size: 13px; }
+.app .planilha th {
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--texto-2);
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borda-forte);
+}
+.app .planilha td { padding: 7px 12px; }
+.app .planilha tbody tr:hover { background: var(--linha-realce); }
+.app .planilha tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borda-forte); }
+.planilha-fixa { table-layout: fixed; }
+.planilha.planilha-estreita { min-width: 0; }
+.planilha-fixa td { overflow: hidden; text-overflow: ellipsis; }
+.planilha .linha-abre { cursor: pointer; }
+.planilha .linha-abre:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+.planilha .cel-principal { font-weight: 600; white-space: normal; }
+.planilha .cel-quebra { white-space: normal; }
+.planilha td small { color: var(--texto-3); font-weight: 400; }
+.planilha .linha-fraca td { color: var(--texto-3); }
+.planilha .linha-fraca .cel-principal { font-weight: 500; }
+
+/* Grupo que abre e fecha: uma faixa dentro da própria tabela. */
+.planilha-grupo-linha th,
+.planilha-secao th { padding: 0; text-transform: none; letter-spacing: 0; }
+.app .planilha .planilha-grupo-linha th { padding: 0; background: var(--superficie); border-bottom: 1px solid var(--borda); }
+.planilha-grupo-botao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.planilha-grupo-botao:hover { background: var(--linha-realce); }
+.planilha-grupo-botao:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+.planilha-grupo-seta { width: 10px; color: var(--texto-3); font-size: 15px; line-height: 1; transition: transform 0.12s ease; transform: rotate(90deg); }
+.planilha-grupo[data-fechado] .planilha-grupo-seta { transform: none; }
+.planilha-grupo[data-fechado] tr:not(.planilha-grupo-linha) { display: none; }
+.planilha-grupo-quantos {
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.planilha-grupo-resumo { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.planilha-grupo-perigo .planilha-grupo-titulo,
+.planilha-grupo-perigo .planilha-grupo-resumo { color: var(--perigo); }
+.planilha-grupo-perigo .planilha-grupo-quantos { background: var(--perigo-suave); color: var(--perigo); }
+.planilha-grupo-alerta .planilha-grupo-titulo { color: var(--alerta); }
+.planilha-grupo-alerta .planilha-grupo-quantos { background: var(--alerta-suave); color: var(--alerta); }
+.planilha-grupo-perigo .planilha-grupo-linha th { box-shadow: inset 3px 0 0 var(--perigo); }
+.planilha-grupo-alerta .planilha-grupo-linha th { box-shadow: inset 3px 0 0 var(--alerta); }
+.app .planilha .planilha-secao th {
+  padding: 5px 12px;
   font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--texto-3);
-}
-.app .indicador-valor {
-  font-family: var(--fonte-display);
-  font-weight: 600;
-  font-size: 30px;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  margin-top: 8px;
-  font-variant-numeric: lining-nums tabular-nums;
-}
-.app .indicador-destaque .indicador-valor { color: var(--marca-forte); }
-.app .crm-tira { border-radius: var(--raio); }
-.app .crm-tira-ligada { background: var(--texto); border-color: var(--texto); box-shadow: none; }
-.app .crm-tira-ligada .crm-tira-numero { color: var(--fundo); }
-.app .crm-tira-ligada .crm-tira-rotulo { color: color-mix(in srgb, var(--fundo) 75%, transparent); }
-.app .crm-tira-numero { font-family: var(--fonte-display); font-weight: 600; font-size: 1.6rem; }
-.app .crm-tira-rotulo { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-
-/* Dinheiro e contagem nas listas: a mesma serifada dos indicadores. */
-.app .conta-valor strong,
-.app .crm-numero strong,
-.app .linha-detalhes > strong,
-.app .grupo-lista-resumo {
-  font-family: var(--fonte-display);
-  font-weight: 600;
-  font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: -0.01em;
-}
-.app .conta-valor strong,
-.app .linha-detalhes > strong { font-size: 1.02rem; }
-.app .crm-numero span { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
-
-/* ---------- O favo: contagem em hexágono, como no hub ---------- */
-.app .hoje-numero {
-  width: 42px;
-  min-width: 42px;
-  height: 37px;
-  padding: 0;
-  border-radius: 0;
-  display: grid;
-  place-items: center;
-  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
   background: var(--superficie-2);
-  font-family: var(--fonte-display);
-  font-size: 1.05rem;
-  font-weight: 700;
 }
-.app .hoje-numero-urgente { background: var(--cta); color: var(--cta-texto); }
-.app .ponto-estado {
-  width: 12px;
-  height: 11px;
-  border-radius: 0;
-  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-}
-.app .grupo-lista-quantos { border-radius: 4px; }
 
-/* ---------- Hoje: a manchete é o momento da marca ---------- */
-.app .hoje-topo {
-  position: relative;
-  overflow: hidden;
-  border: 0;
-  padding: 22px 24px 24px;
-  color: var(--creme);
-  background:
-    radial-gradient(60% 140% at 100% 100%, rgba(255, 107, 53, 0.34), transparent 60%),
-    radial-gradient(40% 90% at 78% 115%, rgba(244, 161, 0, 0.22), transparent 60%),
-    #1c1210;
+/* Listas antigas (linha em flex) acompanham a densidade. */
+.app .tabela { border-radius: var(--raio-g); }
+.app .linha-tabela { padding: 7px 12px; }
+.app button.linha-tabela:hover,
+.app .linha-clicavel:hover,
+.app .hoje-linha:hover { background: var(--linha-realce); }
+.app .grupo-lista { border-radius: var(--raio-g); }
+.app .grupo-lista > summary:hover { background: var(--linha-realce); }
+
+/* ---------- Hoje: barra de situação, sem manchete ---------- */
+.app .hoje-barra {
+  display: flex;
+  align-items: baseline;
+  gap: 6px 14px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--perigo);
+  border-radius: var(--raio-g);
+  background: var(--superficie);
 }
-.app .hoje-topo .hoje-dia { color: var(--marca); letter-spacing: 0.14em; font-size: 0.72rem; }
-.app .hoje-topo .hoje-frase {
-  font-family: var(--fonte-display);
+.app .hoje-barra-ok { border-left-color: var(--ok); }
+.app .hoje-barra strong { font-size: 14px; font-weight: 600; }
+.app .hoje-barra .hoje-dia { margin-left: auto; font-size: 11px; letter-spacing: 0.06em; }
+.app .hoje-colunas { gap: 12px; }
+.planilha .cel-qtd {
+  display: inline-block;
+  min-width: 26px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--superficie-2);
   font-weight: 600;
-  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.3rem);
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  margin: 4px 0 6px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.app .hoje-topo .muted { color: #cdbbad; font-size: 14px; }
-.app .hoje-topo-ok { background: radial-gradient(60% 140% at 100% 100%, rgba(78, 203, 141, 0.26), transparent 60%), #1c1210; }
-.app .hoje-topo-ok .hoje-dia { color: #4ecb8d; }
-.app .hoje-rotulo { letter-spacing: 0.12em; }
-.app .hoje-linha { padding-top: 11px; padding-bottom: 11px; }
+.planilha .cel-qtd-urgente { background: var(--perigo); color: #fff; }
+.planilha .cel-seta { color: var(--texto-3); font-size: 15px; }
+.estado-ponto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 
 @media (max-width: 820px) {
-  .app .topo { padding: 10px 14px; }
-  .app .pagina { padding: 16px 14px 32px; }
-  #titulo-pagina { font-size: 1.2rem; }
-  .app .grade:has(> .indicador) .indicador-valor { font-size: 21px; margin-top: 4px; }
-  .app .grade:has(> .indicador) > .indicador { padding: 10px 12px; }
-  .app .hoje-topo { padding: 18px 16px 20px; }
+  .app .topo { padding: 6px 12px; }
+  .app .pagina { padding: 12px 12px 28px; }
+  #titulo-pagina { font-size: 15.5px; }
+  .app .grade:has(> .indicador) .indicador-valor { font-size: 17px; }
+  /* O dedo precisa de alvo: no toque os controles voltam a 40 px. */
+  .app .btn { min-height: 40px; }
+  .app .chip { padding: 8px 12px; }
 }
+
+/* ---------- A tabela vira ficha no celular ---------- */
+@media (max-width: 640px) {
+  .planilha.planilha-empilha { min-width: 0; display: block; }
+  .planilha-empilha colgroup,
+  .planilha-empilha thead { display: none; }
+  .planilha-empilha tbody,
+  .planilha-empilha tfoot { display: block; }
+  .planilha-empilha tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 2px 12px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--borda);
+  }
+  .planilha-empilha .planilha-grupo-linha,
+  .planilha-empilha .planilha-secao tr { display: block; padding: 0; }
+  .planilha-empilha .planilha-grupo-linha th,
+  .planilha-empilha .planilha-secao th { display: block; }
+  .app .planilha-empilha td {
+    display: block;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    text-align: left;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .planilha-empilha td.cel-principal { grid-column: 1 / -1; font-size: 14px; }
+  .planilha-empilha td.cel-vazia { display: none; }
+  .planilha-empilha td[data-rotulo]::before {
+    content: attr(data-rotulo) " ";
+    display: block;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--texto-3);
+  }
+  .planilha-empilha td.col-acoes { grid-column: 1 / -1; margin-top: 4px; }
+  .planilha-empilha td.col-acoes .btn { width: 100%; }
+  .planilha-empilha tfoot tr { background: var(--superficie-2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planilha-grupo-seta { transition: none; }
+}
+
+/* Ajustes finos da grade */
+.app .planilha td.col-acoes { padding-top: 4px; padding-bottom: 4px; }
+.app .planilha .btn-peq { min-height: 26px; padding: 2px 10px; }
+.app .linha-campos .btn { flex-shrink: 0; }
+/* Os filtros do financeiro numa barra só, em vez de três linhas num cartão. */
+.app .filtros-financeiro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 8px 12px;
+}
+.app .filtros-financeiro > .muted { margin: 0; }
+.app .filtros-financeiro .mais-filtros { margin-left: auto; }
+.app .filtros-financeiro .mais-filtros[open],
+.app .filtros-financeiro .datas-livres { flex-basis: 100%; margin: 0; }
+.app .mais-filtros > summary { font-size: 12.5px; font-weight: 500; }
+
+@media (max-width: 640px) {
+  /* Ficha curta: o nome em cima, depois "rótulo valor" lado a lado. */
+  .planilha-empilha td.cel-principal { order: -1; }
+  .planilha-empilha td[data-rotulo]::before { display: inline; margin-right: 4px; }
+  .planilha-empilha td.col-acoes { grid-column: auto; justify-self: end; margin-top: 0; }
+  .planilha-empilha td.col-acoes .btn { width: auto; min-height: 34px; }
+  .planilha-empilha tr { gap: 4px 12px; align-items: center; }
+  .app .filtros-financeiro .mais-filtros { margin-left: 0; }
+}
+.cel-com-qtd { display: inline-flex; align-items: center; gap: 10px; }
+@media (max-width: 640px) {
+  .planilha-empilha td.cel-larga { grid-column: 1 / -1; }
+  .planilha-empilha td.cel-some { display: none; }
+  .planilha-empilha .linha-uma { white-space: normal; }
+}
+.app .aviso-alerta,
+.app .cartao-atencao { box-shadow: none; border-radius: var(--raio-g); }

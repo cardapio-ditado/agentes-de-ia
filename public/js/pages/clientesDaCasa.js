@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dinheiro, el, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 import { CAMPANHAS_PRONTAS, publicoDaCampanha } from "../modelosProntos.js";
 import { SITUACOES, contarSituacoes, horaCurta, seloDoEnvio, tilesDeSituacao } from "../envios.js";
@@ -212,7 +212,7 @@ export async function clientesDaCasa(raiz, ctx) {
         ...Object.entries(NOME_DA_ORIGEM).map(([v, t]) => el("option", { value: v, texto: t })),
       ],
     );
-    const lista = el("div", { classe: "tabela" });
+    const lista = el("div", { classe: "pilha-fina" });
     const tiras = el("div", { classe: "crm-tiras" });
     // Qual selo está filtrando agora. `null` = a base inteira.
     let seloAtivo = null;
@@ -472,7 +472,21 @@ export async function clientesDaCasa(raiz, ctx) {
         );
         return;
       }
-      for (const c of achados) lista.append(linha(c));
+      lista.append(
+        tabelaDeDados({
+          colunas: [
+            { rotulo: "Cliente", principal: true },
+            { rotulo: "Telefone", largura: "150px" },
+            { rotulo: "Aniversário", largura: "104px" },
+            { rotulo: "Origem" },
+            { rotulo: "Consumo", num: true, largura: "120px" },
+            { rotulo: "Visitas", num: true, largura: "76px" },
+            { rotulo: "Por visita", num: true, largura: "110px" },
+            { rotulo: "Última vez", largura: "116px" },
+          ],
+          linhas: achados.map(linha),
+        }),
+      );
     }
 
     /**
@@ -491,30 +505,24 @@ export async function clientesDaCasa(raiz, ctx) {
       const selo = SELO_POR_ID[c.selo];
       const sumiu = c.selo === "sumido";
 
-      return el("button", { classe: "linha-tabela", type: "button", onclick: () => ficha(c) }, [
-        el("span", { classe: "linha-principal" }, [
-          el("span", { style: "display:flex;align-items:center;gap:8px;flex-wrap:wrap" }, [
-            el("strong", { texto: c.nome || telefoneLegivel(c.telefone) }),
+      return {
+        aoClicar: () => ficha(c),
+        celulas: [
+          el("span", { style: "display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap" }, [
+            el("span", { texto: c.nome || telefoneLegivel(c.telefone) }),
             selo && c.selo !== "comum" ? etiqueta(selo.nome, selo.classe) : null,
             c.descadastrado_em ? etiqueta("não quer mensagem", "etiqueta-perigo") : null,
             selosDaNota(c.nps),
           ].filter(Boolean)),
-          el("small", {
-            classe: "muted",
-            texto: [
-              c.nome ? telefoneLegivel(c.telefone) : null,
-              nasc ? `🎂 ${nasc}` : null,
-              (c.origens ?? []).map((o) => NOME_DA_ORIGEM[o] ?? o).join(" · "),
-            ].filter(Boolean).join(" · "),
-          }),
-        ]),
-        el("span", { classe: "crm-numeros" }, [
-          numero(c.gasto_centavos ? dinheiro(c.gasto_centavos / 100) : "—", "consumo"),
-          numero(String(c.visitas ?? 0), c.visitas === 1 ? "visita" : "visitas"),
-          numero(c.ticket_centavos !== null ? dinheiro(c.ticket_centavos / 100) : "—", "por visita"),
-          numero(faltaHaQuantoTempo(c.dias_sem_vir), "última vez", sumiu),
-        ]),
-      ]);
+          c.nome ? telefoneLegivel(c.telefone) : null,
+          nasc || null,
+          (c.origens ?? []).map((o) => NOME_DA_ORIGEM[o] ?? o).join(", ") || null,
+          c.gasto_centavos ? dinheiro(c.gasto_centavos / 100) : "—",
+          String(c.visitas ?? 0),
+          c.ticket_centavos !== null ? dinheiro(c.ticket_centavos / 100) : "—",
+          el("span", { classe: sumiu ? "erro" : "", style: sumiu ? "font-weight:600" : null, texto: faltaHaQuantoTempo(c.dias_sem_vir) }),
+        ],
+      };
     }
 
     function numero(valor, rotulo, perigo = false) {

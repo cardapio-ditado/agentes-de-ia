@@ -47,29 +47,90 @@ export function preencher(node, ...filhos) {
 }
 
 /**
- * Um grupo que abre e fecha dentro de uma lista comprida.
+ * A tabela de dados do sistema: colunas com cabeçalho, número à direita,
+ * linha que abre o registro e, se pedirem, grupos que abrem e fecham.
  *
- * Lista de 140 linhas não é lista, é rolagem. O grupo mostra o que importa
- * antes de abrir — o nome, quantos tem e a soma — e a pessoa abre só o que
- * veio procurar. É `<details>` de propósito: abre com teclado e com leitor de
- * tela sem uma linha de script.
+ * É uma `<table>` de verdade — coluna alinhada é o que deixa o olho comparar
+ * trinta linhas sem ler nenhuma, e leitor de tela anuncia o cabeçalho de cada
+ * célula. No celular ela se desmonta em fichas (ver `.planilha-empilha`): a
+ * célula `principal` vira o título e as outras levam o nome da coluna na frente.
  *
- * `aoAlternar(aberto)` deixa a tela lembrar o que estava aberto quando ela
- * se redesenha (depois de salvar um item, por exemplo).
+ *   colunas: [{ rotulo, largura?, num?, principal?, acoes?, quebra? }]
+ *            na ficha do celular: larga? (linha inteira), semRotulo?, someNoCelular?
+ *   estreita: true quando a tabela mora numa coluna de meia tela
+ *   linhas:  [{ celulas: [texto | nó | null], aoClicar?, classe? }]
+ *   grupos:  [{ titulo, quantidade?, resumo?, tom?, aberto?, aoAlternar?, linhas }]
+ *            ou { secao: "Comer" } para uma faixa de separação
+ *   rodape:  [texto | nó | null] — uma célula por coluna
  */
-export function grupoDeLista({ titulo, quantidade, resumo, selos = [], aberto = false, tom = "", aoAlternar, filhos = [] }) {
-  const grupo = el("details", { classe: `grupo-lista${tom ? ` grupo-lista-${tom}` : ""}`, open: aberto }, [
-    el("summary", {}, [
-      el("span", { classe: "grupo-lista-seta", "aria-hidden": "true", texto: "›" }),
-      el("strong", { classe: "grupo-lista-titulo", texto: titulo }),
-      quantidade !== undefined && quantidade !== null ? el("span", { classe: "grupo-lista-quantos", texto: String(quantidade) }) : null,
-      ...selos,
-      resumo ? el("span", { classe: "grupo-lista-resumo", texto: resumo }) : null,
+export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = null, semCabecalho = false, estreita = false }) {
+  const celula = (tag, col, conteudo) => {
+    const c = el(tag, {
+      classe: [col.num ? "col-num" : "", col.acoes ? "col-acoes" : "", col.principal ? "cel-principal" : "", col.quebra ? "cel-quebra" : "", col.larga ? "cel-larga" : "", col.someNoCelular ? "cel-some" : ""].filter(Boolean).join(" ") || null,
+      "data-rotulo": tag === "td" && !col.principal && !col.acoes && !col.semRotulo && col.rotulo ? col.rotulo : null,
+    });
+    if (conteudo instanceof Node) c.append(conteudo);
+    else if (conteudo !== null && conteudo !== undefined && conteudo !== false) c.textContent = String(conteudo);
+    // Célula vazia some da ficha do celular: "Fornecedor:" sem nada é ruído.
+    else c.classList.add("cel-vazia");
+    return c;
+  };
+  const linha = (l) => {
+    const tr = el("tr", { classe: [l.classe, l.aoClicar ? "linha-abre" : ""].filter(Boolean).join(" ") || null }, colunas.map((col, i) => celula("td", col, l.celulas[i])));
+    if (l.aoClicar) {
+      tr.tabIndex = 0;
+      tr.addEventListener("click", (e) => {
+        // Botão, link e campo dentro da linha fazem o que são, sem abrir o registro.
+        if (e.target.closest("button, a, input, select, label")) return;
+        l.aoClicar();
+      });
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target === tr) l.aoClicar();
+      });
+    }
+    return tr;
+  };
+
+  const corpos = [];
+  if (grupos) {
+    for (const g of grupos) {
+      if (g.secao) {
+        corpos.push(el("tbody", { classe: "planilha-secao" }, [el("tr", {}, [el("th", { colspan: colunas.length, scope: "colgroup", texto: g.secao })])]));
+        continue;
+      }
+      const botao = el("button", { classe: "planilha-grupo-botao", type: "button", "aria-expanded": String(Boolean(g.aberto)) }, [
+        el("span", { classe: "planilha-grupo-seta", "aria-hidden": "true", texto: "›" }),
+        el("span", { classe: "planilha-grupo-titulo", texto: g.titulo }),
+        g.quantidade !== undefined && g.quantidade !== null ? el("span", { classe: "planilha-grupo-quantos", texto: String(g.quantidade) }) : null,
+        ...(g.selos ?? []),
+        g.resumo ? el("span", { classe: "planilha-grupo-resumo", texto: g.resumo }) : null,
+      ]);
+      const corpo = el("tbody", { classe: `planilha-grupo${g.tom ? ` planilha-grupo-${g.tom}` : ""}`, "data-fechado": g.aberto ? null : "1" }, [
+        el("tr", { classe: "planilha-grupo-linha" }, [el("th", { colspan: colunas.length, scope: "colgroup" }, [botao])]),
+        ...g.linhas.map(linha),
+      ]);
+      botao.addEventListener("click", () => {
+        const abrir = corpo.hasAttribute("data-fechado");
+        corpo.toggleAttribute("data-fechado", !abrir);
+        botao.setAttribute("aria-expanded", String(abrir));
+        g.aoAlternar?.(abrir);
+      });
+      corpos.push(corpo);
+    }
+  } else {
+    corpos.push(el("tbody", {}, linhas.map(linha)));
+  }
+
+  return el("div", { classe: "rolagem-x" }, [
+    // Com largura declarada a tabela é de leiaute fixo: as colunas não dançam
+    // quando um grupo abre, e texto comprido corta com reticências.
+    el("table", { classe: `planilha planilha-empilha${colunas.some((c) => c.largura) ? " planilha-fixa" : ""}${estreita ? " planilha-estreita" : ""}` }, [
+      colunas.some((c) => c.largura) ? el("colgroup", {}, colunas.map((c) => el("col", { style: c.largura ? `width:${c.largura}` : null }))) : null,
+      semCabecalho ? null : el("thead", {}, [el("tr", {}, colunas.map((c) => celula("th", c, c.rotulo)))]),
+      ...corpos,
+      rodape ? el("tfoot", {}, [el("tr", {}, colunas.map((c, i) => celula("td", { ...c, rotulo: null }, rodape[i])))]) : null,
     ]),
-    el("div", { classe: "grupo-lista-corpo" }, filhos),
   ]);
-  if (aoAlternar) grupo.addEventListener("toggle", () => aoAlternar(grupo.open));
-  return grupo;
 }
 
 /** SVG por caminho: os ícones da interface vêm todos daqui. */

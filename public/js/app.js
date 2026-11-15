@@ -679,6 +679,14 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   }
 
   document.getElementById("titulo-pagina").textContent = pagina.rotulo;
+  // "Financeiro › Contas a pagar": em sistema grande, o nome do módulo antes
+  // do nome da tela é o que diz onde a pessoa está.
+  const trilhaDaPagina = document.getElementById("trilha-pagina");
+  const nomeDoModulo = MODULOS.find((m) => m.id === pagina.modulo)?.nome;
+  if (trilhaDaPagina) {
+    trilhaDaPagina.textContent = nomeDoModulo && nomeDoModulo !== pagina.rotulo ? nomeDoModulo : "";
+    trilhaDaPagina.hidden = !trilhaDaPagina.textContent;
+  }
   paginaAtual = pagina;
   document.getElementById("subtitulo-pagina").textContent = pagina.subtitulo ?? "";
   app.removeAttribute("data-menu");

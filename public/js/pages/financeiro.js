@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, grupoDeLista, hojeNaCasa, indicador, preencher, vazio } from "../ui.js";
+import { dinheiro, el, etiqueta, hojeNaCasa, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { NOME_DO_TIPO, formularioDeBaixa, formularioDeConta, nomeDaCategoria } from "./financeiroConta.js";
 
@@ -49,6 +49,7 @@ async function listaDeContas(raiz, ctx, tipo) {
   // O que a pessoa abriu ou fechou vale até ela sair da tela.
   const gavetasAbertas = {};
   const anoCorrente = hoje.slice(0, 4);
+  const telaPequena = window.matchMedia("(max-width: 640px)").matches;
 
   await recarregar();
 
@@ -174,14 +175,22 @@ async function listaDeContas(raiz, ctx, tipo) {
             filtro.situacao === "atrasadas" ? "Nada atrasado 👏" : "Nenhuma conta neste filtro",
             tipo === "pagar" ? "Lance o primeiro boleto: + Nova conta a pagar." : "Lance o que a casa tem para receber: evento, venda a prazo, repasse do cartão.",
           ),
-      lista.length ? el("p", { classe: "muted", texto: `${lista.length} conta(s) · ${dinheiro(lista.reduce((s, l) => s + Math.round(Number(l.situacao === "pago" ? l.valor_pago : l.valor) * 100), 0) / 100)}` }) : null,
     );
   }
 
+  // Declarações de função (e não `const`): a lista é desenhada pelo primeiro
+  // `recarregar()`, lá em cima, antes de esta linha rodar.
+  function valorDe(l) {
+    return Number(l.situacao === "pago" ? l.valor_pago : l.valor);
+  }
+  function somaDe(itens) {
+    return itens.reduce((s, l) => s + Math.round(valorDe(l) * 100), 0) / 100;
+  }
+
   /**
-   * A lista em gavetas, pelo prazo: o atrasado e o de hoje abertos, o que
-   * está longe fechado com a soma do lado de fora. Quem abre a tela para
-   * pagar o dia não precisa rolar o mês inteiro.
+   * A grade de contas: uma tabela só, com as colunas de sempre, e os grupos
+   * por prazo como faixas que abrem e fecham. O atrasado e o de hoje vêm
+   * abertos; o que está longe vem fechado, com a soma do lado de fora.
    */
   function gruposPorPrazo(lista, hoje, nomeForn) {
     const em7 = new Date(`${hoje}T12:00:00Z`);
@@ -199,57 +208,60 @@ async function listaDeContas(raiz, ctx, tipo) {
     const gavetas = GAVETAS.map(([id, titulo, tom]) => ({ id, titulo, tom, itens: [] }));
     for (const l of lista) gavetas[GAVETAS.findIndex(([, , , serve]) => serve(l))].itens.push(l);
     const cheias = gavetas.filter((g) => g.itens.length);
-    // Uma gaveta só (ou lista curta) não precisa de gaveta.
-    if (cheias.length === 1 || lista.length <= 8) return el("div", { classe: "tabela" }, lista.map((l) => linha(l, nomeForn)));
-    return el(
-      "div",
-      { classe: "grupos-lista" },
-      cheias.map((g) =>
-        grupoDeLista({
-          titulo: g.titulo,
-          quantidade: g.itens.length,
-          resumo: dinheiro(g.itens.reduce((s, l) => s + Math.round(Number(l.situacao === "pago" ? l.valor_pago : l.valor) * 100), 0) / 100),
-          tom: g.tom,
-          aberto: gavetasAbertas[g.id] ?? (g.id === "atrasado" || g.id === "hoje" || g.id === "semana"),
-          aoAlternar: (aberto) => { gavetasAbertas[g.id] = aberto; },
-          filhos: g.itens.map((l) => linha(l, nomeForn)),
-        }),
-      ),
-    );
+    const colunas = [
+      { rotulo: "Vencimento", largura: "104px" },
+      { rotulo: "Descrição", principal: true },
+      { rotulo: tipo === "pagar" ? "Fornecedor" : "Cliente", largura: "17%" },
+      { rotulo: "Categoria", largura: "17%" },
+      { rotulo: "Situação", largura: "116px", semRotulo: true },
+      { rotulo: "Valor", num: true, largura: "128px" },
+      { rotulo: "", acoes: true, largura: "96px" },
+    ];
+    const rodape = [`${lista.length} conta(s)`, null, null, null, null, dinheiro(somaDe(lista)), null];
+    // Uma gaveta só (ou lista curta) não precisa de grupo.
+    if (cheias.length === 1 || lista.length <= 8) return tabelaDeDados({ colunas, linhas: lista.map((l) => linha(l, nomeForn)), rodape });
+    return tabelaDeDados({
+      colunas,
+      rodape,
+      grupos: cheias.map((g) => ({
+        titulo: g.titulo,
+        quantidade: g.itens.length,
+        resumo: dinheiro(somaDe(g.itens)),
+        tom: g.tom,
+        // No celular a semana também vem fechada: são fichas, e quinze delas é rolagem.
+        aberto: gavetasAbertas[g.id] ?? (g.id === "atrasado" || g.id === "hoje" || (g.id === "semana" && !telaPequena)),
+        aoAlternar: (aberto) => { gavetasAbertas[g.id] = aberto; },
+        linhas: g.itens.map((l) => linha(l, nomeForn)),
+      })),
+    });
   }
 
   function linha(l, nomeForn) {
     const [rot, cls] = ESTADO[l.estado] ?? ESTADO.aberto;
-    const quem = nomeForn(l.fornecedor_id) ?? l.pessoa;
-    const meta = [
-      quem,
-      nomeDaCategoria(cad, l.categoria_id),
+    const complemento = [
       l.parcelas ? `parcela ${l.parcela}/${l.parcelas}` : l.recorrente ? "todo mês" : null,
       l.documento ? `doc. ${l.documento}` : null,
       l.situacao === "pago" ? `${NOME_DO_TIPO[tipo].feito.toLowerCase()} em ${dataBr(l.pago_em)}` : null,
-    ].filter(Boolean);
-    return el("div", { classe: "linha-tabela linha-clicavel", onclick: () => formularioDeConta(corpo, { ctx, cad, tipo, existente: l, aoTerminar: voltar }) }, [
-      el("div", { classe: "conta-data" }, [el("strong", { texto: dataBr(l.vencimento).slice(0, 5) }), l.vencimento.slice(0, 4) === anoCorrente ? null : el("small", { classe: "muted", texto: l.vencimento.slice(0, 4) })]),
-      el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-        el("strong", { style: "white-space:normal", texto: l.descricao }),
-        el("span", { classe: "muted", style: "white-space:normal", texto: meta.join(" · ") }),
-      ]),
-      el("div", { classe: "conta-valor" }, [
-        el("strong", { texto: dinheiro(Number(l.situacao === "pago" ? l.valor_pago : l.valor)) }),
+    ].filter(Boolean).join(" · ");
+    return {
+      aoClicar: () => formularioDeConta(corpo, { ctx, cad, tipo, existente: l, aoTerminar: voltar }),
+      celulas: [
+        l.vencimento.slice(0, 4) === anoCorrente ? dataBr(l.vencimento).slice(0, 5) : dataBr(l.vencimento),
+        el("span", {}, [document.createTextNode(l.descricao), complemento ? el("small", { texto: complemento }) : null]),
+        nomeForn(l.fornecedor_id) ?? l.pessoa ?? null,
+        nomeDaCategoria(cad, l.categoria_id) || null,
         etiqueta(rot, cls),
-      ]),
-      l.situacao === "aberto"
-        ? el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: NOME_DO_TIPO[tipo].acao,
-            onclick: (e) => {
-              e.stopPropagation();
-              formularioDeBaixa(corpo, { ctx, cad, tipo, conta: l, aoTerminar: voltar });
-            },
-          })
-        : el("span", { classe: "conta-acao-vazia" }),
-    ]);
+        dinheiro(valorDe(l)),
+        l.situacao === "aberto"
+          ? el("button", {
+              classe: "btn btn-peq",
+              type: "button",
+              texto: NOME_DO_TIPO[tipo].acao,
+              onclick: () => formularioDeBaixa(corpo, { ctx, cad, tipo, conta: l, aoTerminar: voltar }),
+            })
+          : null,
+      ],
+    };
   }
 
   function relatorio(lista, de, ate) {
