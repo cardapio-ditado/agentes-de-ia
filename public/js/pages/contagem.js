@@ -1,5 +1,5 @@
 import { get, post } from "../api.js";
-import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, avisar, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -30,7 +30,12 @@ export async function contagem(raiz, ctx) {
       get(`/v1/venues/${ctx.venue}/contagens`),
     ]);
   } catch (e) {
-    conteudo.append(vazio("Contagem indisponível", e.message));
+    conteudo.append(
+      estadoDeErro("Não foi possível carregar a contagem", e.message, () => {
+        raiz.replaceChildren();
+        void contagem(raiz, ctx);
+      }),
+    );
     return;
   }
 
@@ -54,28 +59,21 @@ export async function contagem(raiz, ctx) {
 
     conteudo.append(
       el("section", { classe: "pilha" }, [
-        el("div", { classe: "cabecalho-secao" }, [
+        el("div", { classe: "cartao pilha" }, [
           el("div", {}, [
-            el("h2", { texto: "Contagem de estoque" }),
-            el("p", {
-              classe: "muted",
-              texto: "Conte o que está na prateleira. O que você contar vira o saldo — sem tolerância.",
+            el("h2", { texto: "Nova contagem" }),
+            el("p", { classe: "muted", texto: "Conte o que está na prateleira: o que você contar vira o saldo, sem tolerância. Pode contar só uma parte; o que ficar em branco não muda." }),
+          ]),
+          el("div", { classe: "barra-filtros" }, [
+            el("label", { classe: "campo-rotulado", style: "flex:1 1 260px" }, [el("span", { texto: "Onde vai contar" }), seletorLocal]),
+            el("button", {
+              classe: "btn btn-primario",
+              type: "button",
+              style: "align-self:flex-end",
+              texto: "Começar a contar",
+              onclick: () => desenharContagem(seletorLocal.value),
             }),
           ]),
-        ]),
-
-        el("div", { classe: "cartao" }, [
-          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Onde vai contar" }), seletorLocal]),
-          el("button", {
-            classe: "btn btn-primario btn-grande",
-            type: "button",
-            texto: "Começar a contar",
-            onclick: () => desenharContagem(seletorLocal.value),
-          }),
-          el("p", {
-            classe: "muted",
-            texto: "Pode contar só uma parte: o que ficar em branco não muda.",
-          }),
           // Em muita casa a contagem é no papel, com a prancheta na câmara
           // fria, e só depois alguém digita. A folha já sai na ordem da
           // prateleira (por categoria) e com espaço para escrever.
@@ -85,23 +83,26 @@ export async function contagem(raiz, ctx) {
         ]),
 
         historico.length > 0
-          ? el("div", { classe: "cartao" }, [
-              el("h3", { texto: "Últimas contagens" }),
-              el("p", { classe: "muted", texto: "Toque numa contagem para abrir item a item." }),
-              ...historico.slice(0, 8).map((c) => {
-                const linha = el("div", { classe: "cabecalho-secao", style: "cursor:pointer" }, [
-                  el("span", {}, [
-                    el("strong", { texto: c.local }),
-                    el("p", { classe: "muted", texto: `${dataHora(c.created_at)} · ${c.itens} item(ns)` }),
-                  ]),
-                  // A quebra é o resumo que importa do histórico: quanto
-                  // sumiu, em dinheiro, naquela conferência.
-                  c.quebra < 0
-                    ? etiqueta(`quebra ${dinheiro(Math.abs(c.quebra))}`, "etiqueta-perigo")
-                    : etiqueta("sem quebra", "etiqueta-ok"),
-                ]);
-                linha.addEventListener("click", () => abrirContagem(c.id));
-                return linha;
+          ? el("div", { classe: "pilha-fina" }, [
+              el("h2", { texto: "Últimas contagens" }),
+              tabelaDeDados({
+                colunas: [
+                  { rotulo: "Local", principal: true },
+                  { rotulo: "Quando", largura: "200px" },
+                  { rotulo: "Itens contados", num: true, largura: "150px" },
+                  { rotulo: "Resultado", largura: "220px", semRotulo: true },
+                ],
+                // A quebra é o resumo que importa do histórico: quanto sumiu,
+                // em dinheiro, naquela conferência.
+                linhas: historico.slice(0, 8).map((c) => ({
+                  aoClicar: () => abrirContagem(c.id),
+                  celulas: [
+                    c.local,
+                    dataHora(c.created_at),
+                    String(c.itens),
+                    c.quebra < 0 ? etiqueta(`Quebra de ${dinheiro(Math.abs(c.quebra))}`, "etiqueta-perigo") : etiqueta("Sem quebra", "etiqueta-ok"),
+                  ],
+                })),
               }),
             ])
           : null,
@@ -261,7 +262,7 @@ export async function contagem(raiz, ctx) {
     return raiz;
 
     function desenharDetalhe() {
-      const voltar = el("button", { classe: "btn btn-peq", type: "button", texto: "← Voltar" });
+      const voltar = el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar" });
       voltar.addEventListener("click", () => desenharAbertura());
 
       const corrigir = el("button", {
@@ -466,7 +467,7 @@ export async function contagem(raiz, ctx) {
     conteudo.append(
       el("section", { classe: "pilha" }, [
         el("div", { classe: "cartao" }, [
-          el("h2", { texto: "✓ Contagem processada" }),
+          el("h2", { texto: "Contagem processada" }),
           el("p", {
             classe: "muted",
             texto:

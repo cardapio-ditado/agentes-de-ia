@@ -14,9 +14,25 @@ O hub (colmeia) e a tela de acesso mantêm a identidade própria e não usam est
 
 O painel é JavaScript puro com módulos ES e CSS com variáveis. Não há React nem biblioteca de componentes: nada foi instalado.
 
+## Kit de marca (fonte das cores)
+
+Gerado com a skill `brandkit` (plugin87/ux-ui-agent-skills): três camadas, em OKLCH, claro e escuro.
+
+| Camada | Onde | O que é |
+|---|---|---|
+| Primitiva | `design/tokens/colors.json` → `primitive` e variáveis `--terracota-50…950`, `--neutro-…`, `--musgo-…`, `--ambar-…`, `--verde-…`, `--vermelho-…` | As rampas (11 tons por família). Tela nunca usa direto. |
+| Papel | `semantic` (e `dark`) → `--fundo`, `--superficie`, `--texto`, `--borda`, `--borda-controle`, `--cta`, `--marca`, `--ok`, `--alerta`, `--perigo`… | O que as telas usam. |
+| Componente | `component` e as seções do CSS | Só enxergam papéis. |
+
+O bloco `brandkit` no fim de `public/styles.css` é a versão em CSS do mesmo arquivo. `src/designTokens.test.ts` roda em `npm test` e falha se:
+- algum par de texto e fundo ficar abaixo da WCAG 2.2 AA (4,5:1 para texto, 3:1 para borda de campo), no claro ou no escuro;
+- um valor mudar no JSON sem mudar no CSS, ou o contrário.
+
+Para trocar uma cor: mude o tom na rampa ou o papel em `colors.json`, repita no bloco `brandkit` e rode `npm test`.
+
 ## Tokens
 
-- **Marca:** `--carvao-900 #1a1a1a`, `--carvao-800 #242424`, `--terracota-600 #b94f2b`, `--terracota-700 #9c4122`, `--ambar-500 #e8a03c`, `--musgo-700 #46543d`.
+- **Marca:** terracota (`--terracota-500 #b64f25` é a ação principal), neutro quente, musgo, âmbar, verde e vermelho — ver o kit acima.
 - **Papéis:** `--fundo`, `--superficie`, `--superficie-2`, `--borda`, `--borda-forte`, `--texto`, `--texto-2`, `--texto-3`, `--marca`, `--cta`, `--foco`, e os pares `--ok/-suave`, `--alerta/-suave`, `--perigo/-suave`, `--info/-suave`. Componente usa o papel, nunca a cor crua.
 - **Tipografia:** Inter. `--texto-titulo 24px` (26 no título da tela), `--texto-secao 17px`, `--texto-indicador 28px`, `--texto-corpo 14px`, `--texto-tabela 13.5px`, `--texto-rotulo 12.5px`, `--texto-apoio 12px`. Números de tabela e indicador com `tabular-nums`.
 - **Espaço (escala de 4):** `--esp-1` 4 · `-2` 8 · `-3` 12 · `-4` 16 · `-5` 20 · `-6` 24 · `-8` 32 · `-10` 40.
@@ -72,8 +88,8 @@ Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (J
 
 ## Ordem sugerida para os outros módulos
 
-1. Estoque, Contagem, Produção e Vendas (mesmo módulo do piloto, mesmas tabelas).
-2. Itens e fornecedores; Receitas e custo do prato.
+1. ~~Estoque, Contagem, Produção e Vendas~~ (feito: visão principal de cada uma).
+2. Itens e fornecedores; Receitas e custo do prato; telas internas de Compras, Contagem e Vendas (formulários e conferência).
 3. Financeiro (já usa a tabela e os indicadores; falta o Painel e o Fluxo).
 4. RH e Checklist.
 5. Clientes, Cardápio, Atendente e Ajustes.

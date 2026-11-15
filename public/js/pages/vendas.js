@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo } from "../api.js";
-import { avisar, buscador, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, buscador, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * Importação de vendas: o relatório do PDV baixa o estoque.
@@ -59,7 +59,7 @@ export async function vendas(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ linhas: 6 }));
     let lista;
     let zig = null;
     let estadoZig = null;
@@ -70,7 +70,7 @@ export async function vendas(raiz, ctx) {
       zig = Array.isArray(r) ? null : r.zig ?? null;
       estadoZig = Array.isArray(r) ? null : r.zig_estado ?? null;
     } catch (e) {
-      limpar(conteudo).append(vazio("Vendas indisponíveis", e.message));
+      limpar(conteudo).append(estadoDeErro("Não foi possível carregar as vendas", e.message, desenhar));
       return;
     }
     limpar(conteudo);
@@ -86,12 +86,15 @@ export async function vendas(raiz, ctx) {
       value: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
     });
 
+    const rotuloDeLer = () => comIcone(ICONES.sugestao, "Ler e conferir");
+    const botaoDeLer = el("button", { classe: "btn btn-primario", type: "button", style: "justify-self:start", onclick: () => enviar(botaoDeLer) }, rotuloDeLer());
+
     conteudo.append(
       el("section", { classe: "pilha" }, [
         el("div", {}, [
-          el("h2", { texto: "Vendas" }),
           el("p", {
             classe: "muted",
+            style: "margin:0",
             texto: estadoZig?.vendas_no_estoque
               ? "A noite de ontem entra sozinha aqui todo dia, pela Zig. Relatório de outro período ou de outro sistema: mande abaixo."
               : "Mande o relatório do seu sistema de caixa; a IA lê e baixa o estoque pelas fichas.",
@@ -103,69 +106,52 @@ export async function vendas(raiz, ctx) {
         zig ? avisoDaZig(zig) : null,
 
         el("div", { classe: "cartao pilha" }, [
-          el("h3", { texto: "Importar relatório" }),
-          el("p", { classe: "muted", texto: "Serve CSV, Excel, PDF ou uma foto do relatório — de qualquer sistema." }),
-          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Arquivo" }), arquivo]),
-          el("label", { classe: "campo-rotulado" }, [
-            el("span", { texto: "Dia das vendas" }),
-            dataPadrao,
-            el("small", { classe: "muted", texto: "Usado só nas linhas em que o relatório não disser a data." }),
+          el("div", {}, [
+            el("h2", { texto: "Importar relatório" }),
+            el("p", { classe: "muted", texto: "Serve CSV, Excel, PDF ou uma foto do relatório, de qualquer sistema." }),
           ]),
-          el("button", {
-            classe: "btn btn-primario btn-grande",
-            type: "button",
-            texto: "✨ Ler e conferir",
-            onclick: (ev) => enviar(ev.target),
-          }),
+          el("div", { classe: "barra-filtros", style: "align-items:flex-start" }, [
+            el("label", { classe: "campo-rotulado", style: "flex:2 1 320px" }, [el("span", { texto: "Arquivo" }), arquivo]),
+            el("label", { classe: "campo-rotulado", style: "flex:1 1 200px" }, [
+              el("span", { texto: "Dia das vendas" }),
+              dataPadrao,
+              el("small", { classe: "muted", texto: "Usado só nas linhas em que o relatório não disser a data." }),
+            ]),
+          ]),
+          botaoDeLer,
         ]),
 
-        el("div", { classe: "pilha" }, [
-          el("h3", { texto: "Importações" }),
+        el("div", { classe: "pilha-fina" }, [
+          el("h2", { texto: "Importações" }),
           lista.length === 0
             ? vazio("Nenhuma importação ainda", "A primeira leva alguns minutos; da terceira em diante é um toque.")
-            : el("div", { classe: "rolagem-x" }, [
-                el("table", { classe: "planilha" }, [
-                  el("thead", {}, [
-                    el("tr", {}, [
-                      el("th", { texto: "Arquivo" }),
-                      el("th", { texto: "Período" }),
-                      el("th", { texto: "Enviado" }),
-                      el("th", { texto: "Situação" }),
-                      el("th", { texto: "" }),
-                    ]),
-                  ]),
-                  el("tbody", {}, lista.map(linhaImportacao)),
-                ]),
-              ]),
+            : tabelaDeDados({
+                colunas: [
+                  { rotulo: "Arquivo", principal: true },
+                  { rotulo: "Período", largura: "210px" },
+                  { rotulo: "Enviado", largura: "170px" },
+                  { rotulo: "Situação", largura: "190px", semRotulo: true },
+                  { rotulo: "", acoes: true, largura: "64px" },
+                ],
+                linhas: lista.map(linhaImportacao),
+              }),
         ]),
       ]),
     );
 
     function linhaImportacao(i) {
       const [rotulo, variante] = SITUACAO[i.status] ?? [i.status, ""];
-      return el("tr", {}, [
-        el("td", {}, [
-          el("strong", { texto: i.arquivo_nome || "relatório" }),
-          el("small", { classe: "muted", texto: i.origem === "foto" ? " foto" : i.origem === "api" ? " Zig, automático" : "" }),
-        ]),
-        el("td", {
-          texto:
-            i.periodo_inicio === i.periodo_fim
-              ? dataCurta(i.periodo_inicio)
-              : `${dataCurta(i.periodo_inicio)} a ${dataCurta(i.periodo_fim)}`,
-        }),
-        el("td", { texto: dataHora(i.criado_em) }),
-        el("td", {}, [etiqueta(rotulo, variante)]),
-        el("td", { classe: "col-acoes" }, [
-          el("button", {
-            classe: "btn-icone",
-            type: "button",
-            title: i.status === "baixada" ? "Ver o que foi baixado" : "Conferir e baixar",
-            texto: "👁",
-            onclick: () => revisar(i.id),
-          }),
-        ]),
-      ]);
+      const origem = i.origem === "foto" ? "foto" : i.origem === "api" ? "Zig, automático" : "";
+      return {
+        aoClicar: () => revisar(i.id),
+        celulas: [
+          el("span", {}, [document.createTextNode(i.arquivo_nome || "Relatório"), origem ? el("small", { texto: origem }) : null]),
+          i.periodo_inicio === i.periodo_fim ? dataCurta(i.periodo_inicio) : `${dataCurta(i.periodo_inicio)} a ${dataCurta(i.periodo_fim)}`,
+          dataHora(i.criado_em),
+          etiqueta(rotulo, variante),
+          acaoIcone({ iconePath: ICONES.olho, rotulo: i.status === "baixada" ? "Ver o que foi baixado" : "Conferir e baixar", aoClicar: () => revisar(i.id) }),
+        ],
+      };
     }
 
     async function enviar(botao) {
@@ -185,7 +171,7 @@ export async function vendas(raiz, ctx) {
       } catch (e) {
         avisar(e.message, "erro");
         botao.disabled = false;
-        botao.textContent = "✨ Ler e conferir";
+        botao.replaceChildren(...rotuloDeLer());
       }
     }
   }
@@ -319,7 +305,7 @@ export async function vendas(raiz, ctx) {
               el("button", {
                 classe: "btn btn-peq",
                 type: "button",
-                texto: "🗑 Descartar importação",
+                texto: "Descartar importação",
                 onclick: async () => {
                   if (!confirm("Descartar esta importação? Nada foi baixado ainda; o arquivo pode ser reenviado depois.")) return;
                   try {
@@ -450,7 +436,7 @@ export async function vendas(raiz, ctx) {
           el("div", { classe: "cartao pilha" }, [
             el("p", { classe: "muted", texto: "🍽 prato: saem os insumos da ficha. 📦 item: sai ele mesmo (bebida, garrafa)." }),
             buscador(opcoes, {
-              placeholder: "🔍  Buscar ficha ou item…",
+              placeholder: "Buscar ficha ou item…",
               aoEscolher: (o) => salvarAlvo(it, o.valor.fichaId, o.valor.insumoId),
             }),
             naoConferidas > 0

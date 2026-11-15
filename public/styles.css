@@ -4321,7 +4321,7 @@ a.btn { text-decoration: none; }
 .campo-busca-limpar:hover { background: var(--superficie-2); color: var(--texto); }
 .campo-busca-limpar svg { width: 14px; height: 14px; }
 .barra-filtros { display: flex; gap: var(--esp-3); align-items: center; flex-wrap: wrap; }
-.app .barra-filtros .select { flex: 0 0 220px; height: 40px; }
+.app .barra-filtros > .select { flex: 0 0 220px; height: 40px; }
 
 /* Abas */
 .app .abas { border-bottom: 1px solid var(--borda); gap: var(--esp-1); background: none; }
@@ -4699,7 +4699,7 @@ a.btn { text-decoration: none; }
   .app .indicador { padding: var(--esp-3); }
   .app .indicador-valor { font-size: 22px; }
   .app .indicador-icone { width: 30px; height: 30px; }
-  .app .barra-filtros .select { flex: 1 1 100%; }
+  .app .barra-filtros > .select { flex: 1 1 100%; }
   .acao-icone { width: 40px; height: 40px; }
   .acao-icone[data-dica]::after { display: none; }
 }
@@ -4940,7 +4940,7 @@ a.btn { text-decoration: none; }
 /* 9.6 Busca e tabela */
 .app .campo-busca input { height: 44px; font-size: 15px; padding-left: 42px; }
 .campo-busca > svg { left: 14px; width: 18px; height: 18px; }
-.app .barra-filtros .select { flex: 0 0 280px; height: 44px; font-size: 15px; }
+.app .barra-filtros > .select { flex: 0 0 280px; height: 44px; font-size: 15px; }
 .app .rolagem-x { border-radius: 12px; }
 .app .planilha { font-size: 14px; }
 .app .planilha th {
@@ -4995,7 +4995,7 @@ a.btn { text-decoration: none; }
   .abas-com-acoes { border-bottom: 0; }
   .app .abas-com-acoes .abas { border-bottom: 1px solid var(--borda); flex-basis: 100%; order: 2; }
   .abas-com-acoes .pagina-acoes { width: 100%; order: 1; padding-bottom: 0; }
-  .app .barra-filtros .select { flex: 1 1 100%; }
+  .app .barra-filtros > .select { flex: 1 1 100%; }
   .rosca { grid-template-columns: 120px minmax(0, 1fr); gap: var(--esp-4); }
   .rosca svg { width: 120px; height: 120px; }
   .app .indicador-valor { font-size: 21px; }
@@ -5307,3 +5307,128 @@ a.btn { text-decoration: none; }
   /* Sem largura para a miniatura, ela sairia por cima do texto. */
   .faisca { display: none; }
 }
+
+/* Campo de arquivo: o botão nativo acompanha os outros botões. */
+.app input[type="file"] { padding: 5px 8px 5px 5px; color: var(--texto-2); }
+.app input[type="file"]::file-selector-button {
+  margin-right: var(--esp-3);
+  min-height: 30px;
+  padding: 0 var(--esp-3);
+  border: 0;
+  border-radius: 7px;
+  background: var(--superficie-2);
+  box-shadow: var(--contorno-controle);
+  color: var(--texto);
+  font: 500 13px var(--fonte-ui);
+  cursor: pointer;
+}
+.app input[type="file"]::file-selector-button:hover { box-shadow: var(--contorno-hover); }
+.app .campo-rotulado > span { font-size: var(--texto-rotulo); font-weight: 500; color: var(--texto-2); }
+.app .erro { font-size: inherit; }
+
+/* brandkit:inicio
+   ------------------------------------------------------------
+   KIT DE MARCA — a fonte única das cores do painel.
+   Três camadas: primitiva (as rampas, geradas em OKLCH) → papel (o que as
+   telas usam) → componente (seções acima, que só enxergam papéis).
+   Os mesmos valores estão em design/tokens/colors.json, e
+   src/designTokens.test.ts falha se um mudar sem o outro ou se algum par
+   de texto e fundo cair abaixo do contraste da WCAG 2.2 AA.
+   Por ser o último bloco do arquivo, é ele que vale. */
+:root {
+  --terracota-50: #fff2ea; --terracota-100: #ffe6dd; --terracota-200: #ffcebb; --terracota-300: #fea989; --terracota-400: #e87c53; --terracota-500: #b64f25; --terracota-600: #9a3500; --terracota-700: #801a00; --terracota-800: #620000; --terracota-900: #3a0000; --terracota-950: #270000;
+  --neutro-50: #f7f6f6; --neutro-100: #edecec; --neutro-200: #dcdad9; --neutro-300: #c3c0be; --neutro-400: #a19d9b; --neutro-500: #767270; --neutro-600: #5e5a58; --neutro-700: #484442; --neutro-800: #302d2b; --neutro-900: #1a1816; --neutro-950: #0f0e0d;
+  --musgo-50: #f4f8f2; --musgo-100: #eaefe7; --musgo-200: #d5ded0; --musgo-300: #b7c7ae; --musgo-400: #91a687; --musgo-500: #677a5c; --musgo-600: #4f6145; --musgo-700: #394b30; --musgo-800: #233319; --musgo-900: #111c0b; --musgo-950: #091105;
+  --ambar-50: #fff5e6; --ambar-100: #f8ebd8; --ambar-200: #f2d6b1; --ambar-300: #e7b877; --ambar-400: #cd9130; --ambar-500: #9e6500; --ambar-600: #844c00; --ambar-700: #6b3600; --ambar-800: #511c00; --ambar-900: #2f0d00; --ambar-950: #1f0600;
+  --verde-50: #edfbf1; --verde-100: #e1f2e6; --verde-200: #c3e5cd; --verde-300: #95d1a9; --verde-400: #61b380; --verde-500: #328656; --verde-600: #106c3e; --verde-700: #005529; --verde-800: #003c11; --verde-900: #002207; --verde-950: #001503;
+  --vermelho-50: #fff0ec; --vermelho-100: #ffe5e0; --vermelho-200: #ffcac2; --vermelho-300: #ffa196; --vermelho-400: #f27166; --vermelho-500: #bf433c; --vermelho-600: #a12623; --vermelho-700: #860009; --vermelho-800: #680000; --vermelho-900: #3e0000; --vermelho-950: #2a0000;
+
+  --fundo: var(--neutro-50);
+  --superficie: #ffffff;
+  --superficie-2: var(--neutro-100);
+  --borda: var(--neutro-200);
+  --borda-forte: var(--neutro-300);
+  /* A borda que identifica um campo precisa de 3:1 com o fundo (WCAG 1.4.11). */
+  --borda-controle: var(--neutro-500);
+  --texto: var(--neutro-900);
+  --texto-2: var(--neutro-600);
+  --texto-3: var(--neutro-500);
+
+  --marca: var(--terracota-500);
+  --marca-forte: var(--terracota-600);
+  --marca-suave: var(--terracota-50);
+  --marca-borda: var(--terracota-200);
+  --cta: var(--terracota-500);
+  --cta-hover: var(--terracota-600);
+  --cta-texto: #ffffff;
+  --foco: var(--terracota-500);
+
+  --ok: var(--verde-600);
+  --ok-suave: var(--verde-50);
+  --alerta: var(--ambar-600);
+  --alerta-suave: var(--ambar-50);
+  --perigo: var(--vermelho-600);
+  --perigo-suave: var(--vermelho-50);
+  --info: var(--musgo-600);
+  --info-suave: var(--musgo-50);
+
+  --lateral-fundo: var(--neutro-950);
+  --linha-realce: var(--neutro-50);
+  --cabecalho-tabela: var(--neutro-50);
+}
+[data-tema="escuro"] {
+  --fundo: var(--neutro-950);
+  --superficie: var(--neutro-900);
+  --superficie-2: var(--neutro-800);
+  --borda: var(--neutro-800);
+  --borda-forte: var(--neutro-700);
+  --borda-controle: var(--neutro-500);
+  --texto: var(--neutro-50);
+  --texto-2: var(--neutro-300);
+  --texto-3: var(--neutro-400);
+
+  --marca: var(--terracota-400);
+  --marca-forte: var(--terracota-300);
+  --marca-suave: color-mix(in srgb, var(--terracota-500) 18%, transparent);
+  --marca-borda: color-mix(in srgb, var(--terracota-400) 45%, transparent);
+  --cta: var(--terracota-500);
+  --cta-hover: var(--terracota-600);
+  --cta-texto: #ffffff;
+  --foco: var(--terracota-300);
+
+  --ok: var(--verde-300);
+  --ok-suave: var(--verde-900);
+  --alerta: var(--ambar-300);
+  --alerta-suave: var(--ambar-900);
+  --perigo: var(--vermelho-300);
+  --perigo-suave: var(--vermelho-900);
+  --info: var(--musgo-300);
+  --info-suave: var(--musgo-900);
+
+  --lateral-fundo: #000000;
+  --linha-realce: color-mix(in srgb, var(--neutro-50) 4%, transparent);
+  --cabecalho-tabela: color-mix(in srgb, var(--neutro-50) 3%, transparent);
+}
+/* brandkit:fim */
+
+/* O que usa os papéis do kit */
+[data-tema="escuro"] .app .lateral { background: var(--neutro-950); }
+[data-tema="escuro"] .app .conteudo { background: radial-gradient(760px 260px at 100% 0%, color-mix(in srgb, var(--terracota-500) 12%, transparent), transparent 70%); }
+.app .nav-item[aria-current="page"]::before { background: var(--terracota-400); }
+.app .nav-item[aria-current="page"] svg { color: var(--terracota-300); }
+/* Campo de formulário: a borda é o que diz "aqui se escreve", então ela tem contraste de verdade. */
+.app input:not([type="checkbox"]):not([type="radio"]),
+.app select,
+.app textarea { box-shadow: 0 0 0 1px var(--borda-controle); }
+.app input:not([type="checkbox"]):not([type="radio"]):hover,
+.app select:hover,
+.app textarea:hover { box-shadow: 0 0 0 1px var(--texto-2); }
+.app input:not([type="checkbox"]):not([type="radio"]):focus,
+.app select:focus,
+.app textarea:focus { box-shadow: 0 0 0 1px var(--foco), 0 0 0 4px color-mix(in srgb, var(--foco) 24%, transparent); }
+.app .btn-perigo { color: var(--perigo); }
+.cor-serie-1 { background: var(--terracota-500); stroke: var(--terracota-500); }
+.cor-serie-2 { background: var(--ambar-400); stroke: var(--ambar-400); }
+.cor-serie-3 { background: var(--musgo-400); stroke: var(--musgo-400); }
+.cor-serie-4 { background: var(--terracota-200); stroke: var(--terracota-200); }
+.cor-serie-5 { background: var(--neutro-500); stroke: var(--neutro-500); }

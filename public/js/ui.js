@@ -183,6 +183,11 @@ export const ICONES = {
   recibo: "M6 2h12a1 1 0 011 1v19l-3-2-2 2-2-2-2 2-2-2-3 2V3a1 1 0 011-1zM9 8h6M9 12h6",
   caminhao: "M1 4h13v12H1zM14 9h4l4 4v3h-8zM5.5 19.5a2 2 0 100-4 2 2 0 000 4zM18 19.5a2 2 0 100-4 2 2 0 000 4z",
   pessoas: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8",
+  transferir: "M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7",
+  editar: "M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z",
+  local: "M3 9l9-6 9 6v11a1 1 0 01-1 1H4a1 1 0 01-1-1zM9 21v-8h6v8",
+  cifrao: "M12 2v20M17 6.5C17 4.6 14.8 4 12 4S7 5 7 7.5 9 11 12 11.5s5 1.5 5 4-2.2 4-5 4-5-.8-5-2.8",
+  enviar: "M12 16V4M7 9l5-5 5 5M5 20h14",
 };
 
 /** Quantos erros ficam na tela ao mesmo tempo: mais que isso cobre o trabalho. */

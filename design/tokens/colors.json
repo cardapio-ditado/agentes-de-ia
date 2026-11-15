@@ -1,0 +1,669 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "$description": "Brasa Food — cores em três camadas (primitiva → papel → componente), geradas em OKLCH. O CSS em public/styles.css (bloco brandkit) usa exatamente estes valores; src/designTokens.test.ts confere.",
+  "primitive": {
+    "$description": "Paleta crua, gerada em OKLCH (11 tons por família, croma constante). Componente nunca usa direto.",
+    "terracota": {
+      "50": {
+        "$type": "color",
+        "$value": "#fff2ea"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#ffe6dd"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#ffcebb"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#fea989"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#e87c53"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#b64f25"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#9a3500"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#801a00"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#620000"
+      },
+      "900": {
+        "$type": "color",
+        "$value": "#3a0000"
+      },
+      "950": {
+        "$type": "color",
+        "$value": "#270000"
+      }
+    },
+    "neutro": {
+      "50": {
+        "$type": "color",
+        "$value": "#f7f6f6"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#edecec"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#dcdad9"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#c3c0be"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#a19d9b"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#767270"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#5e5a58"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#484442"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#302d2b"
+      },
+      "900": {
+        "$type": "color",
+        "$value": "#1a1816"
+      },
+      "950": {
+        "$type": "color",
+        "$value": "#0f0e0d"
+      }
+    },
+    "musgo": {
+      "50": {
+        "$type": "color",
+        "$value": "#f4f8f2"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#eaefe7"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#d5ded0"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#b7c7ae"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#91a687"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#677a5c"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#4f6145"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#394b30"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#233319"
+      },
+      "900": {
+        "$type": "color",
+        "$value": "#111c0b"
+      },
+      "950": {
+        "$type": "color",
+        "$value": "#091105"
+      }
+    },
+    "ambar": {
+      "50": {
+        "$type": "color",
+        "$value": "#fff5e6"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#f8ebd8"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#f2d6b1"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#e7b877"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#cd9130"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#9e6500"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#844c00"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#6b3600"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#511c00"
+      },
+      "900": {
+        "$type": "color",
+        "$value": "#2f0d00"
+      },
+      "950": {
+        "$type": "color",
+        "$value": "#1f0600"
+      }
+    },
+    "verde": {
+      "50": {
+        "$type": "color",
+        "$value": "#edfbf1"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#e1f2e6"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#c3e5cd"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#95d1a9"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#61b380"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#328656"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#106c3e"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#005529"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#003c11"
+      },
+      "900": {
+        "$type": "color",
+        "$value": "#002207"
+      },
+      "950": {
+        "$type": "color",
+        "$value": "#001503"
+      }
+    },
+    "vermelho": {
+      "50": {
+        "$type": "color",
+        "$value": "#fff0ec"
+      },
+      "100": {
+        "$type": "color",
+        "$value": "#ffe5e0"
+      },
+      "200": {
+        "$type": "color",
+        "$value": "#ffcac2"
+      },
+      "300": {
+        "$type": "color",
+        "$value": "#ffa196"
+      },
+      "400": {
+        "$type": "color",
+        "$value": "#f27166"
+      },
+      "500": {
+        "$type": "color",
+        "$value": "#bf433c"
+      },
+      "600": {
+        "$type": "color",
+        "$value": "#a12623"
+      },
+      "700": {
+        "$type": "color",
+        "$value": "#860009"
+      },
+      "800": {
+        "$type": "color",
+        "$value": "#680000"
+      },
+      "900": {
+        "$type": "color",
+        "$value": "#3e0000"
+      },
+      "950": {
+        "$type": "color",
+        "$value": "#2a0000"
+      }
+    },
+    "branco": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "preto": {
+      "$type": "color",
+      "$value": "#000000"
+    }
+  },
+  "semantic": {
+    "$description": "Papéis. É isto que as telas usam.",
+    "action": {
+      "primary": {
+        "$type": "color",
+        "$value": "{primitive.terracota.500}"
+      },
+      "primary-hover": {
+        "$type": "color",
+        "$value": "{primitive.terracota.600}"
+      },
+      "primary-active": {
+        "$type": "color",
+        "$value": "{primitive.terracota.700}"
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.100}"
+      },
+      "secondary-hover": {
+        "$type": "color",
+        "$value": "{primitive.neutro.200}"
+      },
+      "destructive": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.500}"
+      },
+      "destructive-hover": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.600}"
+      }
+    },
+    "text": {
+      "primary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.900}"
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.600}"
+      },
+      "tertiary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.500}",
+        "$description": "Apoio: placeholder e legenda."
+      },
+      "on-action": {
+        "$type": "color",
+        "$value": "{primitive.branco}"
+      },
+      "link": {
+        "$type": "color",
+        "$value": "{primitive.terracota.600}"
+      },
+      "link-hover": {
+        "$type": "color",
+        "$value": "{primitive.terracota.700}"
+      }
+    },
+    "surface": {
+      "page": {
+        "$type": "color",
+        "$value": "{primitive.neutro.50}"
+      },
+      "card": {
+        "$type": "color",
+        "$value": "{primitive.branco}"
+      },
+      "raised": {
+        "$type": "color",
+        "$value": "{primitive.neutro.100}"
+      },
+      "sunken": {
+        "$type": "color",
+        "$value": "{primitive.neutro.100}"
+      }
+    },
+    "border": {
+      "default": {
+        "$type": "color",
+        "$value": "{primitive.neutro.200}",
+        "$description": "Divisor e contorno decorativo (abaixo de 3:1 de propósito)."
+      },
+      "strong": {
+        "$type": "color",
+        "$value": "{primitive.neutro.500}",
+        "$description": "Borda que identifica um campo (WCAG 1.4.11)."
+      },
+      "focus": {
+        "$type": "color",
+        "$value": "{primitive.terracota.500}"
+      }
+    },
+    "feedback": {
+      "success-bg": {
+        "$type": "color",
+        "$value": "{primitive.verde.50}"
+      },
+      "success-text": {
+        "$type": "color",
+        "$value": "{primitive.verde.600}"
+      },
+      "warning-bg": {
+        "$type": "color",
+        "$value": "{primitive.ambar.50}"
+      },
+      "warning-text": {
+        "$type": "color",
+        "$value": "{primitive.ambar.600}"
+      },
+      "error-bg": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.50}"
+      },
+      "error-text": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.600}"
+      },
+      "info-bg": {
+        "$type": "color",
+        "$value": "{primitive.musgo.50}"
+      },
+      "info-text": {
+        "$type": "color",
+        "$value": "{primitive.musgo.600}"
+      }
+    },
+    "brand": {
+      "accent": {
+        "$type": "color",
+        "$value": "{primitive.terracota.500}"
+      },
+      "accent-soft": {
+        "$type": "color",
+        "$value": "{primitive.terracota.50}"
+      },
+      "accent-border": {
+        "$type": "color",
+        "$value": "{primitive.terracota.200}"
+      },
+      "sidebar": {
+        "$type": "color",
+        "$value": "{primitive.neutro.950}"
+      }
+    }
+  },
+  "component": {
+    "$description": "Tokens de componente: apontam sempre para um papel.",
+    "button": {
+      "primary-bg": {
+        "$type": "color",
+        "$value": "{semantic.action.primary}"
+      },
+      "primary-bg-hover": {
+        "$type": "color",
+        "$value": "{semantic.action.primary-hover}"
+      },
+      "primary-text": {
+        "$type": "color",
+        "$value": "{semantic.text.on-action}"
+      },
+      "secondary-bg": {
+        "$type": "color",
+        "$value": "{semantic.surface.card}"
+      },
+      "secondary-text": {
+        "$type": "color",
+        "$value": "{semantic.text.primary}"
+      }
+    },
+    "input": {
+      "bg": {
+        "$type": "color",
+        "$value": "{semantic.surface.card}"
+      },
+      "border": {
+        "$type": "color",
+        "$value": "{semantic.border.strong}"
+      },
+      "border-focus": {
+        "$type": "color",
+        "$value": "{semantic.border.focus}"
+      },
+      "text": {
+        "$type": "color",
+        "$value": "{semantic.text.primary}"
+      },
+      "placeholder": {
+        "$type": "color",
+        "$value": "{semantic.text.tertiary}"
+      }
+    },
+    "card": {
+      "bg": {
+        "$type": "color",
+        "$value": "{semantic.surface.card}"
+      },
+      "border": {
+        "$type": "color",
+        "$value": "{semantic.border.default}"
+      }
+    },
+    "table": {
+      "header-bg": {
+        "$type": "color",
+        "$value": "{semantic.surface.raised}"
+      },
+      "header-text": {
+        "$type": "color",
+        "$value": "{semantic.text.secondary}"
+      },
+      "row-border": {
+        "$type": "color",
+        "$value": "{semantic.border.default}"
+      }
+    },
+    "badge": {
+      "success-bg": {
+        "$type": "color",
+        "$value": "{semantic.feedback.success-bg}"
+      },
+      "success-text": {
+        "$type": "color",
+        "$value": "{semantic.feedback.success-text}"
+      },
+      "warning-bg": {
+        "$type": "color",
+        "$value": "{semantic.feedback.warning-bg}"
+      },
+      "warning-text": {
+        "$type": "color",
+        "$value": "{semantic.feedback.warning-text}"
+      },
+      "error-bg": {
+        "$type": "color",
+        "$value": "{semantic.feedback.error-bg}"
+      },
+      "error-text": {
+        "$type": "color",
+        "$value": "{semantic.feedback.error-text}"
+      }
+    }
+  },
+  "dark": {
+    "$description": "Tema escuro (padrão do painel): papéis redesenhados, não o claro invertido.",
+    "action": {
+      "primary": {
+        "$type": "color",
+        "$value": "{primitive.terracota.500}"
+      },
+      "primary-hover": {
+        "$type": "color",
+        "$value": "{primitive.terracota.600}"
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.800}"
+      },
+      "secondary-hover": {
+        "$type": "color",
+        "$value": "{primitive.neutro.700}"
+      },
+      "destructive": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.500}"
+      }
+    },
+    "text": {
+      "primary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.50}"
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.300}"
+      },
+      "tertiary": {
+        "$type": "color",
+        "$value": "{primitive.neutro.400}"
+      },
+      "on-action": {
+        "$type": "color",
+        "$value": "{primitive.branco}"
+      },
+      "link": {
+        "$type": "color",
+        "$value": "{primitive.terracota.300}"
+      },
+      "link-hover": {
+        "$type": "color",
+        "$value": "{primitive.terracota.200}"
+      }
+    },
+    "surface": {
+      "page": {
+        "$type": "color",
+        "$value": "{primitive.neutro.950}"
+      },
+      "card": {
+        "$type": "color",
+        "$value": "{primitive.neutro.900}"
+      },
+      "raised": {
+        "$type": "color",
+        "$value": "{primitive.neutro.800}"
+      },
+      "sunken": {
+        "$type": "color",
+        "$value": "{primitive.preto}"
+      }
+    },
+    "border": {
+      "default": {
+        "$type": "color",
+        "$value": "{primitive.neutro.800}"
+      },
+      "strong": {
+        "$type": "color",
+        "$value": "{primitive.neutro.500}"
+      },
+      "focus": {
+        "$type": "color",
+        "$value": "{primitive.terracota.300}"
+      }
+    },
+    "feedback": {
+      "success-bg": {
+        "$type": "color",
+        "$value": "{primitive.verde.900}"
+      },
+      "success-text": {
+        "$type": "color",
+        "$value": "{primitive.verde.300}"
+      },
+      "warning-bg": {
+        "$type": "color",
+        "$value": "{primitive.ambar.900}"
+      },
+      "warning-text": {
+        "$type": "color",
+        "$value": "{primitive.ambar.300}"
+      },
+      "error-bg": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.900}"
+      },
+      "error-text": {
+        "$type": "color",
+        "$value": "{primitive.vermelho.300}"
+      },
+      "info-bg": {
+        "$type": "color",
+        "$value": "{primitive.musgo.900}"
+      },
+      "info-text": {
+        "$type": "color",
+        "$value": "{primitive.musgo.300}"
+      }
+    },
+    "brand": {
+      "accent": {
+        "$type": "color",
+        "$value": "{primitive.terracota.400}"
+      },
+      "accent-soft": {
+        "$type": "color",
+        "$value": "{primitive.terracota.900}"
+      },
+      "accent-border": {
+        "$type": "color",
+        "$value": "{primitive.terracota.700}"
+      },
+      "sidebar": {
+        "$type": "color",
+        "$value": "{primitive.preto}"
+      }
+    }
+  }
+}

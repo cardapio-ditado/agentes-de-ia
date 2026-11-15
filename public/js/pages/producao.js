@@ -1,5 +1,5 @@
 import { get, post } from "../api.js";
-import { avisar, buscador, el, limpar, vazio } from "../ui.js";
+import { avisar, buscador, el, estadoDeErro, limpar, vazio } from "../ui.js";
 
 /**
  * Produção: a receita foi feita, os insumos saem do estoque.
@@ -26,7 +26,12 @@ export async function producao(raiz, ctx) {
       get(`/v1/venues/${ctx.venue}/estoque-locais`),
     ]);
   } catch (e) {
-    conteudo.append(vazio("Produção indisponível", e.message));
+    conteudo.append(
+      estadoDeErro("Não foi possível carregar a produção", e.message, () => {
+        raiz.replaceChildren();
+        void producao(raiz, ctx);
+      }),
+    );
     return;
   }
 
@@ -70,19 +75,17 @@ export async function producao(raiz, ctx) {
 
   conteudo.append(
     el("section", { classe: "pilha" }, [
-      el("div", { classe: "cabecalho-secao" }, [
+      el("div", { classe: "cartao pilha", style: "max-width:760px" }, [
         el("div", {}, [
           el("h2", { texto: "Registrar produção" }),
-          el("p", { classe: "muted", texto: "A receita foi feita — os ingredientes saem do estoque." }),
+          el("p", { classe: "muted", texto: "Escolha a receita feita e quantas vezes: os ingredientes saem do estoque pela ficha." }),
         ]),
-      ]),
-      el("div", { classe: "cartao pilha" }, [
         el("label", { classe: "campo-rotulado" }, [
           el("span", { texto: "O que foi produzido" }),
           buscador(
             confirmadas.map((f) => ({ rotulo: f.nome, valor: f })),
             {
-              placeholder: "🔍  Digite o nome da ficha…",
+              placeholder: "Digite o nome da ficha…",
               aoEscolher: (o) => {
                 ficha = o.valor;
                 desenharEscolhida();
@@ -96,8 +99,9 @@ export async function producao(raiz, ctx) {
           el("label", {}, [el("span", { texto: "De qual estoque saem os insumos" }), seletorLocal]),
         ]),
         el("button", {
-          classe: "btn btn-primario btn-grande",
+          classe: "btn btn-primario",
           type: "button",
+          style: "justify-self:start",
           texto: "Registrar produção",
           onclick: async (ev) => {
             if (!ficha) return avisar("Escolha a ficha.", "erro");
