@@ -454,6 +454,7 @@ import {
   substituirItens,
   type ItemDaCompra,
 } from "./cmv/estoque.js";
+import { resumoDasCompras } from "./cmv/comprasResumo.js";
 import { lerNota, somaConfere, tipoAceito } from "./cmv/lerNota.js";
 import { sugerirFicha } from "./cmv/sugerirFicha.js";
 import {
@@ -2149,6 +2150,20 @@ async function roteasApi(
         res,
         await comErroDeEstoque(() =>
           listarCompras({ venueId: venue.id, status: url.searchParams.get("status") ?? undefined }),
+        ),
+      );
+    }
+
+    // GET /v1/venues/:slug/compras/resumo?hoje=&mes= — indicadores e gráficos,
+    // contados no período inteiro (a lista tem teto; isto não). Vem ANTES da
+    // rota do detalhe, que tomaria "resumo" por id de compra.
+    if (metodo === "GET" && recurso === "compras" && p.length === 4 && p[3] === "resumo") {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await comErroDeEstoque(() =>
+          resumoDasCompras({ venueId: venue.id, hoje: url.searchParams.get("hoje"), mes: url.searchParams.get("mes") }),
         ),
       );
     }

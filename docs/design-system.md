@@ -45,6 +45,23 @@ O painel é JavaScript puro com módulos ES e CSS com variáveis. Não há React
 
 Classes de apoio: `.btn`, `.btn-primario`, `.btn-peq`, `.abas`/`.aba`, `.abas-com-acoes`, `.chip`, `.barra-filtros`, `.cartao`, `.painel-analise`.
 
+## Acabamento
+
+Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (Jakub Krehel) e do vocabulário visual do shadcn/ui, escritos em CSS puro:
+
+- **Contorno em sombra** (`--contorno`, `--contorno-hover`, `--contorno-controle`) no lugar de borda sólida em cartão, tabela, botão e campo. Borda sólida fica para o que é estrutura: divisor de linha, seleção, foco.
+- **Raio concêntrico**: cartão em 14 px, o que mora dentro em 8–10 px; botão dentro de campo em 6 px.
+- **Rótulo em caixa normal**: grupo do menu, cabeçalho de tabela e módulo acima do título sem caixa alta espaçada.
+- **Resposta ao toque**: `scale: 0.96` ao pressionar botão; transições de 120–150 ms, sempre com a propriedade declarada (nunca `transition: all`).
+- **Número tabular** em indicador, tabela e total.
+- **Etiqueta de situação** em tinta suave com ponto (ou visto, quando concluído), nunca bloco cheio.
+- **Ação de linha** sem moldura até a linha ganhar atenção; alvo de 40 px.
+- **Sem animação de entrada** a cada troca de tela.
+
+## Dados da tela de Compras
+
+`GET /v1/venues/:slug/compras/resumo?hoje=AAAA-MM-DD&mes=AAAA-MM` (`src/cmv/comprasResumo.ts`) devolve os indicadores e as séries dos gráficos contados no período inteiro. A lista (`/compras`) tem teto de 60 registros e serve só à tabela. Se o resumo não responder, a tela conta pela lista e só mostra os gráficos quando o teto não corta o período.
+
 ## Regras
 
 1. Uma ação principal por tela (terracota). As demais são neutras.

@@ -9,9 +9,10 @@ import { dinheiro, el } from "../ui.js";
  * ainda não chegou é promessa, não compra, e somar os dois contaria a mesma
  * mercadoria duas vezes.
  *
- * A lista que a tela recebe tem um teto de registros. Quando o teto corta o
- * período, a análise NÃO aparece: gráfico incompleto com cara de completo é
- * pior do que gráfico nenhum.
+ * Os números vêm da rota de resumo do servidor, que conta o período inteiro.
+ * Se ela não responder, a tela usa a lista que já tem — e, como a lista tem
+ * teto de registros, só quando o teto não corta o período: gráfico incompleto
+ * com cara de completo é pior do que gráfico nenhum.
  */
 
 const NS = "http://www.w3.org/2000/svg";
@@ -47,10 +48,11 @@ function tetoBonito(v) {
 }
 
 /**
- * O que a lista permite afirmar. Devolve null quando o teto da lista pode
- * ter cortado compras de dentro do período.
+ * A reserva: o mesmo resumo, contado em cima da lista que a tela já tem.
+ * Só serve quando a rota de resumo não respondeu, e devolve null quando o
+ * teto da lista pode ter cortado compras de dentro do período.
  */
-export function resumoDasCompras(lista, hoje) {
+export function resumoPelaLista(lista, hoje) {
   const inicio = somarDias(hoje, -29);
   if (lista.length >= TETO_DA_LISTA) {
     const maisAntiga = lista.reduce((m, c) => ((c.created_at ?? "") < m ? (c.created_at ?? "") : m), "9999").slice(0, 10);
@@ -64,19 +66,17 @@ export function resumoDasCompras(lista, hoje) {
     if (porDia.has(dia)) porDia.set(dia, porDia.get(dia) + Math.round(Number(c.valor_total) * 100));
   }
   const mes = hoje.slice(0, 7);
-  const porSetor = new Map();
+  const porLocal = new Map();
   for (const c of recebidas) {
     if (!c.recebida_em.startsWith(mes)) continue;
-    const setor = c.estoque_locais?.nome ?? "Sem local";
-    porSetor.set(setor, (porSetor.get(setor) ?? 0) + Math.round(Number(c.valor_total) * 100));
+    const local = c.estoque_locais?.nome ?? "Sem local";
+    porLocal.set(local, (porLocal.get(local) ?? 0) + Math.round(Number(c.valor_total) * 100));
   }
   const dias = [...porDia].map(([dia, centavos]) => ({ dia, valor: centavos / 100 }));
-  const setores = [...porSetor].map(([nome, centavos]) => ({ nome, valor: centavos / 100 })).filter((s) => s.valor > 0).sort((a, b) => b.valor - a.valor);
   return {
-    dias,
-    total30: dias.reduce((t, d) => t + d.valor, 0),
-    setores,
-    totalDoMes: setores.reduce((t, s) => t + s.valor, 0),
+    ultimos_30_dias: dias,
+    total_30_dias: dias.reduce((t, d) => t + d.valor, 0),
+    por_local: [...porLocal].map(([nome, centavos]) => ({ nome, valor: centavos / 100 })).filter((l) => l.valor > 0).sort((x, y) => y.valor - x.valor),
   };
 }
 
@@ -97,10 +97,7 @@ function graficoDeBarras(dias) {
   dias.forEach((d, i) => {
     if (d.valor > 0) {
       const alt = Math.max(2, (d.valor / teto) * areaA);
-      const barra = svg("rect", { class: "gb-barra", x: esq + i * passo + passo * 0.18, y: topo + areaA - alt, width: passo * 0.64, height: alt, rx: 2 });
-      const dica = svg("title");
-      dica.textContent = `${diaMes(d.dia)}: ${dinheiro(d.valor)}`;
-      barra.append(dica);
+      const barra = svg("rect", { class: "gb-barra", x: esq + i * passo + passo * 0.2, y: topo + areaA - alt, width: passo * 0.6, height: alt, rx: Math.min(3, alt / 2), "data-dia": diaMes(d.dia), "data-valor": dinheiro(d.valor) });
       filhos.push(barra);
     }
     // Um rótulo a cada quatro dias, e sempre o último: mais que isso embola.
@@ -112,7 +109,7 @@ function graficoDeBarras(dias) {
     }
   });
   const com = dias.filter((d) => d.valor > 0);
-  return svg(
+  const desenho = svg(
     "svg",
     {
       class: "grafico-barras",
@@ -124,6 +121,25 @@ function graficoDeBarras(dias) {
     },
     filhos,
   );
+  // A dica segue a barra sob o mouse. Quem navega sem mouse tem os mesmos
+  // números no rótulo do gráfico e no total ao lado do título.
+  const dica = el("div", { classe: "grafico-dica-flutua", hidden: true, role: "presentation" });
+  const caixa = el("div", { classe: "grafico-caixa" }, [desenho, dica]);
+  desenho.addEventListener("pointermove", (e) => {
+    const barra = e.target instanceof Element ? e.target.closest(".gb-barra") : null;
+    if (!barra) {
+      dica.hidden = true;
+      return;
+    }
+    const b = barra.getBoundingClientRect();
+    const c = caixa.getBoundingClientRect();
+    dica.replaceChildren(el("span", { texto: barra.dataset.dia }), el("strong", { texto: barra.dataset.valor }));
+    dica.style.left = `${b.left - c.left + b.width / 2}px`;
+    dica.style.top = `${b.top - c.top}px`;
+    dica.hidden = false;
+  });
+  desenho.addEventListener("pointerleave", () => { dica.hidden = true; });
+  return caixa;
 }
 
 function rosca(setores, total) {
@@ -168,23 +184,26 @@ function rosca(setores, total) {
   ]);
 }
 
-/** Os dois painéis, ou nada quando não há o que mostrar com segurança. */
-export function analiseDasCompras(lista, hoje) {
-  const r = resumoDasCompras(lista, hoje);
-  if (!r || (r.total30 === 0 && r.totalDoMes === 0)) return null;
+/**
+ * Os dois painéis. `r` é o resumo (do servidor, ou a reserva pela lista);
+ * sem resumo, ou sem nada recebido no período, não aparece nada.
+ */
+export function analiseDasCompras(r) {
+  const totalDoMes = (r?.por_local ?? []).reduce((t, l) => t + l.valor, 0);
+  if (!r || (r.total_30_dias === 0 && totalDoMes === 0)) return null;
   return el("div", { classe: "painel-analise" }, [
     el("section", { classe: "cartao" }, [
       el("div", { classe: "painel-analise-topo" }, [
         el("h2", { texto: "Recebido — últimos 30 dias" }),
-        el("strong", { texto: dinheiro(r.total30) }),
+        el("strong", { texto: dinheiro(r.total_30_dias) }),
       ]),
-      graficoDeBarras(r.dias),
+      graficoDeBarras(r.ultimos_30_dias),
     ]),
     el("section", { classe: "cartao" }, [
       el("div", { classe: "painel-analise-topo" }, [
         el("h2", {}, [document.createTextNode("Recebido por local "), el("small", { texto: "(mês)" })]),
       ]),
-      r.totalDoMes > 0 ? rosca(r.setores, r.totalDoMes) : el("p", { classe: "muted", texto: "Nada recebido neste mês ainda." }),
+      totalDoMes > 0 ? rosca(r.por_local, totalDoMes) : el("p", { classe: "muted", texto: "Nada recebido neste mês ainda." }),
     ]),
   ]);
 }

@@ -141,11 +141,13 @@ export function icone(d, tamanho = 19) {
   svg.setAttribute("width", tamanho);
   svg.setAttribute("height", tamanho);
   svg.setAttribute("aria-hidden", "true");
-  svg.style.fill = "none";
-  svg.style.stroke = "currentColor";
-  svg.style.strokeWidth = "1.8";
-  svg.style.strokeLinecap = "round";
-  svg.style.strokeLinejoin = "round";
+  // Atributos, e não estilo embutido: assim o CSS acerta a espessura do traço
+  // ao peso do texto ao lado (1,75 junto de texto normal, 2 junto de negrito).
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("d", d);
   svg.append(path);
@@ -274,7 +276,7 @@ export function esqueleto({ cartoes = 0, linhas = 5 } = {}) {
  * `tom` é semântico — "alerta" pede atenção, "perigo" é problema — e nunca
  * decoração. `destaque` continua valendo como "alerta", para as telas antigas.
  */
-export function indicador({ rotulo, valor, nota, iconePath, destaque, tom, cor }) {
+export function indicador({ rotulo, valor, nota, iconePath, destaque, tom, cor, serie }) {
   const variante = tom ?? (destaque ? "alerta" : "");
   // `cor` (areia, musgo, marca, pinho) é o tom do cartão, da identidade;
   // `tom` (alerta, perigo) é a situação. Um não substitui o outro.
@@ -283,14 +285,29 @@ export function indicador({ rotulo, valor, nota, iconePath, destaque, tom, cor }
     el("div", { classe: "indicador-rotulo", texto: rotulo }),
     el("div", { classe: "indicador-valor", texto: String(valor) }),
     nota ? el("div", { classe: "indicador-nota", texto: nota }) : null,
+    faisca(serie),
   ]);
+}
+
+/**
+ * Os últimos dias em miniatura, no canto do indicador. `serie` são os
+ * valores reais, em ordem; sem valor nenhum acima de zero, não desenha nada.
+ */
+function faisca(serie) {
+  if (!Array.isArray(serie) || !serie.some((v) => v > 0)) return null;
+  const maior = Math.max(...serie);
+  return el(
+    "span",
+    { classe: "faisca", "aria-hidden": "true" },
+    serie.map((v) => el("i", { style: `height:${v > 0 ? Math.max(8, Math.round((v / maior) * 100)) : 7}%`, "data-vazio": v > 0 ? null : "" })),
+  );
 }
 
 /**
  * Campo de busca: lupa, texto e o botão de limpar quando há o que limpar.
  * `aoMudar(texto)` é chamado a cada tecla; quem precisar de pausa passa `espera`.
  */
-export function campoDeBusca({ rotulo, placeholder = "Buscar…", valor = "", aoMudar, espera = 0 }) {
+export function campoDeBusca({ rotulo, placeholder = "Buscar…", valor = "", aoMudar, espera = 0, atalho = false }) {
   const input = el("input", { type: "search", placeholder, value: valor, "aria-label": rotulo ?? placeholder, autocomplete: "off", spellcheck: "false" });
   const limparBusca = el("button", { classe: "campo-busca-limpar", type: "button", "aria-label": "Limpar a busca", hidden: !valor }, [icone(ICONES.fechar, 14)]);
   let temporizador = null;
@@ -306,8 +323,26 @@ export function campoDeBusca({ rotulo, placeholder = "Buscar…", valor = "", ao
     avisarMudanca();
     input.focus();
   });
-  const caixa = el("div", { classe: "campo-busca" }, [icone(ICONES.busca, 16), input, limparBusca]);
+  const caixa = el("div", { classe: "campo-busca" }, [
+    icone(ICONES.busca, 16),
+    input,
+    limparBusca,
+    atalho ? el("kbd", { classe: "campo-busca-atalho", "aria-hidden": "true", texto: "/" }) : null,
+  ]);
   caixa.campo = input;
+  if (atalho) {
+    // "/" leva o cursor para a busca — menos quando a pessoa já está digitando
+    // em algum campo. O ouvinte sai sozinho quando a tela sai do ar.
+    input.setAttribute("aria-keyshortcuts", "/");
+    const aoTeclar = (e) => {
+      if (!caixa.isConnected) return document.removeEventListener("keydown", aoTeclar);
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      input.focus();
+    };
+    document.addEventListener("keydown", aoTeclar);
+  }
   return caixa;
 }
 

@@ -1,6 +1,6 @@
 import { del, get, patch, post, put } from "../api.js";
 import { acaoIcone, avisar, buscador, campoDeBusca, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, ICONES, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
-import { analiseDasCompras } from "./comprasAnalise.js";
+import { analiseDasCompras, resumoPelaLista } from "./comprasAnalise.js";
 
 /**
  * Compras — a tela cheia, no desenho do Gorjeta.
@@ -33,6 +33,15 @@ function valorDaCompra(c) {
 function siglaDe(nome) {
   const palavras = String(nome).split(/\s+/).filter((p) => p.length > 2 || /^[A-ZÀ-Ú]/.test(p));
   return ((palavras[0]?.[0] ?? "") + (palavras[1]?.[0] ?? "")).toUpperCase() || "–";
+}
+
+/** A linha de baixo do "Aguardando entrega": atraso primeiro, depois o que vem. */
+function notaDoQueAguarda(n) {
+  if (n.aguardando === 0) return "nada pendente";
+  if (n.atrasadas > 0) return `${n.atrasadas} com a entrega atrasada`;
+  const valor = n.valor_aguardando > 0 ? `${dinheiro(n.valor_aguardando)} a caminho` : null;
+  const proxima = n.proxima_entrega ? `próxima em ${n.proxima_entrega.slice(8, 10)}/${n.proxima_entrega.slice(5, 7)}` : null;
+  return [valor, proxima].filter(Boolean).join(" · ") || "sem data prevista";
 }
 
 function dataCurta(iso) {
@@ -131,13 +140,18 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
 
   async function desenhar() {
     limpar(conteudo).append(esqueleto({ cartoes: 4, linhas: 6 }));
-    let lista, locais, insumos, fornecedoresLista;
+    let lista, locais, insumos, fornecedoresLista, resumo;
+    // O mês dos indicadores segue a regra de sempre; a janela dos 30 dias, o dia da casa.
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const hojeDaCasa = hojeNaCasa();
     try {
-      [lista, locais, insumos, fornecedoresLista] = await Promise.all([
+      [lista, locais, insumos, fornecedoresLista, resumo] = await Promise.all([
         get(`/v1/venues/${ctx.venue}/compras`),
         get(`/v1/venues/${ctx.venue}/estoque-locais`),
         get(`/v1/venues/${ctx.venue}/insumos`),
         get(`/v1/venues/${ctx.venue}/fornecedores`),
+        // Os totais do período inteiro. Se faltar, a tela conta pela lista.
+        get(`/v1/venues/${ctx.venue}/compras/resumo?hoje=${hojeDaCasa}&mes=${mesAtual}`).catch(() => null),
       ]);
     } catch (e) {
       limpar(conteudo).append(estadoDeErro("Não foi possível carregar as compras", e.message, desenhar));
@@ -153,15 +167,27 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
       return;
     }
 
-    // ---- Indicadores do mês (o desenho do Gorjeta) ----
-    const mesAtual = new Date().toISOString().slice(0, 7);
+    // ---- Indicadores do mês ----
+    // Vêm do resumo do servidor (período inteiro). Sem ele, contam-se pela
+    // lista, como antes — que tem teto e pode ficar curta numa casa movimentada.
     const doMes = lista.filter((c) => (c.data_compra ?? c.created_at ?? "").startsWith(mesAtual));
     const aguardando = lista.filter((c) => c.status === "pedido");
     const recebidasMes = doMes.filter((c) => c.status === "recebida");
-    const valorAguardando = aguardando.reduce((t, c) => t + valorDaCompra(c), 0);
-    const valorRecebidoMes = recebidasMes.reduce((t, c) => t + Number(c.valor_total), 0);
+    const temResumo = Boolean(resumo && Array.isArray(resumo.ultimos_30_dias));
+    const numeros = temResumo
+      ? resumo
+      : {
+          compras_no_mes: doMes.length,
+          recebidas_no_mes: recebidasMes.length,
+          comprado_no_mes: recebidasMes.reduce((t, c) => t + Number(c.valor_total), 0),
+          aguardando: aguardando.length,
+          valor_aguardando: aguardando.reduce((t, c) => t + valorDaCompra(c), 0),
+          atrasadas: 0,
+          proxima_entrega: null,
+        };
+    const analise = temResumo ? resumo : resumoPelaLista(lista, hojeDaCasa);
 
-    aoContarPendentes?.(aguardando.length);
+    aoContarPendentes?.(numeros.aguardando);
 
     // ---- Ações principais: no cabeçalho da tela, ao lado do título ----
     const botaoNovoPedido = () =>
@@ -175,6 +201,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
     const busca = campoDeBusca({
       rotulo: "Buscar fornecedor ou documento",
       placeholder: "Buscar fornecedor ou documento…",
+      atalho: true,
       valor: filtroTexto,
       aoMudar: (texto) => {
         filtroTexto = texto;
@@ -217,12 +244,12 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
           colunas: [
             { rotulo: "Fornecedor", principal: true },
             { rotulo: "Nº nota", largura: "80px" },
-            { rotulo: "Pedido", largura: "100px" },
-            { rotulo: "Previsto", largura: "100px" },
-            { rotulo: "Recebido", largura: "100px" },
+            { rotulo: "Pedido", largura: "110px" },
+            { rotulo: "Previsto", largura: "110px" },
+            { rotulo: "Recebido", largura: "110px" },
             { rotulo: "Valor", num: true, largura: "132px" },
-            { rotulo: "Situação", largura: "174px", semRotulo: true },
-            { rotulo: "Ações", acoes: true, largura: "190px" },
+            { rotulo: "Situação", largura: "178px", semRotulo: true },
+            { rotulo: "Ações", acoes: true, largura: "178px" },
           ],
           larguraMinima: "1020px",
           linhas: filtradas.map(linhaCompra),
@@ -236,24 +263,27 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
         el("div", { classe: "grade" }, [
           indicador({
             rotulo: "Compras no mês",
-            valor: String(doMes.length),
-            nota: `${recebidasMes.length} recebida(s)`,
+            valor: String(numeros.compras_no_mes),
+            nota: `${numeros.recebidas_no_mes} recebida(s)`,
             iconePath: ICONES.recibo,
             cor: "areia",
           }),
           indicador({
             rotulo: "Aguardando entrega",
-            valor: String(aguardando.length),
-            nota: valorAguardando > 0 ? `${dinheiro(valorAguardando)} a caminho` : "nada pendente",
+            valor: String(numeros.aguardando),
+            nota: notaDoQueAguarda(numeros),
             iconePath: ICONES.caminhao,
             cor: "musgo",
+            tom: numeros.atrasadas > 0 ? "alerta" : undefined,
           }),
           indicador({
             rotulo: "Comprado no mês",
-            valor: dinheiro(valorRecebidoMes),
+            valor: dinheiro(numeros.comprado_no_mes),
             nota: "o que já entrou no estoque",
             iconePath: ICONES.caixa,
             cor: "marca",
+            // Os últimos 14 dias de recebimento, em miniatura.
+            serie: analise ? analise.ultimos_30_dias.slice(-14).map((d) => d.valor) : null,
           }),
           indicador({
             rotulo: "Fornecedores",
@@ -263,8 +293,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
             cor: "pinho",
           }),
         ]),
-        // Só aparece quando a lista cobre o período inteiro (ver comprasAnalise.js).
-        analiseDasCompras(lista, hojeNaCasa()),
+        analiseDasCompras(analise),
         el("div", { classe: "barra-filtros" }, [busca, seletorStatus]),
         tabela,
       ]),
