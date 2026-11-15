@@ -3941,3 +3941,285 @@ a.btn { text-decoration: none; }
 /* Dentro da gaveta "Atrasadas", a etiqueta "atrasada" em cada linha só repete o título. */
 .grupo-lista .conta-valor .etiqueta { display: none; }
 .grupo-lista .linha-tabela { padding-top: 8px; padding-bottom: 8px; }
+
+/* ============================================================
+   Identidade do painel — carvão, favo e brasa
+   ------------------------------------------------------------
+   A paleta é a do guia (Carvão, Fogo, Brasa, Âmbar, Creme). O que muda é
+   ONDE cada cor mora: o carvão do hub desce para a barra lateral, o creme
+   deixa de ser fundo de tudo e vira tinta sobre o carvão, e a tela de
+   trabalho fica em papel claro, plana, com fio fino no lugar de sombra.
+
+   Três assinaturas, e só três:
+   · o favo (hexágono do hub) marca contagem e estado;
+   · número em serifada, como preço de cardápio;
+   · rótulo miúdo em caixa alta, como etiqueta de comanda.
+   ============================================================ */
+:root {
+  --fundo: #f4f0ea; /* papel: o creme sem o pêssego */
+  --superficie: #fffefb;
+  --superficie-2: #ece5db;
+  --borda: #e4dbcf;
+  --borda-forte: #cbbcab;
+  --texto-2: #5f5048;
+  --texto-3: #8c7a6c;
+  --marca-suave: #fbe9df;
+  --raio: 6px;
+  --raio-g: 8px;
+  /* A sombra fica para o que flutua de verdade (aviso, dica de gráfico). */
+  --sombra: 0 6px 20px rgba(34, 23, 20, 0.14);
+  --carvao: #221714;
+  --creme: #fff8f0;
+}
+[data-tema="escuro"] {
+  /* Repetidos aqui porque o :root logo acima vem depois do bloco escuro lá
+     do alto do arquivo e, com o mesmo peso, ganharia dele. */
+  --texto-2: #c9b4a6;
+  --texto-3: #9b8777;
+  --fundo: #150e0c;
+  --superficie: #1e1512;
+  --superficie-2: #2a1e19;
+  --borda: #33251f;
+  --borda-forte: #4a372e;
+  --marca-suave: #3a2117;
+  --sombra: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Tipografia: serifada só no nome da tela e nos números ---------- */
+.app h2,
+.app h3 {
+  font-family: var(--fonte-ui);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+.app h2 { font-size: 17px; }
+.app h3 { font-size: 14.5px; }
+#titulo-pagina {
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* ---------- Barra lateral: o carvão do hub ---------- */
+.app .lateral {
+  /* Os tokens são redefinidos AQUI, e tudo o que mora na barra (itens,
+     botões, rótulos) acompanha sem regra própria. */
+  --texto: var(--creme);
+  --texto-2: #cdbbad;
+  --texto-3: #9a8778;
+  --texto-suave: #9a8778;
+  --superficie: transparent;
+  --superficie-2: rgba(255, 248, 240, 0.08);
+  --borda: rgba(255, 248, 240, 0.12);
+  --borda-forte: rgba(255, 248, 240, 0.2);
+  color: var(--texto);
+  border-right: 0;
+  padding: 16px 12px;
+  background:
+    radial-gradient(130% 55% at 0% 100%, rgba(255, 107, 53, 0.2), transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='48.5' viewBox='0 0 84 48.5'%3E%3Cpath d='M0 24.25L14 0h28l14 24.25L42 48.5H14zM56 24.25h28' fill='none' stroke='%23fff8f0' stroke-opacity='.055' stroke-width='1'/%3E%3C/svg%3E") left bottom / 84px 48.5px repeat,
+    #1c1210;
+}
+.app .lateral .wordmark { color: var(--creme); }
+.app .nav-item {
+  border-radius: var(--raio);
+  font-weight: 500;
+  position: relative;
+}
+.app .nav-item[aria-current="page"] {
+  background: rgba(255, 107, 53, 0.16);
+  color: var(--creme);
+  font-weight: 700;
+}
+/* A brasa acesa do lado do item em que se está. */
+.app .nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--marca);
+  box-shadow: 0 0 12px rgba(255, 107, 53, 0.8);
+}
+.app .nav-item[aria-current="page"] svg { color: var(--marca); }
+.app .nav-contador { background: var(--marca); color: var(--carvao); border-radius: 4px; }
+.app .nav-grupo { letter-spacing: 0.12em; font-size: 0.66rem; }
+
+/* ---------- Topo ---------- */
+.app .topo {
+  padding: 18px 26px 16px;
+  background: color-mix(in srgb, var(--fundo) 92%, transparent);
+  border-bottom: 1px solid var(--borda-forte);
+}
+.app .pagina { padding: 24px 26px 40px; }
+
+/* ---------- Superfícies planas: fio fino, sem sombra ---------- */
+.app .cartao,
+.app .indicador {
+  box-shadow: none;
+  border-color: var(--borda);
+}
+.app .tabela,
+.app .grupo-lista { border-radius: var(--raio-g); }
+
+/* ---------- Botões ---------- */
+.app .btn {
+  font-weight: 600;
+  border-color: var(--borda-forte);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.app .btn:hover { border-color: var(--texto-3); }
+.app .btn-primario { border-color: var(--cta); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18); }
+.app .btn-primario:hover { border-color: var(--cta-hover); }
+.app .btn:focus-visible,
+.app .aba:focus-visible,
+.app .nav-item:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+
+/* ---------- Etiqueta: carimbo de comanda, não pílula ---------- */
+.app .etiqueta {
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+/* ---------- Abas ---------- */
+.app .abas { border-bottom: 1px solid var(--borda-forte); gap: 2px; }
+.app .aba {
+  font-family: var(--fonte-ui);
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: -1px;
+  padding: 10px 13px;
+}
+.app .aba-ativa { color: var(--texto); border-bottom-color: var(--marca); }
+
+/* ---------- Filtros: o ligado é carvão cheio, não pastel ---------- */
+.app .chip { border-radius: var(--raio); font-weight: 600; }
+.app .chip-ativo {
+  background: var(--texto);
+  border-color: var(--texto);
+  color: var(--fundo);
+  font-weight: 700;
+}
+
+/* ---------- Indicadores: uma régua de números, não quatro caixas ---------- */
+.app .grade:has(> .indicador) {
+  gap: 0;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-g);
+  background: var(--superficie);
+  overflow: hidden;
+}
+.app .grade:has(> .indicador) > .indicador {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  /* O fio entre as casas: a margem negativa esconde o da última coluna e o
+     da última linha embaixo da borda da régua. */
+  box-shadow: 1px 0 0 var(--borda), 0 1px 0 var(--borda);
+  padding: 14px 18px 15px;
+}
+.app .indicador-rotulo {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+.app .indicador-valor {
+  font-family: var(--fonte-display);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-top: 8px;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.app .indicador-destaque .indicador-valor { color: var(--marca-forte); }
+.app .crm-tira { border-radius: var(--raio); }
+.app .crm-tira-ligada { background: var(--texto); border-color: var(--texto); box-shadow: none; }
+.app .crm-tira-ligada .crm-tira-numero { color: var(--fundo); }
+.app .crm-tira-ligada .crm-tira-rotulo { color: color-mix(in srgb, var(--fundo) 75%, transparent); }
+.app .crm-tira-numero { font-family: var(--fonte-display); font-weight: 600; font-size: 1.6rem; }
+.app .crm-tira-rotulo { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Dinheiro e contagem nas listas: a mesma serifada dos indicadores. */
+.app .conta-valor strong,
+.app .crm-numero strong,
+.app .linha-detalhes > strong,
+.app .grupo-lista-resumo {
+  font-family: var(--fonte-display);
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.01em;
+}
+.app .conta-valor strong,
+.app .linha-detalhes > strong { font-size: 1.02rem; }
+.app .crm-numero span { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+
+/* ---------- O favo: contagem em hexágono, como no hub ---------- */
+.app .hoje-numero {
+  width: 42px;
+  min-width: 42px;
+  height: 37px;
+  padding: 0;
+  border-radius: 0;
+  display: grid;
+  place-items: center;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: var(--superficie-2);
+  font-family: var(--fonte-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.app .hoje-numero-urgente { background: var(--cta); color: var(--cta-texto); }
+.app .ponto-estado {
+  width: 12px;
+  height: 11px;
+  border-radius: 0;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+.app .grupo-lista-quantos { border-radius: 4px; }
+
+/* ---------- Hoje: a manchete é o momento da marca ---------- */
+.app .hoje-topo {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  padding: 22px 24px 24px;
+  color: var(--creme);
+  background:
+    radial-gradient(60% 140% at 100% 100%, rgba(255, 107, 53, 0.34), transparent 60%),
+    radial-gradient(40% 90% at 78% 115%, rgba(244, 161, 0, 0.22), transparent 60%),
+    #1c1210;
+}
+.app .hoje-topo .hoje-dia { color: var(--marca); letter-spacing: 0.14em; font-size: 0.72rem; }
+.app .hoje-topo .hoje-frase {
+  font-family: var(--fonte-display);
+  font-weight: 600;
+  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 4px 0 6px;
+}
+.app .hoje-topo .muted { color: #cdbbad; font-size: 14px; }
+.app .hoje-topo-ok { background: radial-gradient(60% 140% at 100% 100%, rgba(78, 203, 141, 0.26), transparent 60%), #1c1210; }
+.app .hoje-topo-ok .hoje-dia { color: #4ecb8d; }
+.app .hoje-rotulo { letter-spacing: 0.12em; }
+.app .hoje-linha { padding-top: 11px; padding-bottom: 11px; }
+
+@media (max-width: 820px) {
+  .app .topo { padding: 10px 14px; }
+  .app .pagina { padding: 16px 14px 32px; }
+  #titulo-pagina { font-size: 1.2rem; }
+  .app .grade:has(> .indicador) .indicador-valor { font-size: 21px; margin-top: 4px; }
+  .app .grade:has(> .indicador) > .indicador { padding: 10px 12px; }
+  .app .hoje-topo { padding: 18px 16px 20px; }
+}
