@@ -190,7 +190,10 @@ function rosca(setores, total) {
  */
 export function analiseDasCompras(r) {
   const totalDoMes = (r?.por_local ?? []).reduce((t, l) => t + l.valor, 0);
-  if (!r || (r.total_30_dias === 0 && totalDoMes === 0)) return null;
+  // Sem resumo (nem pela reserva), não há o que afirmar. Com resumo e nada
+  // recebido, os painéis ficam — vazios e dizendo por quê —, para a tela não
+  // mudar de forma de uma casa para outra.
+  if (!r) return null;
   return el("div", { classe: "painel-analise" }, [
     el("section", { classe: "cartao" }, [
       el("div", { classe: "painel-analise-topo" }, [
@@ -198,6 +201,7 @@ export function analiseDasCompras(r) {
         el("strong", { texto: dinheiro(r.total_30_dias) }),
       ]),
       graficoDeBarras(r.ultimos_30_dias),
+      r.total_30_dias === 0 ? el("p", { classe: "muted", texto: "Nenhuma compra recebida nos últimos 30 dias. Quando uma mercadoria der entrada, o dia aparece aqui." }) : null,
     ]),
     el("section", { classe: "cartao" }, [
       el("div", { classe: "painel-analise-topo" }, [
