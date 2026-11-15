@@ -446,7 +446,10 @@ const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");
 const telaHub = document.getElementById("tela-hub");
 const nav = document.getElementById("nav");
-const main = document.getElementById("pagina");
+// As telas desenham no CORPO; o cabeçalho (título, descrição, ações) fica
+// acima dele e é do roteador.
+const main = document.getElementById("corpo-pagina");
+const acoesDaPagina = document.getElementById("acoes-pagina");
 const seletorVenue = document.getElementById("seletor-venue");
 
 /** A tela aberta agora — o botão "?" abre a ajuda dela. */
@@ -468,6 +471,13 @@ const ctx = {
    * na dúvida, o dono não vê.
    */
   souPlataforma: false,
+  /**
+   * As ações principais da tela (Novo pedido, Exportar…), no cabeçalho, ao
+   * lado do título. Chamar de novo troca as ações; sem argumento, limpa.
+   */
+  definirAcoes(...botoes) {
+    acoesDaPagina.replaceChildren(...botoes.flat().filter(Boolean));
+  },
   definirAgente(slug) {
     ctx.agente = slug;
   },
@@ -494,17 +504,16 @@ const ctx = {
 };
 
 // ============ Tema ============
-const TEMA = "agentes.tema";
+// Chave nova (v2): o visual novo nasce no escuro, que é o desenho de
+// referência. Quem preferir o claro troca em "Tema" e a escolha fica guardada.
+const TEMA = "brasa.tema.v2";
 
 function aplicarTema(tema) {
   document.documentElement.setAttribute("data-tema", tema);
   localStorage.setItem(TEMA, tema);
 }
 
-aplicarTema(
-  localStorage.getItem(TEMA) ??
-    (matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro"),
-);
+aplicarTema(localStorage.getItem(TEMA) ?? "escuro");
 
 document.getElementById("btn-tema").addEventListener("click", () => {
   aplicarTema(document.documentElement.getAttribute("data-tema") === "escuro" ? "claro" : "escuro");
@@ -578,6 +587,8 @@ function montarNav() {
   // E com uma casa só não há o que escolher: no celular o seletor tomava
   // metade do topo e espremia o título numa coluna de uma palavra por linha.
   seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma" || !variasCasas;
+  // Com uma casa só, o nome dela ocupa o lugar do seletor.
+  document.getElementById("topo-unidade").hidden = moduloAtual === "plataforma" || variasCasas;
   marcarBarra();
 
   limpar(nav);
@@ -679,14 +690,15 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   }
 
   document.getElementById("titulo-pagina").textContent = pagina.rotulo;
-  // "Financeiro › Contas a pagar": em sistema grande, o nome do módulo antes
-  // do nome da tela é o que diz onde a pessoa está.
-  const trilhaDaPagina = document.getElementById("trilha-pagina");
+  // O módulo acima do título ("Custos e estoque" › Compras e recebimento) e
+  // a casa no topo: em sistema grande, é o que diz onde a pessoa está.
   const nomeDoModulo = MODULOS.find((m) => m.id === pagina.modulo)?.nome;
-  if (trilhaDaPagina) {
-    trilhaDaPagina.textContent = nomeDoModulo && nomeDoModulo !== pagina.rotulo ? nomeDoModulo : "";
-    trilhaDaPagina.hidden = !trilhaDaPagina.textContent;
-  }
+  const moduloDaPagina = document.getElementById("modulo-pagina");
+  moduloDaPagina.textContent = nomeDoModulo && nomeDoModulo !== pagina.rotulo ? nomeDoModulo : "";
+  moduloDaPagina.hidden = !moduloDaPagina.textContent;
+  const nomeDaCasa = document.getElementById("marca-org").textContent.trim();
+  document.getElementById("topo-unidade-nome").textContent = nomeDaCasa;
+  ctx.definirAcoes();
   paginaAtual = pagina;
   document.getElementById("subtitulo-pagina").textContent = pagina.subtitulo ?? "";
   app.removeAttribute("data-menu");

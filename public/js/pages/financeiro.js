@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, hojeNaCasa, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
+import { comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, ICONES, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { NOME_DO_TIPO, formularioDeBaixa, formularioDeConta, nomeDaCategoria } from "./financeiroConta.js";
 
@@ -76,7 +76,7 @@ async function listaDeContas(raiz, ctx, tipo) {
     } catch {
       /* navegação privada */
     }
-    preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
+    preencher(corpo, esqueleto({ cartoes: 4, linhas: 6 }));
     const [de, ate] = intervalo();
     const q = new URLSearchParams({ tipo, de, ate });
     if (filtro.situacao === "atrasadas") q.set("situacao", "atrasado");
@@ -93,7 +93,7 @@ async function listaDeContas(raiz, ctx, tipo) {
         get(`/v1/venues/${ctx.venue}/financeiro/lancamentos?${q}`),
       ]);
     } catch (e) {
-      preencher(corpo, vazio(`Contas a ${tipo} indisponíveis`, e.message));
+      preencher(corpo, estadoDeErro(`Não foi possível carregar as contas a ${tipo}`, e.message, recarregar));
       return;
     }
     desenhar(dados, de, ate);
@@ -147,16 +147,14 @@ async function listaDeContas(raiz, ctx, tipo) {
     deLivre.addEventListener("change", aplicarLivre);
     ateLivre.addEventListener("change", aplicarLivre);
 
-    preencher(corpo, 
-      el("div", { classe: "cabecalho-secao" }, [
-        el("p", { classe: "muted", style: "margin:0", texto: tipo === "pagar" ? "Boleto, nota, aluguel, salário: tudo que sai, com o dia de pagar." : "Vendas a receber, evento com sinal, o que te devem: tudo que entra." }),
-        el("div", { classe: "reserva-acoes", style: "margin:0" }, [
-          botaoDePdf(() => relatorio(lista, de, ate), "PDF da lista"),
-          el("button", { classe: "btn btn-primario", type: "button", texto: `+ Nova ${n.conta}`, onclick: () => formularioDeConta(corpo, { ctx, cad, tipo, aoTerminar: voltar }) }),
-        ]),
-      ]),
+    // As ações principais ficam no cabeçalho da tela, ao lado do título.
+    ctx.definirAcoes(
+      botaoDePdf(() => relatorio(lista, de, ate), "PDF da lista"),
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formularioDeConta(corpo, { ctx, cad, tipo, aoTerminar: voltar }) }, comIcone(ICONES.mais, `Nova ${n.conta}`)),
+    );
+    preencher(corpo,
       el("div", { classe: "grade" }, [
-        indicador({ rotulo: "Atrasado", valor: dinheiro(r.atrasado), nota: r.atrasadas ? `${r.atrasadas} conta(s) — ${tipo === "pagar" ? "é o que gera juros" : "cobrar"}` : "nada atrasado", destaque: r.atrasado > 0 }),
+        indicador({ rotulo: "Atrasado", valor: dinheiro(r.atrasado), nota: r.atrasadas ? `${r.atrasadas} conta(s) — ${tipo === "pagar" ? "é o que gera juros" : "cobrar"}` : "nada atrasado", tom: r.atrasado > 0 ? "perigo" : undefined }),
         indicador({ rotulo: "Vence hoje", valor: dinheiro(r.hoje) }),
         indicador({ rotulo: "Próximos 7 dias", valor: dinheiro(r.proximos_7_dias) }),
         indicador({ rotulo: filtro.situacao === "pagas" ? (tipo === "pagar" ? "Pago no período" : "Recebido no período") : "Em aberto no período", valor: dinheiro(filtro.situacao === "pagas" ? r.pago : r.em_aberto) }),
@@ -213,7 +211,7 @@ async function listaDeContas(raiz, ctx, tipo) {
       { rotulo: "Descrição", principal: true },
       { rotulo: tipo === "pagar" ? "Fornecedor" : "Cliente", largura: "17%" },
       { rotulo: "Categoria", largura: "17%" },
-      { rotulo: "Situação", largura: "116px", semRotulo: true },
+      { rotulo: "Situação", largura: "136px", semRotulo: true },
       { rotulo: "Valor", num: true, largura: "128px" },
       { rotulo: "", acoes: true, largura: "96px" },
     ];

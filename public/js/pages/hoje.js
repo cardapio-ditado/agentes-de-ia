@@ -107,7 +107,7 @@ export async function hoje(raiz, ctx) {
           el("h2", { texto: "Conexões e integrações" }),
           tabelaDeDados({
             colunas: [
-              { rotulo: "Serviço", principal: true, largura: "42%" },
+              { rotulo: "Serviço", principal: true, largura: "40%" },
               { rotulo: "Situação", quebra: true, larga: true, semRotulo: true },
             ],
             estreita: true,
@@ -118,7 +118,7 @@ export async function hoje(raiz, ctx) {
                 s.titulo,
                 el("span", {}, [
                   etiqueta(s.estado === "ok" ? "funcionando" : s.estado === "alerta" ? "atenção" : "parado", s.estado === "ok" ? "etiqueta-ok" : s.estado === "alerta" ? "etiqueta-alerta" : "etiqueta-perigo"),
-                  el("span", { classe: "muted", texto: ` ${s.detalhe}` }),
+                  el("small", { texto: s.detalhe }),
                 ]),
               ],
             })),

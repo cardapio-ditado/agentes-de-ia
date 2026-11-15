@@ -58,12 +58,13 @@ export function preencher(node, ...filhos) {
  *   colunas: [{ rotulo, largura?, num?, principal?, acoes?, quebra? }]
  *            na ficha do celular: larga? (linha inteira), semRotulo?, someNoCelular?
  *   estreita: true quando a tabela mora numa coluna de meia tela
+ *   larguraMinima: abaixo dela a tabela rola de lado dentro da caixa, em vez de espremer
  *   linhas:  [{ celulas: [texto | nó | null], aoClicar?, classe? }]
  *   grupos:  [{ titulo, quantidade?, resumo?, tom?, aberto?, aoAlternar?, linhas }]
  *            ou { secao: "Comer" } para uma faixa de separação
  *   rodape:  [texto | nó | null] — uma célula por coluna
  */
-export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = null, semCabecalho = false, estreita = false }) {
+export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = null, semCabecalho = false, estreita = false, larguraMinima = null }) {
   const celula = (tag, col, conteudo) => {
     const c = el(tag, {
       classe: [col.num ? "col-num" : "", col.acoes ? "col-acoes" : "", col.principal ? "cel-principal" : "", col.quebra ? "cel-quebra" : "", col.larga ? "cel-larga" : "", col.someNoCelular ? "cel-some" : ""].filter(Boolean).join(" ") || null,
@@ -124,7 +125,7 @@ export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = nu
   return el("div", { classe: "rolagem-x" }, [
     // Com largura declarada a tabela é de leiaute fixo: as colunas não dançam
     // quando um grupo abre, e texto comprido corta com reticências.
-    el("table", { classe: `planilha planilha-empilha${colunas.some((c) => c.largura) ? " planilha-fixa" : ""}${estreita ? " planilha-estreita" : ""}` }, [
+    el("table", { classe: `planilha planilha-empilha${colunas.some((c) => c.largura) ? " planilha-fixa" : ""}${estreita ? " planilha-estreita" : ""}`, style: larguraMinima ? `--largura-minima:${larguraMinima}` : null }, [
       colunas.some((c) => c.largura) ? el("colgroup", {}, colunas.map((c) => el("col", { style: c.largura ? `width:${c.largura}` : null }))) : null,
       semCabecalho ? null : el("thead", {}, [el("tr", {}, colunas.map((c) => celula("th", c, c.rotulo)))]),
       ...corpos,
@@ -169,6 +170,17 @@ export const ICONES = {
   estrela: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z",
   plugue: "M9 2v6M15 2v6M6 8h12v4a6 6 0 01-12 0V8zM12 18v4",
   caixa: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+  busca: "M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3",
+  fechar: "M18 6L6 18M6 6l12 12",
+  mais: "M12 5v14M5 12h14",
+  olho: "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7zM12 15a3 3 0 100-6 3 3 0 000 6z",
+  baixar: "M12 3v12M7 10l5 5 5-5M5 21h14",
+  entrada: "M22 12h-6l-2 3h-4l-2-3H2M5.5 5.1L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.5-6.9A2 2 0 0016.8 4H7.2a2 2 0 00-1.7 1.1z",
+  lixeira: "M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6",
+  sugestao: "M9.9 4.6L12 10l5.4 2.1L12 14.2 9.9 19.6 7.8 14.2 2.4 12.1 7.8 10zM18 3v4M16 5h4M19 16v3M17.5 17.5h3",
+  recibo: "M6 2h12a1 1 0 011 1v19l-3-2-2 2-2-2-2 2-2-2-3 2V3a1 1 0 011-1zM9 8h6M9 12h6",
+  caminhao: "M1 4h13v12H1zM14 9h4l4 4v3h-8zM5.5 19.5a2 2 0 100-4 2 2 0 000 4zM18 19.5a2 2 0 100-4 2 2 0 000 4z",
+  pessoas: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8",
 };
 
 /** Quantos erros ficam na tela ao mesmo tempo: mais que isso cobre o trabalho. */
@@ -215,25 +227,101 @@ export function avisar(texto, tipo = "info") {
 }
 
 export function etiqueta(texto, variante = "") {
-  return el("span", { classe: `etiqueta ${variante}`.trim(), texto });
+  // Situação começa com maiúscula em todo o sistema, venha como vier do código.
+  const rotulo = String(texto ?? "");
+  return el("span", { classe: `etiqueta ${variante}`.trim(), texto: rotulo.charAt(0).toUpperCase() + rotulo.slice(1) });
 }
 
-export function vazio(titulo, detalhe) {
+/**
+ * Lugar vazio: o que não tem aqui, o que fazer em seguida e, quando houver,
+ * o botão que faz. `acao` é um botão pronto (ou nada).
+ */
+export function vazio(titulo, detalhe, acao = null) {
   return el("div", { classe: "vazio" }, [
     el("strong", { texto: titulo }),
     detalhe ? el("span", { texto: detalhe }) : null,
+    acao,
   ]);
 }
 
-export function indicador({ rotulo, valor, nota, iconePath, destaque }) {
-  return el("div", { classe: `indicador ${destaque ? "indicador-destaque" : ""}`.trim() }, [
-    el("div", { classe: "indicador-rotulo" }, [
-      iconePath ? icone(iconePath, 16) : null,
-      el("span", { texto: rotulo }),
-    ]),
+/** Erro ao carregar: diz o que houve e oferece tentar de novo. */
+export function estadoDeErro(titulo, detalhe, aoTentar) {
+  return el("div", { classe: "vazio estado-erro", role: "alert" }, [
+    el("strong", { texto: titulo }),
+    detalhe ? el("span", { texto: detalhe }) : null,
+    aoTentar ? el("button", { classe: "btn btn-peq", type: "button", texto: "Tentar novamente", onclick: aoTentar }) : null,
+  ]);
+}
+
+/**
+ * Esqueleto de carregamento: ocupa o lugar do que vem, para a tela não pular
+ * quando os dados chegam. `cartoes` e `linhas` dizem quantos de cada.
+ */
+export function esqueleto({ cartoes = 0, linhas = 5 } = {}) {
+  return el("div", { classe: "pilha", "aria-busy": "true", "aria-label": "Carregando" }, [
+    cartoes ? el("div", { classe: "grade" }, Array.from({ length: cartoes }, () => el("span", { classe: "esqueleto esqueleto-cartao indicador" }))) : null,
+    el(
+      "div",
+      { classe: "esqueleto-tabela" },
+      Array.from({ length: linhas }, () => el("div", {}, Array.from({ length: 4 }, () => el("span", { classe: "esqueleto esqueleto-linha" })))),
+    ),
+  ]);
+}
+
+/**
+ * Indicador: ícone pequeno, rótulo, valor e uma linha de contexto.
+ *
+ * `tom` é semântico — "alerta" pede atenção, "perigo" é problema — e nunca
+ * decoração. `destaque` continua valendo como "alerta", para as telas antigas.
+ */
+export function indicador({ rotulo, valor, nota, iconePath, destaque, tom, cor }) {
+  const variante = tom ?? (destaque ? "alerta" : "");
+  // `cor` (areia, musgo, marca, pinho) é o tom do cartão, da identidade;
+  // `tom` (alerta, perigo) é a situação. Um não substitui o outro.
+  return el("div", { classe: `indicador${variante ? ` indicador-${variante}` : ""}${cor ? ` indicador-tom-${cor}` : ""}` }, [
+    iconePath ? el("span", { classe: "indicador-icone", "aria-hidden": "true" }, [icone(iconePath, 18)]) : null,
+    el("div", { classe: "indicador-rotulo", texto: rotulo }),
     el("div", { classe: "indicador-valor", texto: String(valor) }),
     nota ? el("div", { classe: "indicador-nota", texto: nota }) : null,
   ]);
+}
+
+/**
+ * Campo de busca: lupa, texto e o botão de limpar quando há o que limpar.
+ * `aoMudar(texto)` é chamado a cada tecla; quem precisar de pausa passa `espera`.
+ */
+export function campoDeBusca({ rotulo, placeholder = "Buscar…", valor = "", aoMudar, espera = 0 }) {
+  const input = el("input", { type: "search", placeholder, value: valor, "aria-label": rotulo ?? placeholder, autocomplete: "off", spellcheck: "false" });
+  const limparBusca = el("button", { classe: "campo-busca-limpar", type: "button", "aria-label": "Limpar a busca", hidden: !valor }, [icone(ICONES.fechar, 14)]);
+  let temporizador = null;
+  const avisarMudanca = () => {
+    limparBusca.hidden = !input.value;
+    clearTimeout(temporizador);
+    if (espera) temporizador = setTimeout(() => aoMudar?.(input.value), espera);
+    else aoMudar?.(input.value);
+  };
+  input.addEventListener("input", avisarMudanca);
+  limparBusca.addEventListener("click", () => {
+    input.value = "";
+    avisarMudanca();
+    input.focus();
+  });
+  const caixa = el("div", { classe: "campo-busca" }, [icone(ICONES.busca, 16), input, limparBusca]);
+  caixa.campo = input;
+  return caixa;
+}
+
+/**
+ * Botão só de ícone, para as ações de uma linha. O nome vai no `aria-label`
+ * (para quem não vê) e na dica que aparece ao passar o mouse ou focar.
+ */
+export function acaoIcone({ iconePath, rotulo, aoClicar, variante = "" }) {
+  return el("button", { classe: `acao-icone${variante ? ` acao-icone-${variante}` : ""}`, type: "button", "aria-label": rotulo, "data-dica": rotulo, onclick: aoClicar }, [icone(iconePath, 16)]);
+}
+
+/** Texto com ícone à esquerda, para o conteúdo de um botão. */
+export function comIcone(iconePath, texto) {
+  return [icone(iconePath, 16), document.createTextNode(texto)];
 }
 
 // ============ Formatação ============

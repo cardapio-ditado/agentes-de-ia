@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400..700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -235,12 +235,13 @@
             </svg>
           </button>
 
-          <div class="topo-titulo">
-            <!-- Onde a pessoa está: o módulo antes do nome da tela. -->
-            <p id="trilha-pagina" class="trilha-pagina" hidden></p>
-            <h1 id="titulo-pagina">Painel</h1>
-            <p id="subtitulo-pagina" class="muted"></p>
+          <!-- A casa em que se está trabalhando. Quem tem mais de uma casa
+               troca no seletor, que ocupa este mesmo lugar. -->
+          <div class="topo-unidade" id="topo-unidade">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6" /></svg>
+            <span id="topo-unidade-nome">—</span>
           </div>
+          <span class="topo-espaco"></span>
           <!-- A ajuda do mentor: explicação curta e o vídeo desta tela. -->
           <button id="btn-ajuda" class="btn-ajuda" type="button" title="Para que serve esta tela" aria-label="Ajuda desta tela">?</button>
 
@@ -250,7 +251,20 @@
           </div>
         </header>
 
-        <main id="pagina" class="pagina" tabindex="-1"></main>
+        <main id="pagina" class="pagina" tabindex="-1">
+          <!-- Cabeçalho da tela: o nome, uma linha de explicação e as ações
+               principais (cada tela põe as suas com ctx.definirAcoes). -->
+          <header class="pagina-cabecalho">
+            <div class="pagina-cabecalho-texto">
+              <!-- O módulo, acima do nome da tela: diz onde a pessoa está. -->
+              <p id="modulo-pagina" class="pagina-modulo" hidden></p>
+              <h1 id="titulo-pagina">Painel</h1>
+              <p id="subtitulo-pagina"></p>
+            </div>
+            <div id="acoes-pagina" class="pagina-acoes"></div>
+          </header>
+          <div id="corpo-pagina"></div>
+        </main>
       </div>
 
       <!-- Sem o atributo hidden: a regra global [hidden] ganha de tudo, e a

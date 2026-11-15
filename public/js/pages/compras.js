@@ -1,5 +1,6 @@
 import { del, get, patch, post, put } from "../api.js";
-import { avisar, buscador, dataHora, dinheiro, el, etiqueta, ICONES, indicador, limpar, vazio } from "../ui.js";
+import { acaoIcone, avisar, buscador, campoDeBusca, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, ICONES, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { analiseDasCompras } from "./comprasAnalise.js";
 
 /**
  * Compras — a tela cheia, no desenho do Gorjeta.
@@ -28,6 +29,12 @@ function valorDaCompra(c) {
   );
 }
 
+/** "Frigorífico Boi Bom" → "FB": as iniciais que identificam a linha de relance. */
+function siglaDe(nome) {
+  const palavras = String(nome).split(/\s+/).filter((p) => p.length > 2 || /^[A-ZÀ-Ú]/.test(p));
+  return ((palavras[0]?.[0] ?? "") + (palavras[1]?.[0] ?? "")).toUpperCase() || "–";
+}
+
 function dataCurta(iso) {
   return iso ? iso.split("-").reverse().join("/") : "—";
 }
@@ -45,39 +52,73 @@ import { imprimirRelatorio } from "../relatorio.js";
  */
 export async function compras(raiz, ctx) {
   let abaAtual = "pedidos";
-  const corpo = el("div", {});
+  const corpo = el("div", { role: "tabpanel", "aria-labelledby": "aba-compras-pedidos" });
+  // Quantos pedidos esperam o caminhão: número real, vindo da lista de pedidos.
+  const pendentes = el("span", { classe: "aba-contador", hidden: true });
+
+  // As ações principais ficam na linha das abas, à direita.
+  const acoes = el("div", { classe: "pagina-acoes" });
+  const definirAcoes = (...botoes) => acoes.replaceChildren(...botoes.flat().filter(Boolean));
 
   const ABAS = [
     ["pedidos", "Pedidos"],
     ["receber", "Receber mercadoria"],
   ];
+  const abrir = async (id) => {
+    abaAtual = id;
+    for (const b of barra.querySelectorAll("[data-aba]")) {
+      const ativa = b.dataset.aba === id;
+      b.classList.toggle("aba-ativa", ativa);
+      b.setAttribute("aria-selected", String(ativa));
+      b.tabIndex = ativa ? 0 : -1;
+    }
+    corpo.setAttribute("aria-labelledby", `aba-compras-${id}`);
+    // As ações são dos pedidos; a doca tem as dela na própria tela.
+    acoes.replaceChildren();
+    limpar(corpo);
+    if (id === "receber") await recebimento(corpo, ctx);
+    else await paginaPedidos(corpo, ctx, { aoContarPendentes, definirAcoes });
+  };
   const barra = el(
     "div",
-    { classe: "abas" },
+    { classe: "abas", role: "tablist", "aria-label": "Compras e recebimento" },
     ABAS.map(([id, rotulo]) =>
-      el("button", {
-        classe: `aba ${id === abaAtual ? "aba-ativa" : ""}`.trim(),
-        type: "button",
-        texto: rotulo,
-        "data-aba": id,
-        onclick: async () => {
-          abaAtual = id;
-          for (const b of barra.querySelectorAll("[data-aba]")) {
-            b.classList.toggle("aba-ativa", b.dataset.aba === id);
-          }
-          limpar(corpo);
-          if (id === "receber") await recebimento(corpo, ctx);
-          else await paginaPedidos(corpo, ctx);
+      el(
+        "button",
+        {
+          classe: `aba ${id === abaAtual ? "aba-ativa" : ""}`.trim(),
+          type: "button",
+          role: "tab",
+          id: `aba-compras-${id}`,
+          "aria-selected": String(id === abaAtual),
+          tabindex: id === abaAtual ? "0" : "-1",
+          "data-aba": id,
+          onclick: () => abrir(id),
         },
-      }),
+        [document.createTextNode(rotulo), id === "receber" ? pendentes : null],
+      ),
     ),
   );
+  // Setas trocam de aba, como em qualquer grupo de abas.
+  barra.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const ids = ABAS.map(([id]) => id);
+    const proxima = ids[(ids.indexOf(abaAtual) + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    e.preventDefault();
+    void abrir(proxima).then(() => barra.querySelector(`[data-aba="${proxima}"]`)?.focus());
+  });
 
-  raiz.append(el("div", { classe: "pilha" }, [barra, corpo]));
-  await paginaPedidos(corpo, ctx);
+  function aoContarPendentes(n) {
+    pendentes.hidden = n === 0;
+    pendentes.textContent = String(n);
+    pendentes.setAttribute("aria-label", `${n} aguardando entrega`);
+  }
+
+  raiz.append(el("div", { classe: "pilha" }, [el("div", { classe: "abas-com-acoes" }, [barra, acoes]), corpo]));
+  await paginaPedidos(corpo, ctx, { aoContarPendentes, definirAcoes });
 }
 
-async function paginaPedidos(raiz, ctx) {
+async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}) {
   const conteudo = el("div", {});
   raiz.append(conteudo);
 
@@ -89,7 +130,7 @@ async function paginaPedidos(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ cartoes: 4, linhas: 6 }));
     let lista, locais, insumos, fornecedoresLista;
     try {
       [lista, locais, insumos, fornecedoresLista] = await Promise.all([
@@ -99,7 +140,7 @@ async function paginaPedidos(raiz, ctx) {
         get(`/v1/venues/${ctx.venue}/fornecedores`),
       ]);
     } catch (e) {
-      limpar(conteudo).append(vazio("Compras indisponíveis", e.message));
+      limpar(conteudo).append(estadoDeErro("Não foi possível carregar as compras", e.message, desenhar));
       return;
     }
     limpar(conteudo);
@@ -120,14 +161,27 @@ async function paginaPedidos(raiz, ctx) {
     const valorAguardando = aguardando.reduce((t, c) => t + valorDaCompra(c), 0);
     const valorRecebidoMes = recebidasMes.reduce((t, c) => t + Number(c.valor_total), 0);
 
-    // ---- Filtros ----
-    const busca = el("input", {
-      classe: "campo",
-      placeholder: "🔍  Fornecedor ou documento…",
-      style: "flex:2",
-      value: filtroTexto,
+    aoContarPendentes?.(aguardando.length);
+
+    // ---- Ações principais: no cabeçalho da tela, ao lado do título ----
+    const botaoNovoPedido = () =>
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formularioPedido() }, comIcone(ICONES.mais, "Novo pedido"));
+    definirAcoes?.(
+      el("button", { classe: "btn", type: "button", onclick: sugerirPedido }, comIcone(ICONES.sugestao, "Sugerir pedido")),
+      botaoNovoPedido(),
+    );
+
+    // ---- Busca e filtro ----
+    const busca = campoDeBusca({
+      rotulo: "Buscar fornecedor ou documento",
+      placeholder: "Buscar fornecedor ou documento…",
+      valor: filtroTexto,
+      aoMudar: (texto) => {
+        filtroTexto = texto;
+        desenharTabela();
+      },
     });
-    const seletorStatus = el("select", { classe: "select", style: "flex:1" }, [
+    const seletorStatus = el("select", { classe: "select", "aria-label": "Situação do pedido" }, [
       el("option", { value: "", texto: "Todas as situações" }),
       el("option", { value: "pedido", texto: "Aguardando entrega", selected: filtroStatus === "pedido" }),
       el("option", { value: "recebida", texto: "Recebidas", selected: filtroStatus === "recebida" }),
@@ -135,11 +189,10 @@ async function paginaPedidos(raiz, ctx) {
       el("option", { value: "cancelada", texto: "Canceladas", selected: filtroStatus === "cancelada" }),
     ]);
 
-    const tabela = el("div", { classe: "rolagem-x" });
-    const norm = (t) => (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const tabela = el("div", {});
+    const norm = (t) => (t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
     const desenharTabela = () => {
-      filtroTexto = busca.value;
       filtroStatus = seletorStatus.value;
       const alvo = norm(filtroTexto.trim());
       let filtradas = lista;
@@ -151,72 +204,68 @@ async function paginaPedidos(raiz, ctx) {
       }
       limpar(tabela);
       if (filtradas.length === 0) {
-        tabela.append(vazio("Nenhuma compra aqui", filtroStatus || alvo ? "Ajuste os filtros." : "O primeiro pedido leva um minuto."));
+        const filtrando = Boolean(filtroStatus || alvo);
+        tabela.append(
+          filtrando
+            ? vazio("Nenhum pedido com esse filtro", "Mude a busca ou a situação para ver os outros pedidos.")
+            : vazio("Nenhum pedido ainda", "Monte o primeiro pedido para o fornecedor; quando a mercadoria chegar, o recebimento sai daqui.", botaoNovoPedido()),
+        );
         return;
       }
-      // Planilha de verdade, como no Gorjeta: colunas fixas, uma compra por
-      // linha, e o olho abre os itens da nota.
       tabela.append(
-        el("table", { classe: "planilha" }, [
-          el("thead", {}, [
-            el("tr", {}, [
-              el("th", { texto: "Fornecedor" }),
-              el("th", { texto: "Nº nota" }),
-              el("th", { texto: "Pedido" }),
-              el("th", { texto: "Previsto" }),
-              el("th", { texto: "Recebido" }),
-              el("th", { classe: "col-num", texto: "Valor" }),
-              el("th", { texto: "Situação" }),
-              el("th", { texto: "Ações" }),
-            ]),
-          ]),
-          el("tbody", {}, filtradas.map(linhaCompra)),
-        ]),
+        tabelaDeDados({
+          colunas: [
+            { rotulo: "Fornecedor", principal: true },
+            { rotulo: "Nº nota", largura: "80px" },
+            { rotulo: "Pedido", largura: "100px" },
+            { rotulo: "Previsto", largura: "100px" },
+            { rotulo: "Recebido", largura: "100px" },
+            { rotulo: "Valor", num: true, largura: "132px" },
+            { rotulo: "Situação", largura: "174px", semRotulo: true },
+            { rotulo: "Ações", acoes: true, largura: "190px" },
+          ],
+          larguraMinima: "1020px",
+          linhas: filtradas.map(linhaCompra),
+        }),
       );
     };
-    busca.addEventListener("input", desenharTabela);
     seletorStatus.addEventListener("change", desenharTabela);
 
     conteudo.append(
       el("section", { classe: "pilha" }, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Compras" }),
-            el("p", { classe: "muted", texto: "Pedido, entrega e conferência — tudo na mesma linha." }),
-          ]),
-          el("div", { classe: "linha-campos" }, [
-            el("button", { classe: "btn", type: "button", texto: "✨ Sugerir pedido", onclick: sugerirPedido }),
-            el("button", { classe: "btn btn-primario", type: "button", texto: "+ Novo pedido", onclick: () => formularioPedido() }),
-          ]),
-        ]),
         el("div", { classe: "grade" }, [
           indicador({
             rotulo: "Compras no mês",
             valor: String(doMes.length),
             nota: `${recebidasMes.length} recebida(s)`,
-            iconePath: ICONES.reservas,
+            iconePath: ICONES.recibo,
+            cor: "areia",
           }),
           indicador({
             rotulo: "Aguardando entrega",
             valor: String(aguardando.length),
             nota: valorAguardando > 0 ? `${dinheiro(valorAguardando)} a caminho` : "nada pendente",
-            iconePath: ICONES.relogio,
-            destaque: aguardando.length > 0,
+            iconePath: ICONES.caminhao,
+            cor: "musgo",
           }),
           indicador({
             rotulo: "Comprado no mês",
             valor: dinheiro(valorRecebidoMes),
             nota: "o que já entrou no estoque",
             iconePath: ICONES.caixa,
+            cor: "marca",
           }),
           indicador({
             rotulo: "Fornecedores",
             valor: String(fornecedoresLista.length),
             nota: "cadastrados",
-            iconePath: ICONES.pessoa,
+            iconePath: ICONES.pessoas,
+            cor: "pinho",
           }),
         ]),
-        el("div", { classe: "linha-campos" }, [busca, seletorStatus]),
+        // Só aparece quando a lista cobre o período inteiro (ver comprasAnalise.js).
+        analiseDasCompras(lista, hojeNaCasa()),
+        el("div", { classe: "barra-filtros" }, [busca, seletorStatus]),
         tabela,
       ]),
     );
@@ -282,59 +331,37 @@ async function paginaPedidos(raiz, ctx) {
       const nItens = (c.compra_itens ?? []).length;
       const valor = valorDaCompra(c);
       const estimado = c.status !== "recebida" && Number(c.valor_total) === 0 && valor > 0;
+      const recebida = c.status === "recebida";
+      const traco = () => el("span", { classe: "cel-vazia-traco", "aria-label": "sem data", texto: "—" });
+      const nomeDoFornecedor = c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "Sem fornecedor");
+      const detalhe = [nItens > 0 ? `${nItens} ${nItens === 1 ? "item" : "itens"}` : null, c.estoque_locais?.nome].filter(Boolean).join(" · ");
 
-      const acoes = [
-        el("button", {
-          classe: "btn-icone",
-          type: "button",
-          title: "Ver os itens desta nota",
-          texto: "👁",
-          onclick: () => detalheCompra(c.id),
-        }),
-        el("button", {
-          classe: "btn-icone",
-          type: "button",
-          title: c.status === "recebida" ? "Recebimento em PDF" : "Pedido em PDF, para mandar ao fornecedor",
-          texto: "⤓",
-          onclick: () => compraEmPdf(c.id),
-        }),
-      ];
-      if (c.status === "pedido" || c.status === "rascunho") {
-        acoes.push(
-          el("button", {
-            classe: "btn-icone",
-            type: "button",
-            title: "Receber esta compra",
-            texto: "📦",
-            onclick: () => receberInline(c.id),
-          }),
-        );
-      }
-      if (c.status !== "recebida") {
-        acoes.push(
-          el("button", {
-            classe: "btn-icone",
-            type: "button",
-            title: "Excluir esta compra",
-            texto: "🗑",
-            onclick: () => excluirCompraInteira(c),
-          }),
-        );
-      }
-
-      return el("tr", {}, [
-        el("td", {}, [
-          el("strong", { texto: c.fornecedor || (c.origem === "avulsa" ? "Compra avulsa" : "—") }),
-          el("small", { classe: "muted", texto: nItens > 0 ? ` ${nItens} item(ns) · ${c.estoque_locais?.nome ?? ""}` : ` ${c.estoque_locais?.nome ?? ""}` }),
-        ]),
-        el("td", { texto: c.documento || "—" }),
-        el("td", { texto: dataCurta(c.data_compra) }),
-        el("td", { texto: c.data_prevista ? dataCurta(c.data_prevista) : "—" }),
-        el("td", { texto: c.recebida_em ? dataCurta(c.recebida_em.slice(0, 10)) : "—" }),
-        el("td", { classe: "col-num" }, [el("strong", { texto: valor > 0 ? `${estimado ? "~" : ""}${dinheiro(valor)}` : "—" })]),
-        el("td", {}, [etiqueta(rotulo, variante)]),
-        el("td", { classe: "col-acoes" }, acoes),
+      // Receber é a ação que anda o pedido: vem primeiro e em destaque.
+      const acoes = el("span", { classe: "grupo-acoes" }, [
+        c.status === "pedido" || c.status === "rascunho"
+          ? acaoIcone({ iconePath: ICONES.entrada, rotulo: "Receber esta compra", variante: "principal", aoClicar: () => receberInline(c.id) })
+          : null,
+        acaoIcone({ iconePath: ICONES.olho, rotulo: "Ver os itens", aoClicar: () => detalheCompra(c.id) }),
+        acaoIcone({ iconePath: ICONES.baixar, rotulo: recebida ? "Baixar o recebimento em PDF" : "Baixar o pedido em PDF", aoClicar: () => compraEmPdf(c.id) }),
+        !recebida ? acaoIcone({ iconePath: ICONES.lixeira, rotulo: "Excluir esta compra", variante: "perigo", aoClicar: () => excluirCompraInteira(c) }) : null,
       ]);
+
+      return {
+        aoClicar: () => detalheCompra(c.id),
+        celulas: [
+          el("span", { classe: "com-sigla" }, [
+            el("span", { classe: "sigla", "aria-hidden": "true", texto: siglaDe(nomeDoFornecedor) }),
+            el("span", {}, [document.createTextNode(nomeDoFornecedor), detalhe ? el("small", { texto: detalhe }) : null]),
+          ]),
+          c.documento || null,
+          dataCurta(c.data_compra),
+          c.data_prevista ? dataCurta(c.data_prevista) : traco(),
+          c.recebida_em ? dataCurta(c.recebida_em.slice(0, 10)) : traco(),
+          valor > 0 ? el("span", { title: estimado ? "Valor estimado pelo pedido; o real entra no recebimento" : null, texto: `${estimado ? "~" : ""}${dinheiro(valor)}` }) : traco(),
+          etiqueta(rotulo, variante),
+          acoes,
+        ],
+      };
     }
 
     /**
@@ -364,7 +391,7 @@ async function paginaPedidos(raiz, ctx) {
       const lupaFornecedor = buscador(
         fornecedoresLista.map((f) => ({ rotulo: f.nome, valor: f })),
         {
-          placeholder: "🔍  Trocar o fornecedor…",
+          placeholder: "Trocar o fornecedor…",
           aoEscolher: (o) => {
             fornecedorEscolhido = o.valor;
             fornecedorAtual.textContent = `Fornecedor: ${o.valor.nome}`;
@@ -541,7 +568,7 @@ async function paginaPedidos(raiz, ctx) {
       const lupaAdicionar = buscador(
         insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
         {
-          placeholder: "🔍  Veio algo fora do pedido? Adicione aqui…",
+          placeholder: "Veio algo fora do pedido? Adicione aqui…",
           aoEscolher: (o) => {
             itens.push({
               insumoId: o.valor.id,
@@ -735,7 +762,7 @@ async function paginaPedidos(raiz, ctx) {
                   el("button", {
                     classe: "btn btn-primario btn-grande",
                     type: "button",
-                    texto: "📦 Receber esta compra",
+                    texto: "Receber esta compra",
                     onclick: () => receberInline(c.id),
                   }),
                   el("button", {
@@ -768,7 +795,7 @@ async function paginaPedidos(raiz, ctx) {
                   el("button", {
                     classe: "btn btn-peq",
                     type: "button",
-                    texto: "🗑 Excluir compra",
+                    texto: "Excluir compra",
                     onclick: () => excluirCompraInteira(c),
                   }),
                 ])
@@ -859,7 +886,7 @@ async function paginaPedidos(raiz, ctx) {
       const lupaAdicionar = buscador(
         insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
         {
-          placeholder: "🔍  Adicionar item ao pedido…",
+          placeholder: "Adicionar item ao pedido…",
           aoEscolher: (o) => {
             linhas.push({
               insumoId: o.valor.id,
@@ -964,7 +991,7 @@ async function paginaPedidos(raiz, ctx) {
       const lupaFornecedor = buscador(
         fornecedoresLista.map((f) => ({ rotulo: `${f.nome} · entrega a cada ${f.cicloCompraDias}d`, valor: f })),
         {
-          placeholder: "🔍  Escolher fornecedor cadastrado…",
+          placeholder: "Escolher fornecedor cadastrado…",
           aoEscolher: (o) => {
             fornecedorEscolhido = o.valor;
             fornecedorEscolhidoLinha.textContent = `Fornecedor: ${o.valor.nome}`;
@@ -1036,7 +1063,7 @@ async function paginaPedidos(raiz, ctx) {
       const seletorInsumo = buscador(
         insumos.map((i) => ({ rotulo: `${i.nome} (${i.unidade})`, valor: i })),
         {
-          placeholder: "🔍  Adicionar insumo…",
+          placeholder: "Adicionar insumo…",
           aoEscolher: (o) => {
             linhas.push({ insumoId: o.valor.id, qtd: null, custo: o.valor.custoMedio || null });
             desenharItens();

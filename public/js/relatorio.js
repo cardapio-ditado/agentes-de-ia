@@ -1,4 +1,4 @@
-import { el } from "./ui.js";
+import { ICONES, comIcone, el } from "./ui.js";
 
 /**
  * Relatório em PDF, de qualquer tela.
@@ -131,13 +131,16 @@ function nomeDeArquivo(texto) {
 
 /** O botão padrão "Baixar PDF", igual em toda tela. */
 export function botaoDePdf(aoClicar, texto = "Baixar PDF") {
-  return el("button", {
-    classe: "btn btn-peq",
-    type: "button",
-    texto: `⤓ ${texto}`,
-    title: "Abre a impressão: escolha “Salvar como PDF” para guardar ou mandar no WhatsApp",
-    onclick: aoClicar,
-  });
+  return el(
+    "button",
+    {
+      classe: "btn",
+      type: "button",
+      title: "Abre a impressão: escolha “Salvar como PDF” para guardar ou mandar no WhatsApp",
+      onclick: aoClicar,
+    },
+    comIcone(ICONES.baixar, texto),
+  );
 }
 
 /** 2026-10-24 → 24/10/2026 */
