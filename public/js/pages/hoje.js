@@ -47,6 +47,9 @@ export async function hoje(raiz, ctx) {
     const problemas = dados.saude.filter((s) => s.estado === "problema");
     const urgentes = dados.pendencias.filter((p) => p.urgente);
     const quantas = problemas.length + urgentes.length;
+    const semPressa = dados.pendencias.filter((p) => !p.urgente);
+    const foraDoNormal = dados.saude.filter((s) => s.estado !== "ok");
+    const funcionando = dados.saude.filter((s) => s.estado === "ok");
 
     limpar(conteudo).append(
       el("section", { classe: `cartao hoje-topo ${dados.tudo_certo ? "hoje-topo-ok" : "hoje-topo-atencao"}` }, [
@@ -74,19 +77,54 @@ export async function hoje(raiz, ctx) {
           ])
         : null,
 
-      el("section", { classe: "cartao pilha" }, [
-        el("h3", { texto: "O que precisa de você" }),
-        dados.pendencias.length
-          ? el("div", { classe: "tabela" }, dados.pendencias.map(linhaDePendencia))
-          : el("p", { classe: "muted", texto: "Nada esperando por você. 🙌" }),
-      ]),
+      // Lado a lado no computador: o que fazer à esquerda, a saúde à direita.
+      // Uma embaixo da outra, a saúde ficava duas telas abaixo do que importa.
+      el("div", { classe: "hoje-colunas" }, [
+        el("section", { classe: "cartao pilha" }, [
+          el("h3", { texto: "O que precisa de você" }),
+          dados.pendencias.length === 0 ? el("p", { classe: "muted", texto: "Nada esperando por você. 🙌" }) : null,
+          urgentes.length
+            ? el("div", { classe: "pilha-fina" }, [
+                el("p", { classe: "hoje-rotulo hoje-rotulo-urgente", texto: "Resolver hoje" }),
+                el("div", { classe: "tabela" }, urgentes.map(linhaDePendencia)),
+              ])
+            : null,
+          semPressa.length
+            ? el("div", { classe: "pilha-fina" }, [
+                urgentes.length ? el("p", { classe: "hoje-rotulo", texto: "Dá para adiantar" }) : null,
+                el("div", { classe: "tabela" }, semPressa.map(linhaDePendencia)),
+              ])
+            : null,
+        ]),
 
-      el("section", { classe: "cartao pilha" }, [
-        el("h3", { texto: "Está tudo ligado?" }),
-        el("div", { classe: "tabela" }, dados.saude.map((s) => linhaDeSinal(s, ctx.podeConfigurar !== false))),
-        ctx.podeConfigurar === false && problemas.length
-          ? el("p", { classe: "muted", texto: "Avise o dono ou o gerente: o conserto é nos Ajustes da casa." })
-          : null,
+        el("section", { classe: "cartao pilha" }, [
+          el("h3", { texto: "Está tudo ligado?" }),
+          // Só o que está parado ou pedindo atenção ocupa linha. O que está
+          // funcionando cabe numa frase — e abre para quem quiser conferir.
+          foraDoNormal.length
+            ? el("div", { classe: "tabela" }, foraDoNormal.map((s) => linhaDeSinal(s, ctx.podeConfigurar !== false)))
+            : null,
+          funcionando.length
+            ? el("details", { classe: "hoje-ok" }, [
+                el("summary", {}, [
+                  el("span", { classe: "ponto-estado ponto-ok", "aria-hidden": "true" }),
+                  el("span", { classe: "hoje-ok-texto" }, [
+                    el("strong", {
+                      texto: foraDoNormal.length
+                        ? `${funcionando.length} funcionando normalmente`
+                        : `Tudo ligado: ${funcionando.length} de ${funcionando.length}`,
+                    }),
+                    el("span", { classe: "muted", texto: funcionando.map((s) => s.titulo).join(" · ") }),
+                  ]),
+                  el("span", { classe: "hoje-ok-ver", texto: "ver" }),
+                ]),
+                el("div", { classe: "tabela" }, funcionando.map((s) => linhaDeSinal(s, ctx.podeConfigurar !== false))),
+              ])
+            : null,
+          ctx.podeConfigurar === false && problemas.length
+            ? el("p", { classe: "muted", texto: "Avise o dono ou o gerente: o conserto é nos Ajustes da casa." })
+            : null,
+        ]),
       ]),
     );
   }

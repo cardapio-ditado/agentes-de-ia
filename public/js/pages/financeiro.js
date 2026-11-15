@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
+import { dinheiro, el, etiqueta, grupoDeLista, indicador, preencher, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { NOME_DO_TIPO, formularioDeBaixa, formularioDeConta, nomeDaCategoria } from "./financeiroConta.js";
 
@@ -46,6 +46,9 @@ async function listaDeContas(raiz, ctx, tipo) {
     /* sem memória, segue o padrão */
   }
   let cad;
+  // O que a pessoa abriu ou fechou vale até ela sair da tela.
+  const gavetasAbertas = {};
+  const anoCorrente = hoje.slice(0, 4);
 
   await recarregar();
 
@@ -166,12 +169,52 @@ async function listaDeContas(raiz, ctx, tipo) {
         maisFiltros,
       ]),
       lista.length
-        ? el("div", { classe: "tabela" }, lista.map((l) => linha(l, nomeForn)))
+        ? gruposPorPrazo(lista, dados.hoje ?? hoje, nomeForn)
         : vazio(
             filtro.situacao === "atrasadas" ? "Nada atrasado 👏" : "Nenhuma conta neste filtro",
             tipo === "pagar" ? "Lance o primeiro boleto: + Nova conta a pagar." : "Lance o que a casa tem para receber: evento, venda a prazo, repasse do cartão.",
           ),
       lista.length ? el("p", { classe: "muted", texto: `${lista.length} conta(s) · ${dinheiro(lista.reduce((s, l) => s + Math.round(Number(l.situacao === "pago" ? l.valor_pago : l.valor) * 100), 0) / 100)}` }) : null,
+    );
+  }
+
+  /**
+   * A lista em gavetas, pelo prazo: o atrasado e o de hoje abertos, o que
+   * está longe fechado com a soma do lado de fora. Quem abre a tela para
+   * pagar o dia não precisa rolar o mês inteiro.
+   */
+  function gruposPorPrazo(lista, hoje, nomeForn) {
+    const em7 = new Date(`${hoje}T12:00:00Z`);
+    em7.setUTCDate(em7.getUTCDate() + 7);
+    const limite = em7.toISOString().slice(0, 10);
+    const feito = tipo === "pagar" ? "Pagas" : "Recebidas";
+    const GAVETAS = [
+      ["atrasado", "Atrasadas", "perigo", (l) => l.estado === "atrasado"],
+      ["hoje", "Vence hoje", "alerta", (l) => l.estado === "vence_hoje"],
+      ["semana", "Próximos 7 dias", "", (l) => l.estado === "aberto" && l.vencimento <= limite],
+      ["depois", "Mais para frente", "", (l) => l.estado === "aberto" && l.vencimento > limite],
+      ["pago", feito, "", (l) => l.situacao === "pago"],
+      ["outras", "Canceladas", "", () => true],
+    ];
+    const gavetas = GAVETAS.map(([id, titulo, tom]) => ({ id, titulo, tom, itens: [] }));
+    for (const l of lista) gavetas[GAVETAS.findIndex(([, , , serve]) => serve(l))].itens.push(l);
+    const cheias = gavetas.filter((g) => g.itens.length);
+    // Uma gaveta só (ou lista curta) não precisa de gaveta.
+    if (cheias.length === 1 || lista.length <= 8) return el("div", { classe: "tabela" }, lista.map((l) => linha(l, nomeForn)));
+    return el(
+      "div",
+      { classe: "grupos-lista" },
+      cheias.map((g) =>
+        grupoDeLista({
+          titulo: g.titulo,
+          quantidade: g.itens.length,
+          resumo: dinheiro(g.itens.reduce((s, l) => s + Math.round(Number(l.situacao === "pago" ? l.valor_pago : l.valor) * 100), 0) / 100),
+          tom: g.tom,
+          aberto: gavetasAbertas[g.id] ?? (g.id === "atrasado" || g.id === "hoje" || g.id === "semana"),
+          aoAlternar: (aberto) => { gavetasAbertas[g.id] = aberto; },
+          filhos: g.itens.map((l) => linha(l, nomeForn)),
+        }),
+      ),
     );
   }
 
@@ -186,7 +229,7 @@ async function listaDeContas(raiz, ctx, tipo) {
       l.situacao === "pago" ? `${NOME_DO_TIPO[tipo].feito.toLowerCase()} em ${dataBr(l.pago_em)}` : null,
     ].filter(Boolean);
     return el("div", { classe: "linha-tabela linha-clicavel", onclick: () => formularioDeConta(corpo, { ctx, cad, tipo, existente: l, aoTerminar: voltar }) }, [
-      el("div", { classe: "conta-data" }, [el("strong", { texto: dataBr(l.vencimento).slice(0, 5) }), el("small", { classe: "muted", texto: l.vencimento.slice(0, 4) })]),
+      el("div", { classe: "conta-data" }, [el("strong", { texto: dataBr(l.vencimento).slice(0, 5) }), l.vencimento.slice(0, 4) === anoCorrente ? null : el("small", { classe: "muted", texto: l.vencimento.slice(0, 4) })]),
       el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
         el("strong", { style: "white-space:normal", texto: l.descricao }),
         el("span", { classe: "muted", style: "white-space:normal", texto: meta.join(" · ") }),

@@ -25,6 +25,14 @@ export function el(tag, props = {}, filhos = []) {
 
 export function limpar(node) {
   node.replaceChildren();
+  // O `append` do navegador escreve "null" na tela quando recebe null, e
+  // bloco opcional (`cond ? el(...) : null`) é o jeito de escrever tela aqui.
+  // Todo container que passa por limpar() ganha um append que pula vazios.
+  if (!node.__appendSeguro) {
+    const original = node.append.bind(node);
+    node.append = (...filhos) => original(...filhos.flat().filter((f) => f !== null && f !== undefined && f !== false));
+    node.__appendSeguro = true;
+  }
   return node;
 }
 
@@ -36,6 +44,32 @@ export function limpar(node) {
 export function preencher(node, ...filhos) {
   node.replaceChildren(...filhos.flat().filter((f) => f !== null && f !== undefined && f !== false));
   return node;
+}
+
+/**
+ * Um grupo que abre e fecha dentro de uma lista comprida.
+ *
+ * Lista de 140 linhas não é lista, é rolagem. O grupo mostra o que importa
+ * antes de abrir — o nome, quantos tem e a soma — e a pessoa abre só o que
+ * veio procurar. É `<details>` de propósito: abre com teclado e com leitor de
+ * tela sem uma linha de script.
+ *
+ * `aoAlternar(aberto)` deixa a tela lembrar o que estava aberto quando ela
+ * se redesenha (depois de salvar um item, por exemplo).
+ */
+export function grupoDeLista({ titulo, quantidade, resumo, selos = [], aberto = false, tom = "", aoAlternar, filhos = [] }) {
+  const grupo = el("details", { classe: `grupo-lista${tom ? ` grupo-lista-${tom}` : ""}`, open: aberto }, [
+    el("summary", {}, [
+      el("span", { classe: "grupo-lista-seta", "aria-hidden": "true", texto: "›" }),
+      el("strong", { classe: "grupo-lista-titulo", texto: titulo }),
+      quantidade !== undefined && quantidade !== null ? el("span", { classe: "grupo-lista-quantos", texto: String(quantidade) }) : null,
+      ...selos,
+      resumo ? el("span", { classe: "grupo-lista-resumo", texto: resumo }) : null,
+    ]),
+    el("div", { classe: "grupo-lista-corpo" }, filhos),
+  ]);
+  if (aoAlternar) grupo.addEventListener("toggle", () => aoAlternar(grupo.open));
+  return grupo;
 }
 
 /** SVG por caminho: os ícones da interface vêm todos daqui. */

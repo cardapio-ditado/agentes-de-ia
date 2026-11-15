@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dataHora, desde, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dataHora, desde, dinheiro, el, etiqueta, grupoDeLista, limpar, vazio } from "../ui.js";
 
 /**
  * O cardápio digital, como a casa o mexe.
@@ -48,6 +48,11 @@ const LADO_MAXIMO = 1400;
 export async function cardapioDigital(raiz, ctx) {
   let abaAtiva = sessionStorage.getItem("brasa.cardapio.aba") || "itens";
   let dados = null;
+  // O que estava aberto e o que estava filtrado na aba Itens sobrevive ao
+  // redesenho: quem salvou um item volta para a categoria em que estava.
+  // (Fica aqui em cima porque a aba é desenhada pelo primeiro `recarregar()`.)
+  const itensAbertos = new Set();
+  const filtroDeItens = { busca: "", recorte: "todos" };
   // Desliga o relógio da aba "Ao vivo" ao trocar de aba. Declarado AQUI, antes
   // do primeiro `recarregar()`: uma `let` declarada depois não existe ainda
   // quando a tela desenha pela primeira vez.
@@ -439,69 +444,141 @@ export async function cardapioDigital(raiz, ctx) {
     carregar();
   }
 
-  const nomeDaCategoria = (id) => dados.categorias.find((c) => c.id === id)?.nome ?? "Sem categoria";
+  // Declaração de função, e não `const`: a aba Itens é desenhada pelo primeiro
+  // `recarregar()`, lá em cima, antes de esta linha rodar — com `const` a tela
+  // quebrava na abertura ("Cannot access before initialization").
+  function nomeDaCategoria(id) {
+    return dados.categorias.find((c) => c.id === id)?.nome ?? "Sem categoria";
+  }
 
   /* ================= Itens ================= */
 
+  /**
+   * 140 itens numa lista só é rolagem, não tela. Aqui eles ficam dentro da
+   * categoria, fechada, com o que importa do lado de fora: quantos tem,
+   * quantos estão fora do cardápio e a faixa de preço. A busca e os recortes
+   * (fora do cardápio, sem foto, sem preço) abrem sozinhos o que acharam.
+   */
   function abaItens() {
-    const busca = el("input", { classe: "campo", placeholder: "🔍  Buscar item…", style: "flex:2" });
-    const filtro = el("select", { classe: "select", style: "flex:1" }, [
-      el("option", { value: "", texto: "Todas as categorias" }),
-      ...dados.categorias.map((c) => el("option", { value: c.id, texto: c.nome })),
-      el("option", { value: "sem", texto: "Sem categoria" }),
-    ]);
-    const lista = el("div", { classe: "tabela" });
+    const semPreco = (i) => !(Number(i.preco) > 0);
+    const RECORTES = [
+      ["todos", "Todos", () => true],
+      ["ativos", "No cardápio", (i) => i.ativo],
+      ["fora", "Fora do cardápio", (i) => !i.ativo],
+      ["sem-preco", "Sem preço", semPreco],
+      ["sem-foto", "Sem foto", (i) => !i.capa],
+      ["destaque", "Destaques", (i) => i.destaque],
+    ];
+    const busca = el("input", { classe: "input", type: "search", placeholder: "Buscar item pelo nome ou descrição…", value: filtroDeItens.busca, "aria-label": "Buscar item" });
+    const chips = el("div", { classe: "chips" });
+    const lista = el("div", { classe: "grupos-lista" });
 
     corpo.append(
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
-          el("h2", { texto: `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"}` }),
-          el("p", { classe: "muted", texto: "Toque num item para editar. Destaque aparece em cartão grande com foto; os outros, em lista com foto pequena." }),
+          el("h2", { texto: `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"} em ${dados.categorias.length} ${dados.categorias.length === 1 ? "categoria" : "categorias"}` }),
+          el("p", { classe: "muted", texto: "Abra a categoria e toque no item para editar." }),
         ]),
         el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Novo item", onclick: () => editarItem(null) }),
       ]),
-      el("div", { classe: "linha-campos" }, [busca, filtro]),
-      lista,
+      el("div", { classe: "pilha-fina" }, [busca, chips, lista]),
     );
+
+    const desenharChips = () => {
+      limpar(chips);
+      for (const [id, rotulo, serve] of RECORTES) {
+        const quantos = dados.itens.filter(serve).length;
+        // Recorte vazio não aparece: "Destaques 0" só ocupa lugar.
+        if (id !== "todos" && quantos === 0) continue;
+        chips.append(
+          el("button", {
+            classe: `chip${filtroDeItens.recorte === id ? " chip-ativo" : ""}`,
+            type: "button",
+            "aria-pressed": filtroDeItens.recorte === id ? "true" : "false",
+            texto: `${rotulo} · ${quantos}`,
+            onclick: () => {
+              filtroDeItens.recorte = filtroDeItens.recorte === id ? "todos" : id;
+              desenharChips();
+              desenharLista();
+            },
+          }),
+        );
+      }
+    };
 
     const desenharLista = () => {
       const alvo = normalizar(busca.value);
-      const cat = filtro.value;
+      filtroDeItens.busca = busca.value;
+      const serve = (RECORTES.find(([id]) => id === filtroDeItens.recorte) ?? RECORTES[0])[2];
+      const filtrando = Boolean(alvo) || filtroDeItens.recorte !== "todos";
+      const visiveis = dados.itens.filter((i) => serve(i) && (!alvo || normalizar(`${i.nome} ${i.descricao}`).includes(alvo)));
       limpar(lista);
-      const visiveis = dados.itens.filter((i) => {
-        if (cat === "sem" && i.categoria_id) return false;
-        if (cat && cat !== "sem" && i.categoria_id !== cat) return false;
-        return !alvo || normalizar(`${i.nome} ${i.descricao}`).includes(alvo);
-      });
       if (visiveis.length === 0) {
-        lista.append(vazio("Nenhum item", dados.itens.length ? "Nada com esse nome nesta categoria." : "Comece pelo botão “Novo item”."));
+        lista.append(vazio("Nenhum item", dados.itens.length ? "Nada com esse nome neste recorte." : "Comece pelo botão “Novo item”."));
         return;
       }
-      for (const i of visiveis) lista.append(linhaDoItem(i));
+
+      const porCategoria = new Map();
+      for (const i of visiveis) {
+        const chave = dados.categorias.some((c) => c.id === i.categoria_id) ? i.categoria_id : "sem";
+        if (!porCategoria.has(chave)) porCategoria.set(chave, []);
+        porCategoria.get(chave).push(i);
+      }
+      const grupos = [
+        ...[...dados.categorias].sort((a, b) => ORDEM_DO_GRUPO.indexOf(a.grupo) - ORDEM_DO_GRUPO.indexOf(b.grupo) || (a.ordem ?? 0) - (b.ordem ?? 0)),
+        { id: "sem", nome: "Sem categoria", grupo: "" },
+      ].filter((c) => porCategoria.has(c.id));
+      // Cardápio pequeno não precisa de gaveta: abre tudo.
+      const tudoAberto = filtrando || visiveis.length <= 15 || grupos.length === 1;
+
+      let secao = null;
+      for (const c of grupos) {
+        const itens = porCategoria.get(c.id).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome, "pt-BR"));
+        if (c.grupo && c.grupo !== secao && new Set(grupos.map((g) => g.grupo).filter(Boolean)).size > 1) {
+          secao = c.grupo;
+          lista.append(el("h3", { classe: "grupos-lista-secao", texto: NOME_DO_GRUPO[c.grupo] ?? c.grupo }));
+        }
+        const fora = itens.filter((i) => !i.ativo).length;
+        const precos = itens.filter((i) => !semPreco(i)).map((i) => Number(i.preco));
+        const faixa = precos.length === 0 ? "sem preço" : Math.min(...precos) === Math.max(...precos) ? dinheiro(precos[0]) : `${dinheiro(Math.min(...precos))} a ${dinheiro(Math.max(...precos))}`;
+        lista.append(
+          grupoDeLista({
+            titulo: c.nome,
+            quantidade: itens.length,
+            selos: [fora ? etiqueta(fora === itens.length ? "toda fora do cardápio" : `${fora} fora`, "etiqueta-alerta") : null, c.ativa === false ? etiqueta("categoria escondida", "etiqueta-alerta") : null],
+            resumo: faixa,
+            aberto: tudoAberto || itensAbertos.has(c.id),
+            aoAlternar: filtrando ? null : (aberto) => (aberto ? itensAbertos.add(c.id) : itensAbertos.delete(c.id)),
+            filhos: itens.map(linhaDoItem),
+          }),
+        );
+      }
     };
-    busca.addEventListener("input", desenharLista);
-    filtro.addEventListener("change", desenharLista);
+    let espera = null;
+    busca.addEventListener("input", () => {
+      clearTimeout(espera);
+      espera = setTimeout(desenharLista, 120);
+    });
+    desenharChips();
     desenharLista();
   }
 
   function linhaDoItem(i) {
-    const thumb = el("div", { classe: "cardapio-thumb" }, [
-      i.capa ? el("img", { src: i.capa, alt: "" }) : el("span", { texto: (i.nome[0] || "•").toUpperCase() }),
-    ]);
+    const semPreco = !(Number(i.preco) > 0);
     return el(
-      "div",
-      { classe: `linha-tabela linha-clicavel${i.ativo ? "" : " linha-apagada"}`, onclick: () => editarItem(i) },
+      "button",
+      { classe: `linha-tabela${i.ativo ? "" : " linha-apagada"}`, type: "button", onclick: () => editarItem(i) },
       [
-        thumb,
-        el("div", { classe: "linha-principal" }, [
+        i.capa ? el("span", { classe: "cardapio-thumb" }, [el("img", { src: i.capa, alt: "", loading: "lazy" })]) : null,
+        el("span", { classe: "linha-principal" }, [
           el("strong", { texto: i.nome }),
-          el("span", { classe: "muted", texto: [nomeDaCategoria(i.categoria_id), i.descricao].filter(Boolean).join(" · ") }),
+          i.descricao ? el("span", { classe: "muted linha-uma", texto: i.descricao }) : null,
         ]),
-        el("div", { classe: "linha-detalhes" }, [
+        el("span", { classe: "linha-detalhes" }, [
           i.destaque ? etiqueta("destaque", "etiqueta-info") : null,
           !i.ativo ? etiqueta("fora do cardápio", "etiqueta-alerta") : null,
-          el("span", { classe: "muted", texto: `♥ ${i.curtidas}` }),
-          el("strong", { texto: dinheiro(i.preco) }),
+          i.curtidas ? el("span", { classe: "muted", texto: `♥ ${i.curtidas}` }) : null,
+          el("strong", { classe: semPreco ? "muted" : "", texto: semPreco ? "sem preço" : dinheiro(i.preco) }),
         ]),
       ],
     );
@@ -1464,6 +1541,9 @@ export async function cardapioDigital(raiz, ctx) {
     return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
   }
 }
+
+const ORDEM_DO_GRUPO = ["comer", "beber"];
+const NOME_DO_GRUPO = { comer: "Comer", beber: "Beber" };
 
 function normalizar(t) {
   return (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
