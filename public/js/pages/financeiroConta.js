@@ -1,5 +1,5 @@
 import { del, post, put } from "../api.js";
-import { avisar, dinheiro, el, hojeNaCasa, limpar, preencher } from "../ui.js";
+import { avisar, botaoVoltar, dinheiro, el, hojeNaCasa, limpar, preencher } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 
 /**
@@ -67,6 +67,8 @@ const campo = (rotulo, controle, ajuda) =>
  * `aoTerminar` volta para a lista.
  */
 export function formularioDeConta(corpo, { ctx, cad, tipo, existente = null, aoTerminar }) {
+  // Etapa interna: as ações da lista saem do cabeçalho enquanto o formulário está aberto.
+  ctx.definirAcoes?.();
   const n = NOME_DO_TIPO[tipo];
   const base = `/v1/venues/${ctx.venue}/financeiro`;
   const descricao = el("input", { classe: "input", value: existente?.descricao ?? "", placeholder: tipo === "pagar" ? "Ex.: Nota 1234 — bebidas" : "Ex.: Evento aniversário da Ana" });
@@ -94,7 +96,7 @@ export function formularioDeConta(corpo, { ctx, cad, tipo, existente = null, aoT
 
   const cabecalho = el("div", { classe: "cabecalho-secao" }, [
     el("h2", { texto: existente ? existente.descricao : `Nova ${n.conta}` }),
-    el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: aoTerminar }),
+    botaoVoltar(aoTerminar),
   ]);
   const dados = el("section", { classe: "cartao pilha" }, [
     campo("Descrição", descricao),
@@ -359,6 +361,7 @@ export function formularioDeConta(corpo, { ctx, cad, tipo, existente = null, aoT
 
 /** Pagar (ou receber): data, conta, juros, desconto — e se foi só uma parte. */
 export function formularioDeBaixa(corpo, { ctx, cad, tipo, conta: l, aoTerminar }) {
+  ctx.definirAcoes?.();
   const n = NOME_DO_TIPO[tipo];
   const pagoEm = el("input", { classe: "input", type: "date", value: hojeIso() });
   const contaSel = seletor(cad.contas, l.conta_id ?? cad.formas.find((f) => f.id === l.forma_id)?.conta_id ?? cad.contas[0]?.id, "— escolha —");
@@ -384,7 +387,7 @@ export function formularioDeBaixa(corpo, { ctx, cad, tipo, conta: l, aoTerminar 
         el("h2", { texto: `${n.acao}: ${l.descricao}` }),
         el("p", { classe: "muted", texto: `${dinheiro(Number(l.valor))} · vence ${dataBr(l.vencimento)}${l.parcelas ? ` · parcela ${l.parcela}/${l.parcelas}` : ""}` }),
       ]),
-      el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: aoTerminar }),
+      botaoVoltar(aoTerminar),
     ]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [

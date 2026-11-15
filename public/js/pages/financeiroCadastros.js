@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, hojeNaCasa, indicador, preencher, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 import { nomeDaCategoria, seletorDeCategoria } from "./financeiroConta.js";
 
@@ -20,11 +20,13 @@ const valorNoCampo = (n) => (n === null || n === undefined ? "" : Number(n).toFi
 
 async function carregar(corpo, ctx) {
   corpo.classList.add("pilha");
-  preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
+  preencher(corpo, esqueleto({ linhas: 6 }));
+  // Cada aba põe as suas ações no cabeçalho; começa limpo.
+  ctx.definirAcoes();
   try {
     return await get(`${base(ctx)}/cadastros`);
   } catch (e) {
-    preencher(corpo, vazio("Cadastros indisponíveis", e.message));
+    preencher(corpo, estadoDeErro("Não foi possível carregar os cadastros", e.message, () => location.reload()));
     return null;
   }
 }
@@ -66,56 +68,77 @@ export async function financeiroContas(corpo, ctx) {
     /* lista opcional */
   }
   const nomeConta = (id) => cad.contas.find((c) => c.id === id)?.nome ?? "—";
+  const somaDe = (serve) => ativas.filter(serve).reduce((t, c) => t + Math.round(Number(c.saldo) * 100), 0) / 100;
 
-  preencher(corpo, 
+  preencher(corpo,
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h2", { texto: "Bancos e caixas" }),
         el("p", { classe: "muted", texto: "Cada lugar onde o dinheiro da casa fica. O saldo é conta: o saldo inicial + o que entrou − o que saiu." }),
       ]),
       el("div", { classe: "reserva-acoes", style: "margin:0" }, [
-        ativas.length > 1 ? el("button", { classe: "btn btn-peq", type: "button", texto: "Transferir entre contas", onclick: () => formTransferencia(corpo, ctx, cad, recarregar) }) : null,
-        el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Banco ou caixa", onclick: () => formConta(corpo, ctx, null, recarregar) }),
+        ativas.length > 1 ? el("button", { classe: "btn", type: "button", onclick: () => formTransferencia(corpo, ctx, cad, recarregar) }, comIcone(ICONES.transferir, "Transferir entre contas")) : null,
+        el("button", { classe: "btn btn-primario", type: "button", onclick: () => formConta(corpo, ctx, null, recarregar) }, comIcone(ICONES.mais, "Banco ou caixa")),
       ]),
     ]),
     el("div", { classe: "grade" }, [
-      indicador({ rotulo: "Saldo somado", valor: dinheiro(total), nota: `${ativas.length} conta(s)`, destaque: total < 0 }),
-      ...ativas.map((c) => indicador({ rotulo: c.nome, valor: dinheiro(Number(c.saldo)), nota: [NOME_DA_CONTA[c.tipo], c.banco].filter(Boolean).join(" · "), destaque: Number(c.saldo) < 0 })),
+      indicador({ rotulo: "Saldo somado", valor: dinheiro(total), nota: `${ativas.length} ${ativas.length === 1 ? "conta ativa" : "contas ativas"}`, iconePath: ICONES.banco, cor: "areia", tom: total < 0 ? "perigo" : undefined }),
+      indicador({ rotulo: "Em banco", valor: dinheiro(somaDe((c) => c.tipo !== "caixa")), nota: "corrente, digital, poupança, investimento", iconePath: ICONES.cifrao, cor: "musgo" }),
+      indicador({ rotulo: "Em dinheiro", valor: dinheiro(somaDe((c) => c.tipo === "caixa")), nota: "caixa da casa e cofre", iconePath: ICONES.caixa, cor: "pinho" }),
     ]),
-    el("div", { classe: "tabela" }, cad.contas.map((c) =>
-      el("div", { classe: "linha-tabela linha-clicavel", onclick: () => formConta(corpo, ctx, c, recarregar) }, [
-        el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-          el("strong", { texto: c.nome }),
-          el("span", { classe: "muted", texto: [NOME_DA_CONTA[c.tipo], c.banco, c.agencia ? `ag. ${c.agencia}` : null, c.numero ? `c/c ${c.numero}` : null, `saldo inicial ${dinheiro(Number(c.saldo_inicial))} em ${dataBr(c.saldo_inicial_em)}`].filter(Boolean).join(" · ") }),
-        ]),
-        c.ativo ? el("strong", { texto: dinheiro(Number(c.saldo)) }) : etiqueta("arquivada"),
-      ]))),
+    tabelaDeDados({
+      colunas: [
+        { rotulo: "Conta", principal: true },
+        { rotulo: "Tipo", largura: "170px" },
+        { rotulo: "Saldo inicial", num: true, largura: "220px" },
+        { rotulo: "Saldo", num: true, largura: "170px" },
+      ],
+      linhas: cad.contas.map((c) => ({
+        classe: c.ativo ? null : "linha-fraca",
+        aoClicar: () => formConta(corpo, ctx, c, recarregar),
+        celulas: [
+          el("span", {}, [document.createTextNode(c.nome), [c.banco, c.agencia ? `ag. ${c.agencia}` : null, c.numero ? `c/c ${c.numero}` : null].some(Boolean) ? el("small", { texto: [c.banco, c.agencia ? `ag. ${c.agencia}` : null, c.numero ? `c/c ${c.numero}` : null].filter(Boolean).join(" · ") }) : null]),
+          NOME_DA_CONTA[c.tipo] ?? c.tipo,
+          el("span", {}, [document.createTextNode(dinheiro(Number(c.saldo_inicial))), el("small", { texto: `em ${dataBr(c.saldo_inicial_em)}` })]),
+          c.ativo ? el("span", { classe: Number(c.saldo) < 0 ? "erro" : "", style: "font-weight:600", texto: dinheiro(Number(c.saldo)) }) : etiqueta("Arquivada"),
+        ],
+      })),
+      rodape: [`${ativas.length} ${ativas.length === 1 ? "conta ativa" : "contas ativas"}`, null, null, dinheiro(total)],
+    }),
     transferencias.length
-      ? el("section", { classe: "pilha" }, [
-          el("h3", { texto: "Transferências" }),
-          el("div", { classe: "tabela" }, transferencias.slice(0, 30).map((t) =>
-            el("div", { classe: "linha-tabela" }, [
-              el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-                el("strong", { texto: `${nomeConta(t.de_conta_id)} → ${nomeConta(t.para_conta_id)}` }),
-                el("span", { classe: "muted", texto: [dataBr(t.dia), t.descricao].filter(Boolean).join(" · ") }),
-              ]),
-              el("strong", { texto: dinheiro(Number(t.valor)) }),
-              el("button", {
-                classe: "btn-icone",
-                type: "button",
-                title: "Apagar",
-                texto: "🗑",
-                onclick: async () => {
-                  if (!confirm("Apagar esta transferência?")) return;
-                  try {
-                    await del(`${base(ctx)}/transferencias/${t.id}`);
-                    recarregar();
-                  } catch (e) {
-                    avisar(e.message, "erro");
-                  }
-                },
-              }),
-            ]))),
+      ? el("section", { classe: "pilha-fina" }, [
+          el("h2", { texto: "Transferências" }),
+          tabelaDeDados({
+            colunas: [
+              { rotulo: "De → para", principal: true },
+              { rotulo: "Dia", largura: "130px" },
+              { rotulo: "Descrição" },
+              { rotulo: "Valor", num: true, largura: "150px" },
+              { rotulo: "", acoes: true, largura: "64px" },
+            ],
+            linhas: transferencias.slice(0, 30).map((t) => ({
+              celulas: [
+                `${nomeConta(t.de_conta_id)} → ${nomeConta(t.para_conta_id)}`,
+                dataBr(t.dia),
+                t.descricao || null,
+                dinheiro(Number(t.valor)),
+                acaoIcone({
+                  iconePath: ICONES.lixeira,
+                  rotulo: "Apagar a transferência",
+                  variante: "perigo",
+                  aoClicar: async () => {
+                    if (!confirm("Apagar esta transferência?")) return;
+                    try {
+                      await del(`${base(ctx)}/transferencias/${t.id}`);
+                      recarregar();
+                    } catch (e) {
+                      avisar(e.message, "erro");
+                    }
+                  },
+                }),
+              ],
+            })),
+          }),
         ])
       : null,
   );
@@ -130,7 +153,7 @@ function formConta(corpo, ctx, c, voltar) {
   const saldo = el("input", { classe: "input", inputmode: "decimal", value: valorNoCampo(c?.saldo_inicial ?? 0) });
   const saldoEm = el("input", { classe: "input", type: "date", value: c?.saldo_inicial_em ?? hojeNaCasa() });
   preencher(corpo, 
-    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: c ? c.nome : "Novo banco ou caixa" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
+    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: c ? c.nome : "Novo banco ou caixa" }), botaoVoltar(voltar)]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [
         campo("Nome", nome),
@@ -166,7 +189,7 @@ function formTransferencia(corpo, ctx, cad, voltar) {
   const dia = el("input", { classe: "input", type: "date", value: hojeNaCasa() });
   const descricao = el("input", { classe: "input", placeholder: "Ex.: depósito do caixa de sábado" });
   preencher(corpo, 
-    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: "Transferir entre contas" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
+    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: "Transferir entre contas" }), botaoVoltar(voltar)]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [campo("De", de), campo("Para", para), campo("Valor", valor), campo("Dia", dia)]),
       campo("Descrição", descricao),
@@ -200,7 +223,7 @@ export async function financeiroCategorias(corpo, ctx, tipoInicial = "despesa") 
           el("h2", { texto: "Categorias" }),
           el("p", { classe: "muted", texto: "Categoria e subcategoria. A linha do resultado (o grupo) vale para a categoria e tudo dentro dela." }),
         ]),
-        el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Categoria", onclick: () => formCategoria(corpo, ctx, cad, { tipo }, recarregar) }),
+        el("button", { classe: "btn btn-primario", type: "button", onclick: () => formCategoria(corpo, ctx, cad, { tipo }, recarregar) }, comIcone(ICONES.mais, "Categoria")),
       ]),
       el("div", { classe: "abas" }, [["despesa", "Despesas"], ["receita", "Receitas"]].map(([id, rotulo]) =>
         el("button", { classe: `aba${tipo === id ? " aba-ativa" : ""}`, type: "button", texto: rotulo, onclick: () => { tipo = id; desenhar(); } }))),
@@ -233,7 +256,7 @@ function formCategoria(corpo, ctx, cad, c, voltar) {
   preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("h2", { texto: c.id ? c.nome : sub ? `Nova subcategoria em ${pai?.nome ?? ""}` : "Nova categoria" }),
-      el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar }),
+      botaoVoltar(voltar),
     ]),
     el("section", { classe: "cartao pilha" }, [
       campo("Nome", nome),
@@ -268,16 +291,28 @@ export async function financeiroFormas(corpo, ctx) {
         el("h2", { texto: "Formas de pagamento" }),
         el("p", { classe: "muted", texto: "Como se paga e se recebe. No cartão, o prazo (D+1, D+30) e a taxa da maquininha entram na conta do que vai cair." }),
       ]),
-      el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Forma", onclick: () => formForma(corpo, ctx, cad, null, recarregar) }),
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formForma(corpo, ctx, cad, null, recarregar) }, comIcone(ICONES.mais, "Forma")),
     ]),
-    el("div", { classe: "tabela" }, cad.formas.map((f) =>
-      el("div", { classe: "linha-tabela linha-clicavel", onclick: () => formForma(corpo, ctx, cad, f, recarregar) }, [
-        el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-          el("strong", { texto: f.nome }),
-          el("span", { classe: "muted", texto: [NOME_DA_FORMA[f.tipo], f.prazo_dias ? `cai em ${f.prazo_dias} dia(s)` : "na hora", Number(f.taxa) ? `taxa ${String(f.taxa).replace(".", ",")}%` : null, nomeConta(f.conta_id) ? `entra em ${nomeConta(f.conta_id)}` : null].filter(Boolean).join(" · ") }),
-        ]),
-        f.ativo ? null : etiqueta("arquivada"),
-      ]))),
+    tabelaDeDados({
+      colunas: [
+        { rotulo: "Forma", principal: true },
+        { rotulo: "Tipo", largura: "160px" },
+        { rotulo: "Quando cai", largura: "160px" },
+        { rotulo: "Taxa", num: true, largura: "110px" },
+        { rotulo: "Entra em", largura: "22%" },
+      ],
+      linhas: cad.formas.map((f) => ({
+        classe: f.ativo ? null : "linha-fraca",
+        aoClicar: () => formForma(corpo, ctx, cad, f, recarregar),
+        celulas: [
+          el("span", { style: "display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap" }, [el("span", { texto: f.nome }), f.ativo ? null : etiqueta("Arquivada")]),
+          NOME_DA_FORMA[f.tipo] ?? f.tipo,
+          f.prazo_dias ? `em ${f.prazo_dias} ${f.prazo_dias === 1 ? "dia" : "dias"}` : "na hora",
+          Number(f.taxa) ? `${String(f.taxa).replace(".", ",")}%` : null,
+          nomeConta(f.conta_id) ?? null,
+        ],
+      })),
+    }),
   );
 }
 
@@ -288,7 +323,7 @@ function formForma(corpo, ctx, cad, f, voltar) {
   const taxa = el("input", { classe: "input", inputmode: "decimal", value: f ? String(f.taxa).replace(".", ",") : "0" });
   const conta = el("select", { classe: "select" }, [el("option", { value: "", texto: "—" }), ...cad.contas.filter((c) => c.ativo).map((c) => el("option", { value: c.id, texto: c.nome, selected: c.id === f?.conta_id }))]);
   preencher(corpo, 
-    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: f ? f.nome : "Nova forma de pagamento" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
+    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: f ? f.nome : "Nova forma de pagamento" }), botaoVoltar(voltar)]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [
         campo("Nome", nome),
@@ -317,32 +352,56 @@ export async function financeiroFornecedores(corpo, ctx) {
   if (!cad) return;
   const recarregar = () => financeiroFornecedores(corpo, ctx);
   let termo = "";
-  const lista = el("div", { classe: "tabela" });
-  const busca = el("input", { classe: "input", type: "search", placeholder: "Buscar por nome, CNPJ ou telefone…" });
+  const lista = el("div", {});
+  const busca = campoDeBusca({
+    rotulo: "Buscar fornecedor",
+    placeholder: "Buscar por nome, CNPJ ou telefone…",
+    atalho: true,
+    aoMudar: (texto) => {
+      termo = texto;
+      desenharLista();
+    },
+  });
   const desenharLista = () => {
     const t = termo.toLowerCase();
     const achados = cad.fornecedores.filter((f) => !t || [f.nome, f.razao_social, f.cnpj, f.telefone].filter(Boolean).some((v) => String(v).toLowerCase().includes(t)));
-    preencher(lista, 
-      ...(achados.length
-        ? achados.map((f) =>
-            el("div", { classe: "linha-tabela linha-clicavel", onclick: () => fichaFornecedor(corpo, ctx, cad, f.id, recarregar) }, [
-              el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-                el("strong", { texto: f.nome }),
-                el("span", { classe: "muted", texto: [f.razao_social, f.cnpj ? cnpjBonito(f.cnpj) : null, f.categoria_id ? nomeDaCategoria(cad, f.categoria_id) : null, f.prazo_dias ? `paga em ${f.prazo_dias} dias` : null].filter(Boolean).join(" · ") || "sem dados ainda" }),
-              ]),
-              f.ativo === false ? etiqueta("arquivado") : null,
-            ]))
-        : [vazio("Nenhum fornecedor", "Cadastre quem manda boleto: bebidas, alimentos, gás, contador.")]),
+    preencher(
+      lista,
+      achados.length
+        ? tabelaDeDados({
+            colunas: [
+              { rotulo: "Fornecedor", principal: true },
+              { rotulo: "CNPJ", largura: "190px" },
+              { rotulo: "Categoria", largura: "22%" },
+              { rotulo: "Prazo", largura: "130px" },
+            ],
+            linhas: achados.map((f) => ({
+              classe: f.ativo === false ? "linha-fraca" : null,
+              aoClicar: () => fichaFornecedor(corpo, ctx, cad, f.id, recarregar),
+              celulas: [
+                el("span", {}, [
+                  el("span", { style: "display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap" }, [el("span", { texto: f.nome }), f.ativo === false ? etiqueta("Arquivado") : null]),
+                  f.razao_social ? el("small", { texto: f.razao_social }) : null,
+                ]),
+                f.cnpj ? cnpjBonito(f.cnpj) : null,
+                f.categoria_id ? nomeDaCategoria(cad, f.categoria_id) : null,
+                f.prazo_dias ? `${f.prazo_dias} dias` : null,
+              ],
+            })),
+          })
+        : cad.fornecedores.length
+          ? vazio("Nenhum fornecedor com essa busca", "Tente outro nome, CNPJ ou telefone.")
+          : vazio("Nenhum fornecedor ainda", "Cadastre quem manda boleto: bebidas, alimentos, gás, contador."),
     );
   };
-  busca.addEventListener("input", () => { termo = busca.value; desenharLista(); });
+
   preencher(corpo, 
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h2", { texto: "Fornecedores" }),
         el("p", { classe: "muted", texto: "Os mesmos das compras do estoque. A ficha mostra quanto a casa compra de cada um — bom para negociar." }),
       ]),
-      el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Fornecedor", onclick: () => formFornecedor(corpo, ctx, cad, null, recarregar) }),
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formFornecedor(corpo, ctx, cad, null, recarregar) }, comIcone(ICONES.mais, "Fornecedor")),
     ]),
     busca,
     lista,
@@ -371,7 +430,7 @@ async function fichaFornecedor(corpo, ctx, cad, id, voltar) {
       el("div", {}, [el("h2", { texto: f.nome }), el("p", { classe: "muted", texto: [f.razao_social, f.cnpj ? cnpjBonito(f.cnpj) : null].filter(Boolean).join(" · ") })]),
       el("div", { classe: "reserva-acoes", style: "margin:0" }, [
         el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formFornecedor(corpo, ctx, cad, f, () => fichaFornecedor(corpo, ctx, cad, id, voltar)) }),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar }),
+        botaoVoltar(voltar),
       ]),
     ]),
     el("div", { classe: "grade" }, [
@@ -445,7 +504,7 @@ function formFornecedor(corpo, ctx, cad, f, voltar) {
     observacoes: el("textarea", { classe: "input", rows: 2, texto: f?.observacoes ?? "" }),
   };
   preencher(corpo, 
-    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: f ? f.nome : "Novo fornecedor" }), el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: voltar })]),
+    el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: f ? f.nome : "Novo fornecedor" }), botaoVoltar(voltar)]),
     el("section", { classe: "cartao pilha" }, [
       el("div", { classe: "grade grade-2" }, [
         campo("Nome", c.nome),

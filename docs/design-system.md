@@ -57,6 +57,7 @@ Para trocar uma cor: mude o tom na rampa ou o papel em `colors.json`, repita no 
 | Etiqueta de situação | `etiqueta(texto, variante)` | ponto/visto + texto; nunca só a cor |
 | Vazio | `vazio(titulo, detalhe, acao)` | diz o que falta e oferece o próximo passo |
 | Erro | `estadoDeErro(titulo, detalhe, aoTentar)` | com "Tentar novamente" |
+| Faixa de aviso | `faixaDeAviso({ tom, titulo, detalhe, acao })` | o que a pessoa precisa saber antes do resto da tela (caixa negativo, por exemplo) |
 | Carregando | `esqueleto({ cartoes, linhas })` | ocupa o lugar do que vem |
 | Ações da tela | `ctx.definirAcoes(...botoes)` | ações principais no cabeçalho, ao lado do título |
 
@@ -91,6 +92,6 @@ Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (J
 
 1. ~~Estoque, Contagem, Produção e Vendas~~ (feito).
 2. ~~Itens e fornecedores; Receitas e custo do prato~~ (feito: visão principal). Etapas internas do módulo usam `botaoVoltar()`, `acaoIcone()` e limpam as ações do cabeçalho ao entrar; os formulários ainda têm a estrutura antiga.
-3. Financeiro (já usa a tabela e os indicadores; falta o Painel e o Fluxo).
+3. ~~Financeiro~~ (feito: Painel, Fluxo de caixa agrupado por semana, Contas a pagar e a receber, Cadastros).
 4. RH e Checklist.
 5. Clientes, Cardápio, Atendente e Ajustes.

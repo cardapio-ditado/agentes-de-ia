@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dinheiro, el, etiqueta, hojeNaCasa, indicador, preencher, vazio } from "../ui.js";
+import { ICONES, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, faixaDeAviso, hojeNaCasa, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 import { graficoDeResultado, graficoDeSaldo, reaisCurtos } from "./financeiroGraficos.js";
 
@@ -22,12 +22,14 @@ function seloDoPrimeCost(v) {
   return etiqueta("alto", "etiqueta-perigo");
 }
 
-function avisoDeNegativo(neg) {
+function avisoDeNegativo(neg, comAtalho = false) {
   if (!neg) return null;
-  return el("section", { classe: "cartao cartao-atencao pilha" }, [
-    el("strong", { texto: `Em ${dataBr(neg.dia)} o caixa fica negativo: ${dinheiro(neg.saldo)}.` }),
-    el("p", { classe: "muted", style: "margin:0", texto: "Pelo que vence e pelo que está para entrar. Dá tempo de antecipar um recebimento, segurar uma compra ou negociar a data com o fornecedor." }),
-  ]);
+  return faixaDeAviso({
+    tom: "perigo",
+    titulo: `Em ${dataBr(neg.dia)} o caixa fica negativo: ${dinheiro(neg.saldo)}.`,
+    detalhe: "Pelo que vence e pelo que está para entrar. Dá tempo de antecipar um recebimento, segurar uma compra ou negociar a data com o fornecedor.",
+    acao: comAtalho ? el("a", { classe: "btn btn-peq", href: "#fin-fluxo", texto: "Ver o fluxo de caixa" }) : null,
+  });
 }
 
 // ============================================================
@@ -45,12 +47,12 @@ export async function painelFinanceiro(raiz, ctx) {
     } catch {
       /* navegação privada */
     }
-    preencher(corpo, el("p", { classe: "muted", texto: "Calculando…" }));
+    preencher(corpo, esqueleto({ cartoes: 4, linhas: 8 }));
     let p;
     try {
       p = await get(`/v1/venues/${ctx.venue}/financeiro/painel?mes=${mes}`);
     } catch (e) {
-      preencher(corpo, vazio("Painel indisponível", e.message));
+      preencher(corpo, estadoDeErro("Não foi possível calcular o painel", e.message, carregar));
       return;
     }
     desenhar(p);
@@ -58,7 +60,7 @@ export async function painelFinanceiro(raiz, ctx) {
 
   function desenhar(p) {
     const r = p.resultado;
-    const seletorMes = el("input", { classe: "input", type: "month", value: mes, style: "max-width:190px" });
+    const seletorMes = el("input", { classe: "input", type: "month", value: mes, style: "max-width:190px", "aria-label": "Mês do resultado" });
     seletorMes.addEventListener("change", () => { if (seletorMes.value) { mes = seletorMes.value; carregar(); } });
     const semDados = !r.receita && !r.linhas.some((l) => l.valor) && !p.saldo_hoje;
     const sobreVendas = r.base_dos_percentuais === "vendas";
@@ -85,25 +87,24 @@ export async function painelFinanceiro(raiz, ctx) {
     const despesas = r.categorias.filter((c) => c.grupo !== "receita" && c.valor > 0).slice(0, 6);
     const maior = Math.max(1, ...despesas.map((d) => d.valor));
 
-    preencher(corpo, 
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", { classe: "linha-campos", style: "gap:8px;align-items:center" }, [el("span", { classe: "muted", texto: "Mês:" }), seletorMes]),
-        botaoDePdf(() => relatorio(p), "PDF do mês"),
-      ]),
+    // O mês e o PDF ficam no cabeçalho da tela, ao lado do título.
+    ctx.definirAcoes(seletorMes, botaoDePdf(() => relatorio(p), "PDF do mês"));
+    const pagar7 = p.a_vencer.pagar.hoje + p.a_vencer.pagar.proximos_7;
+    preencher(corpo,
       semDados
         ? vazio("O painel acende quando a casa lança as contas", "Cadastre os bancos com o saldo de hoje e lance as contas do mês em Contas a pagar e a receber.")
         : null,
-      avisoDeNegativo(p.primeiro_negativo),
+      avisoDeNegativo(p.primeiro_negativo, true),
       el("div", { classe: "grade" }, [
-        indicador({ rotulo: "Saldo hoje", valor: dinheiro(p.saldo_hoje), nota: "somando bancos e caixas", destaque: p.saldo_hoje < 0 }),
-        indicador({ rotulo: "Saldo em 30 dias", valor: dinheiro(p.saldo_em_30_dias), nota: p.menor_saldo_30_dias ? `pior dia: ${dataBr(p.menor_saldo_30_dias.dia).slice(0, 5)} (${reaisCurtos(p.menor_saldo_30_dias.saldo)})` : "previsto", destaque: p.saldo_em_30_dias < 0 }),
-        indicador({ rotulo: "A pagar em 7 dias", valor: dinheiro(p.a_vencer.pagar.hoje + p.a_vencer.pagar.proximos_7), nota: p.a_vencer.pagar.atrasado ? `+ ${dinheiro(p.a_vencer.pagar.atrasado)} atrasado` : "nada atrasado", destaque: p.a_vencer.pagar.atrasado > 0 }),
-        indicador({ rotulo: "A receber em 7 dias", valor: dinheiro(p.a_vencer.receber.hoje + p.a_vencer.receber.proximos_7), nota: p.a_vencer.receber.atrasado ? `+ ${dinheiro(p.a_vencer.receber.atrasado)} atrasado para cobrar` : "" }),
+        indicador({ rotulo: "Saldo hoje", valor: dinheiro(p.saldo_hoje), nota: "somando bancos e caixas", iconePath: ICONES.banco, cor: "areia", tom: p.saldo_hoje < 0 ? "perigo" : undefined }),
+        indicador({ rotulo: "Saldo em 30 dias", valor: dinheiro(p.saldo_em_30_dias), nota: p.menor_saldo_30_dias ? `pior dia: ${dataBr(p.menor_saldo_30_dias.dia).slice(0, 5)} (${reaisCurtos(p.menor_saldo_30_dias.saldo)})` : "previsto", iconePath: ICONES.calendario, cor: "musgo", tom: p.saldo_em_30_dias < 0 ? "perigo" : undefined }),
+        indicador({ rotulo: "A pagar em 7 dias", valor: dinheiro(pagar7), nota: p.a_vencer.pagar.atrasado ? `+ ${dinheiro(p.a_vencer.pagar.atrasado)} atrasado` : "nada atrasado", iconePath: ICONES.saida_dinheiro, cor: "marca", tom: p.a_vencer.pagar.atrasado > 0 ? "alerta" : undefined }),
+        indicador({ rotulo: "A receber em 7 dias", valor: dinheiro(p.a_vencer.receber.hoje + p.a_vencer.receber.proximos_7), nota: p.a_vencer.receber.atrasado ? `+ ${dinheiro(p.a_vencer.receber.atrasado)} atrasado para cobrar` : "previsto", iconePath: ICONES.entrada_dinheiro, cor: "pinho" }),
       ]),
       el("div", { classe: "grade grade-2 fin-colunas" }, [
         el("section", { classe: "cartao pilha" }, [
           el("div", {}, [
-            el("h3", { texto: `Resultado de ${nomeDoMes(p.mes)}` }),
+            el("h2", { texto: `Resultado de ${nomeDoMes(p.mes)}` }),
             el("p", { classe: "muted", style: "margin:0", texto: "Pelo mês de cada conta (competência), paga ou não." }),
           ]),
           dre,
@@ -112,12 +113,12 @@ export async function painelFinanceiro(raiz, ctx) {
         ]),
         el("div", { classe: "pilha" }, [
           el("section", { classe: "cartao pilha" }, [
-            el("div", { classe: "cabecalho-secao" }, [el("h3", { texto: "Prime cost" }), seloDoPrimeCost(r.pct.prime_cost)]),
+            el("div", { classe: "cabecalho-secao" }, [el("h2", { texto: "Prime cost" }), seloDoPrimeCost(r.pct.prime_cost)]),
             el("div", { classe: "numero-grande", texto: pctBr(r.pct.prime_cost) }),
             el("p", { classe: "muted", style: "margin:0", texto: `CMV ${pctBr(r.pct.cmv)} + pessoal ${pctBr(r.pct.pessoal)} sobre a venda. Em restaurante, até 60% é saudável.` }),
           ]),
           el("section", { classe: "cartao pilha" }, [
-            el("h3", { texto: "Ponto de equilíbrio" }),
+            el("h2", { texto: "Ponto de equilíbrio" }),
             r.ponto_de_equilibrio !== null
               ? el("div", { classe: "pilha", style: "gap:4px" }, [
                   el("div", { classe: "numero-grande", texto: dinheiro(p.ponto_de_equilibrio_por_dia) }),
@@ -126,7 +127,7 @@ export async function painelFinanceiro(raiz, ctx) {
               : el("p", { classe: "muted", style: "margin:0", texto: "Aparece quando o mês tiver venda e custo lançados." }),
           ]),
           el("section", { classe: "cartao pilha" }, [
-            el("h3", { texto: "Caixa do mês" }),
+            el("h2", { texto: "Caixa do mês" }),
             el("div", { classe: "dre" }, [
               linhaDre("Entrou", p.caixa_do_mes.entradas, null),
               linhaDre("Saiu", p.caixa_do_mes.saidas, null, { menos: true }),
@@ -137,11 +138,11 @@ export async function painelFinanceiro(raiz, ctx) {
         ]),
       ]),
       el("section", { classe: "cartao pilha", id: "fin-grafico-meses" }, [
-        el("h3", { texto: "Resultado dos últimos 6 meses" }),
+        el("h2", { texto: "Resultado dos últimos 6 meses" }),
       ]),
       despesas.length
         ? el("section", { classe: "cartao pilha" }, [
-            el("h3", { texto: `Para onde foi o dinheiro em ${nomeDoMes(p.mes)}` }),
+            el("h2", { texto: `Para onde foi o dinheiro em ${nomeDoMes(p.mes)}` }),
             el("div", { classe: "pilha", style: "gap:10px" }, despesas.map((d) =>
               el("div", { classe: "barra-categoria" }, [
                 el("div", { classe: "barra-categoria-topo" }, [el("span", { texto: d.nome }), el("strong", { texto: `${dinheiro(d.valor)}${d.pct !== null ? ` · ${pctBr(d.pct)}` : ""}` })]),
@@ -228,6 +229,8 @@ export async function fluxoDeCaixa(raiz, ctx) {
     return x.toISOString().slice(0, 10);
   };
   let f = { periodo: "60", agrupar: "dia", conta: "", de: "", ate: "" };
+  // As semanas que a pessoa abriu ou fechou na tabela, enquanto ela está na tela.
+  const semanasAbertas = {};
   try {
     Object.assign(f, JSON.parse(sessionStorage.getItem("brasa.fin.fluxo") ?? "{}"));
   } catch {
@@ -250,7 +253,7 @@ export async function fluxoDeCaixa(raiz, ctx) {
     } catch {
       /* navegação privada */
     }
-    preencher(corpo, el("p", { classe: "muted", texto: "Calculando…" }));
+    preencher(corpo, esqueleto({ cartoes: 4, linhas: 8 }));
     const [de, ate] = intervalo();
     const agrupar = f.agrupar === "dia" && (Date.parse(ate) - Date.parse(de)) / 86_400_000 > 100 ? "semana" : f.agrupar;
     const q = new URLSearchParams({ de, ate, agrupar });
@@ -259,7 +262,7 @@ export async function fluxoDeCaixa(raiz, ctx) {
     try {
       x = await get(`/v1/venues/${ctx.venue}/financeiro/fluxo?${q}`);
     } catch (e) {
-      preencher(corpo, vazio("Fluxo de caixa indisponível", e.message));
+      preencher(corpo, estadoDeErro("Não foi possível calcular o fluxo de caixa", e.message, carregar));
       return;
     }
     desenhar(x);
@@ -292,44 +295,93 @@ export async function fluxoDeCaixa(raiz, ctx) {
     const rotuloDoPeriodo = (p) => (x.agrupar === "mes" ? nomeDoMes(p.inicio) : x.agrupar === "semana" ? `${dataBr(p.inicio).slice(0, 5)}–${dataBr(p.fim).slice(0, 5)}` : dataBr(p.inicio).slice(0, 5));
     const indiceHoje = x.periodos.findIndex((p) => p.inicio <= x.hoje && p.fim >= x.hoje);
 
-    preencher(corpo, 
+    ctx.definirAcoes(botaoDePdf(() => relatorio(x, rotuloDoPeriodo), "PDF do fluxo"));
+    preencher(corpo,
       el("section", { classe: "cartao pilha filtros-financeiro" }, [
         el("div", { classe: "chips" }, [chip("periodo", "30", "30 dias"), chip("periodo", "60", "60 dias"), chip("periodo", "90", "90 dias"), chip("periodo", "180", "6 meses"), chip("periodo", "mes", "Este mês"), chip("periodo", "livre", "Escolher datas")]),
         f.periodo === "livre" ? el("div", { classe: "linha-campos datas-livres" }, [deI, el("span", { classe: "muted", texto: "até" }), ateI]) : null,
         el("div", { classe: "linha-campos", style: "gap:10px;align-items:center;flex-wrap:wrap" }, [
           el("div", { classe: "chips" }, [chip("agrupar", "dia", "Por dia"), chip("agrupar", "semana", "Por semana"), chip("agrupar", "mes", "Por mês")]),
           conta,
-          botaoDePdf(() => relatorio(x, rotuloDoPeriodo), "PDF"),
         ]),
       ]),
       avisoDeNegativo(x.primeiro_negativo),
       el("div", { classe: "grade" }, [
-        indicador({ rotulo: `Saldo em ${dataBr(x.de).slice(0, 5)}`, valor: dinheiro(x.saldo_inicial), destaque: x.saldo_inicial < 0 }),
-        indicador({ rotulo: "Entradas", valor: dinheiro(Math.round(tot.e * 100) / 100), nota: x.atrasado_receber ? `inclui ${dinheiro(x.atrasado_receber)} atrasado para receber` : "realizadas + previstas" }),
-        indicador({ rotulo: "Saídas", valor: dinheiro(Math.round(tot.s * 100) / 100), nota: x.atrasado_pagar ? `inclui ${dinheiro(x.atrasado_pagar)} atrasado, contado para hoje` : "realizadas + previstas" }),
-        indicador({ rotulo: `Saldo em ${dataBr(x.ate).slice(0, 5)}`, valor: dinheiro(x.saldo_final), nota: x.menor_saldo ? `pior dia: ${dataBr(x.menor_saldo.dia).slice(0, 5)} (${reaisCurtos(x.menor_saldo.saldo)})` : "", destaque: x.saldo_final < 0 }),
+        indicador({ rotulo: `Saldo em ${dataBr(x.de).slice(0, 5)}`, valor: dinheiro(x.saldo_inicial), nota: "no começo do período", iconePath: ICONES.banco, cor: "areia", tom: x.saldo_inicial < 0 ? "perigo" : undefined }),
+        indicador({ rotulo: "Entradas", valor: dinheiro(Math.round(tot.e * 100) / 100), nota: x.atrasado_receber ? `inclui ${dinheiro(x.atrasado_receber)} atrasado para receber` : "realizadas + previstas", iconePath: ICONES.entrada_dinheiro, cor: "pinho" }),
+        indicador({ rotulo: "Saídas", valor: dinheiro(Math.round(tot.s * 100) / 100), nota: x.atrasado_pagar ? `inclui ${dinheiro(x.atrasado_pagar)} atrasado, contado para hoje` : "realizadas + previstas", iconePath: ICONES.saida_dinheiro, cor: "marca" }),
+        indicador({ rotulo: `Saldo em ${dataBr(x.ate).slice(0, 5)}`, valor: dinheiro(x.saldo_final), nota: x.menor_saldo ? `pior dia: ${dataBr(x.menor_saldo.dia).slice(0, 5)} (${reaisCurtos(x.menor_saldo.saldo)})` : "no fim do período", iconePath: ICONES.calendario, cor: "musgo", tom: x.saldo_final < 0 ? "perigo" : undefined }),
       ]),
       el("section", { classe: "cartao pilha", id: "fin-grafico-saldo" }, [
-        el("div", {}, [el("h3", { texto: "Saldo dia a dia" }), el("p", { classe: "muted", style: "margin:0", texto: "Até hoje, o que aconteceu; daqui para frente, o que vence e o que está para entrar." })]),
+        el("div", {}, [el("h2", { texto: "Saldo dia a dia" }), el("p", { classe: "muted", style: "margin:0", texto: "Até hoje, o que aconteceu; daqui para frente, o que vence e o que está para entrar." })]),
       ]),
-      el("section", { classe: "cartao pilha" }, [
-        el("h3", { texto: "Entradas e saídas" }),
-        el("div", { classe: "rolagem-x" }, [
-          el("table", { classe: "planilha" }, [
-            el("thead", {}, [el("tr", {}, ["Período", "Entrou", "Vai entrar", "Saiu", "Vai sair", "Saldo"].map((t, i) => el("th", { classe: i ? "col-num" : "", texto: t })))]),
-            el("tbody", {}, x.periodos.filter((p) => p.entradas || p.saidas || p.entradas_previstas || p.saidas_previstas || x.agrupar !== "dia").map((p) =>
-              el("tr", { classe: p.saldo < 0 ? "linha-perigo" : p.inicio <= x.hoje && p.fim >= x.hoje ? "linha-atencao" : "" }, [
-                el("td", { texto: `${rotuloDoPeriodo(p)}${p.inicio <= x.hoje && p.fim >= x.hoje ? " · hoje" : ""}` }),
-                el("td", { classe: "col-num", texto: p.entradas ? dinheiro(p.entradas) : "—" }),
-                el("td", { classe: "col-num muted", texto: p.entradas_previstas ? dinheiro(p.entradas_previstas) : "—" }),
-                el("td", { classe: "col-num", texto: p.saidas ? dinheiro(p.saidas) : "—" }),
-                el("td", { classe: "col-num muted", texto: p.saidas_previstas ? dinheiro(p.saidas_previstas) : "—" }),
-                el("td", { classe: `col-num${p.saldo < 0 ? " texto-perigo" : ""}`, texto: dinheiro(p.saldo) }),
-              ]))),
-          ]),
-        ]),
+      el("section", { classe: "pilha-fina" }, [
+        el("h2", { texto: "Entradas e saídas" }),
+        tabelaDoFluxo(),
       ]),
     );
+
+    /**
+     * Por dia, sessenta linhas soltas não se leem: os dias ficam dentro da
+     * semana, com a semana de hoje aberta e o saldo do fim de cada semana do
+     * lado de fora. Por semana ou por mês, a lista já é curta e vai direto.
+     */
+    function tabelaDoFluxo() {
+      const comMovimento = x.periodos.filter((p) => p.entradas || p.saidas || p.entradas_previstas || p.saidas_previstas || x.agrupar !== "dia");
+      const ehHoje = (p) => p.inicio <= x.hoje && p.fim >= x.hoje;
+      const ouTraco = (v) => (v ? dinheiro(v) : null);
+      const linhaDo = (p) => ({
+        classe: p.saldo < 0 ? "linha-perigo" : ehHoje(p) ? "linha-atencao" : null,
+        celulas: [
+          `${rotuloDoPeriodo(p)}${ehHoje(p) ? " · hoje" : ""}`,
+          ouTraco(p.entradas),
+          ouTraco(p.entradas_previstas),
+          ouTraco(p.saidas),
+          ouTraco(p.saidas_previstas),
+          el("span", { classe: p.saldo < 0 ? "erro" : "", style: "font-weight:600", texto: dinheiro(p.saldo) }),
+        ],
+      });
+      const colunas = [
+        { rotulo: "Período", principal: true },
+        { rotulo: "Entrou", num: true, largura: "15%" },
+        { rotulo: "Vai entrar", num: true, largura: "15%" },
+        { rotulo: "Saiu", num: true, largura: "15%" },
+        { rotulo: "Vai sair", num: true, largura: "15%" },
+        { rotulo: "Saldo", num: true, largura: "17%" },
+      ];
+      if (comMovimento.length === 0) return vazio("Nada no período", "Sem contas pagas, recebidas ou a vencer nessas datas.");
+      if (x.agrupar !== "dia" || comMovimento.length <= 10) return tabelaDeDados({ colunas, linhas: comMovimento.map(linhaDo) });
+
+      const segundaDe = (iso) => {
+        const d = new Date(`${iso}T12:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+        return d.toISOString().slice(0, 10);
+      };
+      const semanas = new Map();
+      for (const p of comMovimento) {
+        const s = segundaDe(p.inicio);
+        if (!semanas.has(s)) semanas.set(s, []);
+        semanas.get(s).push(p);
+      }
+      const semanaDeHoje = segundaDe(x.hoje);
+      return tabelaDeDados({
+        colunas,
+        grupos: [...semanas].map(([segunda, dias]) => {
+          const ultimo = dias[dias.length - 1];
+          const negativa = dias.some((p) => p.saldo < 0);
+          return {
+            titulo: segunda === semanaDeHoje ? "Esta semana" : `Semana de ${dataBr(segunda).slice(0, 5)}`,
+            quantidade: dias.length,
+            resumo: `saldo ${dinheiro(ultimo.saldo)}`,
+            tom: negativa ? "perigo" : "",
+            aberto: semanasAbertas[segunda] ?? segunda === semanaDeHoje,
+            aoAlternar: (aberto) => { semanasAbertas[segunda] = aberto; },
+            linhas: dias.map(linhaDo),
+          };
+        }),
+      });
+    }
+
     const caixa = corpo.querySelector("#fin-grafico-saldo");
     caixa.append(
       graficoDeSaldo(

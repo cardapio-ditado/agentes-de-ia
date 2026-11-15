@@ -189,6 +189,10 @@ export const ICONES = {
   cifrao: "M12 2v20M17 6.5C17 4.6 14.8 4 12 4S7 5 7 7.5 9 11 12 11.5s5 1.5 5 4-2.2 4-5 4-5-.8-5-2.8",
   enviar: "M12 16V4M7 9l5-5 5 5M5 20h14",
   voltar: "M15 18l-6-6 6-6",
+  banco: "M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18",
+  entrada_dinheiro: "M12 4v12M7 11l5 5 5-5M5 20h14",
+  saida_dinheiro: "M12 16V4M7 9l5-5 5 5M5 20h14",
+  calendario: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z",
 };
 
 /** Quantos erros ficam na tela ao mesmo tempo: mais que isso cobre o trabalho. */
@@ -248,6 +252,19 @@ export function vazio(titulo, detalhe, acao = null) {
   return el("div", { classe: "vazio" }, [
     el("strong", { texto: titulo }),
     detalhe ? el("span", { texto: detalhe }) : null,
+    acao,
+  ]);
+}
+
+/**
+ * Faixa de aviso: algo que a pessoa precisa saber ANTES de ler o resto da
+ * tela. `tom` é "perigo" (vai dar problema), "alerta" (atenção) ou "info".
+ * O ícone e a barra lateral dizem o tom mesmo para quem não distingue a cor.
+ */
+export function faixaDeAviso({ tom = "alerta", titulo, detalhe, acao = null }) {
+  return el("section", { classe: `faixa-aviso faixa-aviso-${tom}`, role: tom === "perigo" ? "alert" : "status" }, [
+    el("span", { classe: "faixa-aviso-icone", "aria-hidden": "true" }, [icone(tom === "info" ? ICONES.relogio : ICONES.alerta, 18)]),
+    el("div", { classe: "faixa-aviso-texto" }, [el("strong", { texto: titulo }), detalhe ? el("p", { texto: detalhe }) : null]),
     acao,
   ]);
 }
