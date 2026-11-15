@@ -220,7 +220,7 @@
       .estrela.acesa { color: var(--alerta); }
 
       /* ---- Campos ---- */
-      textarea, input[type="text"], input[type="tel"] {
+      textarea, input[type="text"], input[type="tel"], select {
         width: 100%;
         background: var(--superficie);
         border: 1px solid var(--borda);
@@ -232,9 +232,17 @@
         padding: 13px 14px;
       }
       textarea { min-height: 108px; resize: vertical; }
-      input:focus, textarea:focus { outline: 2px solid var(--traco-marca, var(--brasa)); outline-offset: 1px; }
+      input:focus, textarea:focus, select:focus { outline: 2px solid var(--traco-marca, var(--brasa)); outline-offset: 1px; }
       label.campo { display: block; margin-top: 12px; }
       label.campo span { display: block; font-size: 13px; color: var(--creme-2); margin-bottom: 6px; }
+      /* O aniversário: dia e mês lado a lado, com a mesma cara dos campos. */
+      .campo-duplo { margin-top: 12px; }
+      .campo-duplo > span { display: block; font-size: 13px; color: var(--creme-2); margin-bottom: 6px; }
+      .campo-duplo .par { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+      /* A linha que diz para que serve o contato. Pequena, mas legível: é
+         ela que deixa a pessoa decidir sabendo. */
+      .para-que { color: var(--creme-2); font-size: 12.5px; line-height: 1.45; margin: 12px 0 0; }
+      .para-que a { color: inherit; }
 
       /* ---- Prêmio ---- */
       .premio {
@@ -281,6 +289,10 @@
         margin: 10px 0 6px; word-break: break-all;
       }
       .cupom small { color: var(--creme-2); font-size: 12.5px; }
+      /* ---- O convite para avaliar no Google (só para quem deu 9 ou 10) ---- */
+      .google { margin: 24px 0 0; }
+      .google p { color: var(--creme-2); font-size: 14px; margin: 0 0 12px; }
+      a.btn { display: block; text-align: center; text-decoration: none; }
 
       .aviso {
         margin-top: 14px; padding: 12px 14px; border-radius: 12px;
@@ -345,6 +357,9 @@
         comentario: "",
         cliente_nome: "",
         cliente_contato: "",
+        /** Dia e mês do aniversário, se a pessoa quis contar. Nunca o ano. */
+        aniversario_dia: "",
+        aniversario_mes: "",
         mesa,
         /** item_id -> {valor, texto} das perguntas montadas pela casa. */
         itens: new Map(),
@@ -887,7 +902,23 @@
         const contato = campoTexto("WhatsApp (opcional)", "tel", resposta.cliente_contato, (v) => (resposta.cliente_contato = v));
         contato.querySelector("input").autocomplete = "tel";
 
-        bloco.append(nome, contato);
+        // Para que serve o contato, em português de gente, antes de a pessoa
+        // decidir. Sem caixinha para marcar: o campo já é opcional, e deixar
+        // em branco é o "não".
+        const paraQue = document.createElement("p");
+        paraQue.className = "para-que";
+        const politica = document.createElement("a");
+        politica.href = "/privacidade";
+        politica.target = "_blank";
+        politica.rel = "noopener";
+        politica.textContent = "Política de privacidade";
+        paraQue.append(
+          `Deixando o WhatsApp, ${dados.casa} pode te mandar novidades, promoções e o parabéns de aniversário por lá. Para parar, é só responder SAIR. `,
+          politica,
+          ".",
+        );
+
+        bloco.append(nome, contato, campoAniversario(), paraQue);
 
         const enviar = botao(dados.premio ? "Enviar e pegar meu prêmio" : "Enviar", () => enviarTudo(enviar));
         const pular = document.createElement("button");
@@ -900,11 +931,56 @@
           // insatisfeito, que é o mais importante de ouvir.
           resposta.cliente_nome = "";
           resposta.cliente_contato = "";
+          resposta.aniversario_dia = "";
+          resposta.aniversario_mes = "";
           enviarTudo(pular);
         };
 
         bloco.append(rodape(enviar, pular));
         return bloco;
+      }
+
+      /**
+       * Dia e mês do aniversário — opcional, e sem o ano.
+       *
+       * É o dado que faz a casa lembrar da pessoa uma vez por ano, e nenhuma
+       * tela pública perguntava. Dois seletores, e não um campo de data: o
+       * calendário do celular pede o ano, e ano é idade, que ninguém aqui
+       * precisa saber.
+       */
+      function campoAniversario() {
+        const caixa = document.createElement("div");
+        caixa.className = "campo-duplo";
+        const rotulo = document.createElement("span");
+        rotulo.textContent = "Aniversário (opcional) — para a casa lembrar do seu aniversário";
+
+        const seletor = (vazio, opcoes, valor, aoMudar, nomeAcessivel) => {
+          const s = document.createElement("select");
+          s.setAttribute("aria-label", nomeAcessivel);
+          s.append(new Option(vazio, ""), ...opcoes.map(([v, t]) => new Option(t, v)));
+          s.value = valor;
+          s.onchange = () => aoMudar(s.value);
+          return s;
+        };
+        const dias = Array.from({ length: 31 }, (_, i) => [String(i + 1), String(i + 1)]);
+        const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+          .map((m, i) => [String(i + 1), m]);
+
+        const par = document.createElement("div");
+        par.className = "par";
+        par.append(
+          seletor("Dia", dias, resposta.aniversario_dia, (v) => (resposta.aniversario_dia = v), "Dia do aniversário"),
+          seletor("Mês", meses, resposta.aniversario_mes, (v) => (resposta.aniversario_mes = v), "Mês do aniversário"),
+        );
+        caixa.append(rotulo, par);
+        return caixa;
+      }
+
+      /** "DD/MM" quando a pessoa escolheu os dois; pela metade não é data. */
+      function aniversarioEscolhido() {
+        return resposta.aniversario_dia && resposta.aniversario_mes
+          ? `${resposta.aniversario_dia}/${resposta.aniversario_mes}`
+          : undefined;
       }
 
       async function enviarTudo(botaoClicado) {
@@ -918,6 +994,9 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               ...resposta,
+              // O servidor só guarda o aniversário junto de um WhatsApp: é
+              // pela base de clientes que o parabéns sai.
+              cliente_nascimento: aniversarioEscolhido(),
               // Quando a casa marcou a pergunta do NPS, é a resposta dela que
               // vale como nota. O servidor refaz esta conta — aqui é só para a
               // tela final saber o que dizer.
@@ -997,6 +1076,25 @@
           dica.style.marginTop = "14px";
           dica.textContent = "Tire um print desta tela para não perder o código.";
           fim.append(dica);
+        }
+
+        // O convite para avaliar no Google. Quem decide é o SERVIDOR: o link
+        // só vem na resposta de quem deu 9 ou 10, numa casa que configurou
+        // um. Aqui não se refaz a conta — cliente insatisfeito convidado a
+        // avaliar em público é o erro que esta tela não pode cometer.
+        if (resultado.google_avaliacao_url) {
+          const google = document.createElement("div");
+          google.className = "google";
+          const convite = document.createElement("p");
+          convite.textContent = "Que bom que você gostou! Contar isso no Google ajuda muito a casa — leva um minuto.";
+          const link = document.createElement("a");
+          link.className = "btn";
+          link.href = resultado.google_avaliacao_url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "Avaliar no Google";
+          google.append(convite, link);
+          fim.append(google);
         }
 
         conteudo.replaceChildren(fim);

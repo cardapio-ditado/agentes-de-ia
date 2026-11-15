@@ -21,6 +21,7 @@ Stack: **Node + TypeScript**, **Claude** (`claude-opus-5`) e **Supabase** (Postg
 | Painel web: fila de aprovação, programação e chat de teste | ✅ |
 | Notificação ao cliente + webhooks assinados | ✅ |
 | Canal WhatsApp de entrada e saída (Baileys, não oficial) | ✅ |
+| Delivery: cardápio com link, sacola, Pix/cartão (Mercado Pago), cupons e cashback | ✅ (migração aplicada em 14/11/2026) |
 | Billing, embeddings/vector DB, editor visual de fluxo, SSO | ⬜ backlog do PRD |
 
 ---

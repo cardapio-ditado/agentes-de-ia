@@ -1,6 +1,7 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
 import { avisar, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
+import { CAMPANHAS_PRONTAS, publicoDaCampanha } from "../modelosProntos.js";
 import { SITUACOES, contarSituacoes, horaCurta, seloDoEnvio, tilesDeSituacao } from "../envios.js";
 
 /**
@@ -531,7 +532,7 @@ export async function clientesDaCasa(raiz, ctx) {
             el("h2", { texto: "Clientes" }),
             el("p", {
               classe: "muted",
-              texto: "Quem já esteve na casa. A base enche sozinha pela Zig, pelo WhatsApp do agente e pela pesquisa — e você cadastra à mão quem faltar.",
+              texto: "Quem já esteve na casa. A base enche sozinha pela Zig, pelo WhatsApp do atendente virtual e pela pesquisa — e você cadastra à mão quem faltar.",
             }),
           ]),
           el("div", { classe: "linha-campos" }, [
@@ -1338,7 +1339,7 @@ export async function clientesDaCasa(raiz, ctx) {
           classe: "btn btn-peq",
           href: "#conversas",
           texto: "Ver as conversas",
-          title: "Quem respondeu está falando com o agente em Conversas",
+          title: "Quem respondeu está falando com o atendente virtual em Conversas",
         }));
       }
 
@@ -1770,10 +1771,53 @@ export async function clientesDaCasa(raiz, ctx) {
       void contar();
 
       const quando = el("input", { type: "datetime-local" });
+      const criador = criadorDeModeloLivre();
+
+      /**
+       * Usar uma campanha pronta: preenche, não envia.
+       *
+       * O caminho depende de a Meta já ter aprovado o texto dela nesta
+       * conta. Aprovado: o formulário fica pronto, faltando só a casa
+       * escrever o que é dela (a oferta, a programação). Ainda não: abre o
+       * criador de modelo com o texto, para revisar e mandar aprovar — é
+       * uma vez só, e a campanha volta a ser um clique depois disso.
+       */
+      const usarCampanha = (c) => {
+        if (!nome.value.trim()) nome.value = c.titulo;
+        publico.value = publicoDaCampanha(c);
+        void contar();
+
+        const m = modeloEscolhido(modelos, c.modelo.name);
+        if (m?.suportado) {
+          seletorModelo.value = m.name;
+          lacunas = editorDeLacunas(areaLacunas, m, structuredClone(c.variaveis), atualizarPrevia);
+          // O campo do texto fixo pergunta o que é desta campanha, com o
+          // exemplo — "O texto que vai nessa lacuna" não ajuda ninguém.
+          const fixo = [...areaLacunas.querySelectorAll("input")].at(-1);
+          if (fixo) {
+            fixo.placeholder = `${c.lacuna} — ex.: ${c.modelo.exemplos.at(-1)}`;
+            fixo.focus();
+          }
+          atualizarPrevia();
+          avisar(`Campanha “${c.titulo}” no formulário. Escreva o que falta, confira quem recebe e agende.`, "ok");
+          return;
+        }
+        if (m) {
+          avisar(`O texto de “${c.titulo}” já foi para a Meta (modelo ${m.name}) e ainda não dá para usar: ${m.motivo}.`, "erro");
+          return;
+        }
+        criador.preencher(c.modelo);
+        avisar("A Meta precisa aprovar este texto uma vez antes do primeiro envio. Revise e mande aprovar — costuma levar minutos.", "ok");
+      };
 
       const criar = async (agendarJa) => {
         const m = modeloEscolhido(modelos, seletorModelo.value);
         if (!m) return avisar("Escolha um modelo.", "erro");
+        // Lacuna fixa em branco sai como um traço no meio da frase — para a
+        // base inteira. Melhor parar aqui do que explicar depois.
+        if (agendarJa && lacunas().some((v) => v.tipo === "fixo" && !String(v.texto ?? "").trim())) {
+          return avisar("Falta escrever o texto de uma lacuna fixa. Em branco, a pessoa receberia um traço no lugar.", "erro");
+        }
         try {
           const d = await post(`/v1/venues/${ctx.venue}/disparos`, {
             nome: nome.value.trim(),
@@ -1801,8 +1845,9 @@ export async function clientesDaCasa(raiz, ctx) {
           texto: "Pelo número oficial, a Meta só aceita modelos que ela aprovou — o texto é escolhido, não escrito. Crie modelos em business.facebook.com → WhatsApp Manager → Modelos de mensagem; eles aparecem aqui quando aprovados.",
         }),
         aprovados.length === 0
-          ? el("p", { classe: "aviso aviso-alerta", texto: "Nenhum modelo aprovado ainda. Crie um no WhatsApp Manager (categoria Marketing, com {{1}} para o nome) e espere a aprovação — costuma levar minutos." })
+          ? el("p", { classe: "aviso aviso-alerta", texto: "Nenhum modelo aprovado ainda. Comece por uma campanha pronta abaixo, ou crie um no WhatsApp Manager (categoria Marketing, com {{1}} para o nome) — a aprovação costuma levar minutos." })
           : null,
+        campanhasProntas(modelos, usarCampanha),
         el("div", { classe: "grade" }, [
           campoDaTela("Nome do disparo (só para você)", nome),
           campoDaTela("Modelo aprovado", seletorModelo),
@@ -1820,8 +1865,43 @@ export async function clientesDaCasa(raiz, ctx) {
           el("button", { classe: "btn", type: "button", texto: "Salvar rascunho", onclick: () => criar(false) }),
           el("button", { classe: "btn btn-primario", type: "button", texto: "Agendar e enviar", disabled: aprovados.length === 0, onclick: () => criar(true) }),
         ]),
-        criadorDeModeloLivre(),
+        criador,
       ].filter(Boolean));
+    }
+
+    /**
+     * As campanhas que toda casa manda, como ponto de partida.
+     *
+     * Cada cartão diz em que pé o texto está NESTA conta da Meta, porque é
+     * isso que decide o que o botão faz: aprovado, é preencher e agendar;
+     * sem modelo ainda, o primeiro passo é mandar aprovar.
+     */
+    function campanhasProntas(modelos, aoUsar) {
+      return el("div", { classe: "pilha-fina" }, [
+        el("div", {}, [
+          el("h3", { texto: "Campanhas prontas" }),
+          el("p", { classe: "muted", texto: "Textos que bar e restaurante mandam de verdade, com o público sugerido. Escolher só preenche o formulário — nada é enviado sem você agendar." }),
+        ]),
+        el("div", { classe: "modelos" }, CAMPANHAS_PRONTAS.map((c) => {
+          const m = modeloEscolhido(modelos, c.modelo.name);
+          const situacao = m?.suportado
+            ? "Texto aprovado pela Meta — é preencher e agendar."
+            : m
+              ? "Texto em análise na Meta."
+              : "Primeiro uso: a Meta aprova o texto (minutos).";
+          return el("article", { classe: "modelo", "data-campanha": c.chave }, [
+            el("strong", { texto: c.titulo }),
+            el("span", { classe: "muted", texto: c.resumo }),
+            el("span", { classe: "muted", texto: `Para: ${descreverPublico(publicoDoSeletor(publicoDaCampanha(c)))}. ${situacao}` }),
+            el("button", {
+              classe: "btn btn-peq",
+              type: "button",
+              texto: m?.suportado ? "Usar esta campanha" : "Começar por esta",
+              onclick: () => aoUsar(c),
+            }),
+          ]);
+        })),
+      ]);
     }
 
     /**
@@ -1836,8 +1916,9 @@ export async function clientesDaCasa(raiz, ctx) {
         el("summary", { texto: "Criar um modelo novo na Meta" }),
       ]);
       let montado = false;
-      area.addEventListener("toggle", () => {
-        if (!area.open || montado) return;
+      let campos = null;
+      const montar = () => {
+        if (montado) return;
         montado = true;
         const nome = el("input", { placeholder: "ex.: chefe_do_role (minúsculas, números e _)" });
         const texto = el("textarea", {
@@ -1883,7 +1964,24 @@ export async function clientesDaCasa(raiz, ctx) {
             el("div", { classe: "linha-campos" }, [enviar]),
           ]),
         );
+        campos = { nome, texto, exemplos, botoes, rodape };
+      };
+      area.addEventListener("toggle", () => {
+        if (area.open) montar();
       });
+      // Uma campanha pronta chega por aqui: abre o criador já com o texto
+      // dela, para a casa revisar antes de mandar à Meta.
+      area.preencher = (m) => {
+        montar();
+        campos.nome.value = m.name;
+        campos.texto.value = m.corpo;
+        campos.exemplos.value = m.exemplos.join(" | ");
+        campos.botoes.value = m.botoes.join(" | ");
+        campos.rodape.value = m.rodape ?? "";
+        area.open = true;
+        area.scrollIntoView({ behavior: "smooth", block: "start" });
+        campos.texto.focus({ preventScroll: true });
+      };
       return area;
     }
   }

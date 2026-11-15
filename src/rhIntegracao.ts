@@ -431,11 +431,154 @@ const FERRAMENTA_ATESTADO = {
   },
 };
 
+// A IA LÊ, mas quem decide é uma pessoa. Antes, o período lido já tirava o
+// turno e marcava "atestado" na escala sozinho — e uma foto torta, um "3" lido
+// como "8" ou um papel que nem era atestado mudavam a escala de verdade sem
+// ninguém da casa ter olhado. Agora a foto vira um item "a confirmar": o
+// gestor confere o documento e, com um toque, aceita (aí a escala muda) ou
+// não aceita (a escala fica como estava). O documento fica guardado nos dois
+// casos.
+//
+// Onde mora o "a confirmar": no TÍTULO do documento, que já existe e já
+// aparece na ficha. Não pediu migração nem coluna nova, a ficha mostra em
+// português o que está esperando, e apagar o documento desfaz a pendência.
+
+const MARCA_A_CONFIRMAR = "A confirmar";
+const brData = (iso: string) => iso.split("-").reverse().join("/");
+
+/** O título de um atestado esperando o gestor, com o período que a IA leu (se leu). */
+export function tituloDoAtestadoAConfirmar(inicio: string | null, dias: number | null): string {
+  return inicio && dias
+    ? `${MARCA_A_CONFIRMAR} — ${dias} dia${dias === 1 ? "" : "s"} a partir de ${brData(inicio)}`
+    : `${MARCA_A_CONFIRMAR} — não deu para ler o período`;
+}
+
 /**
- * O funcionário manda o atestado por foto: a IA lê o período, o documento é
- * guardado na pasta dele, a escala marca "atestado" nos dias, e o gestor é
- * avisado. O CID não é lido nem guardado em campo nenhum — é dado de saúde,
- * e a casa não precisa dele.
+ * O caminho de volta: do título, o que está esperando. `null` quando o
+ * documento não é um atestado a confirmar (já decidido, ou enviado pelo
+ * gestor direto na ficha).
+ */
+export function lerAtestadoAConfirmar(titulo: string | null | undefined): { inicio: string | null; dias: number | null } | null {
+  const t = String(titulo ?? "");
+  if (!t.startsWith(MARCA_A_CONFIRMAR)) return null;
+  const m = /(\d+) dias? a partir de (\d{2})\/(\d{2})\/(\d{4})/.exec(t);
+  if (!m) return { inicio: null, dias: null };
+  return { inicio: `${m[4]}-${m[3]}-${m[2]}`, dias: Number(m[1]) };
+}
+
+/** Atestado de mais de 30 dias existe, mas não é o caso de resolver num toque. */
+const MAXIMO_DE_DIAS_DO_ATESTADO = 30;
+
+/**
+ * O período que vai para a escala: o que o gestor digitou, ou o que a IA leu.
+ * Erro em português quando falta — é o que a tela mostra.
+ */
+export function periodoDoAtestado(
+  lido: { inicio: string | null; dias: number | null },
+  informado: { inicio?: unknown; dias?: unknown } = {},
+): string[] {
+  const inicio = String(informado.inicio ?? "").trim() || lido.inicio;
+  const dias = informado.dias === undefined || informado.dias === null || informado.dias === "" ? lido.dias : Number(informado.dias);
+  if (!inicio || !/^\d{4}-\d{2}-\d{2}$/.test(inicio) || Number.isNaN(new Date(`${inicio}T12:00:00Z`).getTime())) {
+    throw new ErroDoRh(400, "Diga o primeiro dia do afastamento que está escrito no atestado.");
+  }
+  if (!Number.isInteger(dias) || dias! < 1 || dias! > MAXIMO_DE_DIAS_DO_ATESTADO) {
+    throw new ErroDoRh(400, `Diga quantos dias de afastamento o atestado dá (de 1 a ${MAXIMO_DE_DIAS_DO_ATESTADO}).`);
+  }
+  return Array.from({ length: dias! }, (_, i) => somarDias(inicio, i));
+}
+
+export interface AtestadoAConfirmar {
+  documento_id: string;
+  atendente_id: string;
+  nome: string;
+  inicio: string | null;
+  dias: number | null;
+  enviado_em: string;
+}
+
+/** Os atestados que a equipe mandou e ninguém da casa conferiu ainda. */
+export async function atestadosAConfirmar(venueId: string): Promise<AtestadoAConfirmar[]> {
+  const { data, error } = await cliente()
+    .from("rh_documentos")
+    .select("id, atendente_id, titulo, enviado_em")
+    .eq("venue_id", venueId)
+    .eq("tipo", "atestado")
+    .like("titulo", `${MARCA_A_CONFIRMAR}%`)
+    .order("enviado_em", { ascending: true });
+  if (error) falhar("Falha ao buscar os atestados", error.message);
+  const docs = (data ?? []) as Array<{ id: string; atendente_id: string; titulo: string | null; enviado_em: string }>;
+  if (!docs.length) return [];
+  const { data: pessoas } = await cliente().from("pesquisa_atendentes").select("id, nome, apelido").in("id", [...new Set(docs.map((d) => d.atendente_id))]);
+  const nomeDe = new Map(((pessoas ?? []) as Array<{ id: string; nome: string; apelido: string | null }>).map((p) => [p.id, p.apelido || p.nome]));
+  return docs.flatMap((d) => {
+    const lido = lerAtestadoAConfirmar(d.titulo);
+    return lido ? [{ documento_id: d.id, atendente_id: d.atendente_id, nome: nomeDe.get(d.atendente_id) ?? "", ...lido, enviado_em: d.enviado_em }] : [];
+  });
+}
+
+/**
+ * O toque do gestor. Aceitar marca "atestado" nos dias (sai o turno que
+ * estava, entra a ausência justificada); não aceitar deixa a escala em paz.
+ * Nos dois casos o documento fica na ficha, com o que foi decidido e por
+ * quem — é registro, e pode ser pedido depois.
+ */
+export async function decidirAtestado(params: {
+  venueId: string;
+  documentoId: string;
+  aceitar: boolean;
+  inicio?: unknown;
+  dias?: unknown;
+  quem: string;
+}): Promise<{ aceito: boolean; dias: number; inicio: string | null; fim: string | null }> {
+  const { data: doc, error } = await cliente()
+    .from("rh_documentos")
+    .select("id, atendente_id, titulo")
+    .eq("venue_id", params.venueId)
+    .eq("id", params.documentoId)
+    .eq("tipo", "atestado")
+    .maybeSingle();
+  if (error) falhar("Falha ao abrir o atestado", error.message);
+  const lido = doc ? lerAtestadoAConfirmar(doc.titulo) : null;
+  // Dois gerentes com a tela aberta: o segundo toque não refaz o primeiro.
+  if (!doc || !lido) throw new ErroDoRh(409, "Este atestado já foi conferido, ou foi apagado. Recarregue a página.");
+
+  const dias = params.aceitar ? periodoDoAtestado(lido, { inicio: params.inicio, dias: params.dias }) : [];
+  const quem = String(params.quem || "a casa").slice(0, 60);
+  const titulo = params.aceitar
+    ? `Atestado de ${dias.length} dia${dias.length === 1 ? "" : "s"} (${brData(dias[0]!)} a ${brData(dias[dias.length - 1]!)}) — confirmado por ${quem}`
+    : `Atestado não aceito — conferido por ${quem}`;
+
+  // O título muda PRIMEIRO, e só se ainda estava "a confirmar": é a trava
+  // contra o toque duplo. Se a escala falhar depois, o erro aparece na tela
+  // e o gestor marca o dia à mão — pior seria escala marcada duas vezes.
+  const { data: mudou, error: erroTitulo } = await cliente()
+    .from("rh_documentos")
+    .update({ titulo })
+    .eq("id", doc.id)
+    .eq("venue_id", params.venueId)
+    .like("titulo", `${MARCA_A_CONFIRMAR}%`)
+    .select("id");
+  if (erroTitulo) falhar("Falha ao registrar a decisão", erroTitulo.message);
+  if (!mudou?.length) throw new ErroDoRh(409, "Este atestado já foi conferido. Recarregue a página.");
+
+  for (const dia of dias) {
+    const { error: erroTirar } = await cliente().from("rh_escala").delete().eq("venue_id", params.venueId).eq("atendente_id", doc.atendente_id).eq("data", dia);
+    if (erroTirar) falhar("O atestado foi confirmado, mas a escala não mudou — marque os dias à mão", erroTirar.message);
+    const { error: erroPor } = await cliente()
+      .from("rh_escala")
+      .insert({ venue_id: params.venueId, atendente_id: doc.atendente_id, data: dia, situacao: "atestado", observacao: `atestado confirmado por ${quem}` });
+    if (erroPor) falhar("O atestado foi confirmado, mas a escala não mudou — marque os dias à mão", erroPor.message);
+  }
+  return { aceito: params.aceitar, dias: dias.length, inicio: dias[0] ?? null, fim: dias[dias.length - 1] ?? null };
+}
+
+/**
+ * O funcionário manda o atestado por foto: o documento é guardado na pasta
+ * dele, a IA lê o período e o gestor é avisado para conferir. A ESCALA NÃO
+ * MUDA aqui — só quando alguém da casa confirma (ver `decidirAtestado`). O
+ * CID não é lido nem guardado em campo nenhum — é dado de saúde, e a casa
+ * não precisa dele.
  */
 export async function receberAtestado(params: {
   venueId: string;
@@ -447,13 +590,15 @@ export async function receberAtestado(params: {
   contentType: string;
 }) {
   const media = params.contentType.split(";")[0]!.trim().toLowerCase();
+  // Já nasce "a confirmar": se a leitura da IA cair no meio, a pendência do
+  // gestor existe do mesmo jeito, só sem o período sugerido.
   const documento = await guardarDocumento({
     venueId: params.venueId,
     atendenteId: params.atendenteId,
     arquivo: params.arquivo,
     contentType: media,
     tipo: "atestado",
-    titulo: "enviado pelo funcionário",
+    titulo: tituloDoAtestadoAConfirmar(null, null),
     enviadoPor: params.nome,
   });
 
@@ -484,29 +629,31 @@ export async function receberAtestado(params: {
   }
 
   const dias: string[] = lido.inicio && lido.dias ? Array.from({ length: lido.dias }, (_, i) => somarDias(lido.inicio!, i)) : [];
-  for (const dia of dias) {
-    // O dia vira "atestado": sai o turno que estava, entra a ausência justificada.
-    await cliente().from("rh_escala").delete().eq("venue_id", params.venueId).eq("atendente_id", params.atendenteId).eq("data", dia);
-    await cliente().from("rh_escala").insert({ venue_id: params.venueId, atendente_id: params.atendenteId, data: dia, situacao: "atestado", observacao: "atestado enviado pelo funcionário" });
+  if (dias.length) {
+    // O período lido vai para o título como SUGESTÃO; quem confirma é o gestor.
+    await cliente().from("rh_documentos").update({ titulo: tituloDoAtestadoAConfirmar(lido.inicio, lido.dias) }).eq("id", documento.id).eq("venue_id", params.venueId);
   }
 
-  // O gestor fica sabendo na hora: a escala daquele dia mudou.
+  // O gestor fica sabendo na hora — a escala só muda quando ele confirmar.
   const { data: venue } = await cliente().from("venues").select("reservas_avisar_whatsapp").eq("id", params.venueId).maybeSingle();
   const { normalizarTelefone, inserirAvisos } = await import("./notifications.js");
   const destino = normalizarTelefone(String(venue?.reservas_avisar_whatsapp ?? ""));
   if (destino) {
     const periodo = dias.length
-      ? `${dias.length} dia(s), de ${dias[0]!.split("-").reverse().join("/")} a ${dias[dias.length - 1]!.split("-").reverse().join("/")}`
-      : "não deu para ler o período — confira o documento na ficha";
+      ? `${dias.length} dia(s), de ${brData(dias[0]!)} a ${brData(dias[dias.length - 1]!)} (lido da foto — confira)`
+      : "não deu para ler o período — confira o documento";
     await inserirAvisos({
       venue_id: params.venueId,
       channel: "whatsapp",
       destination: destino,
       papel: "administrativo",
       template: "rh_atestado",
-      body: `🩺 ${params.nome} mandou um atestado — ${params.casa}\nAfastamento: ${periodo}.\n${dias.length ? "A escala já foi marcada como atestado. " : ""}O documento está na ficha, no RH.`,
+      body:
+        `🩺 ${params.nome} mandou um atestado — ${params.casa}\nAfastamento: ${periodo}.\n` +
+        `${lido.e_atestado ? "" : "Atenção: a foto pode não ser de um atestado.\n"}` +
+        `A escala NÃO mudou ainda: abra o RH no painel, confira o documento e toque em Confirmar ou Não aceitar.`,
     }).catch(() => undefined);
   }
 
-  return { documento_id: documento.id, e_atestado: lido.e_atestado, dias: dias.length, inicio: dias[0] ?? null, fim: dias[dias.length - 1] ?? null };
+  return { documento_id: documento.id, e_atestado: lido.e_atestado, a_confirmar: true, dias: dias.length, inicio: dias[0] ?? null, fim: dias[dias.length - 1] ?? null };
 }

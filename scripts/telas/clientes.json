@@ -743,6 +743,158 @@
         }
       }
     },
+    "disparos-campanha-pronta": {
+      "rotulo": "uma campanha pronta cujo texto a Meta já aprovou: o formulário fica preenchido",
+      "cliques": [
+        ".aba[data-aba=\"disparos\"]",
+        "[data-campanha=\"cliente_sumido\"] button"
+      ],
+      "rotas": {
+        "GET /disparos": [],
+        "GET /whatsapp-oficial/modelos": [
+          {
+            "name": "quinta_do_chope",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "Oi, {{1}}! Faz tempo que a gente não te vê no {{2}}. Quinta tem {{3}} — te esperamos?",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [
+              "Quero!",
+              "Não, obrigado"
+            ],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 3,
+            "suportado": true,
+            "motivo": null
+          },
+          {
+            "name": "parabens_ditado",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "{{1}}, o {{2}} quer comemorar seu aniversário com você. Vem com a galera que o primeiro chope é por nossa conta!",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 2,
+            "suportado": true,
+            "motivo": null
+          },
+          {
+            "name": "cardapio_novo",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "PENDING",
+            "corpo": "Cardápio novo no ar!",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 0,
+            "suportado": false,
+            "motivo": "cabeçalho de imagem ainda não é suportado"
+          },
+          {
+            "name": "cliente_sumido",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "Oi, {{1}}, tudo bem? Faz um tempo que você não aparece no {{2}} e a gente sentiu a sua falta. Para te ver de novo, esta semana tem {{3}}. Quer que a gente guarde uma mesa para você?",
+            "cabecalho": null,
+            "rodape": "Responda SAIR para não receber mais mensagens.",
+            "botoes": [
+              "Quero reservar",
+              "Agora não"
+            ],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 3,
+            "suportado": true,
+            "motivo": null
+          }
+        ],
+        "POST /disparos/previa": {
+          "pessoas": 2,
+          "amostra": [
+            "Bruno Camargo",
+            "Hugo Barreto"
+          ]
+        }
+      }
+    },
+    "disparos-campanha-nova": {
+      "rotulo": "uma campanha pronta no primeiro uso: abre o criador de modelo com o texto, para mandar à Meta",
+      "cliques": [
+        ".aba[data-aba=\"disparos\"]",
+        "[data-campanha=\"convite_vip\"] button"
+      ],
+      "rotas": {
+        "GET /disparos": [],
+        "GET /whatsapp-oficial/modelos": [
+          {
+            "name": "quinta_do_chope",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "Oi, {{1}}! Faz tempo que a gente não te vê no {{2}}. Quinta tem {{3}} — te esperamos?",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [
+              "Quero!",
+              "Não, obrigado"
+            ],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 3,
+            "suportado": true,
+            "motivo": null
+          },
+          {
+            "name": "parabens_ditado",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "APPROVED",
+            "corpo": "{{1}}, o {{2}} quer comemorar seu aniversário com você. Vem com a galera que o primeiro chope é por nossa conta!",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 2,
+            "suportado": true,
+            "motivo": null
+          },
+          {
+            "name": "cardapio_novo",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "status": "PENDING",
+            "corpo": "Cardápio novo no ar!",
+            "cabecalho": null,
+            "rodape": null,
+            "botoes": [],
+            "botao_url": null,
+            "botao_url_dinamico": false,
+            "lacunas": 0,
+            "suportado": false,
+            "motivo": "cabeçalho de imagem ainda não é suportado"
+          }
+        ],
+        "POST /disparos/previa": {
+          "pessoas": 2,
+          "amostra": [
+            "Renata Prado",
+            "Lia Moura"
+          ]
+        }
+      }
+    },
     "disparo-aberto": {
       "rotulo": "um disparo aberto, com o que aconteceu com cada pessoa",
       "cliques": [

@@ -8,6 +8,8 @@ import { db } from "./supabase.js";
  * e troca sem precisar de deploy.
  */
 
+// Tabelas ainda fora do database.types.ts: o mesmo `any` deliberado de rotinas.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cliente = () => db() as any;
 
 /** Id de tela do painel: letras, números, hífen e "pagina:aba". */

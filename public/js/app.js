@@ -1,9 +1,10 @@
 import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessao } from "./api.js";
-import { ICONES, avisar, el, icone, limpar } from "./ui.js";
+import { ICONES, avisar, definirFusoDaCasa, el, icone, limpar } from "./ui.js";
 import { painel } from "./pages/painel.js";
 import { hoje } from "./pages/hoje.js";
 import { trilha } from "./pages/trilha.js";
 import { abrirAjuda } from "./ajuda.js";
+import { WHATSAPP_COMERCIAL } from "./contato.js";
 import { clientes } from "./pages/clientes.js";
 import { plataforma } from "./pages/plataforma.js";
 import { conversas } from "./pages/conversas.js";
@@ -40,6 +41,7 @@ import { clientesDaCasa } from "./pages/clientesDaCasa.js";
 import { pesquisaRespostas } from "./pages/pesquisaRespostas.js";
 import { producao } from "./pages/producao.js";
 import { cardapioDigital } from "./pages/cardapioDigital.js";
+import { delivery } from "./pages/delivery.js";
 import { rh } from "./pages/rh.js";
 import { contasAPagar, contasAReceber } from "./pages/financeiro.js";
 import { fluxoDeCaixa, painelFinanceiro } from "./pages/financeiroPainel.js";
@@ -134,7 +136,7 @@ const PAGINAS = [
   { id: "hoje", modulo: "hoje", rotulo: "Hoje", icone: SOL, render: hoje, subtitulo: "O que precisa de você e se está tudo funcionando" },
 
   { id: "painel", modulo: "agentes-ia", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
-  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente conversou com cada cliente" },
+  { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente virtual conversou com cada cliente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
   {
     id: "programacao", modulo: "agentes-ia", rotulo: "Programação", icone: ICONES.programacao, subtitulo: "Shows, jogos e promoções",
@@ -144,9 +146,9 @@ const PAGINAS = [
     ]),
   },
   {
-    id: "atendente", modulo: "agentes-ia", grupo: "configurar", rotulo: "Atendente", icone: ICONES.agente, subtitulo: "Quem ele é, o que ele sabe da casa — e um teste antes de soltar para o cliente",
+    id: "atendente", modulo: "agentes-ia", grupo: "configurar", rotulo: "Atendente virtual", icone: ICONES.agente, subtitulo: "Quem ele é, o que ele sabe da casa — e um teste antes de soltar para o cliente",
     render: comAbas("atendente", [
-      { id: "agentes", rotulo: "Jeito e regras", render: agentes, subtitulo: "A personalidade e as regras do atendente" },
+      { id: "agentes", rotulo: "Jeito e regras", render: agentes, subtitulo: "A personalidade e as regras do atendente virtual" },
       { id: "sabe", rotulo: "O que ele sabe", render: agenteSabe, subtitulo: "Endereço, horários e as respostas às perguntas do cliente" },
       { id: "testar", rotulo: "Testar", render: agente, subtitulo: "Converse como se fosse um cliente" },
     ]),
@@ -170,11 +172,15 @@ const PAGINAS = [
   // A Zig e os outros sistemas que a casa já usa. Nada aqui é premissa: cada
   // uso tem a sua chave, e a casa sem integração nenhuma usa o painel igual.
   { id: "integracoes", modulo: "ajustes", rotulo: "Integrações", icone: ICONES.plugue, render: integracoes, subtitulo: "Zig e os outros sistemas que a casa já usa — ligue só o que tiver" },
-  { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, agentes e chaves de API" },
+  { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, atendentes virtuais e chaves de acesso" },
 
   // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link
   // externo por cliente. Uma tela só, com abas — é o que a casa mexe todo dia.
   { id: "cardapio", modulo: "cardapio-digital", rotulo: "Cardápio", icone: ICONES.caixa, render: cardapioDigital, subtitulo: "Itens, fotos, banners, promoções e os comentários dos clientes" },
+
+  // Delivery — o canal próprio de pedidos. Os itens são os do Cardápio
+  // Digital; aqui ficam a fila de pedidos, os cupons e como a casa entrega.
+  { id: "delivery", modulo: "delivery", rotulo: "Delivery", icone: ICONES.raio, render: delivery, subtitulo: "A fila de pedidos, os cupons, os números e como a casa entrega" },
 
   // RH — Fase 1. Ficha, documento, admissão e desligamento. Não calcula folha:
   // entrega os números prontos para quem já fecha a folha da casa.
@@ -284,6 +290,12 @@ let modulosDoCliente = new Map();
 let moduloAtual = "agentes-ia";
 
 /**
+ * A conta tem mais de uma casa? Só então o seletor de estabelecimento
+ * aparece no topo. Preenchido no login, com a lista de casas.
+ */
+let variasCasas = false;
+
+/**
  * Módulos do hub: cada solução do Brasa Food é uma porta.
  *
  * Aqui só está o que o módulo É — nome, ícone, lugar na colmeia. Se ele acende
@@ -295,6 +307,9 @@ const MODULOS = [
   {
     id: "agentes-ia",
     nome: "Atendente virtual",
+    // Uma linha só, para a lista do celular — a `descricao` inteira é a
+    // legenda da colmeia e não cabe num cartão.
+    resumo: "Responde o cliente no WhatsApp e no Instagram",
     descricao:
       "Atendimento no WhatsApp e Instagram: reservas, programação e dúvidas respondidas na hora.",
     // O número do atendente mora nos Ajustes da casa, junto com os outros —
@@ -309,6 +324,7 @@ const MODULOS = [
   {
     id: "cardapio-digital",
     nome: "Cardápio Digital",
+    resumo: "Cardápio com foto e QR code na mesa",
     descricao:
       "QR code na mesa, cardápio com foto e vídeo, curtidas e comentários dos clientes — e o garçom chamado pelo celular.",
     icone: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z",
@@ -318,8 +334,19 @@ const MODULOS = [
     pos: { x: -0.75, y: 0.5 },
   },
   {
+    id: "delivery",
+    nome: "Delivery",
+    resumo: "Pedidos direto com a casa, sem comissão",
+    descricao:
+      "Canal próprio de pedidos, sem comissão: cardápio com link, sacola e pagamento por Pix ou cartão, e o atendente virtual fechando pedido pelo WhatsApp.",
+    icone: "M5 17a2 2 0 104 0 2 2 0 00-4 0zm10 0a2 2 0 104 0 2 2 0 00-4 0zM3 17V6h11v11M14 9h4l3 4v4h-2M9 17h6",
+    // Ao lado do Cardápio Digital, de onde vêm os itens. Era favo vazio.
+    pos: { x: -1.5, y: 0 },
+  },
+  {
     id: "rh",
     nome: "RH",
+    resumo: "A ficha da equipe, a escala e as férias",
     descricao:
       "A equipe organizada: ficha de cada um, documento com aviso de vencimento, admissão guiada e desligamento registrado. A folha continua com a contabilidade.",
     icone: ICONES.pessoa,
@@ -328,6 +355,7 @@ const MODULOS = [
   {
     id: "financeiro",
     nome: "Financeiro",
+    resumo: "Contas a pagar, a receber e o caixa",
     descricao:
       "Contas a pagar e a receber com parcelas do jeito que o fornecedor dá, bancos e caixas com saldo, e a ficha de cada fornecedor.",
     icone: "M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",
@@ -336,6 +364,7 @@ const MODULOS = [
   {
     id: "checklist",
     nome: "Checklist Inteligente",
+    resumo: "Rotinas da equipe, com foto como prova",
     descricao:
       "Rotinas de abertura e fechamento com link no WhatsApp, fotos como prova e a IA conferindo cada resposta.",
     icone: "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
@@ -344,6 +373,7 @@ const MODULOS = [
   {
     id: "cmv",
     nome: "Custos e estoque",
+    resumo: "Estoque, compras e o custo de cada prato",
     descricao:
       "Estoque, compras e receitas. Foto da nota vira entrada, e o custo de cada prato aparece sozinho.",
     icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
@@ -352,6 +382,7 @@ const MODULOS = [
   {
     id: "clientes",
     nome: "Clientes",
+    resumo: "Quem veio à casa e o que achou dela",
     descricao:
       "Quem já esteve na casa e o que ele diz dela: a base (à mão, Zig, WhatsApp), o parabéns de aniversário, a pesquisa com QR na mesa e as avaliações do Google respondidas no tom da casa.",
     icone: ICONES.pessoa,
@@ -409,7 +440,6 @@ const MODULOS = [
  */
 const FAVOS_VAZIOS = [
   { x: 1.5, y: 0 },
-  { x: -1.5, y: 0 },
 ];
 
 const app = document.getElementById("app");
@@ -432,6 +462,12 @@ const ctx = {
   aba: null,
   /** Esta pessoa mexe na configuração da casa? (falso = perfil Equipe) */
   podeConfigurar: true,
+  /**
+   * É da equipe Brasa Food? Para a tela esconder do dono o que só interessa
+   * a quem opera a plataforma (consumo de tokens, por exemplo). Nasce falso:
+   * na dúvida, o dono não vê.
+   */
+  souPlataforma: false,
   definirAgente(slug) {
     ctx.agente = slug;
   },
@@ -498,12 +534,51 @@ document.getElementById("btn-sair").addEventListener("click", () => {
   location.reload();
 });
 
+// ============ Barra de baixo (celular) ============
+//
+// No celular a lateral é uma gaveta atrás do ☰, e os Ajustes só se alcançavam
+// voltando à colmeia. Quem está com uma mão ocupada não acha. Os quatro
+// destinos que valem em qualquer módulo ficam fixos embaixo; as telas DO
+// módulo continuam na gaveta. O CSS só mostra a barra em tela estreita.
+const barra = document.getElementById("barra-movel");
+const ITENS_DA_BARRA = [
+  { id: "hoje", rotulo: "Hoje", icone: SOL, acao: () => entrarNoModulo("hoje") },
+  { id: "modulos", rotulo: "Módulos", icone: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z", acao: () => mostrarHub() },
+  { id: "ajustes", rotulo: "Ajustes", icone: MODULOS.find((m) => m.id === "ajustes").icone, acao: () => entrarNoModulo("ajustes") },
+  { id: "ajuda", rotulo: "Ajuda", icone: "M12 22a10 10 0 100-20 10 10 0 000 20zM9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01", acao: () => ajudaDaTela() },
+];
+for (const item of ITENS_DA_BARRA) {
+  barra.append(
+    el("button", { classe: "barra-item", type: "button", "data-barra": item.id, onclick: item.acao }, [
+      icone(item.icone, 22),
+      el("span", { texto: item.rotulo }),
+    ]),
+  );
+}
+
+/** Acende na barra o lugar onde a pessoa está (Hoje ou Ajustes). */
+function marcarBarra() {
+  for (const b of barra.querySelectorAll(".barra-item")) {
+    if (b.dataset.barra === moduloAtual) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  }
+}
+
+/** A ajuda da tela aberta — o "?" do topo e o "Ajuda" da barra de baixo. */
+function ajudaDaTela() {
+  if (paginaAtual) abrirAjuda({ pagina: paginaAtual.id, rotulo: paginaAtual.rotulo, admin: souPlataforma });
+}
+
 // ============ Navegação ============
 function montarNav() {
   // Escolher estabelecimento não faz sentido enquanto se olha a carteira
   // inteira: o módulo de administração é sobre TODOS os clientes, e um
   // seletor dizendo "Ditado Popular" ali é só ruído que confunde.
-  seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma";
+  //
+  // E com uma casa só não há o que escolher: no celular o seletor tomava
+  // metade do topo e espremia o título numa coluna de uma palavra por linha.
+  seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma" || !variasCasas;
+  marcarBarra();
 
   limpar(nav);
   const atalhos = (MODULOS.find((m) => m.id === moduloAtual)?.atalhos ?? []).filter((a) => podeConfigurar || a.grupo !== "configurar").map((a) => ({
@@ -630,6 +705,20 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
 }
 
 addEventListener("hashchange", () => irPara(location.hash.slice(1), { podeTrocarDeModulo: true }));
+
+// Link para o endereço que JÁ é o atual não dispara hashchange — e o toque
+// parece não fazer nada. Acontece com as linhas do Hoje e da Implantação
+// quando a pessoa volta para elas por um caminho que não mexe no endereço
+// (a colmeia, por exemplo). Aqui o toque leva à tela do mesmo jeito.
+document.addEventListener("click", (e) => {
+  if (e.defaultPrevented) return;
+  const link = e.target instanceof Element ? e.target.closest('a[href^="#"]') : null;
+  const destino = link?.getAttribute("href") ?? "";
+  if (destino.length > 1 && destino === location.hash) {
+    e.preventDefault();
+    irPara(destino.slice(1), { podeTrocarDeModulo: true });
+  }
+});
 
 // ============ Acesso ============
 
@@ -834,6 +923,63 @@ function montarHub() {
 
   colmeia.addEventListener("mouseleave", () => contar(DICA_PADRAO));
   contar(DICA_PADRAO);
+
+  montarListaDoHub(visiveis);
+}
+
+/**
+ * Os mesmos módulos da colmeia, em lista — é o que o celular mostra.
+ *
+ * Em tela estreita o favo fica com 85px e letra de 10px, e a descrição só
+ * aparecia ao passar o mouse, que no celular não existe. Na lista cada módulo
+ * diz o que é e em que estado está sem precisar de toque nenhum. Os que a
+ * casa tem vêm primeiro: é por eles que a pessoa entrou.
+ */
+function montarListaDoHub(visiveis) {
+  const lista = limpar(document.getElementById("hub-lista"));
+  const casa = document.getElementById("hub-org").textContent.trim();
+  const acesos = visiveis.filter((m) => moduloAceso(m));
+  const apagados = visiveis.filter((m) => !moduloAceso(m));
+
+  const miolo = (m, estado) => [
+    el("span", { classe: "hex-icone" }, [icone(m.icone, 20)]),
+    el("span", { classe: "hub-cartao-texto" }, [
+      el("strong", { classe: "hub-cartao-nome", texto: m.nome }),
+      el("span", { classe: "hub-cartao-resumo", texto: m.resumo ?? m.descricao }),
+      estado,
+    ]),
+  ];
+
+  for (const m of acesos) {
+    lista.append(
+      el("button", { classe: "hub-cartao", type: "button", onclick: () => entrarNoModulo(m.id) }, [
+        ...miolo(m, null),
+        el("span", { classe: "hub-cartao-entrar", texto: "Entrar" }),
+      ]),
+    );
+  }
+
+  for (const m of apagados) {
+    // Neutro de propósito: "ativar" prometia um botão que liga na hora, e o
+    // que existe é uma conversa com a Brasa Food. O link já leva a mensagem
+    // escrita — quem recebe sabe de que casa e de que módulo se trata.
+    const mensagem = `Olá! ${casa ? `Sou da casa ${casa}. ` : ""}Quero conhecer o módulo ${m.nome} do Brasa Food.`;
+    lista.append(
+      el("div", { classe: "hub-cartao hub-cartao-apagado" }, miolo(
+        m,
+        el("span", { classe: "hub-cartao-estado" }, [
+          el("span", { texto: "Não faz parte do seu plano" }),
+          el("a", {
+            classe: "hub-cartao-conhecer",
+            href: `https://wa.me/${WHATSAPP_COMERCIAL}?text=${encodeURIComponent(mensagem)}`,
+            target: "_blank",
+            rel: "noopener",
+            texto: "Quero conhecer",
+          }),
+        ]),
+      )),
+    );
+  }
 }
 
 function mostrarHub() {
@@ -879,9 +1025,7 @@ document.getElementById("btn-sair-hub").addEventListener("click", () => {
 // Os dois que não são favo: configuração da casa e a mesa da equipe.
 document.getElementById("btn-ajustes").addEventListener("click", () => entrarNoModulo("ajustes"));
 document.getElementById("btn-hoje").addEventListener("click", () => entrarNoModulo("hoje"));
-document.getElementById("btn-ajuda").addEventListener("click", () => {
-  if (paginaAtual) abrirAjuda({ pagina: paginaAtual.id, rotulo: paginaAtual.rotulo, admin: souPlataforma });
-});
+document.getElementById("btn-ajuda").addEventListener("click", ajudaDaTela);
 document.getElementById("btn-hoje-lateral").addEventListener("click", () => entrarNoModulo("hoje"));
 document.getElementById("btn-plataforma").addEventListener("click", () => entrarNoModulo("plataforma"));
 
@@ -1134,23 +1278,30 @@ async function iniciar() {
   }
 
   if (venues.length === 0) {
-    return pedirChave("A chave é válida, mas não há estabelecimento nesta organização. Rode `npm run seed`.");
+    // Quem lê isto é o dono no primeiro acesso, não quem instala o sistema:
+    // um comando de terminal aqui não é coisa que ele consiga fazer.
+    return pedirChave("Seu acesso está certo, mas ainda não há nenhuma casa cadastrada nesta conta. Avise o suporte da Brasa Food para terminar o cadastro.");
   }
 
   telaAcesso.hidden = true;
 
   limpar(seletorVenue);
   for (const v of venues) seletorVenue.append(el("option", { value: v.slug, texto: v.name }));
+  variasCasas = venues.length > 1;
 
   const nomeDoVenue = () => venues.find((v) => v.slug === ctx.venue)?.name ?? "";
   const salvo = localStorage.getItem("agentes.venue");
   ctx.venue = venues.some((v) => v.slug === salvo) ? salvo : venues[0].slug;
+  // O relógio do painel é o da casa aberta — e muda junto quando ela muda.
+  const acertarRelogio = () => definirFusoDaCasa(venues.find((v) => v.slug === ctx.venue)?.timezone);
+  acertarRelogio();
   seletorVenue.value = ctx.venue;
   document.getElementById("marca-org").textContent = nomeDoVenue();
   document.getElementById("hub-org").textContent = nomeDoVenue();
 
   seletorVenue.addEventListener("change", async () => {
     ctx.venue = seletorVenue.value;
+    acertarRelogio();
     localStorage.setItem("agentes.venue", ctx.venue);
     document.getElementById("marca-org").textContent = nomeDoVenue();
     document.getElementById("hub-org").textContent = nomeDoVenue();
@@ -1176,8 +1327,10 @@ async function iniciar() {
     meusModulos = null;
   }
   ctx.podeConfigurar = podeConfigurar;
+  ctx.souPlataforma = souPlataforma;
   document.getElementById("btn-plataforma").hidden = !souPlataforma;
   document.getElementById("btn-ajustes").hidden = !podeConfigurar;
+  barra.querySelector('[data-barra="ajustes"]').hidden = !podeConfigurar;
 
   await carregarModulos();
 

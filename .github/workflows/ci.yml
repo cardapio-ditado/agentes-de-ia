@@ -1,0 +1,45 @@
+# O portão de cada push e de cada pull request: instala, confere os tipos,
+# roda os testes e passa o lint. Nada aqui fala com banco nem com serviço de
+# fora — os testes são de função pura (node:test), então não há segredo para
+# configurar no repositório.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Dois pushes seguidos no mesmo ramo: o mais antigo para, o mais novo roda.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Tipos, testes e lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # A mesma versão de `engines` no package.json.
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      - name: Testes
+        run: npm test
+
+      # Erro barra; aviso de complexidade não (é mapa, não portão — ver
+      # eslint.config.js).
+      - name: Lint
+        run: npx eslint .

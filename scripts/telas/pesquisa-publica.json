@@ -1,0 +1,67 @@
+{
+  "rotulo": "Pesquisa no celular do cliente — o passo do contato",
+  "pagina": "/pesquisa.html?c=casa-de-teste",
+  "cliques": [".nota:nth-child(11)", ".rodape .btn"],
+  "rotas": {
+    "GET /v1/pesquisa-publica/casa-de-teste": {
+      "ativa": true,
+      "casa": "Casa de Teste",
+      "saudacao": null,
+      "etiquetas": ["Comida", "Atendimento", "Ambiente", "Preço", "Tempo de espera"],
+      "perguntas": [],
+      "dia_visita": "2026-11-14",
+      "perguntar_atendente": false,
+      "atendente_posicao": "fim",
+      "perguntar_comentario": false,
+      "premio": { "titulo": "Uma sobremesa por nossa conta na próxima visita", "regras": "Válido de terça a quinta" },
+      "atendentes": [],
+      "convidado": null
+    }
+  },
+  "variacoes": {
+    "fim-promotor": {
+      "rotulo": "quem deu 10 numa casa com link do Google: o botão Avaliar no Google aparece",
+      "cliques": [".nota:nth-child(11)", ".rodape .btn", ".rodape .btn"],
+      "rotas": {
+        "POST /v1/pesquisa-publica/casa-de-teste": {
+          "id": "r1",
+          "nota": 10,
+          "agradecimento": null,
+          "premio": {
+            "titulo": "Uma sobremesa por nossa conta na próxima visita",
+            "codigo": "BRASA7",
+            "expira_em": "2026-12-14T03:00:00.000Z",
+            "liberado_em": "2026-11-15T03:00:00.000Z"
+          },
+          "google_avaliacao_url": "https://g.page/r/CabcDEF123/review"
+        }
+      }
+    },
+    "fim-detrator": {
+      "rotulo": "quem deu 3: o servidor não manda o link, e a tela termina como sempre terminou",
+      "cliques": [".nota:nth-child(4)", ".rodape .btn", ".rodape .btn-fantasma"],
+      "rotas": {
+        "POST /v1/pesquisa-publica/casa-de-teste": {
+          "id": "r2",
+          "nota": 3,
+          "agradecimento": null,
+          "premio": null,
+          "google_avaliacao_url": null
+        }
+      }
+    },
+    "fim-sem-link": {
+      "rotulo": "quem deu 10 numa casa SEM link configurado: nada muda",
+      "cliques": [".nota:nth-child(11)", ".rodape .btn", ".rodape .btn"],
+      "rotas": {
+        "POST /v1/pesquisa-publica/casa-de-teste": {
+          "id": "r3",
+          "nota": 10,
+          "agradecimento": null,
+          "premio": null,
+          "google_avaliacao_url": null
+        }
+      }
+    }
+  }
+}

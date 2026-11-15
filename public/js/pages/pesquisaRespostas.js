@@ -283,7 +283,7 @@ function folhaDaAvaliacao(r) {
       el("span", {
         texto: r.atendente_nome
           ? `Atendeu: ${r.atendente_nome}${r.atendente_nota ? ` — ${estrelas(r.atendente_nota)}` : ""}`
-          : "Sem atendente indicado",
+          : "Não disse quem atendeu",
       }),
       el("span", { texto: r.premio ? `Cupom ${r.premio.codigo}` : "" }),
     ]),

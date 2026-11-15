@@ -1,0 +1,416 @@
+{
+  "rotulo": "Delivery — a fila de pedidos, os cupons, os números e os ajustes",
+  "modulo": "/js/pages/delivery.js",
+  "funcao": "delivery",
+  "venue": "casa-de-teste",
+  "rotas": {
+    "GET /delivery": {
+      "config": {
+        "aceitando": true,
+        "horario": {
+          "4": [
+            "18:00",
+            "23:30"
+          ],
+          "5": [
+            "18:00",
+            "02:00"
+          ],
+          "6": [
+            "18:00",
+            "02:00"
+          ]
+        },
+        "taxa_unica_centavos": 700,
+        "previsao": "40 a 60 minutos",
+        "endereco_retirada": "Av. Brasil, 500 — Centro",
+        "cashback_percentual": 5,
+        "lembrar_sacola": true,
+        "instrucoes": "Pedido mínimo de R$ 30.",
+        "mp_email_pagador": "financeiro@casa.com",
+        "mercado_pago": {
+          "conectado": true,
+          "final_do_token": "9f3a",
+          "webhook_assinado": true
+        }
+      },
+      "aberto": true,
+      "link": "https://brasa.example/delivery/casa-de-teste",
+      "webhook": "https://brasa.example/v1/webhooks/mercadopago/casa-de-teste",
+      "bairros": [
+        {
+          "id": "b1",
+          "nome": "Centro",
+          "taxa_centavos": 500,
+          "ativo": true
+        },
+        {
+          "id": "b2",
+          "nome": "Jardim Itália",
+          "taxa_centavos": 900,
+          "ativo": true
+        },
+        {
+          "id": "b3",
+          "nome": "Distrito Industrial",
+          "taxa_centavos": 2000,
+          "ativo": false
+        }
+      ],
+      "cupons": [
+        {
+          "id": "c1",
+          "codigo": "VOLTA10",
+          "tipo": "percentual",
+          "valor": 10,
+          "minimo_centavos": 3000,
+          "limite_usos": 100,
+          "usos": 37,
+          "expira_em": "2026-12-31",
+          "ativo": true
+        },
+        {
+          "id": "c2",
+          "codigo": "FRETEGRATIS",
+          "tipo": "fixo",
+          "valor": 700,
+          "minimo_centavos": 5000,
+          "limite_usos": 0,
+          "usos": 4,
+          "expira_em": null,
+          "ativo": false
+        }
+      ]
+    },
+    "GET /delivery/pedidos": [
+      {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "numero": 1504,
+        "token": "t4",
+        "status": "aguardando_pagamento",
+        "nome": "Caio Lima",
+        "telefone": "5565999990000",
+        "telefone_verificado": true,
+        "tipo": "entrega",
+        "endereco": "Rua das Flores, 100, ap 12",
+        "bairro": "Centro",
+        "pagamento": "pix",
+        "origem": "conversa",
+        "canal": "whatsapp",
+        "subtotal_centavos": 6100,
+        "taxa_centavos": 500,
+        "desconto_centavos": 0,
+        "cupom": null,
+        "cashback_usado_centavos": 0,
+        "cashback_ganho_centavos": 0,
+        "total_centavos": 6600,
+        "observacoes": null,
+        "criado_em": "2026-11-14T23:40:00.000Z",
+        "pago_em": null,
+        "itens": [
+          {
+            "nome": "X-Burger",
+            "opcoes": "Mal passado, Bacon",
+            "preco_centavos": 2700,
+            "quantidade": 2,
+            "observacao": "sem cebola"
+          },
+          {
+            "nome": "Refrigerante lata",
+            "opcoes": "Guaraná",
+            "preco_centavos": 700,
+            "quantidade": 1,
+            "observacao": null
+          }
+        ],
+        "proximos": [
+          "cancelado"
+        ]
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000003",
+        "numero": 1503,
+        "token": "t3",
+        "status": "recebido",
+        "nome": "Marina Alves",
+        "telefone": "5565999990000",
+        "telefone_verificado": true,
+        "tipo": "entrega",
+        "endereco": "Rua das Flores, 100, ap 12",
+        "bairro": "Centro",
+        "pagamento": "pix",
+        "origem": "cardapio",
+        "canal": "site",
+        "subtotal_centavos": 6100,
+        "taxa_centavos": 500,
+        "desconto_centavos": 0,
+        "cupom": null,
+        "cashback_usado_centavos": 0,
+        "cashback_ganho_centavos": 0,
+        "total_centavos": 6600,
+        "observacoes": null,
+        "criado_em": "2026-11-14T23:35:00.000Z",
+        "pago_em": "2026-11-14T23:11:00.000Z",
+        "itens": [
+          {
+            "nome": "X-Burger",
+            "opcoes": "Mal passado, Bacon",
+            "preco_centavos": 2700,
+            "quantidade": 2,
+            "observacao": "sem cebola"
+          },
+          {
+            "nome": "Refrigerante lata",
+            "opcoes": "Guaraná",
+            "preco_centavos": 700,
+            "quantidade": 1,
+            "observacao": null
+          }
+        ],
+        "proximos": [
+          "em_preparo",
+          "saiu_para_entrega",
+          "entregue",
+          "cancelado"
+        ]
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "numero": 1502,
+        "token": "t2",
+        "status": "em_preparo",
+        "nome": "Duda Reis",
+        "telefone": "5565999990000",
+        "telefone_verificado": true,
+        "tipo": "retirada",
+        "endereco": null,
+        "bairro": null,
+        "pagamento": "cartao",
+        "origem": "cardapio",
+        "canal": "site",
+        "subtotal_centavos": 6100,
+        "taxa_centavos": 0,
+        "desconto_centavos": 610,
+        "cupom": "VOLTA10",
+        "cashback_usado_centavos": 0,
+        "cashback_ganho_centavos": 0,
+        "total_centavos": 5490,
+        "observacoes": "Tocar o interfone 12",
+        "criado_em": "2026-11-14T23:20:00.000Z",
+        "pago_em": "2026-11-14T23:11:00.000Z",
+        "itens": [
+          {
+            "nome": "X-Burger",
+            "opcoes": "Mal passado, Bacon",
+            "preco_centavos": 2700,
+            "quantidade": 2,
+            "observacao": "sem cebola"
+          },
+          {
+            "nome": "Refrigerante lata",
+            "opcoes": "Guaraná",
+            "preco_centavos": 700,
+            "quantidade": 1,
+            "observacao": null
+          }
+        ],
+        "proximos": [
+          "pronto_para_retirada",
+          "entregue",
+          "cancelado"
+        ]
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "numero": 1501,
+        "token": "t1",
+        "status": "entregue",
+        "nome": "Eva Souza",
+        "telefone": "5565999990000",
+        "telefone_verificado": true,
+        "tipo": "entrega",
+        "endereco": "Rua das Flores, 100, ap 12",
+        "bairro": "Centro",
+        "pagamento": "pix",
+        "origem": "cardapio",
+        "canal": "site",
+        "subtotal_centavos": 6100,
+        "taxa_centavos": 500,
+        "desconto_centavos": 0,
+        "cupom": null,
+        "cashback_usado_centavos": 0,
+        "cashback_ganho_centavos": 305,
+        "total_centavos": 6600,
+        "observacoes": null,
+        "criado_em": "2026-11-14T23:00:00.000Z",
+        "pago_em": "2026-11-14T23:11:00.000Z",
+        "itens": [
+          {
+            "nome": "X-Burger",
+            "opcoes": "Mal passado, Bacon",
+            "preco_centavos": 2700,
+            "quantidade": 2,
+            "observacao": "sem cebola"
+          },
+          {
+            "nome": "Refrigerante lata",
+            "opcoes": "Guaraná",
+            "preco_centavos": 700,
+            "quantidade": 1,
+            "observacao": null
+          }
+        ],
+        "proximos": []
+      }
+    ],
+    "GET /delivery/relatorio?dias=7": {
+      "dias": 7,
+      "pedidos": 86,
+      "faturamento_centavos": 512300,
+      "ticket_medio_centavos": 5957,
+      "descontos_centavos": 18400,
+      "cashback_usado_centavos": 6200,
+      "cancelados": 3,
+      "por_dia": [
+        {
+          "rotulo": "2026-11-08",
+          "pedidos": 9,
+          "centavos": 51000
+        },
+        {
+          "rotulo": "2026-11-09",
+          "pedidos": 6,
+          "centavos": 33000
+        },
+        {
+          "rotulo": "2026-11-10",
+          "pedidos": 8,
+          "centavos": 47500
+        },
+        {
+          "rotulo": "2026-11-11",
+          "pedidos": 10,
+          "centavos": 61000
+        },
+        {
+          "rotulo": "2026-11-12",
+          "pedidos": 13,
+          "centavos": 80300
+        },
+        {
+          "rotulo": "2026-11-13",
+          "pedidos": 19,
+          "centavos": 116500
+        },
+        {
+          "rotulo": "2026-11-14",
+          "pedidos": 21,
+          "centavos": 123000
+        }
+      ],
+      "por_canal": [
+        {
+          "rotulo": "cardapio:whatsapp",
+          "pedidos": 41,
+          "centavos": 251000
+        },
+        {
+          "rotulo": "cardapio:site",
+          "pedidos": 33,
+          "centavos": 190300
+        },
+        {
+          "rotulo": "conversa:whatsapp",
+          "pedidos": 12,
+          "centavos": 71000
+        }
+      ],
+      "por_pagamento": [
+        {
+          "rotulo": "pix",
+          "pedidos": 64,
+          "centavos": 371000
+        },
+        {
+          "rotulo": "cartao",
+          "pedidos": 22,
+          "centavos": 141300
+        }
+      ],
+      "mais_vendidos": [
+        {
+          "rotulo": "X-Burger",
+          "quantidade": 58,
+          "centavos": 127600
+        },
+        {
+          "rotulo": "Batata frita",
+          "quantidade": 41,
+          "centavos": 73800
+        },
+        {
+          "rotulo": "Refrigerante lata",
+          "quantidade": 77,
+          "centavos": 53900
+        }
+      ]
+    }
+  },
+  "variacoes": {
+    "sem-pedido": {
+      "rotulo": "a casa acabou de ligar o módulo: nenhum pedido",
+      "rotas": {
+        "GET /delivery/pedidos": []
+      }
+    },
+    "cupons": {
+      "rotulo": "a aba de cupons",
+      "cliques": [
+        ".abas .aba:nth-child(2)"
+      ]
+    },
+    "numeros": {
+      "rotulo": "os números da semana",
+      "cliques": [
+        ".abas .aba:nth-child(3)"
+      ]
+    },
+    "ajustes": {
+      "rotulo": "como a casa entrega, com Mercado Pago conectado",
+      "cliques": [
+        ".abas .aba:nth-child(4)"
+      ]
+    },
+    "ajustes-do-zero": {
+      "rotulo": "ajustes de quem ainda não conectou o Mercado Pago",
+      "cliques": [
+        ".abas .aba:nth-child(4)"
+      ],
+      "rotas": {
+        "GET /delivery": {
+          "config": {
+            "aceitando": true,
+            "horario": {},
+            "taxa_unica_centavos": 700,
+            "previsao": "40 a 60 minutos",
+            "endereco_retirada": "Av. Brasil, 500 — Centro",
+            "cashback_percentual": 5,
+            "lembrar_sacola": true,
+            "instrucoes": "Pedido mínimo de R$ 30.",
+            "mp_email_pagador": "financeiro@casa.com",
+            "mercado_pago": {
+              "conectado": false,
+              "final_do_token": null,
+              "webhook_assinado": false
+            }
+          },
+          "aberto": true,
+          "link": "https://brasa.example/delivery/casa-de-teste",
+          "webhook": "https://brasa.example/v1/webhooks/mercadopago/casa-de-teste",
+          "bairros": [],
+          "cupons": []
+        }
+      }
+    }
+  }
+}

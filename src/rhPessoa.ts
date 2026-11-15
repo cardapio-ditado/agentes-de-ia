@@ -328,6 +328,21 @@ export interface ConviteAberto {
   enviado_em: string | null;
 }
 
+/**
+ * A pessoa já saiu da casa nesta data?
+ *
+ * É o que decide se o link pessoal ainda abre. O dia do desligamento já
+ * conta como fora (quem desliga "hoje" quer o acesso cortado hoje); uma data
+ * futura — aviso prévio trabalhado — deixa o link vivo até a véspera.
+ */
+export function jaDesligado(desligamento: string | null | undefined, hoje: string): boolean {
+  return Boolean(desligamento) && String(desligamento).slice(0, 10) <= hoje;
+}
+
+/** O que o link diz a quem já saiu. Sem bronca: a pessoa só quer um documento. */
+export const AVISO_DE_LINK_ENCERRADO =
+  "Este link era do seu tempo na equipe e foi encerrado quando você saiu. Se precisar de um documento ou de alguma informação, fale direto com a casa.";
+
 /** O que o link mostra. Só campos que a própria pessoa preenche — salário não. */
 export async function abrirConvite(token: string, tipo: "ficha" | "disc" | "portal" = "ficha"): Promise<ConviteAberto> {
   const { data: convite, error } = await cliente()
@@ -341,22 +356,32 @@ export async function abrirConvite(token: string, tipo: "ficha" | "disc" | "port
   if (new Date(convite.expira_em).getTime() < Date.now()) {
     throw new ErroDoRh(410, "Este link venceu. Peça um novo para a casa.");
   }
-  const [{ data: venue }, { data: pessoa }, { data: ficha }, { data: docs }] = await Promise.all([
-    cliente().from("venues").select("name").eq("id", convite.venue_id).single(),
+  const [{ data: venue }, { data: pessoa }, { data: fichaInteira, error: erroFicha }, { data: docs }] = await Promise.all([
+    cliente().from("venues").select("name, timezone").eq("id", convite.venue_id).single(),
     cliente().from("pesquisa_atendentes").select("nome").eq("id", convite.atendente_id).single(),
     cliente()
       .from("rh_fichas")
-      .select("nome_completo, cpf, rg, nascimento, telefone, endereco, chave_pix, banco, emergencia_nome, emergencia_telefone")
+      .select("nome_completo, cpf, rg, nascimento, telefone, endereco, chave_pix, banco, emergencia_nome, emergencia_telefone, desligamento")
       .eq("atendente_id", convite.atendente_id)
       .maybeSingle(),
     cliente().from("rh_documentos").select("tipo").eq("atendente_id", convite.atendente_id),
   ]);
+  // O link morre com o vínculo (LGPD): quem saiu não continua vendo escala,
+  // gorjeta e ficha, nem mandando atestado. Quem decide é a SITUAÇÃO da
+  // pessoa na hora de abrir, e não o apagar do convite — assim a readmissão
+  // devolve o mesmo link sem ninguém precisar mandar outro. E, sem conseguir
+  // ler a ficha, a porta fica fechada: na dúvida, dado pessoal não sai.
+  if (erroFicha) falhar("Falha ao abrir o link", erroFicha.message);
+  const { desligamento, ...ficha } = (fichaInteira ?? {}) as Record<string, unknown>;
+  if (jaDesligado(desligamento as string | null, hojeNaCasa(venue?.timezone ?? "America/Cuiaba"))) {
+    throw new ErroDoRh(410, AVISO_DE_LINK_ENCERRADO);
+  }
   return {
     venue_id: convite.venue_id,
     atendente_id: convite.atendente_id,
     casa: venue?.name ?? "",
     nome: pessoa?.nome ?? "",
-    ficha: ficha ?? {},
+    ficha,
     documentos: [...new Set(((docs ?? []) as Array<{ tipo: string }>).map((d) => d.tipo))],
     enviado_em: convite.enviado_em,
   };

@@ -1,3 +1,4 @@
+import { ferramentasDeDelivery } from "./delivery.js";
 import { ferramentasDeRestaurante } from "./restaurante.js";
 import type { AgentTool } from "./types.js";
 
@@ -5,10 +6,16 @@ export type { AgentTool, ToolContext } from "./types.js";
 
 /** Todas as ferramentas disponíveis, indexadas por nome. */
 export const toolRegistry: Record<string, AgentTool> = Object.fromEntries(
-  ferramentasDeRestaurante.map((tool) => [tool.definition.name, tool]),
+  [...ferramentasDeRestaurante, ...ferramentasDeDelivery].map((tool) => [tool.definition.name, tool]),
 );
 
-/** O que todo agente de atendimento precisa para trabalhar. */
+/**
+ * O que todo agente de atendimento precisa para trabalhar.
+ *
+ * As de delivery ficam DE FORA de propósito: elas só entram no agente da casa
+ * que contratou o módulo (ver `comDelivery`). No conjunto padrão, todo
+ * atendente ganharia "finalizar pedido" — inclusive o do bar que não entrega.
+ */
 export const FERRAMENTAS_PADRAO = ferramentasDeRestaurante.map((t) => t.definition.name);
 
 /**
@@ -39,4 +46,18 @@ export function resolveTools(names: unknown): AgentTool[] {
     }
     return tool;
   });
+}
+
+/**
+ * Soma as ferramentas de delivery às do agente — para a casa que tem o módulo.
+ *
+ * Só quando o agente usa o conjunto padrão (`names` ausente). Lista explícita
+ * continua valendo à risca: quem restringiu as ferramentas de propósito não
+ * ganha nove novas porque a casa contratou um módulo; se quiser, cita os
+ * nomes na lista.
+ */
+export function comDelivery(tools: AgentTool[], names: unknown): AgentTool[] {
+  if (names !== undefined && names !== null) return tools;
+  const jaTem = new Set(tools.map((t) => t.definition.name));
+  return [...tools, ...ferramentasDeDelivery.filter((t) => !jaTem.has(t.definition.name))];
 }
