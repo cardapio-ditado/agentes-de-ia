@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, dataHora, desde, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, dataHora, desde, el, esqueleto, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Caixa de entrada: lista à esquerda, conversa à direita.
@@ -44,7 +44,7 @@ export async function conversas(raiz, ctx) {
 
   const selCanal = el(
     "select",
-    { classe: "select", onchange: (e) => ((filtros.canal = e.target.value), carregarLista()) },
+    { classe: "select", "aria-label": "Canal", onchange: (e) => ((filtros.canal = e.target.value), carregarLista()) },
     [
       el("option", { value: "", texto: "Todos os canais" }),
       el("option", { value: "whatsapp", texto: "WhatsApp" }),
@@ -54,7 +54,7 @@ export async function conversas(raiz, ctx) {
 
   const selStatus = el(
     "select",
-    { classe: "select", onchange: (e) => ((filtros.status = e.target.value), carregarLista()) },
+    { classe: "select", "aria-label": "Situação da conversa", onchange: (e) => ((filtros.status = e.target.value), carregarLista()) },
     [
       el("option", { value: "", texto: "Todos os status" }),
       el("option", { value: "open", texto: "Abertas" }),
@@ -66,6 +66,7 @@ export async function conversas(raiz, ctx) {
     "select",
     {
       classe: "select",
+      "aria-label": "Quem está atendendo",
       onchange: (e) => ((filtros.humanas = e.target.value === "1"), carregarLista()),
     },
     [
@@ -79,7 +80,7 @@ export async function conversas(raiz, ctx) {
   // uma pergunta diferente de "o que a Fernanda respondeu".
   const selAgente = el(
     "select",
-    { classe: "select", onchange: (e) => ((filtros.agente = e.target.value), carregarLista()) },
+    { classe: "select", "aria-label": "Atendente virtual", onchange: (e) => ((filtros.agente = e.target.value), carregarLista()) },
     [el("option", { value: "", texto: "Todos os atendentes virtuais" })],
   );
   get("/v1/agents?all=1")
@@ -192,7 +193,7 @@ export async function conversas(raiz, ctx) {
 
   async function carregarLista({ silencioso = false } = {}) {
     if (!silencioso) {
-      limpar(itens).append(el("p", { classe: "muted", style: "padding:14px", texto: "Carregando…" }));
+      limpar(itens).append(esqueleto({ linhas: 5 }));
     }
 
     const busca = new URLSearchParams();

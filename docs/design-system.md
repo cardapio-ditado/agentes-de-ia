@@ -99,4 +99,10 @@ Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (J
 2. ~~Itens e fornecedores; Receitas e custo do prato~~ (feito: visão principal). Etapas internas do módulo usam `botaoVoltar()`, `acaoIcone()` e limpam as ações do cabeçalho ao entrar; os formulários ainda têm a estrutura antiga.
 3. ~~Financeiro~~ (feito: Painel, Fluxo de caixa agrupado por semana, Contas a pagar e a receber, Cadastros).
 4. ~~RH e Checklist~~ (feito: Equipe, Escala, Férias, Gorjeta, Treinamentos, Indicadores, Contratação, Modelos de checklist e Checklists feitos). Em telas com abas, cada aba põe as próprias ações no cabeçalho e a troca de aba limpa as anteriores. Ainda com a estrutura antiga: a ficha da pessoa, os formulários (admissão, lançar venda, regras da gorjeta, lançar férias, editor de checklist e de treinamento) e as visões "Prazos" e "Alertas" das férias.
-5. Clientes, Cardápio, Atendente e Ajustes.
+5. ~~Clientes, Cardápio, Atendente e Ajustes~~ (feito: base de clientes, pesquisa, respostas, avaliações do Google, cardápio, painel, conversas, reservas, programação, jogos, atendentes virtuais, implantação, pessoas e acessos, integrações e estabelecimentos). Avaliações do Google deixou de ser uma página só: são quatro abas (fila, histórico, responder à mão, tom). Ainda com a estrutura antiga: os formulários e editores (ficha do cliente, novo disparo, parabéns, item do cardápio, banner, promoção, editor do atendente, "O que ele sabe", "A casa"), as telas de WhatsApp e Instagram e os Ajustes da pesquisa (só ganharam abas acessíveis e estados de carregando e erro), e o módulo Delivery, que não entrou nesta rodada.
+
+## Cuidados ao converter uma tela
+
+- Estado e funções que o primeiro desenho usa ficam declarados ANTES do primeiro `await` (ou como `function`), senão a tela abre em branco.
+- Ao trocar um bloco inteiro por outro, confira as funções removidas no `git diff`: é fácil levar junto uma vizinha que não era do bloco.
+- O lint do projeto não acusa nome indefinido nos arquivos do painel; o que acusa é abrir a tela e clicar. Toda tela convertida passa por foto e clique antes de publicar.

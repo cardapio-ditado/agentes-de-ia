@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -14,7 +14,10 @@ import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
  */
 export async function reservas(raiz, ctx) {
   const lista = el("div", { classe: "lista" });
-  const listaConfirmadas = el("div", { classe: "lista" });
+  const listaConfirmadas = el("div", { classe: "pilha-fina" });
+  const numeros = el("div", { classe: "grade" });
+  // O editor de uma confirmada abre acima da tabela, e não dentro da linha.
+  const edicaoDaConfirmada = el("div", {});
   let confirmadasAgora = [];
 
   /**
@@ -56,49 +59,47 @@ export async function reservas(raiz, ctx) {
     });
   }
 
+  ctx.definirAcoes?.(
+    botaoDePdf(listaDaRecepcao, "Lista da recepção"),
+    el("button", { classe: "btn", type: "button", onclick: carregar }, comIcone(ICONES.atualizar, "Atualizar")),
+  );
+
+  const titulo = (texto, detalhe) => el("div", {}, [el("h2", { texto }), el("p", { classe: "muted", texto: detalhe })]);
   raiz.append(
     el("section", { classe: "pilha" }, [
-      await blocoDeAvisos(ctx),
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Fila de aprovação" }),
-          el("p", { classe: "muted", texto: "Reservas anotadas pelo atendente virtual, aguardando decisão." }),
-        ]),
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: "Recarregar",
-          onclick: carregar,
-        }),
-      ]),
+      numeros,
+      titulo("Fila de aprovação", "Reservas anotadas pelo atendente virtual, aguardando decisão."),
       lista,
-
-      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
-        el("div", {}, [
-          el("h2", { texto: "Confirmadas — próximas" }),
-          el("p", {
-            classe: "muted",
-            texto: "O que a casa tem para receber: reservas aprovadas que ainda vão acontecer.",
-          }),
-        ]),
-        botaoDePdf(listaDaRecepcao, "Lista da recepção"),
-      ]),
+      titulo("Confirmadas — próximas", "O que a casa tem para receber: reservas aprovadas que ainda vão acontecer."),
+      edicaoDaConfirmada,
       listaConfirmadas,
+      // Os avisos automáticos se configuram uma vez: ficam por último, para
+      // não empurrar a fila de todo dia para baixo.
+      await blocoDeAvisos(ctx),
     ]),
   );
 
   await carregar();
 
   async function carregar() {
-    limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(lista).append(esqueleto({ linhas: 3 }));
     limpar(listaConfirmadas);
+    limpar(edicaoDaConfirmada);
 
-    const [pendentes, confirmadas] = await Promise.all([
-      get(`/v1/venues/${ctx.venue}/reservations`),
-      get(`/v1/venues/${ctx.venue}/reservations?status=approved`),
-    ]);
+    let pendentes, confirmadas;
+    try {
+      [pendentes, confirmadas] = await Promise.all([
+        get(`/v1/venues/${ctx.venue}/reservations`),
+        get(`/v1/venues/${ctx.venue}/reservations?status=approved`),
+      ]);
+    } catch (e) {
+      limpar(numeros);
+      limpar(lista).append(estadoDeErro("Não deu para carregar as reservas", e.message, carregar));
+      return;
+    }
 
     confirmadasAgora = confirmadas;
+    desenharNumeros(pendentes, confirmadas);
     limpar(lista);
     if (pendentes.length === 0) {
       lista.append(vazio("Nenhuma reserva na fila", "Tudo decidido por aqui."));
@@ -111,60 +112,111 @@ export async function reservas(raiz, ctx) {
     if (confirmadas.length === 0) {
       listaConfirmadas.append(vazio("Nenhuma reserva confirmada por vir"));
     } else {
-      for (const r of confirmadas) listaConfirmadas.append(cartaoConfirmada(r));
+      listaConfirmadas.append(tabelaDasConfirmadas(confirmadas));
     }
   }
 
-  /** Cartão da confirmada: mapa do serviço, mas a vida muda — dá para editar,
-   *  cancelar (fica no histórico) ou excluir (some de vez). */
-  function cartaoConfirmada(r) {
-    const areaEdicao = el("div", {});
+  /** Os números saem das duas listas que a tela já carregou. */
+  function desenharNumeros(pendentes, confirmadas) {
+    const pessoas = confirmadas.reduce((t, r) => t + Number(r.party_size || 0), 0);
+    const proxima = [...confirmadas].sort((a, b) => a.reserved_for.localeCompare(b.reserved_for))[0];
+    limpar(numeros).append(
+      indicador({
+        rotulo: "Na fila",
+        valor: pendentes.length,
+        nota: pendentes.length ? "o cliente está esperando a resposta" : "nada para decidir agora",
+        iconePath: ICONES.relogio,
+        cor: "marca",
+        tom: pendentes.length ? "alerta" : undefined,
+      }),
+      indicador({ rotulo: "Confirmadas por vir", valor: confirmadas.length, nota: confirmadas.length === 1 ? "reserva aprovada" : "reservas aprovadas", iconePath: ICONES.reservas, cor: "musgo" }),
+      indicador({ rotulo: "Pessoas esperadas", valor: pessoas, nota: "somando as confirmadas", iconePath: ICONES.pessoas, cor: "areia" }),
+      indicador({
+        rotulo: "Próxima reserva",
+        valor: proxima ? dataHora(proxima.reserved_for) : "—",
+        nota: proxima ? `${proxima.customer_name} · ${plural(proxima.party_size, "pessoa", "pessoas")}` : "nenhuma por vir",
+        iconePath: ICONES.calendario,
+        cor: "pinho",
+      }),
+    );
+  }
 
-    const cartao = el("article", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h3", { texto: r.customer_name }),
-          el("p", { classe: "muted", texto: r.customer_phone }),
-        ]),
-        el("div", { style: "display:flex;gap:6px" }, [
-          etiqueta(`${r.party_size} pessoas`, "etiqueta-info"),
-          etiqueta("confirmada", "etiqueta-ok"),
-        ]),
-      ]),
-      linha("Para", dataHora(r.reserved_for)),
-      r.area_preference ? linha("Área", r.area_preference) : null,
-      r.occasion ? linha("Ocasião", r.occasion) : null,
-      r.notes ? linha("Observações", r.notes) : null,
-      areaEdicao,
-      el("div", { classe: "reserva-acoes" }, [
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: "Editar",
-          onclick: () => alternarEdicao(areaEdicao, r),
-        }),
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: "Cancelar reserva",
-          onclick: async (e) => {
-            if (!confirm(`Cancelar a reserva de ${r.customer_name}? O cliente NÃO é avisado automaticamente — combine com ele pelo WhatsApp.`)) return;
-            e.target.disabled = true;
-            try {
-              await post(`/v1/reservations/${r.id}/cancel`, {});
-              avisar("Reserva cancelada. Lembre de avisar o cliente.", "ok");
-              await carregar();
-            } catch (err) {
-              avisar(err.message, "erro");
-              e.target.disabled = false;
-            }
-          },
-        }),
-        botaoExcluir(r),
-      ]),
-    ]);
-
-    return cartao;
+  /**
+   * As confirmadas em tabela, na ordem do horário: é o mapa do serviço. A
+   * vida muda — dá para editar, cancelar (fica no histórico) ou excluir
+   * (some de vez).
+   */
+  function tabelaDasConfirmadas(confirmadas) {
+    const ordenadas = [...confirmadas].sort((a, b) => a.reserved_for.localeCompare(b.reserved_for));
+    return tabelaDeDados({
+      colunas: [
+        { rotulo: "Cliente", principal: true },
+        { rotulo: "Para", largura: "150px" },
+        { rotulo: "Pessoas", num: true, largura: "90px" },
+        { rotulo: "Área, ocasião e observações", largura: "32%", quebra: true, larga: true },
+        { rotulo: "Ações", largura: "150px", acoes: true },
+      ],
+      larguraMinima: "860px",
+      linhas: ordenadas.map((r) => ({
+        celulas: [
+          el("span", {}, [document.createTextNode(r.customer_name), r.customer_phone ? el("small", { texto: r.customer_phone }) : null]),
+          dataHora(r.reserved_for),
+          String(r.party_size),
+          [r.area_preference, r.occasion, r.notes].filter(Boolean).join(" · ") || null,
+          el("span", { classe: "grupo-acoes" }, [
+            acaoIcone({
+              iconePath: ICONES.editar,
+              rotulo: `Editar a reserva de ${r.customer_name}`,
+              aoClicar: () => {
+                const jaAberta = edicaoDaConfirmada.dataset.reserva === r.id && edicaoDaConfirmada.childElementCount > 0;
+                limpar(edicaoDaConfirmada);
+                edicaoDaConfirmada.dataset.reserva = r.id;
+                if (jaAberta) return;
+                const area = el("div", {});
+                edicaoDaConfirmada.append(el("section", { classe: "cartao" }, [el("h3", { texto: `Editar a reserva de ${r.customer_name}` }), area]));
+                alternarEdicao(area, r, () => limpar(edicaoDaConfirmada));
+                edicaoDaConfirmada.scrollIntoView({ behavior: "smooth", block: "center" });
+              },
+            }),
+            acaoIcone({
+              iconePath: ICONES.fechar,
+              rotulo: "Cancelar a reserva (fica no histórico)",
+              aoClicar: async (e) => {
+                if (!confirm(`Cancelar a reserva de ${r.customer_name}? O cliente NÃO é avisado automaticamente — combine com ele pelo WhatsApp.`)) return;
+                const botao = e.currentTarget;
+                botao.disabled = true;
+                try {
+                  await post(`/v1/reservations/${r.id}/cancel`, {});
+                  avisar("Reserva cancelada. Lembre de avisar o cliente.", "ok");
+                  await carregar();
+                } catch (err) {
+                  avisar(err.message, "erro");
+                  botao.disabled = false;
+                }
+              },
+            }),
+            acaoIcone({
+              iconePath: ICONES.lixeira,
+              rotulo: "Excluir de vez (dado de teste ou lançamento errado)",
+              variante: "perigo",
+              aoClicar: async (e) => {
+                if (!confirm(`Excluir DE VEZ a reserva de ${r.customer_name}? Isso apaga também o histórico dela. Para cancelamento normal, use "Cancelar reserva".`)) return;
+                const botao = e.currentTarget;
+                botao.disabled = true;
+                try {
+                  await del(`/v1/reservations/${r.id}`);
+                  avisar("Reserva excluída.", "ok");
+                  await carregar();
+                } catch (err) {
+                  avisar(err.message, "erro");
+                  botao.disabled = false;
+                }
+              },
+            }),
+          ]),
+        ],
+      })),
+    });
   }
 
   function cartaoReserva(r) {
@@ -190,7 +242,7 @@ export async function reservas(raiz, ctx) {
           el("h3", { texto: r.customer_name }),
           el("p", { classe: "muted", texto: r.customer_phone }),
         ]),
-        etiqueta(`${r.party_size} pessoas`, "etiqueta-info"),
+        etiqueta(plural(r.party_size, "pessoa", "pessoas"), "etiqueta-info"),
       ]),
       linha("Para", dataHora(r.reserved_for)),
       r.area_preference ? linha("Área", r.area_preference) : null,
@@ -275,7 +327,7 @@ export async function reservas(raiz, ctx) {
   }
 
   /** Abre (ou fecha, se já aberto) o formulário de edição dentro do cartão. */
-  function alternarEdicao(area, r) {
+  function alternarEdicao(area, r, aoDescartar = () => limpar(area)) {
     if (area.childElementCount > 0) {
       limpar(area);
       return;
@@ -329,7 +381,7 @@ export async function reservas(raiz, ctx) {
             classe: "btn btn-peq",
             type: "button",
             texto: "Descartar",
-            onclick: () => limpar(area),
+            onclick: aoDescartar,
           }),
         ]),
       ]),

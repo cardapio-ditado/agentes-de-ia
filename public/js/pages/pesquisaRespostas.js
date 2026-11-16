@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * As respostas uma a uma, como o cliente as preencheu.
@@ -32,12 +32,12 @@ export async function pesquisaRespostas(raiz, ctx) {
 
   const periodo = el(
     "select",
-    { classe: "select" },
+    { classe: "select", "aria-label": "Período das respostas" },
     PERIODOS.map(([v, r]) => el("option", { value: v, texto: r, selected: v === "30" })),
   );
   const filtro = el(
     "select",
-    { classe: "select" },
+    { classe: "select", "aria-label": "Quais respostas mostrar" },
     FILTROS.map(([v, r]) => el("option", { value: v, texto: r })),
   );
   periodo.addEventListener("change", carregar);
@@ -45,18 +45,10 @@ export async function pesquisaRespostas(raiz, ctx) {
 
   raiz.append(
     el("div", { classe: "pilha" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Respostas, uma a uma" }),
-          el("p", {
-            classe: "muted",
-            texto: "Clique numa linha para ler tudo o que a pessoa respondeu, pergunta por pergunta.",
-          }),
-        ]),
-        el("div", { classe: "linha-campos" }, [
-          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Período" }), periodo]),
-          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Mostrar" }), filtro]),
-        ]),
+      el("div", { classe: "barra-filtros" }, [
+        periodo,
+        filtro,
+        el("span", { classe: "muted", texto: "Clique numa linha para ler tudo o que a pessoa respondeu, pergunta por pergunta." }),
       ]),
       detalhe,
       lista,
@@ -67,14 +59,14 @@ export async function pesquisaRespostas(raiz, ctx) {
 
   async function carregar() {
     limpar(detalhe);
-    limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(lista).append(esqueleto({ linhas: 6 }));
 
     const nota = filtro.value ? `&nota_max=${filtro.value}` : "";
     let respostas;
     try {
       respostas = await get(`/v1/venues/${ctx.venue}/pesquisa/respostas?dias=${periodo.value}${nota}`);
     } catch (e) {
-      limpar(lista).append(vazio("Não deu para carregar", e.message));
+      limpar(lista).append(estadoDeErro("Não deu para carregar as respostas", e.message, carregar));
       return;
     }
 
@@ -93,13 +85,13 @@ export async function pesquisaRespostas(raiz, ctx) {
   }
 
   async function abrir(id) {
-    limpar(detalhe).append(el("p", { classe: "muted", texto: "Abrindo…" }));
+    limpar(detalhe).append(esqueleto({ linhas: 3 }));
     try {
       const r = await get(`/v1/venues/${ctx.venue}/pesquisa/respostas/${id}`);
       limpar(detalhe).append(cartaoDaResposta(r, () => limpar(detalhe)));
       detalhe.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (e) {
-      limpar(detalhe).append(vazio("Não deu para abrir", e.message));
+      limpar(detalhe).append(estadoDeErro("Não deu para abrir a resposta", e.message, () => abrir(id)));
     }
   }
 }
@@ -107,43 +99,28 @@ export async function pesquisaRespostas(raiz, ctx) {
 /* ---------- a lista ---------- */
 
 function tabela(respostas, aoClicar) {
-  return el("section", { classe: "cartao" }, [
-    el("div", { classe: "rolagem-x" }, [
-      el("table", { classe: "planilha planilha-clicavel" }, [
-        el("thead", {}, [
-          el("tr", {}, [
-            el("th", { texto: "Quando" }),
-            el("th", { classe: "col-num", texto: "Nota" }),
-            el("th", { texto: "Cliente" }),
-            el("th", { texto: "Mesa" }),
-            el("th", { texto: "O que disse" }),
-          ]),
-        ]),
-        el(
-          "tbody",
-          {},
-          respostas.map((r) => {
-            const linha = el("tr", { style: "cursor:pointer" }, [
-              el("td", { texto: dataHora(r.created_at) }),
-              el("td", { classe: "col-num" }, [etiqueta(String(r.nota), classeDaNota(r.nota))]),
-              el("td", {}, [
-                el("strong", { texto: r.cliente_nome || "Anônimo" }),
-                r.cliente_contato ? el("small", { classe: "muted", texto: r.cliente_contato }) : null,
-              ]),
-              el("td", { texto: r.mesa || "—" }),
-              // Quebra o `nowrap` da planilha de propósito: é a coluna que
-              // precisa ser lida, e é o motivo de a tela existir.
-              el("td", { style: "white-space:normal;max-width:44ch" }, [
-                el("span", { texto: resumoDoQueDisse(r) }),
-              ]),
-            ]);
-            linha.addEventListener("click", () => aoClicar(r.id));
-            return linha;
-          }),
-        ),
-      ]),
-    ]),
-  ]);
+  return tabelaDeDados({
+    colunas: [
+      { rotulo: "Cliente", principal: true, largura: "22%" },
+      { rotulo: "Quando", largura: "150px" },
+      { rotulo: "Nota", largura: "80px" },
+      { rotulo: "Mesa", largura: "90px" },
+      // É a coluna que precisa ser lida, e é o motivo de a tela existir.
+      { rotulo: "O que disse", quebra: true, larga: true },
+    ],
+    larguraMinima: "760px",
+    linhas: respostas.map((r) => ({
+      aoClicar: () => aoClicar(r.id),
+      classe: r.nota <= 6 ? "linha-perigo" : "",
+      celulas: [
+        el("span", {}, [document.createTextNode(r.cliente_nome || "Anônimo"), r.cliente_contato ? el("small", { texto: r.cliente_contato }) : null]),
+        dataHora(r.created_at),
+        etiqueta(String(r.nota), classeDaNota(r.nota)),
+        r.mesa || el("span", { classe: "muted", texto: "—" }),
+        resumoDoQueDisse(r),
+      ],
+    })),
+  });
 }
 
 function resumoDoQueDisse(r) {
@@ -342,9 +319,8 @@ function cartaoDaResposta(r, fechar) {
   const botaoPdf = el("button", {
     classe: "btn btn-peq",
     type: "button",
-    texto: "📄 Gerar PDF",
     title: "Abre a impressão — escolha “Salvar como PDF” para mandar à equipe",
-  });
+  }, comIcone(ICONES.baixar, "Gerar PDF"));
 
   // As perguntas ficam agrupadas por categoria, e as piores primeiro. É a
   // mesma razão do painel: a tela existe para achar o problema, e em ordem

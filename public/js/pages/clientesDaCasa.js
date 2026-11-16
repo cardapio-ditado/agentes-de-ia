@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 import { CAMPANHAS_PRONTAS, publicoDaCampanha } from "../modelosProntos.js";
 import { SITUACOES, contarSituacoes, horaCurta, seloDoEnvio, tilesDeSituacao } from "../envios.js";
@@ -162,22 +162,37 @@ export async function clientesDaCasa(raiz, ctx) {
   const corpo = el("div", {});
   const barra = el(
     "div",
-    { classe: "abas" },
+    { classe: "abas", role: "tablist", "aria-label": "Clientes" },
     ABAS.map(([id, rotulo]) =>
       el("button", {
         classe: `aba ${id === abaAtiva ? "aba-ativa" : ""}`.trim(),
         type: "button",
+        role: "tab",
+        "aria-selected": String(id === abaAtiva),
+        tabindex: id === abaAtiva ? "0" : "-1",
         texto: rotulo,
         "data-aba": id,
         onclick: () => trocarAba(id),
       }),
     ),
   );
+  // Setas trocam de aba, como em qualquer grupo de abas.
+  barra.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const ids = ABAS.map(([id]) => id);
+    const proxima = ids[(ids.indexOf(abaAtiva) + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    e.preventDefault();
+    trocarAba(proxima);
+    barra.querySelector(`[data-aba="${proxima}"]`)?.focus();
+  });
 
   function trocarAba(id) {
     abaAtiva = id;
     for (const b of barra.querySelectorAll(".aba")) {
-      b.classList.toggle("aba-ativa", b.dataset.aba === id);
+      const ativa = b.dataset.aba === id;
+      b.classList.toggle("aba-ativa", ativa);
+      b.setAttribute("aria-selected", String(ativa));
+      b.tabIndex = ativa ? 0 : -1;
     }
     desenharAba();
   }
@@ -187,6 +202,8 @@ export async function clientesDaCasa(raiz, ctx) {
 
   function desenharAba() {
     limpar(corpo);
+    // As ações do cabeçalho são de cada aba: a que entra põe as dela.
+    ctx.definirAcoes?.();
     if (abaAtiva === "lista") abaLista();
     else if (abaAtiva === "aniversarios") abaAniversarios();
     else if (abaAtiva === "disparos") abaDisparos();
@@ -197,16 +214,19 @@ export async function clientesDaCasa(raiz, ctx) {
 
   async function abaLista() {
     limpar(corpo);
-    corpo.append(el("p", { classe: "muted", texto: "Carregando os clientes…" }));
+    corpo.append(esqueleto({ cartoes: 5, linhas: 6 }));
 
-    const busca = el("input", {
-      classe: "campo",
-      placeholder: "🔍  Buscar por nome ou telefone…",
-      style: "flex:2",
+    // A busca espera o dedo parar (ver `temporizador`, abaixo): cada letra
+    // seria uma ida ao servidor.
+    const caixaDaBusca = campoDeBusca({
+      rotulo: "Buscar cliente por nome ou telefone",
+      placeholder: "Buscar por nome ou telefone…",
+      atalho: true,
     });
+    const busca = caixaDaBusca.campo;
     const filtroOrigem = el(
       "select",
-      { classe: "select", style: "flex:1" },
+      { classe: "select", "aria-label": "Origem do cliente" },
       [
         el("option", { value: "", texto: "De qualquer origem" }),
         ...Object.entries(NOME_DA_ORIGEM).map(([v, t]) => el("option", { value: v, texto: t })),
@@ -219,7 +239,7 @@ export async function clientesDaCasa(raiz, ctx) {
 
     // O DDD: "só quem é daqui" é o filtro que o dono mais usa, e as tiras
     // seguem junto — "quantos sumidos de Cuiabá?" é uma pergunta só.
-    const filtroDdd = el("select", { classe: "select", style: "flex:1" }, [
+    const filtroDdd = el("select", { classe: "select", "aria-label": "DDD do telefone" }, [
       el("option", { value: "", texto: "Qualquer DDD" }),
     ]);
     get(`/v1/venues/${ctx.venue}/clientes/ddds`)
@@ -396,7 +416,7 @@ export async function clientesDaCasa(raiz, ctx) {
         }
       } catch (e) {
         limpar(lista);
-        lista.append(vazio("Não deu para carregar", e.message));
+        lista.append(estadoDeErro("Não deu para carregar os clientes", e.message, recarregar));
       }
     };
     busca.addEventListener("input", () => {
@@ -445,6 +465,7 @@ export async function clientesDaCasa(raiz, ctx) {
       return el("button", {
         classe: `crm-tira ${ligada ? "crm-tira-ligada" : ""}`.trim(),
         type: "button",
+        "aria-pressed": String(ligada),
         title: dica,
         onclick: () => {
           // Clicar na tira acesa apaga o filtro: é o gesto que todo mundo
@@ -477,7 +498,7 @@ export async function clientesDaCasa(raiz, ctx) {
           colunas: [
             { rotulo: "Cliente", principal: true },
             { rotulo: "Telefone", largura: "150px" },
-            { rotulo: "Aniversário", largura: "104px" },
+            { rotulo: "Aniversário", largura: "120px" },
             { rotulo: "Origem" },
             { rotulo: "Consumo", num: true, largura: "120px" },
             { rotulo: "Visitas", num: true, largura: "76px" },
@@ -532,38 +553,26 @@ export async function clientesDaCasa(raiz, ctx) {
       ]);
     }
 
+    // As ações da base, no cabeçalho da página: trazer gente (Zig, planilha)
+    // e cadastrar à mão, que é a principal.
+    ctx.definirAcoes?.(
+      puxarDaZig(recarregar),
+      el("button", {
+        classe: "btn",
+        type: "button",
+        title: "Traga uma lista de clientes de .xlsx ou .csv",
+        onclick: () => escolherPlanilha.click(),
+      }, comIcone(ICONES.enviar, "Importar planilha")),
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => ficha(null) }, comIcone(ICONES.mais, "Novo cliente")),
+    );
+
     limpar(corpo);
     corpo.append(
       el("div", { classe: "pilha" }, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Clientes" }),
-            el("p", {
-              classe: "muted",
-              texto: "Quem já esteve na casa. A base enche sozinha pela Zig, pelo WhatsApp do atendente virtual e pela pesquisa — e você cadastra à mão quem faltar.",
-            }),
-          ]),
-          el("div", { classe: "linha-campos" }, [
-            puxarDaZig(recarregar),
-            escolherPlanilha,
-            el("button", {
-              classe: "btn",
-              type: "button",
-              texto: "Importar planilha",
-              title: "Traga uma lista de clientes de .xlsx ou .csv",
-              onclick: () => escolherPlanilha.click(),
-            }),
-            el("button", {
-              classe: "btn btn-primario",
-              type: "button",
-              texto: "+ Novo cliente",
-              onclick: () => ficha(null),
-            }),
-          ]),
-        ]),
+        escolherPlanilha,
         painelDaPlanilha,
         tiras,
-        el("div", { classe: "linha-campos" }, [busca, filtroOrigem, filtroDdd]),
+        el("div", { classe: "barra-filtros" }, [caixaDaBusca, filtroOrigem, filtroDdd]),
         lista,
       ]),
     );
@@ -586,7 +595,7 @@ export async function clientesDaCasa(raiz, ctx) {
    */
   function puxarDaZig(aoTerminar) {
     const ontem = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const dia = el("input", { classe: "campo", type: "date", value: ontem, style: "max-width:170px" });
+    const dia = el("input", { classe: "campo", type: "date", value: ontem, "aria-label": "Dia para puxar da Zig", title: "Dia para puxar da Zig" });
 
     const botao = el("button", {
       classe: "btn",
@@ -605,7 +614,7 @@ export async function clientesDaCasa(raiz, ctx) {
           });
           avisar(
             r.visitantes
-              ? `${r.visitantes} pessoa(s) de ${dia.value.split("-").reverse().join("/")} na base.`
+              ? `${plural(r.visitantes, "pessoa", "pessoas")} de ${dia.value.split("-").reverse().join("/")} na base.`
               : `A Zig não trouxe ninguém em ${dia.value.split("-").reverse().join("/")}.`,
             r.visitantes ? "ok" : "info",
           );
@@ -619,13 +628,14 @@ export async function clientesDaCasa(raiz, ctx) {
       },
     });
 
-    return el("div", { classe: "linha-campos", style: "flex:0 0 auto" }, [dia, botao]);
+    return [dia, botao];
   }
 
   /* ================= A ficha de um cliente ================= */
 
   function ficha(existente) {
     limpar(corpo);
+    ctx.definirAcoes?.();
     const campos = {
       telefone: el("input", {
         classe: "campo",
@@ -659,7 +669,7 @@ export async function clientesDaCasa(raiz, ctx) {
       el("section", { classe: "cartao pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("h2", { texto: existente ? (existente.nome || telefoneLegivel(existente.telefone)) : "Novo cliente" }),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => trocarAba("lista") }),
+          botaoVoltar(() => trocarAba("lista"), "Clientes"),
         ]),
         linha(
           "Telefone",
@@ -976,7 +986,7 @@ export async function clientesDaCasa(raiz, ctx) {
   async function abaAniversarios() {
     const versao = ++versaoDaAgenda;
     limpar(corpo);
-    corpo.append(el("p", { classe: "muted", texto: "Carregando a agenda…" }));
+    corpo.append(esqueleto({ linhas: 6 }));
 
     const params = new URLSearchParams({ dias: filtrosDaAgenda.dias });
     const porPeriodo = Boolean(filtrosDaAgenda.de || filtrosDaAgenda.ate);
@@ -999,7 +1009,7 @@ export async function clientesDaCasa(raiz, ctx) {
       ]);
     } catch (e) {
       limpar(corpo);
-      corpo.append(vazio("Não deu para carregar", e.message));
+      corpo.append(estadoDeErro("Não deu para carregar os aniversariantes", e.message, abaAniversarios));
       return;
     }
     // Trocou de aba (ou de filtro) enquanto carregava: este desenho morreu.
@@ -1539,7 +1549,7 @@ export async function clientesDaCasa(raiz, ctx) {
    */
   async function abaDisparos() {
     limpar(corpo);
-    corpo.append(el("p", { classe: "muted", texto: "Carregando os disparos…" }));
+    corpo.append(esqueleto({ linhas: 5 }));
 
     let disparos = [];
     let modelos = null;
@@ -1554,7 +1564,7 @@ export async function clientesDaCasa(raiz, ctx) {
       ]);
     } catch (e) {
       limpar(corpo);
-      corpo.append(vazio("Não deu para carregar", e.message));
+      corpo.append(estadoDeErro("Não deu para carregar as mensagens em massa", e.message, abaDisparos));
       return;
     }
     if (!Array.isArray(modelos)) modelos = null;
@@ -1635,7 +1645,7 @@ export async function clientesDaCasa(raiz, ctx) {
             numero(d.balanco.falharam, "falharam", d.balanco.falharam > 0 ? "crm-numero-perigo" : ""),
           ]),
           el("div", { classe: "linha-campos" }, [
-            el("button", { classe: "btn", type: "button", texto: "← Voltar", onclick: () => abaDisparos() }),
+            botaoVoltar(() => abaDisparos(), "Mensagens em massa"),
             d.status === "rascunho"
               ? el("button", {
                   classe: "btn btn-primario",
@@ -1998,14 +2008,14 @@ export async function clientesDaCasa(raiz, ctx) {
 
   async function abaParabens() {
     limpar(corpo);
-    corpo.append(el("p", { classe: "muted", texto: "Carregando…" }));
+    corpo.append(esqueleto({ linhas: 4 }));
 
     let config;
     try {
       config = await get(`/v1/venues/${ctx.venue}/clientes/config`);
     } catch (e) {
       limpar(corpo);
-      corpo.append(vazio("Não deu para carregar", e.message));
+      corpo.append(estadoDeErro("Não deu para carregar a mensagem de parabéns", e.message, abaParabens));
       return;
     }
     // Os modelos aprovados da conta oficial. Sem conexão oficial a lista

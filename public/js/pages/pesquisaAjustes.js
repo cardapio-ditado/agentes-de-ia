@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dataHora, dinheiro, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, nomeAproximadoDaCasa, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 import { contarSituacoes, seloDoEnvio, tilesDeSituacao } from "../envios.js";
 
@@ -26,34 +26,50 @@ export async function pesquisaAjustes(raiz, ctx) {
 
   const barra = el(
     "div",
-    { classe: "abas" },
+    { classe: "abas", role: "tablist", "aria-label": "Ajustes da pesquisa" },
     ABAS.map(([id, rotulo]) =>
       el("button", {
         classe: `aba ${id === abaAtual ? "aba-ativa" : ""}`.trim(),
         type: "button",
+        role: "tab",
+        "aria-selected": String(id === abaAtual),
+        tabindex: id === abaAtual ? "0" : "-1",
         texto: rotulo,
         "data-aba": id,
-        onclick: () => {
-          abaAtual = id;
-          for (const b of barra.querySelectorAll("[data-aba]")) {
-            b.classList.toggle("aba-ativa", b.dataset.aba === id);
-          }
-          desenhar();
-        },
+        onclick: () => abrirAba(id),
       }),
     ),
   );
+  function abrirAba(id) {
+    abaAtual = id;
+    for (const b of barra.querySelectorAll("[data-aba]")) {
+      const ativa = b.dataset.aba === id;
+      b.classList.toggle("aba-ativa", ativa);
+      b.setAttribute("aria-selected", String(ativa));
+      b.tabIndex = ativa ? 0 : -1;
+    }
+    return desenhar();
+  }
+  // Setas trocam de aba, como em qualquer grupo de abas.
+  barra.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const ids = ABAS.map(([id]) => id);
+    const proxima = ids[(ids.indexOf(abaAtual) + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    e.preventDefault();
+    void abrirAba(proxima);
+    barra.querySelector(`[data-aba="${proxima}"]`)?.focus();
+  });
 
   raiz.append(el("div", { classe: "pilha" }, [barra, conteudo]));
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ linhas: 5 }));
     try {
       const telas = { perguntas: telaPerguntas, qrcode: telaQrcode, equipe: telaEquipe, premio: telaPremio, convites: telaConvites };
       limpar(conteudo).append(await telas[abaAtual](ctx, desenhar));
     } catch (e) {
-      limpar(conteudo).append(vazio("Não deu para carregar", e.message));
+      limpar(conteudo).append(estadoDeErro("Não deu para carregar os ajustes da pesquisa", e.message, desenhar));
     }
   }
 }

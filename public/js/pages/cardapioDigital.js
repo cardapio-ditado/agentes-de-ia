@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { avisar, dataHora, desde, dinheiro, el, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, dataHora, desde, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * O cardápio digital, como a casa o mexe.
@@ -57,18 +57,21 @@ export async function cardapioDigital(raiz, ctx) {
   // do primeiro `recarregar()`: uma `let` declarada depois não existe ainda
   // quando a tela desenha pela primeira vez.
   let pararAoVivo = null;
-  const corpo = el("div", {});
-  const contadorComentarios = el("span", { classe: "nav-contador", hidden: true, texto: "0" });
+  const corpo = el("div", { classe: "pilha", role: "tabpanel" });
+  const contadorComentarios = el("span", { classe: "aba-contador", hidden: true, texto: "0" });
 
   const barra = el(
     "div",
-    { classe: "abas" },
+    { classe: "abas", role: "tablist", "aria-label": "Cardápio" },
     ABAS.map(([id, rotulo]) =>
       el(
         "button",
         {
           classe: `aba ${id === abaAtiva ? "aba-ativa" : ""}`.trim(),
           type: "button",
+          role: "tab",
+          "aria-selected": String(id === abaAtiva),
+          tabindex: id === abaAtiva ? "0" : "-1",
           "data-aba": id,
           onclick: () => trocarAba(id),
         },
@@ -76,8 +79,18 @@ export async function cardapioDigital(raiz, ctx) {
       ),
     ),
   );
+  // Setas trocam de aba, como em qualquer grupo de abas.
+  barra.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const ids = ABAS.map(([id]) => id);
+    const proxima = ids[(ids.indexOf(abaAtiva) + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    e.preventDefault();
+    trocarAba(proxima);
+    barra.querySelector(`[data-aba="${proxima}"]`)?.focus();
+  });
 
-  const cabecalho = el("div", { classe: "cartao", style: "display:flex;gap:12px;align-items:center;flex-wrap:wrap" });
+  // O endereço do cardápio, numa linha: os botões dele vão para o cabeçalho.
+  const cabecalho = el("div", { classe: "barra-periodo" });
 
   raiz.append(el("div", { classe: "pilha" }, [cabecalho, barra, corpo]));
   await recarregar();
@@ -85,20 +98,48 @@ export async function cardapioDigital(raiz, ctx) {
   function trocarAba(id) {
     abaAtiva = id;
     sessionStorage.setItem("brasa.cardapio.aba", id);
-    for (const b of barra.querySelectorAll(".aba")) b.classList.toggle("aba-ativa", b.dataset.aba === id);
+    for (const b of barra.querySelectorAll(".aba")) {
+      const ativa = b.dataset.aba === id;
+      b.classList.toggle("aba-ativa", ativa);
+      b.setAttribute("aria-selected", String(ativa));
+      b.tabIndex = ativa ? 0 : -1;
+    }
     desenharAba();
   }
 
+  /**
+   * As ações do cabeçalho da página: o link do cardápio, que vale em qualquer
+   * aba, e — por último, em destaque — a ação da aba aberta. Sem `dados`
+   * (o cardápio não carregou), não há link para oferecer.
+   */
+  function definirAcoesDaAba(...daAba) {
+    ctx.definirAcoes?.(
+      dados
+        ? el("button", {
+            classe: "btn",
+            type: "button",
+            onclick: async () => {
+              try {
+                await navigator.clipboard.writeText(dados.endereco);
+                avisar("Link copiado.", "ok");
+              } catch {
+                avisar("Copie o link que está na tela.", "erro");
+              }
+            },
+          }, comIcone(ICONES.recibo, "Copiar link"))
+        : null,
+      dados ? el("a", { classe: "btn", href: dados.endereco, target: "_blank", rel: "noopener" }, comIcone(ICONES.olho, "Abrir como cliente")) : null,
+      ...daAba,
+    );
+  }
+
   async function recarregar() {
+    if (!dados) limpar(corpo).append(esqueleto({ linhas: 6 }));
     try {
       dados = await get(`/v1/venues/${ctx.venue}/cardapio`);
     } catch (e) {
-      limpar(corpo).append(
-        el("div", { classe: "cartao" }, [
-          el("h2", { texto: "Não deu para carregar o cardápio" }),
-          el("p", { classe: "muted", texto: e.message }),
-        ]),
-      );
+      ctx.definirAcoes?.();
+      limpar(corpo).append(estadoDeErro("Não deu para carregar o cardápio", e.message, recarregar));
       return;
     }
     contadorComentarios.textContent = String(dados.comentarios_pendentes);
@@ -110,24 +151,10 @@ export async function cardapioDigital(raiz, ctx) {
 
   function desenharCabecalho() {
     limpar(cabecalho).append(
-      el("div", { style: "flex:1;min-width:220px" }, [
-        el("strong", { texto: "Endereço do cardápio" }),
-        el("p", { classe: "muted", style: "margin:2px 0 0;word-break:break-all", texto: dados.endereco }),
+      el("span", { classe: "muted endereco-publico" }, [
+        document.createTextNode("Endereço do cardápio: "),
+        el("a", { href: dados.endereco, target: "_blank", rel: "noopener", texto: dados.endereco.replace(/^https?:\/\//, "") }),
       ]),
-      el("a", { classe: "btn btn-peq", href: dados.endereco, target: "_blank", rel: "noopener", texto: "Abrir como cliente" }),
-      el("button", {
-        classe: "btn btn-peq",
-        type: "button",
-        texto: "Copiar link",
-        onclick: async () => {
-          try {
-            await navigator.clipboard.writeText(dados.endereco);
-            avisar("Link copiado.", "ok");
-          } catch {
-            avisar("Copie o link que está na tela.", "erro");
-          }
-        },
-      }),
       dados.chamados.length
         ? etiqueta(`${dados.chamados.length} chamado${dados.chamados.length > 1 ? "s" : ""} de mesa nas últimas 12h`, "etiqueta-alerta")
         : null,
@@ -136,6 +163,8 @@ export async function cardapioDigital(raiz, ctx) {
 
   function desenharAba() {
     limpar(corpo);
+    // Cada aba põe a própria ação; as que não têm ficam só com o link.
+    definirAcoesDaAba();
     if (pararAoVivo) { pararAoVivo(); pararAoVivo = null; }
     if (abaAtiva === "aovivo") abaAoVivo();
     else if (abaAtiva === "itens") abaItens();
@@ -158,11 +187,8 @@ export async function cardapioDigital(raiz, ctx) {
     const atualizadoEm = el("span", { classe: "muted", texto: "" });
 
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Salão agora" }),
-          el("p", { classe: "muted", texto: "Quem está em cada mesa, o que está olhando e quem chamou. Atualiza sozinho a cada 10 segundos." }),
-        ]),
+      el("div", { classe: "barra-periodo" }, [
+        el("p", { classe: "muted", texto: "Quem está em cada mesa, o que está olhando e quem chamou. Atualiza sozinho a cada 10 segundos." }),
         atualizadoEm,
       ]),
       resumo,
@@ -296,12 +322,7 @@ export async function cardapioDigital(raiz, ctx) {
     });
 
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Mesas e quem atende cada uma" }),
-          el("p", { classe: "muted", texto: "Cadastre a equipe e as mesas uma vez. A cada dia, escale o garçom de cada mesa: o chamado do cliente sai com o nome dele, e o cliente vê quem o atende." }),
-        ]),
-      ]),
+      el("p", { classe: "muted", texto: "Cadastre a equipe e as mesas uma vez. A cada dia, escale o garçom de cada mesa: o chamado do cliente sai com o nome dele, e o cliente vê quem o atende." }),
       el("div", { classe: "cartao" }, [
         el("h3", { texto: "Equipe" }),
         el("p", { classe: "muted", texto: "A mesma lista que a pesquisa de satisfação usa em “quem te atendeu?”. Quem sai da casa é desligado, não apagado, para o histórico ficar." }),
@@ -363,7 +384,7 @@ export async function cardapioDigital(raiz, ctx) {
 
     let ultimo = null;
     async function carregar() {
-      limpar(lista).append(el("p", { classe: "muted", style: "padding:12px", texto: "Carregando…" }));
+      limpar(lista).append(esqueleto({ linhas: 4 }));
       try {
         ultimo = await get(`/v1/venues/${ctx.venue}/cardapio/mesas${dia.value ? `?dia=${dia.value}` : ""}`);
       } catch (e) {
@@ -469,19 +490,26 @@ export async function cardapioDigital(raiz, ctx) {
       ["sem-foto", "Sem foto", (i) => !i.capa],
       ["destaque", "Destaques", (i) => i.destaque],
     ];
-    const busca = el("input", { classe: "input", type: "search", placeholder: "Buscar item pelo nome ou descrição…", value: filtroDeItens.busca, "aria-label": "Buscar item" });
-    const chips = el("div", { classe: "chips" });
+    const caixaDaBusca = campoDeBusca({
+      rotulo: "Buscar item pelo nome ou descrição",
+      placeholder: "Buscar item pelo nome ou descrição…",
+      valor: filtroDeItens.busca,
+      atalho: true,
+    });
+    const busca = caixaDaBusca.campo;
+    const chips = el("div", { classe: "chips", role: "group", "aria-label": "Recorte dos itens" });
     const lista = el("div", {});
 
+    definirAcoesDaAba(
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => editarItem(null) }, comIcone(ICONES.mais, "Novo item")),
+    );
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"} em ${dados.categorias.length} ${dados.categorias.length === 1 ? "categoria" : "categorias"}` }),
-          el("p", { classe: "muted", texto: "Abra a categoria e toque no item para editar." }),
-        ]),
-        el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Novo item", onclick: () => editarItem(null) }),
+      el("div", { classe: "barra-filtros" }, [
+        caixaDaBusca,
+        el("span", { classe: "muted", texto: `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"} em ${dados.categorias.length} ${dados.categorias.length === 1 ? "categoria" : "categorias"}` }),
       ]),
-      el("div", { classe: "pilha-fina" }, [busca, chips, lista]),
+      chips,
+      lista,
     );
 
     const desenharChips = () => {
@@ -599,6 +627,7 @@ export async function cardapioDigital(raiz, ctx) {
   }
 
   function editarItem(item) {
+    definirAcoesDaAba();
     const novo = !item;
     const campos = {
       nome: el("input", { placeholder: "Picanha na brasa", value: item?.nome ?? "" }),
@@ -677,7 +706,7 @@ export async function cardapioDigital(raiz, ctx) {
     limpar(corpo).append(
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [el("h2", { texto: novo ? "Novo item" : item.nome })]),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "← Voltar", onclick: desenharAba }),
+        botaoVoltar(desenharAba, "Voltar"),
       ]),
       el("div", { classe: "cartao" }, [
         el("div", { classe: "grade grade-2" }, [
@@ -712,7 +741,7 @@ export async function cardapioDigital(raiz, ctx) {
     const botao = el("button", {
       classe: "btn btn-primario btn-peq",
       type: "button",
-      texto: "+ Foto ou vídeo",
+      texto: "Adicionar foto ou vídeo",
       onclick: () => arquivo.click(),
     });
 
@@ -915,12 +944,7 @@ export async function cardapioDigital(raiz, ctx) {
     });
 
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Categorias" }),
-          el("p", { classe: "muted", texto: "A ordem aqui é a ordem no cardápio. Arraste pela alça ou use as setas — salva sozinho." }),
-        ]),
-      ]),
+      el("p", { classe: "muted", texto: "A ordem aqui é a ordem no cardápio. Arraste pela alça ou use as setas — salva sozinho." }),
       el("div", { classe: "cartao" }, [el("div", { classe: "linha-campos" }, [nome, grupo, criar])]),
       lista,
     );
@@ -1053,27 +1077,23 @@ export async function cardapioDigital(raiz, ctx) {
 
   function abaBanners() {
     const lista = el("div", { classe: "pilha" });
+    definirAcoesDaAba(
+      el("button", {
+        classe: "btn btn-primario",
+        type: "button",
+        onclick: async () => {
+          try {
+            await post(`/v1/venues/${ctx.venue}/cardapio/banners`, { titulo: "Novo banner", ativo: false });
+            avisar("Banner criado, desligado. Suba a foto ou o vídeo e ligue.", "ok");
+            await recarregar();
+          } catch (e) {
+            avisar(e.message, "erro");
+          }
+        },
+      }, comIcone(ICONES.mais, "Novo banner")),
+    );
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Banners" }),
-          el("p", { classe: "muted", texto: "Aparecem no topo do cardápio, em carrossel. Foto ou vídeo (mudo, em laço). Com data de início e fim, somem sozinhos." }),
-        ]),
-        el("button", {
-          classe: "btn btn-primario btn-peq",
-          type: "button",
-          texto: "+ Novo banner",
-          onclick: async () => {
-            try {
-              await post(`/v1/venues/${ctx.venue}/cardapio/banners`, { titulo: "Novo banner", ativo: false });
-              avisar("Banner criado, desligado. Suba a foto ou o vídeo e ligue.", "ok");
-              await recarregar();
-            } catch (e) {
-              avisar(e.message, "erro");
-            }
-          },
-        }),
-      ]),
+      el("p", { classe: "muted", texto: "Aparecem no topo do cardápio, em carrossel. Foto ou vídeo (mudo, em laço). Com data de início e fim, somem sozinhos." }),
       lista,
     );
     if (!dados.banners.length) {
@@ -1219,14 +1239,11 @@ export async function cardapioDigital(raiz, ctx) {
 
   function abaPromocoes() {
     const lista = el("div", { classe: "pilha" });
+    definirAcoesDaAba(
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => editarPromocao(null) }, comIcone(ICONES.mais, "Nova promoção")),
+    );
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Promoções" }),
-          el("p", { classe: "muted", texto: "Preço promocional por dia da semana. Nos dias marcados o item aparece com o preço riscado e o selo da promoção. O atendente virtual também passa a saber." }),
-        ]),
-        el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "+ Nova promoção", onclick: () => editarPromocao(null) }),
-      ]),
+      el("p", { classe: "muted", texto: "Preço promocional por dia da semana. Nos dias marcados o item aparece com o preço riscado e o selo da promoção. O atendente virtual também passa a saber." }),
       lista,
     );
     if (!dados.promocoes.length) {
@@ -1247,6 +1264,7 @@ export async function cardapioDigital(raiz, ctx) {
   }
 
   function editarPromocao(p) {
+    definirAcoesDaAba();
     const novo = !p;
     const nome = el("input", { value: p?.nome ?? "", placeholder: "Chopp em dobro" });
     const descricao = el("input", { value: p?.descricao ?? "", placeholder: "Até as 20h (opcional)" });
@@ -1339,7 +1357,7 @@ export async function cardapioDigital(raiz, ctx) {
     limpar(corpo).append(
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [el("h2", { texto: novo ? "Nova promoção" : p.nome })]),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "← Voltar", onclick: desenharAba }),
+        botaoVoltar(desenharAba, "Voltar"),
       ]),
       el("div", { classe: "cartao" }, [
         el("div", { classe: "grade grade-2" }, [campo("Nome (vira o selo no item)", nome), campo("Descrição", descricao)]),
@@ -1376,7 +1394,7 @@ export async function cardapioDigital(raiz, ctx) {
     };
 
     async function carregar() {
-      limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
+      limpar(lista).append(esqueleto({ linhas: 4 }));
       let comentarios;
       try {
         comentarios = await get(`/v1/venues/${ctx.venue}/cardapio/comentarios?situacao=${situacao}`);
@@ -1425,12 +1443,7 @@ export async function cardapioDigital(raiz, ctx) {
     }
 
     corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Comentários dos clientes" }),
-          el("p", { classe: "muted", texto: "Ninguém vê um comentário até você liberar. Quem escreveu vê o próprio, marcado como “aguardando a casa”." }),
-        ]),
-      ]),
+      el("p", { classe: "muted", texto: "Ninguém vê um comentário até você liberar. Quem escreveu vê o próprio, marcado como “aguardando a casa”." }),
       filtros,
       lista,
     );

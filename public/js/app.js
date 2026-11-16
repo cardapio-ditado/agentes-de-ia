@@ -1,5 +1,5 @@
 import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessao } from "./api.js";
-import { ICONES, avisar, definirFusoDaCasa, el, icone, limpar } from "./ui.js";
+import { ICONES, avisar, definirFusoDaCasa, el, icone, limpar, estadoDeErro } from "./ui.js";
 import { painel } from "./pages/painel.js";
 import { hoje } from "./pages/hoje.js";
 import { trilha } from "./pages/trilha.js";
@@ -97,10 +97,10 @@ function comAbas(paginaId, abas) {
       // DENTRO da aba: as outras abas continuam ali para trocar.
       if (e instanceof ErroApi && e.status === 401) throw e;
       limpar(corpo).append(
-        el("div", { classe: "cartao" }, [
-          el("h2", { texto: "Não deu para carregar esta aba" }),
-          el("p", { classe: "muted", texto: e.message }),
-        ]),
+        estadoDeErro("Não deu para carregar esta aba", e.message, () => {
+          // Tentar de novo é refazer a rota: o roteador limpa e redesenha.
+          window.dispatchEvent(new HashChangeEvent("hashchange"));
+        }),
       );
     }
   };

@@ -1,5 +1,5 @@
 import { get, post, put } from "../api.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, avisar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, vazio } from "../ui.js";
 
 /**
  * Avaliações do Google.
@@ -57,75 +57,108 @@ export async function avaliacoes(raiz, ctx) {
   const prontas = el("div", { classe: "lista" });
   const aviso = el("div", { classe: "cartao alerta" });
   const regras = el("div", { classe: "cartao" });
-  const resumo = el("p", { classe: "muted" });
-  const filtros = el("div", { classe: "abas" });
+  const numeros = el("div", { classe: "grade" });
+  const filtros = el("div", { classe: "chips", role: "group", "aria-label": "Recorte do histórico" });
   const historico = el("div", { classe: "lista" });
   const verMais = el("div", { classe: "reserva-acoes" });
   let filtroAtivo = "todas";
 
-  raiz.append(
-    el("section", { classe: "pilha" }, [
-      aviso,
-
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Responder uma avaliação à mão" }),
-          el("p", { classe: "muted", texto: "Para uma avaliação que não veio pelo Google (ou para testar o tom): cole o texto, a IA responde, você copia." }),
-        ]),
-      ]),
-      formularioResponder(),
-
-      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
-        el("div", {}, [
-          el("h2", { texto: "Esperando você" }),
-          el("p", { classe: "muted", texto: "Nota baixa para aqui, sempre: leia, ajuste se quiser e aprove." }),
-        ]),
-        el("div", { classe: "reserva-acoes", style: "margin:0" }, [
-          botaoBuscarNovas(),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
-        ]),
-      ]),
+  /*
+   * Quatro trabalhos diferentes moravam numa página só, um embaixo do outro:
+   * aprovar o que espera, consultar o histórico, responder uma avaliação à
+   * mão e ajustar o tom. Cada um tem a sua aba; a fila é a primeira porque é
+   * a única com pressa. As quatro são montadas de uma vez — trocar de aba só
+   * mostra e esconde, sem ir ao servidor de novo.
+   */
+  const ABAS = [
+    ["fila", "Esperando você"],
+    ["historico", "Histórico do Google"],
+    ["manual", "Responder à mão"],
+    ["tom", "Como a IA escreve"],
+  ];
+  let abaAtiva = "fila";
+  const contadorDaFila = el("span", { classe: "aba-contador", hidden: true });
+  const titulo = (texto, detalhe) => el("div", {}, [el("h2", { texto }), detalhe ? el("p", { classe: "muted", texto: detalhe }) : null]);
+  const paineis = {
+    fila: el("div", { classe: "pilha", role: "tabpanel" }, [
+      titulo("Esperando você", "Nota baixa para aqui, sempre: leia, ajuste se quiser e aprove."),
       fila,
-
-      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
-        el("div", {}, [
-          el("h2", { texto: "Aprovadas" }),
-          el("p", { classe: "muted", texto: "Com o Google ligado, o Make publica em segundos e a avaliação vai para o histórico. Sem ele, copie e cole no Google." }),
-        ]),
-      ]),
+      titulo("Aprovadas", "Com o Google ligado, o Make publica em segundos e a avaliação vai para o histórico. Sem ele, copie e cole no Google."),
       prontas,
-
-      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
-        el("div", {}, [
-          el("h2", { texto: "Como a IA escreve" }),
-          el("p", { classe: "muted", texto: "O tom da casa e o que poderá sair sem a sua revisão." }),
-        ]),
-      ]),
-      regras,
-
-      el("div", { classe: "cabecalho-secao", style: "margin-top:10px" }, [
-        el("div", {}, [
-          el("h2", { texto: "Avaliações no Google" }),
-          resumo,
-        ]),
-      ]),
-      filtros,
-      historico,
-      verMais,
     ]),
+    historico: el("div", { classe: "pilha", role: "tabpanel" }, [filtros, historico, verMais]),
+    manual: el("div", { classe: "pilha", role: "tabpanel" }, [
+      el("p", { classe: "muted", texto: "Para uma avaliação que não veio pelo Google (ou para testar o tom): cole o texto, a IA responde, você copia." }),
+      formularioResponder(),
+    ]),
+    tom: el("div", { classe: "pilha", role: "tabpanel" }, [
+      el("p", { classe: "muted", texto: "O tom da casa e o que poderá sair sem a sua revisão." }),
+      regras,
+    ]),
+  };
+  const barra = el(
+    "div",
+    { classe: "abas", role: "tablist", "aria-label": "Avaliações do Google" },
+    ABAS.map(([id, rotulo]) =>
+      el(
+        "button",
+        { classe: "aba", type: "button", role: "tab", "data-aba": id, onclick: () => abrirAba(id) },
+        [document.createTextNode(rotulo), id === "fila" ? contadorDaFila : null],
+      ),
+    ),
+  );
+  barra.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const ids = ABAS.map(([id]) => id);
+    const proxima = ids[(ids.indexOf(abaAtiva) + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    e.preventDefault();
+    abrirAba(proxima);
+    barra.querySelector(`[data-aba="${proxima}"]`)?.focus();
+  });
+  function abrirAba(id) {
+    abaAtiva = id;
+    for (const b of barra.querySelectorAll(".aba")) {
+      const ativa = b.dataset.aba === id;
+      b.classList.toggle("aba-ativa", ativa);
+      b.setAttribute("aria-selected", String(ativa));
+      b.tabIndex = ativa ? 0 : -1;
+    }
+    for (const [nome, painel] of Object.entries(paineis)) painel.hidden = nome !== id;
+  }
+  abrirAba(abaAtiva);
+
+  const conteudo = el("div", { classe: "pilha" }, [numeros, aviso, barra, ...Object.values(paineis)]);
+  const estado = el("div", {});
+  raiz.append(el("section", { classe: "pilha" }, [estado, conteudo]));
+
+  ctx.definirAcoes?.(
+    botaoBuscarNovas(),
+    el("button", { classe: "btn", type: "button", onclick: carregar }, comIcone(ICONES.atualizar, "Atualizar")),
   );
 
   await carregar();
 
   async function carregar() {
-    limpar(fila).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    conteudo.hidden = true;
+    limpar(estado).append(esqueleto({ cartoes: 4, linhas: 4 }));
+
+    let dados;
+    try {
+      dados = await get(`/v1/venues/${ctx.venue}/avaliacoes?filtro=${filtroAtivo}`);
+    } catch (e) {
+      limpar(estado).append(estadoDeErro("Não deu para carregar as avaliações", e.message, carregar));
+      return;
+    }
+    limpar(estado);
+    conteudo.hidden = false;
+    limpar(fila);
     limpar(prontas);
     limpar(historico);
     limpar(verMais);
 
-    const dados = await get(`/v1/venues/${ctx.venue}/avaliacoes?filtro=${filtroAtivo}`);
-
-    limpar(fila);
+    contadorDaFila.hidden = dados.fila.length === 0;
+    contadorDaFila.textContent = String(dados.fila.length);
+    contadorDaFila.setAttribute("aria-label", `${dados.fila.length} esperando você`);
     if (dados.fila.length === 0) {
       fila.append(vazio("Nada esperando", "Nenhuma resposta pendente da sua leitura."));
       ctx.atualizarContador("avaliacoes", 0);
@@ -143,44 +176,70 @@ export async function avaliacoes(raiz, ctx) {
 
     limpar(regras).append(...formularioDeRegras(dados.perfil));
     desenharAviso(dados.perfil);
-    desenharResumo(dados.perfil, dados.resumo);
+    desenharResumo(dados.perfil, dados.resumo, dados.fila.length);
     desenharFiltros();
     mostrarPagina(dados.historico, true);
   }
 
   // ---------- Histórico: igual ao Google ----------
 
-  /** "★ 4,6 · 1.234 avaliações · 980 respondidas · 254 sem resposta". */
-  function desenharResumo(perfil, r) {
-    const partes = [];
-    if (perfil?.nota_media) partes.push(`★ ${NOTA.format(perfil.nota_media)} no Google`);
+  /** A nota no Google, quantas existem, quantas têm resposta e quantas não. */
+  function desenharResumo(perfil, r, esperando) {
     const total = perfil?.total_avaliacoes ?? r?.conhecidas ?? 0;
-    partes.push(`${NUMERO.format(total)} ${total === 1 ? "avaliação" : "avaliações"}`);
-    if (r) {
-      partes.push(`${NUMERO.format(r.respondidas)} respondidas`);
-      partes.push(`${NUMERO.format(r.sem_resposta)} sem resposta`);
-      if (perfil?.total_avaliacoes && r.conhecidas < perfil.total_avaliacoes) {
-        partes.push(`${NUMERO.format(perfil.total_avaliacoes - r.conhecidas)} ainda não importadas`);
-      }
-    }
-    resumo.textContent = partes.join(" · ");
+    const porImportar = perfil?.total_avaliacoes && r && r.conhecidas < perfil.total_avaliacoes ? perfil.total_avaliacoes - r.conhecidas : 0;
+    limpar(numeros).append(
+      indicador({
+        rotulo: "Nota no Google",
+        valor: perfil?.nota_media ? NOTA.format(perfil.nota_media) : "—",
+        nota: perfil?.nota_media ? "de 1 a 5 estrelas" : "aparece com o Google ligado",
+        iconePath: ICONES.estrela,
+        cor: "marca",
+      }),
+      indicador({
+        rotulo: "Avaliações",
+        valor: NUMERO.format(total),
+        nota: porImportar ? `${NUMERO.format(porImportar)} ainda não importadas` : "no perfil da casa",
+        iconePath: ICONES.conversas,
+        cor: "areia",
+      }),
+      indicador({
+        rotulo: "Respondidas",
+        valor: r ? NUMERO.format(r.respondidas) : "—",
+        nota: esperando ? `${esperando} esperando a sua leitura` : "nenhuma esperando você",
+        iconePath: ICONES.checklist,
+        cor: "musgo",
+      }),
+      indicador({
+        rotulo: "Sem resposta",
+        valor: r ? NUMERO.format(r.sem_resposta) : "—",
+        nota: r?.sem_resposta ? "veja no histórico, em “Sem resposta”" : "todas respondidas",
+        iconePath: ICONES.alerta,
+        cor: "pinho",
+        tom: r?.sem_resposta ? "alerta" : undefined,
+      }),
+    );
   }
 
   function desenharFiltros() {
     limpar(filtros).append(
       ...FILTROS.map(([valor, rotulo]) =>
         el("button", {
-          classe: `aba ${valor === filtroAtivo ? "aba-ativa" : ""}`.trim(),
+          classe: `chip${valor === filtroAtivo ? " chip-ativo" : ""}`,
           type: "button",
+          "aria-pressed": String(valor === filtroAtivo),
           texto: rotulo,
           onclick: async () => {
             if (filtroAtivo === valor) return;
             filtroAtivo = valor;
             desenharFiltros();
-            limpar(historico).append(el("p", { classe: "muted", texto: "Carregando…" }));
+            limpar(historico).append(esqueleto({ linhas: 4 }));
             limpar(verMais);
-            const pagina = await get(`/v1/venues/${ctx.venue}/avaliacoes/historico?filtro=${filtroAtivo}`);
-            mostrarPagina(pagina, true);
+            try {
+              const pagina = await get(`/v1/venues/${ctx.venue}/avaliacoes/historico?filtro=${filtroAtivo}`);
+              mostrarPagina(pagina, true);
+            } catch (e) {
+              limpar(historico).append(estadoDeErro("Não deu para carregar o histórico", e.message, carregar));
+            }
           },
         }),
       ),
@@ -228,17 +287,18 @@ export async function avaliacoes(raiz, ctx) {
   function desenharAviso(perfil) {
     const ligado = Boolean(perfil?.make_webhook_url);
     limpar(aviso).append(
-      el("p", {}, [
+      el("p", { style: "margin:0" }, [
         el("strong", { texto: ligado ? "Ligado ao Google. " : "Ainda não ligado ao Google. " }),
         document.createTextNode(
           ligado
-            ? "Avaliação nova entra aqui em algumas horas (o servidor confere o Google a cada 4 horas). As de nota alta são respondidas sozinhas, conforme a regra abaixo; as de nota baixa esperam o seu OK — ao aprovar, a resposta é publicada em segundos."
+            ? "Avaliação nova entra aqui em algumas horas (o servidor confere o Google a cada 4 horas). As de nota alta são respondidas sozinhas, conforme a regra em “Como a IA escreve”; as de nota baixa esperam o seu OK — ao aprovar, a resposta é publicada em segundos."
             : "Por enquanto: cole a avaliação, a IA escreve, você copia e cola no Google. Para ligar o Google, fale com a equipe Brasa Food.",
         ),
       ]),
     );
-    aviso.classList.toggle("alerta", !ligado);
-    aviso.classList.toggle("aviso-ok", ligado);
+    // Ligado, é só um lembrete de como funciona: uma linha discreta. Sem
+    // ligar, é aviso de verdade, e ganha o cartão de alerta.
+    aviso.className = ligado ? "regra-em-linha" : "cartao alerta";
   }
 
   // ---------- Colar uma avaliação ----------
@@ -575,7 +635,7 @@ export async function avaliacoes(raiz, ctx) {
   /** Pede ao Make só as 50 mais novas, agora. Avaliação nova entra e a regra responde. */
   function botaoBuscarNovas() {
     const botao = el("button", {
-      classe: "btn btn-peq",
+      classe: "btn",
       type: "button",
       texto: "Buscar novas no Google",
       title: "O servidor faz isso sozinho de tempos em tempos; aqui é para não esperar",

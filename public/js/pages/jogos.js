@@ -1,5 +1,5 @@
 import { get, post } from "../api.js";
-import { avisar, diaCurtoNaCasa, el, etiqueta, horaNaCasa, limpar, vazio } from "../ui.js";
+import { avisar, diaCurtoNaCasa, el, esqueleto, estadoDeErro, etiqueta, horaNaCasa, limpar, plural, vazio } from "../ui.js";
 
 /**
  * Jogos: a agenda esportiva que vira programação da casa.
@@ -23,14 +23,14 @@ export async function jogos(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Buscando os jogos…" }));
+    limpar(conteudo).append(esqueleto({ linhas: 6 }));
     let dados;
     try {
       const busca = competicaoAtual ? `?competicao=${competicaoAtual}` : "";
       dados = await get(`/v1/venues/${ctx.venue}/jogos${busca}`);
     } catch (e) {
       limpar(conteudo).append(
-        vazio("Não consegui buscar os jogos", e.message),
+        estadoDeErro("Não deu para buscar os jogos", e.message, desenhar),
         el("p", {
           classe: "muted",
           texto: "A agenda continua funcionando normalmente — dá para cadastrar o jogo à mão em Programação.",
@@ -45,7 +45,7 @@ export async function jogos(raiz, ctx) {
 
     const seletor = el(
       "select",
-      { classe: "select" },
+      { classe: "select", "aria-label": "Competição" },
       dados.competicoes.map((c) =>
         el("option", { value: c.id, texto: c.nome, selected: c.id === dados.competicao }),
       ),
@@ -66,7 +66,7 @@ export async function jogos(raiz, ctx) {
       rodape.hidden = marcados.size === 0;
       limpar(rodape).append(
         el("div", { classe: "cabecalho-secao" }, [
-          el("span", { texto: `${marcados.size} jogo(s) marcado(s)` }),
+          el("span", { texto: plural(marcados.size, "jogo marcado", "jogos marcados") }),
           el("button", {
             classe: "btn btn-primario btn-grande",
             type: "button",
@@ -81,14 +81,10 @@ export async function jogos(raiz, ctx) {
 
     conteudo.append(
       el("section", { classe: "pilha" }, [
-        el("div", {}, [
-          el("h2", { texto: "Jogos" }),
-          el("p", {
-            classe: "muted",
-            texto: "Marque os que a casa vai transmitir. Só o que você marcar entra na programação e o atendente virtual passa a contar.",
-          }),
+        el("div", { classe: "barra-filtros" }, [
+          seletor,
+          el("span", { classe: "muted", texto: "Marque os que a casa vai transmitir. Só o que você marcar entra na programação e o atendente virtual passa a contar." }),
         ]),
-        el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Competição" }), seletor]),
         dados.jogos.length === 0
           ? vazio("Nenhum jogo nos próximos 30 dias", "Pode ser pausa no campeonato. Tente outra competição.")
           : lista,
@@ -145,8 +141,8 @@ export async function jogos(raiz, ctx) {
         const r = await post(`/v1/venues/${ctx.venue}/jogos`, { jogos: escolhidos });
         avisar(
           r.jaExistiam > 0
-            ? `${r.criados} incluído(s); ${r.jaExistiam} já estava(m) na agenda.`
-            : `${r.criados} jogo(s) na programação. O atendente virtual já sabe contar.`,
+            ? `${plural(r.criados, "incluído", "incluídos")}; ${plural(r.jaExistiam, "já estava", "já estavam")} na agenda.`
+            : `${plural(r.criados, "jogo", "jogos")} na programação. O atendente virtual já sabe contar.`,
           "ok",
         );
         desenhar();

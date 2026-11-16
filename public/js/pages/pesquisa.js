@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -26,26 +26,17 @@ export async function pesquisa(raiz, ctx) {
 
   const seletor = el(
     "select",
-    { classe: "select" },
+    { classe: "select", "aria-label": "Período das respostas" },
     PERIODOS.map(([v, r]) => el("option", { value: v, texto: r, selected: v === "30" })),
   );
   seletor.addEventListener("change", carregar);
 
-  raiz.append(
-    el("div", { classe: "pilha" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "O que os clientes acham" }),
-          el("p", { classe: "muted", texto: "Respostas do QR code da mesa e dos links enviados." }),
-        ]),
-        el("div", { classe: "linha-campos", style: "align-items:flex-end" }, [
-          el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Período" }), seletor]),
-          botaoDePdf(() => ultimos && relatorioDaPesquisa(ultimos, seletor.selectedOptions[0].textContent), "Relatório"),
-        ]),
-      ]),
-      conteudo,
-    ]),
+  // O período e o relatório valem para a tela toda: ficam no cabeçalho.
+  ctx.definirAcoes?.(
+    seletor,
+    botaoDePdf(() => ultimos && relatorioDaPesquisa(ultimos, seletor.selectedOptions[0].textContent), "Relatório em PDF"),
   );
+  raiz.append(conteudo);
 
   /** O que está na tela agora — é o que vai para o papel. */
   let ultimos = null;
@@ -53,12 +44,12 @@ export async function pesquisa(raiz, ctx) {
   await carregar();
 
   async function carregar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ cartoes: 5, linhas: 5 }));
     let dados;
     try {
       dados = await get(`/v1/venues/${ctx.venue}/pesquisa?dias=${seletor.value}`);
     } catch (e) {
-      limpar(conteudo).append(vazio("Não deu para carregar", e.message));
+      limpar(conteudo).append(estadoDeErro("Não deu para carregar a pesquisa", e.message, carregar));
       return;
     }
 
@@ -68,8 +59,9 @@ export async function pesquisa(raiz, ctx) {
     if (dados.resumo.respostas === 0) {
       conteudo.append(
         vazio(
-          "Nenhuma resposta ainda",
+          "Nenhuma resposta neste período",
           "Imprima o QR code em “Ajustes da pesquisa” e ponha na mesa — ou mande o link para quem já veio.",
+          el("a", { classe: "btn btn-primario", href: "#pesquisa-ajustes", texto: "Abrir os ajustes da pesquisa" }),
         ),
       );
       return;
@@ -96,45 +88,44 @@ export async function pesquisa(raiz, ctx) {
 
 function indicadores(dados) {
   const { resumo, anterior } = dados;
+  const semExperiencia = dados.mediaDaExperiencia === null || dados.mediaDaExperiencia === undefined;
+  const detratores = percentual(resumo.detratores, resumo.respostas);
 
-  return el("div", { classe: "grade" }, [
-    indicador("NPS", String(resumo.nps), textoDaVariacao(resumo.nps, anterior?.nps), true),
+  return el("div", { classe: "grade grade-cinco" }, [
+    indicador({ rotulo: "NPS", valor: String(resumo.nps), nota: textoDaVariacao(resumo.nps, anterior?.nps), iconePath: ICONES.estrela, cor: "marca" }),
     // A recomendação e a experiência lado a lado, e nunca uma no lugar da
     // outra. NPS alto com experiência baixa é a casa que ainda tem crédito
     // com o cliente e está gastando — e é o que nenhum dos dois números
     // conta sozinho.
-    indicador(
-      "Nota de recomendação",
-      resumo.media.toFixed(1).replace(".", ","),
-      `de 0 a 10 · ${resumo.respostas} respostas`,
-    ),
-    indicador(
-      "Média da experiência",
-      dados.mediaDaExperiencia === null || dados.mediaDaExperiencia === undefined
-        ? "—"
-        : dados.mediaDaExperiencia.toFixed(1).replace(".", ","),
-      dados.mediaDaExperiencia === null || dados.mediaDaExperiencia === undefined
-        ? "monte a pesquisa por categoria para ver"
-        : textoDaVariacao(dados.mediaDaExperiencia, dados.experienciaAntes),
-    ),
-    indicador(
-      "Promotores",
-      `${percentual(resumo.promotores, resumo.respostas)}%`,
-      `${resumo.promotores} deram 9 ou 10`,
-    ),
-    indicador(
-      "Detratores",
-      `${percentual(resumo.detratores, resumo.respostas)}%`,
-      `${resumo.detratores} deram 6 ou menos`,
-    ),
-  ]);
-}
-
-function indicador(rotulo, valor, nota, destaque = false) {
-  return el("div", { classe: `indicador ${destaque ? "indicador-destaque" : ""}`.trim() }, [
-    el("div", { classe: "indicador-rotulo" }, [el("span", { texto: rotulo })]),
-    el("div", { classe: "indicador-valor", texto: valor }),
-    nota ? el("div", { classe: "indicador-nota", texto: nota }) : null,
+    indicador({
+      rotulo: "Nota de recomendação",
+      valor: resumo.media.toFixed(1).replace(".", ","),
+      nota: `de 0 a 10 · ${resumo.respostas} ${resumo.respostas === 1 ? "resposta" : "respostas"}`,
+      iconePath: ICONES.conversas,
+      cor: "areia",
+    }),
+    indicador({
+      rotulo: "Média da experiência",
+      valor: semExperiencia ? "—" : dados.mediaDaExperiencia.toFixed(1).replace(".", ","),
+      nota: semExperiencia ? "monte a pesquisa por categoria para ver" : textoDaVariacao(dados.mediaDaExperiencia, dados.experienciaAntes),
+      iconePath: ICONES.checklist,
+      cor: "musgo",
+    }),
+    indicador({
+      rotulo: "Promotores",
+      valor: `${percentual(resumo.promotores, resumo.respostas)}%`,
+      nota: `${resumo.promotores} deram 9 ou 10`,
+      iconePath: ICONES.pessoas,
+      cor: "pinho",
+    }),
+    indicador({
+      rotulo: "Detratores",
+      valor: `${detratores}%`,
+      nota: `${resumo.detratores} deram 6 ou menos`,
+      iconePath: ICONES.alerta,
+      cor: "marca",
+      tom: resumo.detratores > 0 ? "alerta" : undefined,
+    }),
   ]);
 }
 
@@ -161,7 +152,7 @@ function cartaoDetratores(respostas) {
   return el("section", { classe: "cartao cartao-atencao" }, [
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
-        el("h3", { texto: `⚠️  ${respostas.length} ${respostas.length === 1 ? "cliente saiu insatisfeito" : "clientes saíram insatisfeitos"}` }),
+        el("h3", { texto: `${respostas.length} ${respostas.length === 1 ? "cliente saiu insatisfeito" : "clientes saíram insatisfeitos"}` }),
         el("p", {
           classe: "muted",
           texto: "Um telefonema hoje ainda recupera. Depois de uma semana, ele já contou para os amigos.",
@@ -176,44 +167,25 @@ function cartaoDetratores(respostas) {
         texto: "Ler as respostas inteiras",
       }),
     ]),
-    el(
-      "div",
-      { classe: "rolagem-x", style: "margin-top:10px" },
-      [
-        el("table", { classe: "planilha" }, [
-          el("thead", {}, [
-            el("tr", {}, [
-              el("th", { texto: "Quando" }),
-              el("th", { classe: "col-num", texto: "Nota" }),
-              el("th", { texto: "Cliente" }),
-              el("th", { texto: "O que disse" }),
-            ]),
-          ]),
-          el(
-            "tbody",
-            {},
-            respostas.map((r) =>
-              el("tr", {}, [
-                el("td", { texto: dataHora(r.created_at) }),
-                el("td", { classe: "col-num" }, [etiqueta(String(r.nota), "etiqueta-perigo")]),
-                el("td", {}, [
-                  el("strong", { texto: r.cliente_nome || "Anônimo" }),
-                  r.cliente_contato
-                    ? el("small", { classe: "muted", texto: r.cliente_contato })
-                    : null,
-                ]),
-                // O comentário quebra a regra do `white-space: nowrap` da
-                // planilha de propósito: é a única coluna aqui que precisa ser
-                // lida inteira, e é o motivo de o cartão existir.
-                el("td", { style: "white-space:normal;max-width:38ch" }, [
-                  el("span", { texto: r.comentario || textoDasEtiquetas(r) }),
-                ]),
-              ]),
-            ),
-          ),
-        ]),
+    tabelaDeDados({
+      colunas: [
+        { rotulo: "Cliente", principal: true, largura: "24%" },
+        { rotulo: "Quando", largura: "150px" },
+        { rotulo: "Nota", largura: "80px" },
+        // O comentário é a única coluna que precisa ser lida inteira, e é o
+        // motivo de o cartão existir.
+        { rotulo: "O que disse", quebra: true, larga: true },
       ],
-    ),
+      larguraMinima: "680px",
+      linhas: respostas.map((r) => ({
+        celulas: [
+          el("span", {}, [document.createTextNode(r.cliente_nome || "Anônimo"), r.cliente_contato ? el("small", { texto: r.cliente_contato }) : null]),
+          dataHora(r.created_at),
+          etiqueta(String(r.nota), "etiqueta-perigo"),
+          r.comentario || textoDasEtiquetas(r),
+        ],
+      })),
+    }),
   ]);
 }
 
@@ -413,7 +385,7 @@ function cartaoNuvem(termos) {
       // 40 vezes ao lado de outro citado 2 fica quatro linhas mais alto e a
       // nuvem vira um título com legendas.
       const fatia = maior === menor ? 1 : (t.mencoes - menor) / (maior - menor);
-      const tamanho = 14 + Math.sqrt(fatia) * 24;
+      const tamanho = 14 + Math.sqrt(fatia) * 14;
       corpo.append(
         el("span", {
           classe: `termo termo-${t.tom}`,
@@ -484,63 +456,43 @@ function cartaoRanking(postos) {
   }
 
   const classificados = postos.filter((p) => p.classificado);
-  const medalhas = ["🥇", "🥈", "🥉"];
 
-  return el("section", { classe: "cartao" }, [
-    el("div", { classe: "cabecalho-secao" }, [
-      el("div", {}, [
-        el("h3", { texto: "Ranking da equipe" }),
-        el("p", {
-          classe: "muted",
-          texto: "Média das estrelas dadas pelos clientes. Quem tem menos de 5 avaliações ainda não entra na disputa.",
-        }),
-      ]),
+  return el("section", { classe: "cartao pilha" }, [
+    el("div", {}, [
+      el("h3", { texto: "Ranking da equipe" }),
+      el("p", {
+        classe: "muted",
+        texto: "Média das estrelas dadas pelos clientes. Quem tem menos de 5 avaliações ainda não entra na disputa.",
+      }),
     ]),
-    el(
-      "div",
-      { classe: "rolagem-x", style: "margin-top:10px" },
-      [
-        el("table", { classe: "planilha" }, [
-          el("thead", {}, [
-            el("tr", {}, [
-              el("th", { texto: "" }),
-              el("th", { texto: "Pessoa" }),
-              el("th", { classe: "col-num", texto: "Média" }),
-              el("th", { classe: "col-num", texto: "Avaliações" }),
-              el("th", { classe: "col-num", texto: "5 estrelas" }),
-            ]),
-          ]),
-          el(
-            "tbody",
-            {},
-            postos.map((p, i) =>
-              el("tr", {}, [
-                el("td", { texto: p.classificado && i < 3 ? medalhas[i] : "" }),
-                el("td", {}, [
-                  el("strong", { texto: p.nome }),
-                  p.classificado
-                    ? null
-                    : el("small", {
-                        classe: "muted",
-                        texto: `faltam ${5 - p.avaliacoes} avaliações para entrar no ranking`,
-                      }),
-                ]),
-                el("td", { classe: "col-num" }, [
-                  el("span", { texto: "★".repeat(Math.round(p.media)), style: "color:var(--alerta)" }),
-                  el("small", { classe: "muted", texto: p.media.toFixed(1).replace(".", ",") }),
-                ]),
-                el("td", { classe: "col-num", texto: String(p.avaliacoes) }),
-                el("td", { classe: "col-num", texto: String(p.cincoEstrelas) }),
-              ]),
-            ),
-          ),
-        ]),
+    tabelaDeDados({
+      colunas: [
+        { rotulo: "Posição", largura: "90px" },
+        { rotulo: "Pessoa", principal: true },
+        { rotulo: "Média", num: true, largura: "170px" },
+        { rotulo: "Avaliações", num: true, largura: "120px" },
+        { rotulo: "5 estrelas", num: true, largura: "120px" },
       ],
-    ),
+      larguraMinima: "620px",
+      linhas: postos.map((p, i) => ({
+        celulas: [
+          p.classificado ? el("span", { classe: `cel-qtd${i === 0 ? " cel-qtd-urgente" : ""}`, texto: `${i + 1}º` }) : el("span", { classe: "muted", texto: "—" }),
+          el("span", {}, [
+            document.createTextNode(p.nome),
+            p.classificado ? null : el("small", { texto: `faltam ${5 - p.avaliacoes} avaliações para entrar no ranking` }),
+          ]),
+          el("span", { title: `${p.media.toFixed(1).replace(".", ",")} de 5` }, [
+            el("span", { classe: "estrelas", "aria-hidden": "true", texto: "★".repeat(Math.round(p.media)) }),
+            document.createTextNode(` ${p.media.toFixed(1).replace(".", ",")}`),
+          ]),
+          String(p.avaliacoes),
+          String(p.cincoEstrelas),
+        ],
+      })),
+    }),
     classificados.length === 0
       ? el("p", {
           classe: "muted",
-          style: "margin-top:10px",
           texto: "Ninguém tem avaliações suficientes ainda — o ranking fica assim até as primeiras 5 por pessoa.",
         })
       : null,

@@ -1,5 +1,5 @@
 import { get, post, put } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, vazio } from "../ui.js";
 
 /**
  * Integrações: os sistemas que a casa já usa e que o Brasa Food pode ler.
@@ -16,12 +16,12 @@ export async function integracoes(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ linhas: 5 }));
     let dados;
     try {
       dados = await get(`/v1/venues/${ctx.venue}/integracoes`);
     } catch (e) {
-      limpar(conteudo).append(vazio("Integrações indisponíveis", e.message));
+      limpar(conteudo).append(estadoDeErro("Não deu para carregar as integrações", e.message, desenhar));
       return;
     }
     limpar(conteudo).append(
@@ -71,7 +71,7 @@ export async function integracoes(raiz, ctx) {
             token: token.value.trim() || undefined,
             loja: loja.value.trim() || undefined,
           });
-          avisar(`A Zig respondeu: token e loja valem (${r.eventos} evento(s) recente(s)).`, "ok");
+          avisar(`A Zig respondeu: token e loja valem (${plural(r.eventos, "evento recente", "eventos recentes")}).`, "ok");
         } catch (e) {
           avisar(e.message, "erro");
         } finally {
@@ -140,7 +140,7 @@ export async function integracoes(raiz, ctx) {
         testar.disabled = true;
         try {
           const r = await post(`/v1/venues/${ctx.venue}/integracoes/zig/testar`, {});
-          avisar(`A Zig respondeu (${r.eventos} evento(s) recente(s)).`, "ok");
+          avisar(`A Zig respondeu (${plural(r.eventos, "evento recente", "eventos recentes")}).`, "ok");
         } catch (e) {
           avisar(e.message, "erro");
         } finally {

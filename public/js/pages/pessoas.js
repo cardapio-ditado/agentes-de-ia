@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, comSigla, dataHora, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados } from "../ui.js";
 
 /**
  * Pessoas e acessos: quem entra no painel desta casa.
@@ -31,7 +31,7 @@ export async function pessoas(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    limpar(conteudo).append(esqueleto({ linhas: 5 }));
     let dados, modulosDaCasa;
     try {
       [dados, modulosDaCasa] = await Promise.all([
@@ -40,7 +40,8 @@ export async function pessoas(raiz, ctx) {
         get(`/v1/venues/${ctx.venue}/modulos`).catch(() => []),
       ]);
     } catch (e) {
-      limpar(conteudo).append(vazio("Acessos indisponíveis", e.message));
+      ctx.definirAcoes?.();
+      limpar(conteudo).append(estadoDeErro("Não deu para carregar os acessos", e.message, desenhar));
       return;
     }
     limpar(conteudo);
@@ -48,47 +49,45 @@ export async function pessoas(raiz, ctx) {
     const contratados = (modulosDaCasa ?? []).filter((m) => m.ativo).map((m) => m.modulo ?? m.id);
     const nomeDoPapel = (id) => dados.papeis.find((p) => p.id === id)?.nome ?? id;
 
+    // A seta importa: `onclick: formulario` passaria o EVENTO do clique como
+    // argumento, e o formulário trataria esse objeto como "pessoa existente"
+    // — abria travado, sem deixar digitar o e-mail, e salvava contra um id
+    // inexistente.
+    ctx.definirAcoes?.(
+      dados.pode_mexer
+        ? el("button", { classe: "btn btn-primario", type: "button", onclick: () => formulario(null) }, comIcone(ICONES.mais, "Nova pessoa"))
+        : null,
+    );
+
     conteudo.append(
       el("section", { classe: "pilha" }, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Pessoas e acessos" }),
-            el("p", { classe: "muted", texto: "Cada pessoa com o seu login — é o que faz o histórico ter dono." }),
-          ]),
-          dados.pode_mexer
-            // A seta importa: `onclick: formulario` passaria o EVENTO do
-            // clique como argumento, e o formulário trataria esse objeto como
-            // "pessoa existente" — abria travado, sem deixar digitar o
-            // e-mail, e salvava contra um id inexistente.
-            ? el("button", { classe: "btn btn-primario", type: "button", texto: "+ Nova pessoa", onclick: () => formulario(null) })
-            : null,
-        ].filter(Boolean)),
+        el("p", { classe: "muted", texto: "Cada pessoa com o seu login — é o que faz o histórico ter dono." }),
 
         !dados.pode_mexer
           ? el("p", { classe: "aviso aviso-alerta", texto: "Só o dono e o gerente podem criar ou alterar acessos." })
           : null,
 
+        tabelaDeDados({
+          colunas: [
+            { rotulo: "Pessoa", principal: true },
+            { rotulo: "Pode fazer", largura: "170px" },
+            { rotulo: "Módulos", largura: "30%", quebra: true, larga: true },
+            { rotulo: "Último acesso", largura: "150px" },
+            { rotulo: "Ações", largura: "140px", acoes: true },
+          ],
+          larguraMinima: "860px",
+          linhas: dados.pessoas.map(linhaPessoa),
+        }),
+
         // Os perfis prontos, lado a lado: a pergunta "que acesso eu dou para
         // o cozinheiro?" se responde olhando, sem precisar de mentor.
-        el("div", { classe: "perfis" }, dados.papeis.map((papel) =>
-          el("div", { classe: "perfil" }, [
-            el("strong", { texto: papel.nome }),
-            el("span", { classe: "muted", texto: papel.descricao }),
-          ]))),
-
-        el("div", { classe: "rolagem-x" }, [
-          el("table", { classe: "planilha" }, [
-            el("thead", {}, [
-              el("tr", {}, [
-                el("th", { texto: "Pessoa" }),
-                el("th", { texto: "Pode fazer" }),
-                el("th", { texto: "Módulos" }),
-                el("th", { texto: "Último acesso" }),
-                el("th", { texto: "" }),
-              ]),
-            ]),
-            el("tbody", {}, dados.pessoas.map(linhaPessoa)),
-          ]),
+        el("div", {}, [
+          el("h3", { texto: "O que cada perfil pode fazer" }),
+          el("div", { classe: "perfis", style: "margin-top:10px" }, dados.papeis.map((papel) =>
+            el("div", { classe: "perfil" }, [
+              el("strong", { texto: papel.nome }),
+              el("span", { classe: "muted", texto: papel.descricao }),
+            ]))),
         ]),
       ].filter(Boolean)),
     );
@@ -102,48 +101,27 @@ export async function pessoas(raiz, ctx) {
           : p.modulos.length === 0
             ? "nenhum"
             : p.modulos.map((m) => NOME_DO_MODULO[m] ?? m).join(", ");
+      const nome = p.nome || p.email;
 
-      return el("tr", {}, [
-        el("td", {}, [
-          el("strong", { texto: p.nome || p.email }),
-          el("small", { classe: "muted", texto: p.nome ? ` ${p.email}` : "" }),
-        ]),
-        el("td", {}, [
-          etiqueta(nomeDoPapel(p.papel), dono ? "etiqueta-ok" : ""),
-          souEu ? el("small", { classe: "muted", texto: " você" }) : null,
-        ].filter(Boolean)),
-        el("td", { texto: modulos }),
-        el("td", { texto: p.ultimoAcesso ? dataHora(p.ultimoAcesso) : "nunca entrou" }),
-        el("td", { classe: "col-acoes" },
+      return {
+        aoClicar: dados.pode_mexer && !dono ? () => formulario(p) : null,
+        celulas: [
+          comSigla(nome, p.nome ? p.email : null),
+          el("span", { classe: "cel-etiquetas" }, [
+            etiqueta(nomeDoPapel(p.papel), dono ? "etiqueta-ok" : ""),
+            souEu ? el("span", { classe: "muted", texto: "você" }) : null,
+          ]),
+          modulos,
+          p.ultimoAcesso ? dataHora(p.ultimoAcesso) : el("span", { classe: "muted", texto: "nunca entrou" }),
           !dados.pode_mexer || dono
-            ? []
-            : [
-                el("button", {
-                  classe: "btn-icone",
-                  type: "button",
-                  title: "Alterar o que essa pessoa pode fazer",
-                  texto: "✏️",
-                  onclick: () => formulario(p),
-                }),
-                el("button", {
-                  classe: "btn-icone",
-                  type: "button",
-                  title: "Gerar uma senha nova",
-                  texto: "🔑",
-                  onclick: () => novaSenha(p),
-                }),
-                souEu
-                  ? null
-                  : el("button", {
-                      classe: "btn-icone",
-                      type: "button",
-                      title: "Tirar o acesso",
-                      texto: "🗑",
-                      onclick: () => remover(p),
-                    }),
-              ].filter(Boolean),
-        ),
-      ]);
+            ? null
+            : el("span", { classe: "grupo-acoes" }, [
+                acaoIcone({ iconePath: ICONES.editar, rotulo: `Alterar o que ${nome} pode fazer`, aoClicar: () => formulario(p) }),
+                acaoIcone({ iconePath: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 11-7.8 7.8 5.5 5.5 0 017.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4", rotulo: `Gerar uma senha nova para ${nome}`, aoClicar: () => novaSenha(p) }),
+                souEu ? null : acaoIcone({ iconePath: ICONES.lixeira, rotulo: `Tirar o acesso de ${nome}`, variante: "perigo", aoClicar: () => remover(p) }),
+              ]),
+        ],
+      };
     }
 
     async function novaSenha(p) {
@@ -260,7 +238,7 @@ export async function pessoas(raiz, ctx) {
         el("section", { classe: "pilha" }, [
           el("div", { classe: "cabecalho-secao" }, [
             el("h2", { texto: existente ? `Acesso de ${existente.nome || existente.email}` : "Nova pessoa" }),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            botaoVoltar(desenhar, "Pessoas e acessos"),
           ]),
           el("div", { classe: "cartao pilha" }, [
             el("label", { classe: "campo-rotulado" }, [el("span", { texto: "Nome" }), nome]),

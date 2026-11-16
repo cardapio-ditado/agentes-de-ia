@@ -1,36 +1,42 @@
 import { get } from "../api.js";
-import { el, etiqueta, vazio } from "../ui.js";
+import { el, esqueleto, estadoDeErro, etiqueta, tabelaDeDados, vazio } from "../ui.js";
 
 /** O que está configurado nesta organização: estabelecimentos e agentes. */
 export async function organizacao(raiz, ctx) {
-  const [venues, agentes] = await Promise.all([get("/v1/venues"), get("/v1/agents")]);
+  raiz.replaceChildren(esqueleto({ linhas: 3 }));
+  let venues, agentes;
+  try {
+    [venues, agentes] = await Promise.all([get("/v1/venues"), get("/v1/agents")]);
+  } catch (e) {
+    raiz.replaceChildren(estadoDeErro("Não deu para carregar os estabelecimentos", e.message, () => organizacao(raiz, ctx)));
+    return;
+  }
+  raiz.replaceChildren();
 
   raiz.append(
     el("div", { classe: "pilha" }, [
-      el("section", {}, [
-        el("div", { classe: "cabecalho-secao" }, [
-          el("div", {}, [
-            el("h2", { texto: "Estabelecimentos" }),
-            el("p", { classe: "muted", texto: "Cada um tem programação, reservas e conversas próprias." }),
-          ]),
+      el("section", { classe: "pilha-fina" }, [
+        el("div", {}, [
+          el("h2", { texto: "Estabelecimentos" }),
+          el("p", { classe: "muted", texto: "Cada um tem programação, reservas e conversas próprias." }),
         ]),
         venues.length === 0
           ? vazio("Nenhuma casa cadastrada", "Avise o suporte da Brasa Food para cadastrar a primeira.")
-          : el(
-              "div",
-              { classe: "lista" },
-              venues.map((v) =>
-                el("article", { classe: "cartao" }, [
-                  el("div", { classe: "cabecalho-secao" }, [
-                    el("div", {}, [
-                      el("h3", { texto: v.name }),
-                      el("p", { classe: "muted", texto: v.timezone ?? "" }),
-                    ]),
-                    v.slug === ctx.venue ? etiqueta("em uso", "etiqueta-ok") : etiqueta(v.slug),
-                  ]),
-                ]),
-              ),
-            ),
+          : tabelaDeDados({
+              colunas: [
+                { rotulo: "Estabelecimento", principal: true },
+                { rotulo: "Fuso horário", largura: "30%" },
+                { rotulo: "Situação", largura: "160px" },
+              ],
+              estreita: true,
+              linhas: venues.map((v) => ({
+                celulas: [
+                  v.name,
+                  v.timezone ?? null,
+                  v.slug === ctx.venue ? etiqueta("em uso", "etiqueta-ok") : etiqueta(v.slug),
+                ],
+              })),
+            }),
       ]),
 
       el("section", { classe: "cartao" }, [

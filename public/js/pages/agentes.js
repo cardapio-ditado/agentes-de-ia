@@ -1,6 +1,6 @@
 import { api, del, get, post, postArquivo } from "../api.js";
 import { avisoDeMotor, extrato } from "../pontos.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, limpar, vazio } from "../ui.js";
 import { MODELOS_DE_ATENDENTE } from "../modelosProntos.js";
 
 const MODELOS = [
@@ -68,26 +68,22 @@ export async function agentes(raiz, ctx) {
   }
 
   async function listar() {
-    limpar(conteudo).append(el("p", { classe: "muted", texto: "Carregando…" }));
-    const lista = await get("/v1/agents?all=1");
+    limpar(conteudo).append(esqueleto({ linhas: 3 }));
+    let lista;
+    try {
+      lista = await get("/v1/agents?all=1");
+    } catch (e) {
+      ctx.definirAcoes?.();
+      limpar(conteudo).append(estadoDeErro("Não deu para carregar os atendentes virtuais", e.message, listar));
+      return;
+    }
     limpar(conteudo);
 
+    ctx.definirAcoes?.(
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => editor(null) }, comIcone(ICONES.mais, "Novo atendente virtual")),
+    );
     conteudo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Seus atendentes virtuais" }),
-          el("p", {
-            classe: "muted",
-            texto: "Cada atendente virtual tem personalidade, modelo e esforço próprios.",
-          }),
-        ]),
-        el("button", {
-          classe: "btn btn-primario",
-          type: "button",
-          texto: "+ Novo atendente virtual",
-          onclick: () => editor(null),
-        }),
-      ]),
+      el("p", { classe: "muted", texto: "Cada atendente virtual tem personalidade, modelo e esforço próprios." }),
     );
 
     if (lista.length === 0) {
@@ -109,19 +105,8 @@ export async function agentes(raiz, ctx) {
             ]),
             el("div", { style: "display:flex;gap:6px;align-items:center" }, [
               etiqueta(a.enabled ? "ativo" : "pausado", a.enabled ? "etiqueta-ok" : "etiqueta-alerta"),
-              el("button", {
-                classe: "btn btn-peq",
-                type: "button",
-                texto: "Editar",
-                onclick: () => editor(a.slug),
-              }),
-              el("button", {
-                classe: "btn-icone",
-                type: "button",
-                title: "Excluir atendente virtual",
-                texto: "🗑",
-                onclick: () => excluir(a),
-              }),
+              el("button", { classe: "btn btn-peq", type: "button", onclick: () => editor(a.slug) }, comIcone(ICONES.editar, "Editar")),
+              acaoIcone({ iconePath: ICONES.lixeira, rotulo: `Excluir ${a.name}`, variante: "perigo", aoClicar: () => excluir(a) }),
             ]),
           ]),
           el("div", { classe: "linha-dado" }, [
@@ -171,6 +156,7 @@ export async function agentes(raiz, ctx) {
   }
 
   async function editor(slug, modelo = null) {
+    ctx.definirAcoes?.();
     const criando = slug === null;
     const atual = criando && modelo
       ? { model: "claude-opus-5", effort: "high", enabled: true, ...modelo }
@@ -281,7 +267,7 @@ export async function agentes(raiz, ctx) {
       ]),
       el("div", { classe: "reserva-acoes" }, [
         btnSalvar,
-        el("button", { classe: "btn", type: "button", texto: "Voltar", onclick: listar }),
+        el("button", { classe: "btn", type: "button", texto: "Cancelar", onclick: listar }),
         el("label", { style: "display:flex;align-items:center;gap:7px;margin-left:auto;font-size:14px" }, [
           campos.enabled,
           el("span", { texto: "Atendente virtual ativo" }),
@@ -300,6 +286,7 @@ export async function agentes(raiz, ctx) {
               : "As mudanças valem para as próximas mensagens, inclusive no WhatsApp.",
           }),
         ]),
+        botaoVoltar(listar, "Atendentes virtuais"),
       ]),
       form,
     );

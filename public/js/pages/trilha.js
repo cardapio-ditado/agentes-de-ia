@@ -1,5 +1,5 @@
 import { get, put } from "../api.js";
-import { avisar, el, limpar, vazio } from "../ui.js";
+import { avisar, el, esqueleto, estadoDeErro, limpar, vazio } from "../ui.js";
 
 /**
  * Implantação: o roteiro da consultoria, passo a passo, para esta casa.
@@ -15,11 +15,12 @@ export async function trilha(raiz, ctx) {
   await desenhar();
 
   async function desenhar() {
+    if (!conteudo.childElementCount) conteudo.append(esqueleto({ linhas: 6 }));
     let t;
     try {
       t = await get(`/v1/venues/${encodeURIComponent(ctx.venue)}/trilha`);
     } catch (e) {
-      limpar(conteudo).append(vazio("Não deu para carregar a implantação", e.message));
+      limpar(conteudo).append(estadoDeErro("Não deu para carregar a implantação", e.message, desenhar));
       return;
     }
     const pct = t.total ? Math.round((t.feitos / t.total) * 100) : 0;

@@ -1,20 +1,42 @@
 import { get } from "../api.js";
 import { avisarSeAcabou, cartaoDeSaldo, extrato } from "../pontos.js";
-import { el, ICONES, icone, indicador, numero, vazio } from "../ui.js";
+import { el, esqueleto, estadoDeErro, faixaDeAviso, ICONES, indicador, numero, plural, vazio } from "../ui.js";
 
 /** Painel: os números que respondem "como foi a semana?" numa olhada. */
 export async function painel(raiz, ctx) {
-  raiz.append(el("p", { classe: "muted", texto: "Carregando números…" }));
+  raiz.replaceChildren(esqueleto({ cartoes: 4, linhas: 4 }));
 
   // O saldo não pode derrubar o painel: se a conta de pontos falhar, o resto
   // dos números continua valendo.
-  const [m, pontos] = await Promise.all([
-    get(`/v1/venues/${ctx.venue}/metrics`),
-    extrato(ctx.venue).catch(() => null),
-  ]);
+  let m, pontos;
+  try {
+    [m, pontos] = await Promise.all([
+      get(`/v1/venues/${ctx.venue}/metrics`),
+      extrato(ctx.venue).catch(() => null),
+    ]);
+  } catch (e) {
+    raiz.replaceChildren(estadoDeErro("Não deu para carregar o painel", e.message, () => painel(raiz, ctx)));
+    return;
+  }
   raiz.replaceChildren();
 
   const pilha = el("div", { classe: "pilha" });
+
+  // O que deu errado vem antes dos números: cliente que não foi avisado da
+  // reserva é a única coisa desta tela que não pode esperar.
+  if (m.notificacoes_falhas > 0) {
+    pilha.append(
+      faixaDeAviso({
+        tom: "perigo",
+        titulo: m.notificacoes_falhas === 1 ? "1 aviso ao cliente não chegou" : `${numero(m.notificacoes_falhas)} avisos ao cliente não chegaram`,
+        // Ainda não existe botão de reenviar (só um comando de quem cuida do
+        // servidor). Até existir, o que o dono PODE fazer é falar com o
+        // cliente e chamar o suporte — é isso que o texto diz.
+        detalhe: "Alguém pode ter tido a reserva aprovada ou recusada sem ficar sabendo. Confira as últimas reservas, fale com o cliente pelo WhatsApp se precisar e avise o suporte da Brasa Food para reenviarmos.",
+        acao: el("a", { classe: "btn btn-peq", href: "#reservas", texto: "Ver as reservas" }),
+      }),
+    );
+  }
 
   if (pontos) {
     pilha.append(cartaoDeSaldo(pontos));
@@ -28,25 +50,29 @@ export async function painel(raiz, ctx) {
         valor: numero(m.reservas.pendentes),
         nota: m.reservas.pendentes > 0 ? "precisam de aprovação" : "nada na fila",
         iconePath: ICONES.reservas,
-        destaque: m.reservas.pendentes > 0,
+        cor: "marca",
+        tom: m.reservas.pendentes > 0 ? "alerta" : undefined,
       }),
       indicador({
         rotulo: "Conversas abertas",
         valor: numero(m.conversas.abertas),
         nota: `${numero(m.conversas.total)} no total`,
         iconePath: ICONES.conversas,
+        cor: "areia",
       }),
       indicador({
         rotulo: "Com pessoa da equipe",
         valor: numero(m.conversas.com_humano),
         nota: "conversas que a equipe assumiu",
         iconePath: ICONES.pessoa,
+        cor: "musgo",
       }),
       indicador({
         rotulo: "Mensagens (7 dias)",
         valor: numero(m.mensagens.total_7d),
         nota: `${numero(m.mensagens.do_agente_7d)} respondidas pelo atendente virtual`,
         iconePath: ICONES.raio,
+        cor: "pinho",
       }),
     ]),
   );
@@ -119,33 +145,6 @@ export async function painel(raiz, ctx) {
     ]),
   );
 
-  // Só aparece quando há algo errado — cartão de alerta vazio vira ruído.
-  if (m.notificacoes_falhas > 0) {
-    pilha.append(
-      el("section", { classe: "cartao alerta" }, [
-        el("div", { classe: "indicador-rotulo" }, [
-          icone(ICONES.alerta, 16),
-          el("strong", { texto: "Mensagens não entregues" }),
-        ]),
-        // Ainda não existe botão de reenviar (só um comando de quem cuida do
-        // servidor). Até existir, o que o dono PODE fazer é falar com o
-        // cliente e chamar o suporte — é isso que o texto diz.
-        el("p", {
-          classe: "muted",
-          texto:
-            m.notificacoes_falhas === 1
-              ? "1 aviso ao cliente não chegou. Ele pode ter tido a reserva aprovada ou recusada sem ficar sabendo."
-              : `${numero(m.notificacoes_falhas)} avisos ao cliente não chegaram. Eles podem ter tido a reserva aprovada ou recusada sem ficar sabendo.`,
-        }),
-        el("p", {
-          classe: "muted",
-          texto:
-            "Confira as últimas reservas e, se precisar, fale com o cliente pelo WhatsApp. Avise o suporte da Brasa Food para reenviarmos.",
-        }),
-      ]),
-    );
-  }
-
   pilha.append(
     el("section", { classe: "cartao" }, [
       el("h2", { texto: "Programação" }),
@@ -153,7 +152,7 @@ export async function painel(raiz, ctx) {
         classe: "muted",
         texto:
           m.eventos_proximos > 0
-            ? `${m.eventos_proximos} evento(s) futuro(s) que o atendente virtual pode citar para os clientes.`
+            ? `${plural(m.eventos_proximos, "evento futuro", "eventos futuros")} que o atendente virtual pode citar para os clientes.`
             : "Nenhum evento futuro cadastrado. Sem isso o atendente virtual não tem o que contar sobre a casa.",
       }),
     ]),

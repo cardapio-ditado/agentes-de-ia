@@ -9,7 +9,7 @@ export async function agente(raiz, ctx) {
     autocomplete: "off",
     required: true,
   });
-  const seletor = el("select", { classe: "select" });
+  const seletor = el("select", { classe: "select", "aria-label": "Qual atendente virtual testar" });
 
   const agentes = await get("/v1/agents");
   for (const a of agentes) seletor.append(el("option", { value: a.slug, texto: a.name }));
@@ -28,15 +28,9 @@ export async function agente(raiz, ctx) {
 
   raiz.append(
     el("div", { classe: "pilha" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Testar o atendente virtual" }),
-          el("p", {
-            classe: "muted",
-            texto: "Fale com o atendente virtual como se você fosse um cliente. As reservas criadas aqui vão para a fila de aprovação de verdade.",
-          }),
-        ]),
+      el("div", { classe: "barra-filtros" }, [
         seletor,
+        el("span", { classe: "muted", texto: "Fale como se você fosse um cliente. As reservas criadas aqui vão para a fila de aprovação de verdade." }),
       ]),
       chat,
       form,

@@ -1,6 +1,6 @@
 import { del, get, post } from "../api.js";
 import { blocoAgendaRapida } from "./agendaRapida.js";
-import { avisar, dataHora, diaNaCasa, dinheiro, el, etiqueta, horaNaCasa, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, dataHora, diaNaCasa, dinheiro, el, esqueleto, estadoDeErro, etiqueta, horaNaCasa, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 
 const TIPOS = [
   ["musica", "Música"],
@@ -156,14 +156,14 @@ export async function programacao(raiz, ctx) {
 
   function botaoVisao(id, texto) {
     return el("button", {
-      classe: `aba ${visao === id ? "aba-ativa" : ""}`.trim(),
       type: "button",
       texto,
       "data-visao": id,
+      "aria-pressed": String(visao === id),
       onclick: () => {
         visao = id;
         for (const b of raiz.querySelectorAll("[data-visao]")) {
-          b.classList.toggle("aba-ativa", b.dataset.visao === id);
+          b.setAttribute("aria-pressed", String(b.dataset.visao === id));
         }
         desenhar();
       },
@@ -183,7 +183,7 @@ export async function programacao(raiz, ctx) {
             el("h2", { texto: "Agenda" }),
             el("p", { classe: "muted", texto: "O atendente virtual cita estes itens quando o cliente pergunta." }),
           ]),
-          el("div", { classe: "abas" }, [botaoVisao("lista", "Lista"), botaoVisao("calendario", "Calendário")]),
+          el("div", { classe: "seletor-de-visao", role: "group", "aria-label": "Como ver a agenda" }, [botaoVisao("lista", "Lista"), botaoVisao("calendario", "Calendário")]),
         ]),
         el("div", { classe: "linha-campos" }, [
           el("label", { classe: "campo-rotulado", style: "flex:1" }, [
@@ -201,8 +201,14 @@ export async function programacao(raiz, ctx) {
   await carregarEventos();
 
   async function carregarEventos() {
-    limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
-    eventosCarregados = await get(`/v1/venues/${ctx.venue}/events`);
+    limpar(lista).append(esqueleto({ linhas: 4 }));
+    try {
+      eventosCarregados = await get(`/v1/venues/${ctx.venue}/events`);
+    } catch (e) {
+      lista.hidden = false;
+      limpar(lista).append(estadoDeErro("Não deu para carregar a agenda", e.message, carregarEventos));
+      return;
+    }
     desenhar();
   }
 
@@ -254,9 +260,23 @@ export async function programacao(raiz, ctx) {
       return;
     }
 
+    // Uma linha por item, na ordem em que acontecem: o show avulso pela data
+    // dele, a série pela próxima ocorrência.
     const { solos, series } = agruparPorSerie(eventos);
-    for (const ev of solos) lista.append(cartaoSolo(ev));
-    for (const ocorrencias of series.values()) lista.append(cartaoSerie(ocorrencias));
+    const linhas = [...solos.map(linhaSolo), ...[...series.values()].map(linhaSerie)].sort((x, y) => x.ordem.localeCompare(y.ordem));
+    lista.append(
+      tabelaDeDados({
+        colunas: [
+          { rotulo: "Item", principal: true },
+          { rotulo: "Tipo", largura: "140px" },
+          { rotulo: "Quando", largura: "26%", quebra: true },
+          { rotulo: "Couvert", num: true, largura: "110px" },
+          { rotulo: "Ações", largura: "220px", acoes: true },
+        ],
+        larguraMinima: "860px",
+        linhas,
+      }),
+    );
   }
 
   /**
@@ -370,40 +390,41 @@ export async function programacao(raiz, ctx) {
     return { solos, series };
   }
 
-  function cartaoSolo(ev) {
+  function celulaDoItem(ev) {
+    return el("span", {}, [document.createTextNode(ev.title), ev.description ? el("small", { texto: ev.description }) : null]);
+  }
+
+  function linhaSolo(ev) {
     const futuro = new Date(ev.starts_at) > new Date();
-    return el("article", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", { style: "min-width:0" }, [
-          el("h3", { texto: ev.title }),
-          el("p", { classe: "muted", texto: ev.description ?? "" }),
-        ]),
+    return {
+      ordem: ev.starts_at,
+      celulas: [
+        celulaDoItem(ev),
         etiqueta(rotuloTipo(ev.kind), futuro ? "etiqueta-ok" : ""),
-      ]),
-      linha("Quando", dataHora(ev.starts_at)),
-      linha("Couvert", dinheiro(ev.cover_charge)),
-      el("div", { classe: "reserva-acoes" }, [
-        el("button", {
-          classe: "btn btn-perigo btn-peq",
-          type: "button",
-          texto: "Remover",
-          onclick: async (e) => {
-            e.target.disabled = true;
+        dataHora(ev.starts_at),
+        dinheiro(ev.cover_charge),
+        acaoIcone({
+          iconePath: ICONES.lixeira,
+          rotulo: `Remover ${ev.title}`,
+          variante: "perigo",
+          aoClicar: async (e) => {
+            const botao = e.currentTarget;
+            botao.disabled = true;
             try {
               await del(`/v1/events/${ev.id}?venue=${encodeURIComponent(ctx.venue)}`);
               avisar("Item removido.", "ok");
               await carregarEventos();
             } catch (err) {
               avisar(err.message, "erro");
-              e.target.disabled = false;
+              botao.disabled = false;
             }
           },
         }),
-      ]),
-    ]);
+      ],
+    };
   }
 
-  function cartaoSerie(ocorrencias) {
+  function linhaSerie(ocorrencias) {
     const agora = new Date();
     const primeira = ocorrencias[0];
     const futuras = ocorrencias.filter((o) => new Date(o.starts_at) > agora);
@@ -415,66 +436,58 @@ export async function programacao(raiz, ctx) {
       futuras.length > 0 &&
       (new Date(ultima.starts_at) - agora) / (1000 * 60 * 60 * 24) <= AVISO_RENOVACAO_DIAS;
 
-    const botaoRemover = el("button", {
-      classe: "btn btn-perigo btn-peq",
-      type: "button",
-      texto: "Remover próximas",
-      onclick: async (e) => {
-        if (!confirm(`Remover as ${futuras.length} ocorrências futuras de "${primeira.title}"? As já passadas ficam no histórico.`)) return;
-        e.target.disabled = true;
-        try {
-          await del(`/v1/venues/${ctx.venue}/events/series/${primeira.series_id}`);
-          avisar("Ocorrências futuras removidas.", "ok");
-          await carregarEventos();
-        } catch (err) {
-          avisar(err.message, "erro");
-          e.target.disabled = false;
-        }
-      },
-    });
-
-    const acoes = [botaoRemover];
-    if (terminandoEmBreve) {
-      acoes.unshift(
-        el("button", {
-          classe: "btn btn-primario btn-peq",
-          type: "button",
-          texto: "Renovar mais 12 semanas",
-          onclick: async (e) => {
-            e.target.disabled = true;
-            try {
-              await post(`/v1/venues/${ctx.venue}/events/series/${primeira.series_id}/renew`, {});
-              avisar("Série renovada por mais ~12 semanas.", "ok");
-              await carregarEventos();
-            } catch (err) {
-              avisar(err.message, "erro");
-              e.target.disabled = false;
-            }
-          },
-        }),
-      );
-    }
-
-    return el("article", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", { style: "min-width:0" }, [
-          el("h3", { texto: primeira.title }),
-          el("p", { classe: "muted", texto: primeira.description ?? "" }),
-        ]),
+    return {
+      ordem: (proxima ?? ultima).starts_at,
+      classe: terminandoEmBreve ? "linha-atencao" : "",
+      celulas: [
+        celulaDoItem(primeira),
         etiqueta(rotuloTipo(primeira.kind), futuras.length > 0 ? "etiqueta-ok" : ""),
-      ]),
-      linha("Repetição", resumoRecorrencia(regra)),
-      linha("Próxima", proxima ? dataHora(proxima.starts_at) : "Nenhuma futura"),
-      linha("Ocorrências futuras", String(futuras.length)),
-      linha("Couvert", dinheiro(primeira.cover_charge)),
-      terminandoEmBreve
-        ? el("p", { classe: "muted", style: "color:var(--perigo)" }, [
-            el("strong", { texto: "Essa série está acabando" }),
-            el("span", { texto: ` — última ocorrência em ${dataHora(ultima.starts_at)}.` }),
-          ])
-        : null,
-      el("div", { classe: "reserva-acoes" }, acoes),
-    ]);
+        el("span", {}, [
+          document.createTextNode(proxima ? `Próxima: ${dataHora(proxima.starts_at)}` : "Nenhuma futura"),
+          el("small", { texto: `${resumoRecorrencia(regra)} · ${plural(futuras.length, "ocorrência futura", "ocorrências futuras")}` }),
+          terminandoEmBreve ? el("small", { classe: "erro", texto: `A série está acabando: última em ${dataHora(ultima.starts_at)}.` }) : null,
+        ]),
+        dinheiro(primeira.cover_charge),
+        el("span", { classe: "grupo-acoes" }, [
+          terminandoEmBreve
+            ? el("button", {
+                classe: "btn btn-peq",
+                type: "button",
+                texto: "Renovar 12 semanas",
+                onclick: async (e) => {
+                  e.target.disabled = true;
+                  try {
+                    await post(`/v1/venues/${ctx.venue}/events/series/${primeira.series_id}/renew`, {});
+                    avisar("Série renovada por mais ~12 semanas.", "ok");
+                    await carregarEventos();
+                  } catch (err) {
+                    avisar(err.message, "erro");
+                    e.target.disabled = false;
+                  }
+                },
+              })
+            : null,
+          acaoIcone({
+            iconePath: ICONES.lixeira,
+            rotulo: `Remover as próximas de ${primeira.title}`,
+            variante: "perigo",
+            aoClicar: async (e) => {
+              if (!confirm(`Remover as ${futuras.length} ocorrências futuras de "${primeira.title}"? As já passadas ficam no histórico.`)) return;
+              const botao = e.currentTarget;
+              botao.disabled = true;
+              try {
+                await del(`/v1/venues/${ctx.venue}/events/series/${primeira.series_id}`);
+                avisar("Ocorrências futuras removidas.", "ok");
+                await carregarEventos();
+              } catch (err) {
+                avisar(err.message, "erro");
+                botao.disabled = false;
+              }
+            },
+          }),
+        ]),
+      ],
+    };
   }
 
   function resumoRecorrencia(regra) {
