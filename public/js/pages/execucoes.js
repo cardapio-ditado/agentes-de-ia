@@ -1,5 +1,5 @@
 import { get } from "../api.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 const STATUS = {
@@ -15,7 +15,7 @@ const STATUS = {
  * com as fotos como prova e os alertas da IA em destaque.
  */
 export async function execucoes(raiz, ctx) {
-  const lista = el("div", { classe: "lista" });
+  const lista = el("div", { classe: "pilha" });
   const detalhe = el("div", {});
   let runs = [];
 
@@ -71,7 +71,7 @@ export async function execucoes(raiz, ctx) {
   function relatorioDaExecucao(r, itens, respostas, alertas) {
     const valorDe = (item, resposta) =>
       item.tipo === "foto"
-        ? resposta?.foto_url ? "📷 foto enviada" : "sem foto"
+        ? resposta?.foto_url ? "foto enviada" : "sem foto"
         : item.tipo === "sim_nao"
           ? resposta?.valor === "sim" ? "Sim" : resposta?.valor === "nao" ? "Não" : "sem resposta"
           : resposta?.valor ?? "—";
@@ -90,7 +90,7 @@ export async function execucoes(raiz, ctx) {
       periodo: [dataCurta(r.scheduled_for), r.executor_nome ? `por ${r.executor_nome}` : null, r.completed_at ? `concluído ${dataHora(r.completed_at)}` : null].filter(Boolean).join(" · "),
       secoes: [
         r.resumo_ia || alertas.length
-          ? { titulo: "O que a IA achou", paragrafos: [r.resumo_ia, ...alertas.map((a) => `⚠ ${a}`)].filter(Boolean) }
+          ? { titulo: "O que a IA achou", paragrafos: [r.resumo_ia, ...alertas.map((a) => `Atenção: ${a}`)].filter(Boolean) }
           : null,
         ...(rodadas.length
           ? rodadas.map((rod) =>
@@ -104,124 +104,147 @@ export async function execucoes(raiz, ctx) {
     });
   }
 
-  raiz.append(
-    el("div", { classe: "pilha" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Checklists feitos" }),
-          el("p", { classe: "muted", texto: "Cada linha é um checklist disparado — clique para abrir." }),
-        ]),
-        el("div", { classe: "linha-campos" }, [
-          botaoDePdf(relatorioDaSemana, "Semana em PDF"),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Recarregar", onclick: carregar }),
-        ]),
-      ]),
-      lista,
-      detalhe,
-    ]),
-  );
+  raiz.append(el("div", { classe: "pilha" }, [lista, detalhe]));
 
   await carregar();
 
   async function carregar() {
-    limpar(lista).append(el("p", { classe: "muted", texto: "Carregando…" }));
+    // A lista e o detalhe dividem a tela: abrir um checklist troca a lista
+    // por ele, e "Voltar" devolve a lista como estava.
+    detalhe.hidden = true;
+    lista.hidden = false;
     limpar(detalhe);
-    runs = await get(`/v1/venues/${ctx.venue}/checklist-runs`);
+    limpar(lista).append(esqueleto({ cartoes: 4, linhas: 5 }));
+    try {
+      runs = await get(`/v1/venues/${ctx.venue}/checklist-runs`);
+    } catch (e) {
+      ctx.definirAcoes?.();
+      limpar(lista).append(estadoDeErro("Não deu para carregar os checklists feitos", e.message, carregar));
+      return;
+    }
+    desenharLista();
+  }
+
+  function desenharLista() {
+    detalhe.hidden = true;
+    lista.hidden = false;
+    ctx.definirAcoes?.(
+      botaoDePdf(relatorioDaSemana, "Semana em PDF"),
+      el("button", { classe: "btn", type: "button", onclick: carregar }, comIcone(ICONES.atualizar, "Atualizar")),
+    );
     limpar(lista);
 
     if (runs.length === 0) {
       lista.append(
-        vazio("Nenhuma execução ainda", 'Crie um checklist e clique em "Disparar agora" para testar.'),
+        vazio(
+          "Nenhum checklist feito ainda",
+          'Crie um modelo em "Modelos de checklist" e clique em "Disparar agora" para testar.',
+          el("a", { classe: "btn btn-primario", href: "#checklists", texto: "Ver os modelos" }),
+        ),
       );
       return;
     }
 
-    for (const r of runs) {
-      const [rotulo, variante] = STATUS[r.status] ?? [r.status, ""];
-      const alertas = Array.isArray(r.alertas_ia) ? r.alertas_ia.length : 0;
-      lista.append(
-        el(
-          "button",
-          {
-            classe: "cartao cartao-clicavel",
-            type: "button",
-            style: "text-align:left;width:100%;font:inherit;color:inherit;cursor:pointer",
-            onclick: () => abrir(r.id),
-          },
-          [
-            el("div", { classe: "cabecalho-secao" }, [
-              el("div", {}, [
-                el("h3", { texto: r.checklist_nome }),
-                el("p", {
-                  classe: "muted",
-                  texto: `${dataCurta(r.scheduled_for)}${r.executor_nome ? ` · por ${r.executor_nome}` : ""}`,
-                }),
-              ]),
-              el("div", { style: "display:flex;gap:6px;flex-wrap:wrap" }, [
-                // Checklist de rodadas: "9 de 11" é o que se lê na linha, sem
-                // abrir — e é o número que diz se a noite foi bem cuidada.
-                r.rodadas_previstas
-                  ? etiqueta(
-                      `${r.rodadas_feitas} de ${r.rodadas_previstas} rodadas`,
-                      r.rodadas_feitas === r.rodadas_previstas ? "etiqueta-ok" : r.status === "concluida" ? "etiqueta-alerta" : "",
-                    )
-                  : null,
-                alertas > 0 ? etiqueta(`${alertas} alerta(s)`, "etiqueta-alerta") : null,
-                etiqueta(rotulo, variante),
-              ]),
-            ]),
-          ],
-        ),
-      );
-    }
+    // Os números são da lista que está na tela — a mesma que a tabela mostra.
+    const alertasDe = (r) => (Array.isArray(r.alertas_ia) ? r.alertas_ia.length : 0);
+    const concluidos = runs.filter((r) => r.status === "concluida").length;
+    const abertos = runs.length - concluidos;
+    const comAlerta = runs.filter((r) => alertasDe(r) > 0).length;
+    const rodadasPuladas = runs.reduce((t, r) => t + (r.status === "concluida" && r.rodadas_previstas ? Math.max(0, r.rodadas_previstas - r.rodadas_feitas) : 0), 0);
+
+    lista.append(
+      el("div", { classe: "grade" }, [
+        indicador({ rotulo: "Na lista", valor: runs.length, nota: runs.length === 1 ? "checklist disparado" : "checklists disparados", iconePath: ICONES.checklist, cor: "areia" }),
+        indicador({ rotulo: "Concluídos", valor: concluidos, nota: abertos ? `${abertos} ainda ${abertos === 1 ? "aberto" : "abertos"}` : "todos concluídos", iconePath: ICONES.relogio, cor: "musgo" }),
+        indicador({ rotulo: "Com alerta da IA", valor: comAlerta, nota: comAlerta ? "abra para ver o que ela apontou" : "nada apontado", iconePath: ICONES.alerta, cor: "marca", tom: comAlerta ? "alerta" : undefined }),
+        indicador({ rotulo: "Rodadas puladas", valor: rodadasPuladas, nota: rodadasPuladas ? "em checklists já encerrados" : "nenhuma rodada pulada", iconePath: ICONES.atualizar, cor: "pinho", tom: rodadasPuladas ? "alerta" : undefined }),
+      ]),
+      tabelaDeDados({
+        colunas: [
+          { rotulo: "Checklist", principal: true },
+          { rotulo: "Dia", largura: "120px" },
+          { rotulo: "Quem fez", largura: "16%" },
+          { rotulo: "Rodadas", largura: "150px" },
+          { rotulo: "Alertas da IA", largura: "130px" },
+          { rotulo: "Situação", largura: "150px" },
+        ],
+        larguraMinima: "860px",
+        linhas: runs.map((r) => {
+          const [rotulo, variante] = STATUS[r.status] ?? [r.status, ""];
+          const alertas = alertasDe(r);
+          return {
+            aoClicar: () => abrir(r.id),
+            classe: alertas > 0 ? "linha-atencao" : "",
+            celulas: [
+              r.checklist_nome,
+              dataCurta(r.scheduled_for),
+              r.executor_nome || el("span", { classe: "muted", texto: "—" }),
+              // Checklist de rodadas: "9 de 11" é o que se lê na linha, sem
+              // abrir — e é o número que diz se a noite foi bem cuidada.
+              r.rodadas_previstas
+                ? etiqueta(
+                    `${r.rodadas_feitas} de ${r.rodadas_previstas}`,
+                    r.rodadas_feitas === r.rodadas_previstas ? "etiqueta-ok" : r.status === "concluida" ? "etiqueta-alerta" : "",
+                  )
+                : el("span", { classe: "muted", texto: "—" }),
+              alertas > 0 ? etiqueta(`${alertas} ${alertas === 1 ? "alerta" : "alertas"}`, "etiqueta-alerta") : el("span", { classe: "muted", texto: "nenhum" }),
+              etiqueta(rotulo, variante),
+            ],
+          };
+        }),
+      }),
+    );
   }
 
   async function abrir(id) {
-    limpar(detalhe).append(el("p", { classe: "muted", texto: "Abrindo execução…" }));
+    ctx.definirAcoes?.();
+    lista.hidden = true;
+    detalhe.hidden = false;
+    limpar(detalhe).append(esqueleto({ linhas: 5 }));
     let r;
     try {
       r = await get(`/v1/checklist-runs/${id}?venue=${encodeURIComponent(ctx.venue)}`);
     } catch (e) {
       avisar(e.message, "erro");
-      limpar(detalhe);
+      desenharLista();
       return;
     }
 
     const itens = r.checklist?.items ?? [];
     const respostas = new Map((r.answers ?? []).map((a) => [a.item, a]));
     const alertas = Array.isArray(r.alertas_ia) ? r.alertas_ia : [];
+    ctx.definirAcoes?.(botaoDePdf(() => relatorioDaExecucao(r, itens, respostas, alertas), "Checklist em PDF"));
 
     limpar(detalhe).append(
-      el("section", { classe: "cartao", style: "margin-top:6px" }, [
+      el("section", { classe: "pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
-            el("h2", { texto: r.checklist?.name ?? "Execução" }),
-            el("p", {
-              classe: "muted",
-              texto: [
-                dataCurta(r.scheduled_for),
-                r.executor_nome ? `por ${r.executor_nome}` : null,
-                r.completed_at ? `concluída em ${dataHora(r.completed_at)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · "),
-            }),
+            el("h2", { texto: r.checklist?.name ?? "Checklist" }),
+            el("p", { classe: "muted cel-etiquetas" }, [
+              etiqueta(...(STATUS[r.status] ?? [r.status, ""])),
+              el("span", {
+                texto: [
+                  dataCurta(r.scheduled_for),
+                  r.executor_nome ? `por ${r.executor_nome}` : null,
+                  r.completed_at ? `concluída em ${dataHora(r.completed_at)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+              }),
+            ]),
           ]),
-          el("div", { classe: "linha-campos" }, [
-            botaoDePdf(() => relatorioDaExecucao(r, itens, respostas, alertas), "PDF"),
-            etiqueta(...(STATUS[r.status] ?? [r.status, ""])),
-          ]),
+          botaoVoltar(desenharLista, "Checklists feitos"),
         ]),
 
         r.resumo_ia
-          ? el("div", { classe: "cartao", style: "margin:10px 0;padding:12px" }, [
+          ? el("div", { classe: "cartao" }, [
               el("strong", { texto: "Resumo da IA" }),
               el("p", { classe: "muted", style: "margin:4px 0 0", texto: r.resumo_ia }),
             ])
           : null,
 
         alertas.length > 0
-          ? el("div", { classe: "cartao alerta", style: "margin:10px 0;padding:12px" }, [
+          ? el("div", { classe: "cartao alerta" }, [
               el("strong", { texto: "Pontos de atenção" }),
               el(
                 "ul",
@@ -232,11 +255,11 @@ export async function execucoes(raiz, ctx) {
           : null,
 
         Array.isArray(r.rodadas) && r.rodadas.length > 0
-          ? el("div", { classe: "pilha", style: "gap:10px;margin-top:10px" }, r.rodadas.map((rod) => blocoRodada(rod, itens)))
+          ? el("div", { classe: "pilha-fina" }, r.rodadas.map((rod) => blocoRodada(rod, itens)))
           : r.status === "concluida"
           ? el(
               "div",
-              { classe: "pilha", style: "gap:8px;margin-top:10px" },
+              { classe: "pilha-fina" },
               itens.map((item) => blocoResposta(item, respostas.get(item.id))),
             )
           : el("p", {
@@ -248,7 +271,6 @@ export async function execucoes(raiz, ctx) {
             }),
       ]),
     );
-    detalhe.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /**

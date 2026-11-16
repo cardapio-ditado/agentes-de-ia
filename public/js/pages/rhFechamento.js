@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, icone, indicador, limpar, navegadorDePeriodo, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -48,11 +48,13 @@ export function criarFechamento(corpo, ctx) {
 
   async function recarregar() {
     const busca = semana ? `?ano=${semana.ano}&semana=${semana.numero}` : "";
+    if (!dados) limpar(corpo).append(esqueleto({ cartoes: 4, linhas: 5 }));
     try {
       dados = await get(`/v1/venues/${ctx.venue}/rh/acerto${busca}`);
       semana = { ano: dados.ano, numero: dados.semana };
     } catch (e) {
-      limpar(corpo).append(vazio("Não deu para carregar a gorjeta", e.message));
+      ctx.definirAcoes?.();
+      limpar(corpo).append(estadoDeErro("Não deu para carregar a gorjeta", e.message, recarregar));
       return;
     }
     desenhar();
@@ -63,26 +65,28 @@ export function criarFechamento(corpo, ctx) {
       void recarregar();
       return;
     }
-    limpar(corpo);
-    corpo.append(cabecalho());
+    // Uma pilha só: o espaço entre os blocos vem dela, e não de margem solta.
+    const pilha = el("div", { classe: "pilha" });
+    limpar(corpo).append(pilha);
+    pilha.append(cabecalho());
 
     if (!dados.regra.configurada) {
-      corpo.append(escolhaInicial());
-      if (painel === "regras") corpo.append(painelDeRegras());
+      pilha.append(escolhaInicial());
+      if (painel === "regras") pilha.append(painelDeRegras());
       return;
     }
 
     // Retenção acima do teto da lei aparece no acerto de TODA semana, e não
     // só em Regras: quem paga a semana nem sempre é quem configurou.
     const retencao = avisoDeRetencao(dados.avisos_da_retencao, dados.regra.percentual_repasse);
-    if (retencao) corpo.append(el("div", { style: "margin-bottom:16px" }, [retencao]));
+    if (retencao) pilha.append(retencao);
 
-    if (painel === "regras") corpo.append(painelDeRegras());
-    if (painel === "venda") corpo.append(formularioDeVenda());
-    if (painel === "adicional") corpo.append(formularioDeExtra("adicional"));
-    if (painel === "desconto") corpo.append(formularioDeExtra("desconto"));
+    if (painel === "regras") pilha.append(painelDeRegras());
+    if (painel === "venda") pilha.append(formularioDeVenda());
+    if (painel === "adicional") pilha.append(formularioDeExtra("adicional"));
+    if (painel === "desconto") pilha.append(formularioDeExtra("desconto"));
 
-    corpo.append(barraDaSemana(), tabelaDoAcerto(), lancamentosDaSemana());
+    pilha.append(barraDaSemana(), tabelaDoAcerto(), lancamentosDaSemana());
   }
 
   /* ================= Topo ================= */
@@ -101,33 +105,39 @@ export function criarFechamento(corpo, ctx) {
       ? `Metas da semana: ${r.metas.map((m) => `a partir de ${dinheiro(m.a_partir_de)} +${numeroCurto(m.bonus)}%`).join(" · ")}`
       : null;
 
-    const botao = (id, rotulo, primario = false) =>
-      el("button", {
-        classe: `btn btn-peq ${primario ? "btn-primario" : ""}`.trim(),
-        type: "button",
-        texto: painel === id ? "Fechar" : rotulo,
-        onclick: () => {
-          painel = painel === id ? null : id;
-          desenhar();
+    // O painel aberto vira "Fechar" no próprio botão que o abriu.
+    const botao = (id, rotulo, { primario = false, iconePath = null } = {}) =>
+      el(
+        "button",
+        {
+          classe: `btn ${primario ? "btn-primario" : ""}`.trim(),
+          type: "button",
+          "aria-expanded": String(painel === id),
+          onclick: () => {
+            painel = painel === id ? null : id;
+            desenhar();
+          },
         },
-      });
+        painel === id ? [document.createTextNode("Fechar")] : iconePath ? comIcone(iconePath, rotulo) : [document.createTextNode(rotulo)],
+      );
 
-    return el("div", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Gorjeta" }),
-          el("p", { classe: "muted", texto: frase }),
-          fraseDasMetas ? el("p", { classe: "muted", texto: fraseDasMetas }) : null,
-        ]),
-        el("div", { classe: "reserva-acoes", style: "flex-wrap:wrap" }, [
-          // A meta precisa da venda de cada um, nos dois métodos.
-          dados.regra.configurada && (dados.regra.metodo === "individual" || dados.regra.metas?.length)
-            ? botao("venda", "Lançar venda", true)
-            : null,
-          dados.regra.configurada ? botao("adicional", "Adicional") : null,
-          dados.regra.configurada ? botao("desconto", "Desconto") : null,
-          botao("regras", "Regras"),
-        ]),
+    // As ações da gorjeta moram no cabeçalho da página, como nas outras telas.
+    ctx.definirAcoes?.(
+      botao("regras", "Regras"),
+      dados.regra.configurada ? botao("desconto", "Desconto") : null,
+      dados.regra.configurada ? botao("adicional", "Adicional") : null,
+      // A meta precisa da venda de cada um, nos dois métodos.
+      dados.regra.configurada && (dados.regra.metodo === "individual" || dados.regra.metas?.length)
+        ? botao("venda", "Lançar venda", { primario: true, iconePath: ICONES.mais })
+        : null,
+    );
+
+    // A regra da casa numa linha: é o que explica todos os números abaixo.
+    return el("div", { classe: "regra-em-linha" }, [
+      el("span", { classe: "regra-em-linha-icone", "aria-hidden": "true" }, [icone(ICONES.cifrao, 16)]),
+      el("div", {}, [
+        el("strong", { texto: frase }),
+        fraseDasMetas ? el("span", { classe: "muted", texto: fraseDasMetas }) : null,
       ]),
     ]);
   }
@@ -434,36 +444,36 @@ export function criarFechamento(corpo, ctx) {
     };
 
     const t = dados.totais;
-    return el("section", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h3", { texto: `Semana ${dados.semana}/${dados.ano}` }),
-          el("p", { classe: "muted", texto: `${diaBr(dados.inicio)} a ${diaBr(dados.fim)}` }),
-        ]),
-        el("div", { classe: "reserva-acoes" }, [
-          el("button", { classe: "btn btn-peq", type: "button", texto: "← Anterior", onclick: () => andar(-1) }),
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: "Esta semana",
-            onclick: () => {
-              semana = null;
-              void recarregar();
-            },
-          }),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Próxima →", onclick: () => andar(1) }),
-          botaoDePdf(acertoEmPdf, "Acerto em PDF"),
-        ]),
+    const comandas = somaComandas();
+    return el("section", { classe: "pilha" }, [
+      el("div", { classe: "barra-periodo" }, [
+        navegadorDePeriodo({
+          titulo: `Semana ${dados.semana}/${dados.ano}`,
+          detalhe: `${diaBr(dados.inicio)} a ${diaBr(dados.fim)}`,
+          aoVoltar: () => andar(-1),
+          aoAvancar: () => andar(1),
+          rotuloAtual: "Esta semana",
+          aoIrParaAtual: () => {
+            semana = null;
+            void recarregar();
+          },
+        }),
+        botaoDePdf(acertoEmPdf, "Acerto em PDF"),
       ]),
-      el("div", { classe: "grade", style: "margin-top:14px" }, [
+      el("div", { classe: "grade" }, [
         indicador({
           rotulo: "Vendas da semana",
           valor: dinheiro(t.vendas),
-          nota: dados.regra.metodo === "global" ? "informativo: não é o que paga" : `${somaComandas()} comanda(s)`,
+          nota: dados.regra.metodo === "global" ? "informativo: não é o que paga" : `${comandas} ${comandas === 1 ? "comanda" : "comandas"}`,
+          iconePath: ICONES.recibo,
+          cor: "areia",
         }),
         indicador({
           rotulo: `Serviço arrecadado (${numeroCurto(dados.regra.percentual_servico)}%)`,
           valor: dinheiro(t.arrecadado),
+          nota: "o que os clientes pagaram de serviço",
+          iconePath: ICONES.entrada_dinheiro,
+          cor: "musgo",
         }),
         indicador({
           // "Fica com a casa" dizia o que a lei não deixa: a retenção é para
@@ -471,12 +481,15 @@ export function criarFechamento(corpo, ctx) {
           rotulo: "Retido para encargos",
           valor: dinheiro(t.retido),
           nota: t.retido > 0 ? `${numeroCurto(100 - dados.regra.percentual_repasse)}% do arrecadado, pela regra da casa` : "repassa tudo",
+          iconePath: ICONES.banco,
+          cor: "pinho",
         }),
         indicador({
           rotulo: "A receber pela equipe",
           valor: dinheiro(t.a_receber),
-          destaque: t.a_receber > 0,
           nota: notaDoTotal(t),
+          iconePath: ICONES.pessoas,
+          cor: "marca",
         }),
       ]),
     ]);
@@ -560,7 +573,7 @@ export function criarFechamento(corpo, ctx) {
     return [
       { chave: "nome", rotulo: "Pessoa", texto: (l) => l.nome, forte: true },
       { chave: "funcao", rotulo: "Função", texto: (l) => l.funcao || "—" },
-      { chave: "vendas", rotulo: "Vendas", num: true, valor: (l) => l.vendas, nota: (l) => (l.comandas ? `${l.comandas} comanda(s)` : null) },
+      { chave: "vendas", rotulo: "Vendas", num: true, valor: (l) => l.vendas, nota: (l) => (l.comandas ? `${l.comandas} ${l.comandas === 1 ? "comanda" : "comandas"}` : null) },
       individual
         ? { chave: "comissao", rotulo: `Comissão`, num: true, valor: (l) => l.comissao }
         : null,
@@ -594,51 +607,36 @@ export function criarFechamento(corpo, ctx) {
     const linhas = dados.linhas;
 
     if (linhas.length === 0) {
-      return el("section", { classe: "cartao" }, [
-        vazio(
-          "Ninguém no acerto desta semana",
-          dados.regra.metodo === "individual"
-            ? 'Lance a venda de cada um em "Lançar venda" e a comissão aparece aqui.'
-            : "Feche o serviço de um turno e o rateio aparece aqui.",
-        ),
-      ]);
+      return vazio(
+        "Ninguém no acerto desta semana",
+        dados.regra.metodo === "individual"
+          ? 'Lance a venda de cada um em "Lançar venda" e a comissão aparece aqui.'
+          : "Feche o serviço de um turno e o rateio aparece aqui.",
+      );
     }
 
     const total = (col) => (col.valor ? linhas.reduce((s, l) => s + col.valor(l), 0) : null);
 
-    return el("section", { classe: "cartao" }, [
-      el("div", { classe: "rolagem-x" }, [
-        el("table", { classe: "planilha" }, [
-          el("thead", {}, [
-            el("tr", {}, cols.map((c) => el("th", { classe: c.num ? "col-num" : "", texto: c.rotulo }))),
-          ]),
-          el("tbody", {}, linhas.map((l) =>
-            el("tr", {}, cols.map((c) => celula(c, l))),
-          )),
-          el("tfoot", {}, [
-            el("tr", {}, cols.map((c, i) =>
-              el("td", { classe: c.num ? "col-num" : "", texto: i === 0 ? "Total" : c.valor ? dinheiroDaColuna(c, total(c)) : "" }),
-            )),
-          ]),
-        ]),
-      ]),
-    ]);
+    return tabelaDeDados({
+      colunas: cols.map((c, i) => ({ rotulo: c.rotulo, num: c.num, principal: i === 0 })),
+      larguraMinima: `${Math.max(640, cols.length * 118)}px`,
+      linhas: linhas.map((l) => ({ celulas: cols.map((c) => celula(c, l)) })),
+      rodape: cols.map((c, i) => (i === 0 ? "Total" : c.valor ? dinheiroDaColuna(c, total(c)) : null)),
+    });
   }
 
   function celula(col, linha) {
     if (!col.valor) {
       const conteudo = col.texto(linha);
-      return col.forte
-        ? el("td", {}, [el("strong", { texto: conteudo })])
-        : el("td", { classe: "muted", texto: conteudo });
+      return col.forte ? conteudo : el("span", { classe: "muted", texto: conteudo });
     }
     const valor = col.valor(linha);
-    const td = el("td", { classe: "col-num" });
     const texto = dinheiroDaColuna(col, valor);
-    td.append(col.forte ? el("strong", { texto }) : el("span", { texto, classe: valor > 0 ? "" : "muted" }));
     const nota = col.nota?.(linha);
-    if (nota) td.append(el("small", { classe: "muted", texto: nota }));
-    return td;
+    return el("span", {}, [
+      col.forte ? el("strong", { texto }) : el("span", { texto, classe: valor > 0 ? "" : "muted" }),
+      nota ? el("small", { texto: nota }) : null,
+    ]);
   }
 
   function dinheiroDaColuna(col, valor) {
@@ -812,7 +810,7 @@ export function criarFechamento(corpo, ctx) {
         rota: "vendas",
         dia: v.dia,
         titulo: `${nomeDe.get(v.atendente_id) ?? "—"} vendeu ${dinheiro(v.valor)}`,
-        detalhe: [v.comandas ? `${v.comandas} comanda(s)` : null, nomeDoTurno(v.turno_id)].filter(Boolean).join(" · "),
+        detalhe: [v.comandas ? `${v.comandas} ${v.comandas === 1 ? "comanda" : "comandas"}` : null, nomeDoTurno(v.turno_id)].filter(Boolean).join(" · "),
         cor: "",
       })),
       ...dados.extras.map((x) => ({
@@ -830,56 +828,60 @@ export function criarFechamento(corpo, ctx) {
       rota: "gorjetas",
       dia: g.dia,
       titulo: `Bolo do turno: ${dinheiro(g.valor_repassado)} repartidos`,
-      detalhe: `${nomeDoTurno(g.turno_id) || "a noite inteira"} · ${g.cotas.length} pessoa(s)`,
+      detalhe: `${nomeDoTurno(g.turno_id) || "a noite inteira"} · ${g.cotas.length} ${g.cotas.length === 1 ? "pessoa" : "pessoas"}`,
       cor: "etiqueta-info",
     }));
 
     const tudo = [...itens, ...fechamentos].sort((a, b) => b.dia.localeCompare(a.dia));
     if (tudo.length === 0) return el("div", {});
 
-    return el("section", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("h3", { texto: "Lançamentos da semana" }),
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: verLancamentos ? "Esconder" : `Ver os ${tudo.length}`,
-          onclick: () => {
-            verLancamentos = !verLancamentos;
-            desenhar();
-          },
-        }),
-      ]),
-      verLancamentos
-        ? el("div", { classe: "tabela", style: "margin-top:10px" },
-          tudo.map((i) =>
-            el("div", { classe: "linha-tabela" }, [
-              el("div", { classe: "linha-principal", style: "flex:1;min-width:200px" }, [
-                el("strong", { texto: i.titulo }),
-                el("span", { classe: "muted", texto: [diaBr(i.dia), i.detalhe].filter(Boolean).join(" · ") }),
-              ]),
-              i.cor ? etiqueta(i.rota === "gorjetas" ? "bolo" : i.titulo.includes("+") ? "adicional" : "desconto", i.cor) : null,
-              el("button", {
-                classe: "btn btn-peq btn-perigo",
-                type: "button",
-                texto: "Apagar",
-                onclick: async (e) => {
-                  if (!confirm(`Apagar "${i.titulo}"?`)) return;
-                  e.target.disabled = true;
-                  try {
-                    await del(`/v1/venues/${ctx.venue}/rh/${i.rota}/${i.id}`);
-                    avisar("Lançamento apagado.", "ok");
-                    await recarregar();
-                  } catch (err) {
-                    avisar(err.message, "erro");
-                    e.target.disabled = false;
-                  }
-                },
-              }),
-            ]),
-          ))
-        : null,
-    ]);
+    // Fechado por padrão: o que se confere toda semana é o acerto, acima; os
+    // lançamentos são para achar o que foi digitado errado.
+    return tabelaDeDados({
+      colunas: [
+        { rotulo: "Lançamento", principal: true },
+        { rotulo: "Dia", largura: "120px" },
+        { rotulo: "Detalhe", largura: "32%", quebra: true },
+        { rotulo: "Tipo", largura: "120px" },
+        { rotulo: "", largura: "56px", acoes: true },
+      ],
+      larguraMinima: "720px",
+      // Um grupo só, que abre e fecha: o título das colunas acima dele, com o
+      // grupo fechado, seria um cabeçalho de nada.
+      semCabecalho: true,
+      grupos: [{
+        titulo: "Lançamentos da semana",
+        quantidade: tudo.length,
+        aberto: verLancamentos,
+        aoAlternar: (aberto) => { verLancamentos = aberto; },
+        linhas: tudo.map((i) => ({
+          celulas: [
+            i.titulo,
+            diaBr(i.dia),
+            i.detalhe || null,
+            etiqueta(i.rota === "gorjetas" ? "bolo" : i.rota === "vendas" ? "venda" : i.titulo.includes("+") ? "adicional" : "desconto", i.cor),
+            acaoIcone({
+              iconePath: ICONES.lixeira,
+              rotulo: "Apagar este lançamento",
+              variante: "perigo",
+              aoClicar: async (e) => {
+                if (!confirm(`Apagar "${i.titulo}"?`)) return;
+                const botao = e.currentTarget;
+                botao.disabled = true;
+                try {
+                  await del(`/v1/venues/${ctx.venue}/rh/${i.rota}/${i.id}`);
+                  avisar("Lançamento apagado.", "ok");
+                  await recarregar();
+                } catch (err) {
+                  avisar(err.message, "erro");
+                  botao.disabled = false;
+                }
+              },
+            }),
+          ],
+        })),
+      }],
+    });
   }
 
   function nomeDoTurno(id) {

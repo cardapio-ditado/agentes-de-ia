@@ -55,7 +55,8 @@ export function preencher(node, ...filhos) {
  * célula. No celular ela se desmonta em fichas (ver `.planilha-empilha`): a
  * célula `principal` vira o título e as outras levam o nome da coluna na frente.
  *
- *   colunas: [{ rotulo, largura?, num?, principal?, acoes?, quebra? }]
+ *   colunas: [{ rotulo, largura?, num?, principal?, acoes?, quebra?, ordem? }]
+ *            ordem: { ativa, desc, aoClicar } faz do título um botão de ordenar
  *            na ficha do celular: larga? (linha inteira), semRotulo?, someNoCelular?
  *   estreita: true quando a tabela mora numa coluna de meia tela
  *   larguraMinima: abaixo dela a tabela rola de lado dentro da caixa, em vez de espremer
@@ -90,6 +91,18 @@ export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = nu
       });
     }
     return tr;
+  };
+
+  // Título que ordena é botão de verdade: recebe foco, responde a Enter e
+  // conta ao leitor de tela em que sentido a coluna está.
+  const titulo = (col) => {
+    if (!col.ordem) return celula("th", col, col.rotulo);
+    const th = celula("th", col, el("button", { classe: "planilha-ordenar", type: "button", title: "Ordenar por esta coluna", onclick: col.ordem.aoClicar }, [
+      el("span", { texto: col.rotulo }),
+      el("span", { classe: "planilha-ordenar-seta", "aria-hidden": "true", texto: col.ordem.ativa ? (col.ordem.desc ? "↓" : "↑") : "↕" }),
+    ]));
+    th.setAttribute("aria-sort", col.ordem.ativa ? (col.ordem.desc ? "descending" : "ascending") : "none");
+    return th;
   };
 
   const corpos = [];
@@ -127,9 +140,11 @@ export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = nu
     // quando um grupo abre, e texto comprido corta com reticências.
     el("table", { classe: `planilha planilha-empilha${colunas.some((c) => c.largura) ? " planilha-fixa" : ""}${estreita ? " planilha-estreita" : ""}`, style: larguraMinima ? `--largura-minima:${larguraMinima}` : null }, [
       colunas.some((c) => c.largura) ? el("colgroup", {}, colunas.map((c) => el("col", { style: c.largura ? `width:${c.largura}` : null }))) : null,
-      semCabecalho ? null : el("thead", {}, [el("tr", {}, colunas.map((c) => celula("th", c, c.rotulo)))]),
+      semCabecalho ? null : el("thead", {}, [el("tr", {}, colunas.map(titulo))]),
       ...corpos,
-      rodape ? el("tfoot", {}, [el("tr", {}, colunas.map((c, i) => celula("td", { ...c, rotulo: null }, rodape[i])))]) : null,
+      // No celular, o total de uma coluna de número leva o nome dela na frente;
+      // sem isso, o rodapé vira uma fila de valores sem dono.
+      rodape ? el("tfoot", {}, [el("tr", {}, colunas.map((c, i) => celula("td", { ...c, rotulo: c.num ? c.rotulo : null }, rodape[i])))]) : null,
     ]),
   ]);
 }
@@ -377,12 +392,49 @@ export function acaoIcone({ iconePath, rotulo, aoClicar, variante = "" }) {
   return el("button", { classe: `acao-icone${variante ? ` acao-icone-${variante}` : ""}`, type: "button", "aria-label": rotulo, "data-dica": rotulo, onclick: aoClicar }, [icone(iconePath, 16)]);
 }
 
+/** "Frigorífico Boi Bom" → "FB": as iniciais que identificam a linha de relance. */
+export function siglaDe(nome) {
+  const palavras = String(nome ?? "").split(/\s+/).filter((p) => p.length > 2 || /^[A-ZÀ-Ú]/.test(p));
+  return ((palavras[0]?.[0] ?? "") + (palavras[1]?.[0] ?? "")).toUpperCase() || "–";
+}
+
+/** Célula de nome com as iniciais na frente e, se houver, uma linha de detalhe. */
+export function comSigla(nome, detalhe = null) {
+  return el("span", { classe: "com-sigla" }, [
+    el("span", { classe: "sigla", "aria-hidden": "true", texto: siglaDe(nome) }),
+    el("span", {}, [document.createTextNode(nome), detalhe ? el("small", { texto: detalhe }) : null]),
+  ]);
+}
+
 /**
  * "Voltar" de uma etapa interna (detalhe, formulário, conferência). Fica à
  * esquerda do título da etapa: o CSS cuida da posição (`.btn-voltar`).
  */
 export function botaoVoltar(aoClicar, texto = "Voltar") {
   return el("button", { classe: "btn btn-peq btn-voltar", type: "button", onclick: aoClicar }, comIcone(ICONES.voltar, texto));
+}
+
+/**
+ * "‹  Semana 37/2026 · 07/09 a 13/09  ›  [Esta semana]": andar no tempo sem
+ * tirar o período da frente dos olhos.
+ */
+export function navegadorDePeriodo({ titulo, detalhe, aoVoltar, aoAvancar, rotuloAtual, aoIrParaAtual }) {
+  const seta = (rotulo, caminho, aoClicar) =>
+    el("button", { classe: "acao-icone", type: "button", "aria-label": rotulo, "data-dica": rotulo, onclick: aoClicar }, [icone(caminho, 16)]);
+  return el("div", { classe: "navegador-periodo" }, [
+    seta("Período anterior", "M15 18l-6-6 6-6", aoVoltar),
+    el("div", { classe: "navegador-periodo-texto", "aria-live": "polite" }, [
+      el("strong", { texto: titulo }),
+      detalhe ? el("span", { classe: "muted", texto: detalhe }) : null,
+    ]),
+    seta("Próximo período", "M9 18l6-6-6-6", aoAvancar),
+    aoIrParaAtual ? el("button", { classe: "btn btn-peq", type: "button", texto: rotuloAtual, onclick: aoIrParaAtual }) : null,
+  ]);
+}
+
+/** "1 aviso", "5 avisos": o número com a palavra certa. */
+export function plural(n, um, varios) {
+  return `${n} ${Number(n) === 1 ? um : varios}`;
 }
 
 /** Texto com ícone à esquerda, para o conteúdo de um botão. */

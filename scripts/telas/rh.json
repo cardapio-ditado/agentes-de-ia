@@ -47,7 +47,7 @@
           "ativo": true,
           "documentos_alerta": 1,
           "pendencias": [
-            "Exame periódico vence em 12 dias"
+            "Exame admissional (ASO)"
           ],
           "ficha": {
             "atendente_id": "p2",
@@ -79,8 +79,8 @@
           "ativo": true,
           "documentos_alerta": 0,
           "pendencias": [
-            "Sem CPF na ficha",
-            "Sem carteira de trabalho"
+            "CPF",
+            "Carteira de trabalho"
           ],
           "ficha": {
             "atendente_id": "p3",
@@ -112,7 +112,7 @@
           "ativo": true,
           "documentos_alerta": 0,
           "pendencias": [
-            "Sem data de admissão"
+            "Data de admissão"
           ],
           "ficha": {
             "atendente_id": "p4",
@@ -1867,7 +1867,7 @@
               "ativo": true,
               "documentos_alerta": 1,
               "pendencias": [
-                "Exame periódico vence em 12 dias"
+                "Exame admissional (ASO)"
               ],
               "ficha": {
                 "atendente_id": "p2",
@@ -1899,8 +1899,8 @@
               "ativo": true,
               "documentos_alerta": 0,
               "pendencias": [
-                "Sem CPF na ficha",
-                "Sem carteira de trabalho"
+                "CPF",
+                "Carteira de trabalho"
               ],
               "ficha": {
                 "atendente_id": "p3",
@@ -1932,7 +1932,7 @@
               "ativo": true,
               "documentos_alerta": 0,
               "pendencias": [
-                "Sem data de admissão"
+                "Data de admissão"
               ],
               "ficha": {
                 "atendente_id": "p4",

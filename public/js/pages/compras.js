@@ -1,5 +1,5 @@
 import { del, get, patch, post, put } from "../api.js";
-import { ICONES, acaoIcone, avisar, botaoVoltar, buscador, campoDeBusca, comIcone, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, buscador, campoDeBusca, comIcone, comSigla, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { analiseDasCompras, resumoPelaLista } from "./comprasAnalise.js";
 
 /**
@@ -27,12 +27,6 @@ function valorDaCompra(c) {
     (t, it) => t + Number(it.quantidade_pedida ?? 0) * Number(it.custo_unitario_pedido ?? 0),
     0,
   );
-}
-
-/** "Frigorífico Boi Bom" → "FB": as iniciais que identificam a linha de relance. */
-function siglaDe(nome) {
-  const palavras = String(nome).split(/\s+/).filter((p) => p.length > 2 || /^[A-ZÀ-Ú]/.test(p));
-  return ((palavras[0]?.[0] ?? "") + (palavras[1]?.[0] ?? "")).toUpperCase() || "–";
 }
 
 /** A linha de baixo do "Aguardando entrega": atraso primeiro, depois o que vem. */
@@ -384,10 +378,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
       return {
         aoClicar: () => detalheCompra(c.id),
         celulas: [
-          el("span", { classe: "com-sigla" }, [
-            el("span", { classe: "sigla", "aria-hidden": "true", texto: siglaDe(nomeDoFornecedor) }),
-            el("span", {}, [document.createTextNode(nomeDoFornecedor), detalhe ? el("small", { texto: detalhe }) : null]),
-          ]),
+          comSigla(nomeDoFornecedor, detalhe),
           c.documento || null,
           dataCurta(c.data_compra),
           c.data_prevista ? dataCurta(c.data_prevista) : traco(),

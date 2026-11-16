@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, indicador, preencher, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, comSigla, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -14,7 +14,7 @@ export function criarIndicadores(corpo, ctx) {
   return { recarregar };
 
   async function recarregar() {
-    preencher(corpo, el("p", { classe: "muted", texto: "Calculando…" }));
+    preencher(corpo, esqueleto({ cartoes: 4, linhas: 4 }));
     let ind, clima;
     try {
       [ind, clima] = await Promise.all([
@@ -22,25 +22,21 @@ export function criarIndicadores(corpo, ctx) {
         get(`/v1/venues/${ctx.venue}/rh/clima`).catch(() => ({ perguntas: [], rodadas: [] })),
       ]);
     } catch (e) {
-      preencher(corpo, vazio("Indicadores indisponíveis", e.message));
+      ctx.definirAcoes?.();
+      preencher(corpo, estadoDeErro("Não deu para calcular os indicadores", e.message, recarregar));
       return;
     }
     const ultimoClima = clima.rodadas.find((r) => r.visivel) ?? null;
     const anosEMeses = (dias) => (dias === null ? "—" : dias < 365 ? `${Math.round(dias / 30)} meses` : `${(dias / 365).toFixed(1).replace(".", ",")} anos`);
 
-    preencher(corpo, 
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Indicadores de gente" }),
-          el("p", { classe: "muted", texto: "Os últimos 12 meses. Os números saem das fichas, da escala e das ocorrências registradas." }),
-        ]),
-        botaoDePdf(() => relatorio(ind, clima), "Relatório em PDF"),
-      ]),
+    ctx.definirAcoes?.(botaoDePdf(() => relatorio(ind, clima), "Relatório em PDF"));
+    preencher(corpo, el("div", { classe: "pilha" }, [
+      el("p", { classe: "muted", texto: "Os últimos 12 meses. Os números saem das fichas, da escala e das ocorrências registradas." }),
       el("div", { classe: "grade" }, [
-        indicador({ rotulo: "Na casa", valor: String(ind.na_casa), nota: `tempo médio de casa: ${anosEMeses(ind.tempo_medio_de_casa_dias)}` }),
-        indicador({ rotulo: "Saídas em 12 meses", valor: String(ind.saidas_12m), nota: ind.turnover_12m === null ? "" : `${String(ind.turnover_12m).replace(".", ",")}% da equipe`, destaque: ind.saidas_12m > ind.na_casa / 2 }),
-        indicador({ rotulo: "Saíram na experiência", valor: String(ind.saidas_na_experiencia_12m), nota: "em até 90 dias — sinal de contratação ou integração", destaque: ind.saidas_na_experiencia_12m > 0 }),
-        indicador({ rotulo: "Custo da rotatividade", valor: ind.custo_estimado_12m === null ? "—" : dinheiro(ind.custo_estimado_12m), nota: "estimativa: cerca de um salário por saída" }),
+        indicador({ rotulo: "Na casa", valor: String(ind.na_casa), nota: `tempo médio de casa: ${anosEMeses(ind.tempo_medio_de_casa_dias)}`, iconePath: ICONES.pessoas, cor: "areia" }),
+        indicador({ rotulo: "Saídas em 12 meses", valor: String(ind.saidas_12m), nota: ind.turnover_12m === null ? "" : `${String(ind.turnover_12m).replace(".", ",")}% da equipe`, iconePath: ICONES.transferir, cor: "marca", tom: ind.saidas_12m > ind.na_casa / 2 ? "alerta" : undefined }),
+        indicador({ rotulo: "Saíram na experiência", valor: String(ind.saidas_na_experiencia_12m), nota: "em até 90 dias — sinal de contratação ou integração", iconePath: ICONES.relogio, cor: "musgo", tom: ind.saidas_na_experiencia_12m > 0 ? "alerta" : undefined }),
+        indicador({ rotulo: "Custo da rotatividade", valor: ind.custo_estimado_12m === null ? "—" : dinheiro(ind.custo_estimado_12m), nota: "estimativa: cerca de um salário por saída", iconePath: ICONES.cifrao, cor: "pinho" }),
       ]),
       cartaoDoRisco(ind.risco),
       cartaoDoClima(clima, ultimoClima),
@@ -48,11 +44,15 @@ export function criarIndicadores(corpo, ctx) {
       ind.motivos.length
         ? el("section", { classe: "cartao pilha" }, [
             el("h3", { texto: "Por que saíram" }),
-            el("div", { classe: "tabela" }, ind.motivos.map((m) => el("div", { classe: "linha-tabela" }, [el("span", { texto: m.motivo }), el("strong", { texto: String(m.vezes) })]))),
+            tabelaDeDados({
+              colunas: [{ rotulo: "Motivo", principal: true }, { rotulo: "Vezes", num: true, largura: "110px" }],
+              estreita: true,
+              linhas: ind.motivos.map((m) => ({ celulas: [m.motivo, String(m.vezes)] })),
+            }),
             el("p", { classe: "muted", texto: "Anote o motivo no desligamento: é daqui que sai o que mudar." }),
           ])
         : null,
-    );
+    ].filter(Boolean)));
   }
 
   function cartaoDoRisco(risco) {
@@ -62,15 +62,23 @@ export function criarIndicadores(corpo, ctx) {
         el("p", { classe: "muted", texto: "Sinais que costumam vir antes do pedido de demissão. Uma conversa agora sai mais barato que contratar de novo." }),
       ]),
       risco.length
-        ? el("div", { classe: "tabela" }, risco.map((r) =>
-            el("div", { classe: "linha-tabela" }, [
-              el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-                el("strong", { texto: `${r.nome}${r.funcao ? ` · ${r.funcao}` : ""}` }),
-                el("span", { classe: "muted", style: "white-space:normal", texto: r.sinais.join(" · ") }),
-              ]),
-              etiqueta(r.nivel === "alto" ? "conversar já" : "ficar de olho", r.nivel === "alto" ? "etiqueta-perigo" : "etiqueta-alerta"),
-            ])))
-        : el("p", { classe: "muted", texto: "Ninguém com sinal agora. 👍" }),
+        ? tabelaDeDados({
+            colunas: [
+              { rotulo: "Pessoa", principal: true, largura: "28%" },
+              { rotulo: "Sinais", quebra: true },
+              { rotulo: "O que fazer", largura: "150px" },
+            ],
+            larguraMinima: "640px",
+            linhas: risco.map((r) => ({
+              classe: r.nivel === "alto" ? "linha-perigo" : "",
+              celulas: [
+                comSigla(r.nome, r.funcao || null),
+                r.sinais.join(" · "),
+                etiqueta(r.nivel === "alto" ? "conversar já" : "ficar de olho", r.nivel === "alto" ? "etiqueta-perigo" : "etiqueta-alerta"),
+              ],
+            })),
+          })
+        : el("p", { classe: "muted", texto: "Ninguém com sinal agora." }),
     ]);
   }
 
@@ -120,21 +128,21 @@ export function criarIndicadores(corpo, ctx) {
   function cartaoDosMeses(meses) {
     return el("section", { classe: "cartao pilha" }, [
       el("h3", { texto: "Mês a mês" }),
-      el("div", { classe: "rolagem-x" }, [
-        el("table", { classe: "planilha" }, [
-          el("thead", {}, [el("tr", {}, ["Mês", "Na casa", "Entraram", "Saíram", "Rotatividade", "Faltas", "Atrasos"].map((t, i) => el("th", { classe: i ? "col-num" : "", texto: t })))]),
-          el("tbody", {}, meses.map((m) =>
-            el("tr", {}, [
-              el("td", { texto: `${m.mes.slice(5)}/${m.mes.slice(0, 4)}` }),
-              el("td", { classe: "col-num", texto: String(m.ativos) }),
-              el("td", { classe: "col-num", texto: String(m.admissoes) }),
-              el("td", { classe: "col-num", texto: String(m.desligamentos) }),
-              el("td", { classe: "col-num", texto: m.turnover === null ? "—" : `${String(m.turnover).replace(".", ",")}%` }),
-              el("td", { classe: "col-num", texto: String(m.faltas) }),
-              el("td", { classe: "col-num", texto: String(m.atrasos) }),
-            ]))),
-        ]),
-      ]),
+      tabelaDeDados({
+        colunas: ["Mês", "Na casa", "Entraram", "Saíram", "Rotatividade", "Faltas", "Atrasos"].map((rotulo, i) => ({ rotulo, num: i > 0, principal: i === 0 })),
+        larguraMinima: "640px",
+        linhas: meses.map((m) => ({
+          celulas: [
+            `${m.mes.slice(5)}/${m.mes.slice(0, 4)}`,
+            String(m.ativos),
+            String(m.admissoes),
+            String(m.desligamentos),
+            m.turnover === null ? "—" : `${String(m.turnover).replace(".", ",")}%`,
+            String(m.faltas),
+            String(m.atrasos),
+          ],
+        })),
+      }),
     ]);
   }
 
@@ -176,70 +184,83 @@ export function criarContratacao(corpo, ctx) {
   return { recarregar };
 
   async function recarregar() {
-    preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
+    preencher(corpo, esqueleto({ linhas: 5 }));
     let dados;
     try {
       dados = await get(`/v1/venues/${ctx.venue}/rh/candidatos`);
     } catch (e) {
-      preencher(corpo, vazio("Contratação indisponível", e.message));
+      ctx.definirAcoes?.();
+      preencher(corpo, estadoDeErro("Não deu para carregar a contratação", e.message, recarregar));
       return;
     }
     const lista = dados.candidatos.filter((c) => c.tipo === filtro);
     const NOME_DA_SITUACAO = { novo: "novo", conversando: "conversando", contratado: "contratado", nao_serve: "não serve", disponivel: "disponível" };
 
-    preencher(corpo, 
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Contratação" }),
-          el("p", { classe: "muted", texto: "Ponha o link no Instagram e no balcão: quem quer trabalhar na casa cai aqui." }),
-        ]),
-        el("div", { classe: "reserva-acoes" }, [
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: "Copiar link do Trabalhe conosco",
-            onclick: async () => {
-              await navigator.clipboard?.writeText(dados.link).catch(() => {});
-              prompt("Link copiado:", dados.link);
-            },
-          }),
-          el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: filtro === "extra" ? "+ Extra" : "+ Candidato", onclick: () => formulario(null) }),
-        ]),
-      ]),
-      el("div", { classe: "abas" }, [["vaga", "Candidatos a vaga"], ["extra", "Lista de extras"]].map(([id, rotulo]) =>
-        el("button", { classe: `aba${filtro === id ? " aba-ativa" : ""}`, type: "button", texto: `${rotulo} (${dados.candidatos.filter((c) => c.tipo === id).length})`, onclick: () => { filtro = id; recarregar(); } }))),
-      lista.length
-        ? el("div", { classe: "tabela" }, lista.map((c) =>
-            el("div", { classe: "linha-tabela" }, [
-              el("div", { classe: "linha-principal", style: "flex:1;min-width:0" }, [
-                el("strong", { texto: `${c.nome}${c.funcao ? ` · ${c.funcao}` : ""}` }),
-                el("span", { classe: "muted", style: "white-space:normal", texto: [c.nota ? `${"★".repeat(c.nota)} da última vez` : null, c.ultima_vez ? `última vez ${c.ultima_vez.split("-").reverse().join("/")}` : null, c.experiencia, c.observacoes].filter(Boolean).join(" · ") || (c.origem === "link" ? "veio pelo link" : "") }),
-              ]),
-              el("div", { classe: "reserva-acoes", style: "margin:0" }, [
-                etiqueta(NOME_DA_SITUACAO[c.situacao] ?? c.situacao, c.situacao === "contratado" || c.situacao === "disponivel" ? "etiqueta-ok" : c.situacao === "nao_serve" ? "" : "etiqueta-alerta"),
-                c.telefone
-                  ? el("a", { classe: "btn btn-peq", href: `https://wa.me/${c.telefone.length <= 11 ? `55${c.telefone}` : c.telefone}`, target: "_blank", rel: "noopener", texto: filtro === "extra" ? "Chamar" : "WhatsApp" })
-                  : null,
-                el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => formulario(c) }),
-                el("button", {
-                  classe: "btn-icone",
-                  type: "button",
-                  title: "Apagar",
-                  texto: "🗑",
-                  onclick: async () => {
-                    if (!confirm(`Apagar ${c.nome}?`)) return;
-                    try {
-                      await del(`/v1/venues/${ctx.venue}/rh/candidatos/${c.id}`);
-                      await recarregar();
-                    } catch (e) {
-                      avisar(e.message, "erro");
-                    }
-                  },
-                }),
-              ]),
-            ])))
-        : vazio(filtro === "extra" ? "Nenhum extra na lista" : "Nenhum candidato ainda", filtro === "extra" ? "Guarde aqui quem fez extra e foi bem: no próximo sábado cheio, é só chamar." : "Mande o link do Trabalhe conosco no Instagram da casa."),
+    ctx.definirAcoes?.(
+      el("button", {
+        classe: "btn",
+        type: "button",
+        texto: "Copiar link do Trabalhe conosco",
+        onclick: async () => {
+          await navigator.clipboard?.writeText(dados.link).catch(() => {});
+          prompt("Link copiado:", dados.link);
+        },
+      }),
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formulario(null) }, comIcone(ICONES.mais, filtro === "extra" ? "Novo extra" : "Novo candidato")),
     );
+
+    const dataBr = (iso) => iso.split("-").reverse().join("/");
+    preencher(corpo, el("div", { classe: "pilha" }, [
+      el("div", { classe: "barra-periodo" }, [
+        // Duas listas da mesma tela: chaves lado a lado, com a contagem de cada.
+        el("div", { classe: "seletor-de-visao", role: "group", "aria-label": "Qual lista ver" },
+          [["vaga", "Candidatos a vaga"], ["extra", "Lista de extras"]].map(([id, rotulo]) =>
+            el("button", { type: "button", "aria-pressed": String(filtro === id), onclick: () => { filtro = id; recarregar(); } }, [
+              document.createTextNode(rotulo),
+              el("span", { classe: "aba-contador", texto: String(dados.candidatos.filter((c) => c.tipo === id).length) }),
+            ]))),
+        el("span", { classe: "muted", texto: "Ponha o link no Instagram e no balcão: quem quer trabalhar na casa cai aqui." }),
+      ]),
+      lista.length
+        ? tabelaDeDados({
+            colunas: [
+              { rotulo: "Nome", principal: true },
+              { rotulo: filtro === "extra" ? "Como foi" : "Experiência e observações", largura: "38%", quebra: true },
+              { rotulo: "Situação", largura: "150px" },
+              { rotulo: "Ações", largura: "214px", acoes: true },
+            ],
+            larguraMinima: "860px",
+            linhas: lista.map((c) => ({
+              aoClicar: () => formulario(c),
+              celulas: [
+                comSigla(c.nome, c.funcao || null),
+                [c.nota ? `nota ${c.nota} de 5 da última vez` : null, c.ultima_vez ? `última vez ${dataBr(c.ultima_vez)}` : null, c.experiencia, c.observacoes].filter(Boolean).join(" · ") || (c.origem === "link" ? "veio pelo link" : null),
+                etiqueta(NOME_DA_SITUACAO[c.situacao] ?? c.situacao, c.situacao === "contratado" || c.situacao === "disponivel" ? "etiqueta-ok" : c.situacao === "nao_serve" ? "" : "etiqueta-alerta"),
+                el("span", { classe: "grupo-acoes" }, [
+                  c.telefone
+                    ? el("a", { classe: "btn btn-peq", href: `https://wa.me/${c.telefone.length <= 11 ? `55${c.telefone}` : c.telefone}`, target: "_blank", rel: "noopener", texto: filtro === "extra" ? "Chamar" : "WhatsApp" })
+                    : null,
+                  acaoIcone({ iconePath: ICONES.editar, rotulo: `Editar ${c.nome}`, aoClicar: () => formulario(c) }),
+                  acaoIcone({
+                    iconePath: ICONES.lixeira,
+                    rotulo: `Apagar ${c.nome}`,
+                    variante: "perigo",
+                    aoClicar: async () => {
+                      if (!confirm(`Apagar ${c.nome}?`)) return;
+                      try {
+                        await del(`/v1/venues/${ctx.venue}/rh/candidatos/${c.id}`);
+                        await recarregar();
+                      } catch (e) {
+                        avisar(e.message, "erro");
+                      }
+                    },
+                  }),
+                ]),
+              ],
+            })),
+          })
+        : vazio(filtro === "extra" ? "Nenhum extra na lista" : "Nenhum candidato ainda", filtro === "extra" ? "Guarde aqui quem fez extra e foi bem: no próximo sábado cheio, é só chamar." : "Mande o link do Trabalhe conosco no Instagram da casa."),
+    ]));
   }
 
   function formulario(c) {
@@ -252,10 +273,11 @@ export function criarContratacao(corpo, ctx) {
     const nota = el("select", { classe: "select" }, [["", "—"], ["5", "★★★★★ ótimo"], ["4", "★★★★ bom"], ["3", "★★★ ok"], ["2", "★★ fraco"], ["1", "★ ruim"]].map(([v, t]) => el("option", { value: v, texto: t, selected: String(c?.nota ?? "") === v })));
     const ultima = el("input", { classe: "input", type: "date", value: c?.ultima_vez ?? "" });
     const obs = el("textarea", { classe: "input", rows: 2, texto: c?.observacoes ?? "" });
+    ctx.definirAcoes?.();
     preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("h2", { texto: c ? c.nome : extra ? "Novo extra" : "Novo candidato" }),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: recarregar }),
+        botaoVoltar(recarregar, "Contratação"),
       ]),
       el("section", { classe: "cartao pilha" }, [
         el("div", { classe: "grade grade-2" }, [

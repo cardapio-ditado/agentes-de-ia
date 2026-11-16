@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, limpar, navegadorDePeriodo, plural, vazio } from "../ui.js";
 
 /**
  * RH — Fase 2: a grade da semana.
@@ -46,12 +46,14 @@ export function criarEscala(corpo, ctx) {
   return { desenhar, recarregar };
 
   async function recarregar() {
+    if (!dados) limpar(corpo).append(esqueleto({ linhas: 6 }));
     try {
       const busca = semana ? `?semana=${semana}` : "";
       dados = await get(`/v1/venues/${ctx.venue}/rh/escala${busca}`);
       semana = dados.semana;
     } catch (e) {
-      limpar(corpo).append(vazio("Não deu para carregar a escala", e.message));
+      ctx.definirAcoes?.();
+      limpar(corpo).append(estadoDeErro("Não deu para carregar a escala", e.message, recarregar));
       return;
     }
     desenhar();
@@ -62,13 +64,15 @@ export function criarEscala(corpo, ctx) {
       void recarregar();
       return;
     }
-    limpar(corpo);
-    corpo.append(cabecalhoDaSemana());
+    // Uma pilha só: o espaço entre os blocos vem dela.
+    const pilha = el("div", { classe: "pilha" });
+    limpar(corpo).append(pilha);
+    pilha.append(cabecalhoDaSemana());
 
-    if (mostrandoTurnos) corpo.append(painelDeTurnos());
+    if (mostrandoTurnos) pilha.append(painelDeTurnos());
 
     if (dados.turnos.length === 0) {
-      corpo.append(
+      pilha.append(
         el("section", { classe: "cartao alerta" }, [
           el("strong", { texto: "Antes da escala, os turnos da casa" }),
           el("p", {
@@ -110,16 +114,16 @@ export function criarEscala(corpo, ctx) {
     }
 
     if (dados.pessoas.length === 0) {
-      corpo.append(
+      pilha.append(
         vazio("Ninguém para escalar", 'Cadastre a equipe na aba "Equipe" e volte aqui para montar a semana.'),
       );
       return;
     }
 
     const alertas = cartaoDeAlertas();
-    if (alertas) corpo.append(alertas);
-    corpo.append(grade());
-    if (editando) corpo.append(editorDaCelula());
+    if (alertas) pilha.append(alertas);
+    pilha.append(grade());
+    if (editando) pilha.append(editorDaCelula());
   }
 
   /**
@@ -134,7 +138,7 @@ export function criarEscala(corpo, ctx) {
   function cartaoDeAlertas() {
     const lista = dados.alertas ?? [];
     if (!lista.length) return null;
-    return el("section", { classe: "cartao alerta", style: "margin-bottom:16px" }, [
+    return el("section", { classe: "cartao alerta" }, [
       el("strong", {
         texto: lista.length === 1 ? "1 ponto para conferir antes de publicar" : `${lista.length} pontos para conferir antes de publicar`,
       }),
@@ -157,49 +161,40 @@ export function criarEscala(corpo, ctx) {
     const fim = somarDias(dados.semana, 6);
     const publicada = Boolean(dados.publicada_em);
 
-    return el("div", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: `Semana de ${diaBr(dados.semana)} a ${diaBr(fim)}` }),
-          el("p", { classe: "muted", texto: textoDoStatus() }),
-        ]),
-        el("div", { classe: "reserva-acoes" }, [
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: "‹ Anterior",
-            onclick: () => trocarSemana(-7),
-          }),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Hoje", onclick: () => trocarSemana(null) }),
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: "Próxima ›",
-            onclick: () => trocarSemana(7),
-          }),
-        ]),
-      ]),
-      el("div", { classe: "reserva-acoes" }, [
-        el("button", {
-          classe: "btn btn-primario",
-          type: "button",
-          texto: publicada ? "Publicar de novo e avisar" : "Publicar e avisar no WhatsApp",
-          onclick: (e) => publicar(e.target),
-        }),
-        el("button", {
-          classe: "btn",
-          type: "button",
-          texto: "Copiar semana anterior",
-          onclick: (e) => copiarAnterior(e.target),
-        }),
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: mostrandoTurnos ? "Fechar turnos" : "Turnos da casa",
-          onclick: () => {
-            mostrandoTurnos = !mostrandoTurnos;
-            desenhar();
-          },
+    // O que se faz com a semana inteira vai para o cabeçalho da página.
+    ctx.definirAcoes?.(
+      el("button", {
+        classe: "btn",
+        type: "button",
+        "aria-expanded": String(mostrandoTurnos),
+        texto: mostrandoTurnos ? "Fechar turnos" : "Turnos da casa",
+        onclick: () => {
+          mostrandoTurnos = !mostrandoTurnos;
+          desenhar();
+        },
+      }),
+      el("button", {
+        classe: "btn",
+        type: "button",
+        texto: "Copiar semana anterior",
+        onclick: (e) => copiarAnterior(e.target),
+      }),
+      el("button", {
+        classe: "btn btn-primario",
+        type: "button",
+        texto: publicada ? "Publicar de novo e avisar" : "Publicar e avisar no WhatsApp",
+        onclick: (e) => publicar(e.target),
+      }),
+    );
+
+    return el("div", { classe: "pilha-fina" }, [
+      el("div", { classe: "barra-periodo" }, [
+        navegadorDePeriodo({
+          titulo: `Semana de ${diaBr(dados.semana)} a ${diaBr(fim)}`,
+          aoVoltar: () => trocarSemana(-7),
+          aoAvancar: () => trocarSemana(7),
+          rotuloAtual: "Esta semana",
+          aoIrParaAtual: () => trocarSemana(null),
         }),
         publicada && dados.mudou_depois_de_publicar
           ? etiqueta("mudou depois de publicar", "etiqueta-alerta")
@@ -207,6 +202,7 @@ export function criarEscala(corpo, ctx) {
             ? etiqueta("publicada", "etiqueta-ok")
             : etiqueta("rascunho", ""),
       ]),
+      el("p", { classe: "muted", texto: textoDoStatus() }),
     ]);
   }
 
@@ -216,7 +212,7 @@ export function criarEscala(corpo, ctx) {
     }
     const quando = new Date(dados.publicada_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
     const quem = dados.publicada_por ? ` por ${dados.publicada_por}` : "";
-    const base = `Publicada em ${quando}${quem} · ${dados.avisos_enviados} aviso(s) enviado(s).`;
+    const base = `Publicada em ${quando}${quem} · ${plural(dados.avisos_enviados, "aviso enviado", "avisos enviados")}.`;
     return dados.mudou_depois_de_publicar
       ? `${base} A grade mudou depois disso — publique de novo para a equipe saber.`
       : base;
@@ -243,12 +239,12 @@ export function criarEscala(corpo, ctx) {
     botao.disabled = true;
     try {
       const r = await post(`/v1/venues/${ctx.venue}/rh/escala/publicar`, { semana: dados.semana });
-      const partes = [`${r.avisados} aviso(s) na fila do WhatsApp.`];
-      if (r.alertas) partes.push(`Publicada com ${r.alertas} ponto(s) de descanso para conferir.`);
+      const partes = [`${plural(r.avisados, "aviso", "avisos")} na fila do WhatsApp.`];
+      if (r.alertas) partes.push(`Publicada com ${plural(r.alertas, "ponto", "pontos")} de descanso para conferir.`);
       if (r.sem_telefone.length) {
         partes.push(`Sem telefone na ficha: ${r.sem_telefone.join(", ")}.`);
       }
-      if (r.sem_escala) partes.push(`${r.sem_escala} pessoa(s) sem nenhum dia nesta semana.`);
+      if (r.sem_escala) partes.push(`${plural(r.sem_escala, "pessoa", "pessoas")} sem nenhum dia nesta semana.`);
       avisar(partes.join(" "), r.sem_telefone.length ? "info" : "ok");
       await recarregar();
     } catch (e) {
@@ -266,7 +262,7 @@ export function criarEscala(corpo, ctx) {
       });
       avisar(
         r.copiadas
-          ? `${r.copiadas} lançamento(s) copiado(s)${r.ignoradas ? `, ${r.ignoradas} já existia(m)` : ""}.`
+          ? `${plural(r.copiadas, "lançamento copiado", "lançamentos copiados")}${r.ignoradas ? `, ${plural(r.ignoradas, "já existia", "já existiam")}` : ""}.`
           : "Nada a copiar: esta semana já tem tudo que a anterior tinha.",
         "ok",
       );
@@ -295,7 +291,8 @@ export function criarEscala(corpo, ctx) {
           el("tr", {}, [
             el("th", { texto: "Pessoa" }),
             ...dados.dias.map((dia, i) =>
-              el("th", {}, [
+              // O dia de hoje ganha marca: é por ele que se começa a ler a semana.
+              el("th", { classe: dia === hojeNaCasa() ? "coluna-hoje" : null, "aria-current": dia === hojeNaCasa() ? "date" : null }, [
                 document.createTextNode(DIAS[i]),
                 el("small", { classe: "muted", texto: diaBr(dia).slice(0, 5) }),
               ]),
@@ -323,15 +320,25 @@ export function criarEscala(corpo, ctx) {
     const minhas = linhasDe(pessoa.id, dia);
     const aberta = editando && editando.atendenteId === pessoa.id && editando.data === dia;
 
+    const abrir = () => {
+      editando = aberta ? null : { atendenteId: pessoa.id, data: dia };
+      desenhar();
+      if (!aberta) corpo.querySelector(".editor-escala")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
     return el(
       "td",
       {
-        style: `cursor:pointer;${aberta ? "outline:2px solid var(--marca);outline-offset:-2px" : ""}`,
-        title: "Clique para lançar ou mudar",
-        onclick: () => {
-          editando = aberta ? null : { atendenteId: pessoa.id, data: dia };
-          desenhar();
-          if (!aberta) corpo.querySelector(".editor-escala")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        // A célula é o botão de lançar: recebe foco e responde ao teclado.
+        classe: `escala-celula${aberta ? " escala-celula-aberta" : ""}${dia === hojeNaCasa() ? " coluna-hoje" : ""}`,
+        tabindex: "0",
+        role: "button",
+        "aria-label": `${pessoa.apelido || pessoa.nome}, ${diaBr(dia)}: lançar ou mudar`,
+        "aria-expanded": String(Boolean(aberta)),
+        onclick: abrir,
+        onkeydown: (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          abrir();
         },
       },
       minhas.length === 0

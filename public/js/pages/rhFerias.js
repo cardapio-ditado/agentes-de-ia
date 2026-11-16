@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, comSigla, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * RH — Fase 4: férias.
@@ -42,17 +42,17 @@ const NOME_DO_PERIODO = {
  * como estiver.
  */
 const CORES = {
-  em_gozo: { fundo: "#2563a8", texto: "#ffffff", nome: "de férias agora" },
-  agendada: { fundo: "#f4a100", texto: "#221714", nome: "agendadas" },
-  gozada: { fundo: "#1a7a4a", texto: "#ffffff", nome: "tiradas" },
-  a_decidir: { fundo: "#c1121f", texto: "#ffffff", nome: "terminou sem decisão" },
+  em_gozo: { fundo: "var(--ferias-fora)", texto: "var(--ferias-texto)", nome: "de férias agora" },
+  agendada: { fundo: "var(--ferias-agendada)", texto: "var(--ferias-texto)", nome: "agendadas" },
+  gozada: { fundo: "var(--ferias-tirada)", texto: "var(--ferias-texto)", nome: "tiradas" },
+  a_decidir: { fundo: "var(--ferias-vencida)", texto: "var(--ferias-texto)", nome: "terminou sem decisão" },
 };
 
 const URGENCIAS = [
-  { ate: -1, cor: "#c1121f", rotulo: "passou do prazo" },
-  { ate: 60, cor: "#e06c00", rotulo: "vence em até 60 dias" },
-  { ate: 120, cor: "#f4a100", rotulo: "vence em até 120 dias" },
-  { ate: Infinity, cor: "#1a7a4a", rotulo: "com folga" },
+  { ate: -1, cor: "var(--ferias-vencida)", rotulo: "passou do prazo" },
+  { ate: 60, cor: "var(--ferias-perto)", rotulo: "vence em até 60 dias" },
+  { ate: 120, cor: "var(--ferias-agendada)", rotulo: "vence em até 120 dias" },
+  { ate: Infinity, cor: "var(--ferias-tirada)", rotulo: "com folga" },
 ];
 
 const urgencia = (dias) => URGENCIAS.find((u) => dias <= u.ate);
@@ -71,10 +71,12 @@ export function criarFerias(corpo, ctx) {
   return { desenhar, recarregar };
 
   async function recarregar() {
+    if (!dados) limpar(corpo).append(esqueleto({ linhas: 6 }));
     try {
       dados = await get(`/v1/venues/${ctx.venue}/rh/ferias`);
     } catch (e) {
-      limpar(corpo).append(vazio("Não deu para carregar as férias", e.message));
+      ctx.definirAcoes?.();
+      limpar(corpo).append(estadoDeErro("Não deu para carregar as férias", e.message, recarregar));
       return;
     }
     desenhar();
@@ -158,8 +160,8 @@ export function criarFerias(corpo, ctx) {
     if (pes.emGozo) partes.push([`De férias até ${diaCurto(pes.emGozo.fim)}`, "etiqueta-info"]);
     else if (pes.proximaAgendada) partes.push([`Férias em ${diaCurto(pes.proximaAgendada.inicio)}`, "etiqueta-alerta"]);
 
-    if (pes.pendencia === "vencido") partes.push([`${pes.diasVencidos} dia(s) vencido(s)`, "etiqueta-perigo"]);
-    else if (pes.pendencia === "a_tirar") partes.push([`${pes.diasATirar} dia(s) até ${diaCurto(pes.proximoPrazo)}`, "etiqueta-alerta"]);
+    if (pes.pendencia === "vencido") partes.push([`${nDias(pes.diasVencidos)} ${pes.diasVencidos === 1 ? "vencido" : "vencidos"}`, "etiqueta-perigo"]);
+    else if (pes.pendencia === "a_tirar") partes.push([`${nDias(pes.diasATirar)} até ${diaCurto(pes.proximoPrazo)}`, "etiqueta-alerta"]);
     else if (pes.pendencia === "em_dia") partes.push(["Em dia", "etiqueta-ok"]);
     else if (pes.pendencia === "primeiro_ano") partes.push([`1º ano fecha em ${diaCurto(pes.emCurso.fim)}`, ""]);
     else if (pes.pendencia === "sem_periodo") partes.push([`Entra em ${diaCurto(pes.admissao)}`, ""]);
@@ -176,69 +178,70 @@ export function criarFerias(corpo, ctx) {
       void recarregar();
       return;
     }
-    limpar(corpo);
+    // Uma pilha só: o espaço entre os blocos vem dela.
+    const pilha = el("div", { classe: "pilha" });
+    limpar(corpo).append(pilha);
     const time = equipe();
 
     if (pessoaAberta) {
       const pes = time.find((p) => p.atendente_id === pessoaAberta);
       if (pes) {
-        corpo.append(paginaDaPessoa(pes));
+        ctx.definirAcoes?.();
+        pilha.append(paginaDaPessoa(pes));
         return;
       }
       pessoaAberta = null;
     }
 
-    corpo.append(cabecalho(time));
-    if (lancando) corpo.append(cartaoDeLancamento(time, null));
+    pilha.append(cabecalho(time));
+    if (lancando) pilha.append(cartaoDeLancamento(time, null));
 
     if (time.length === 0) {
-      corpo.append(vazio("Ninguém na equipe ainda", 'Cadastre a equipe na aba "Equipe" para acompanhar as férias.'));
+      pilha.append(vazio("Ninguém na equipe ainda", 'Cadastre a equipe na aba "Equipe" para acompanhar as férias.'));
       return;
     }
 
-    if (aba === "prazos") corpo.append(prazosDaCasa(time));
-    else if (aba === "alertas") corpo.append(alertas(time));
-    else corpo.append(panoramaDoTime(time), filtrosDaLista(), listaDePessoas(time));
+    if (aba === "prazos") pilha.append(prazosDaCasa(time));
+    else if (aba === "alertas") pilha.append(alertas(time));
+    else pilha.append(panoramaDoTime(time), filtrosDaLista(), listaDePessoas(time));
   }
 
   function cabecalho(time) {
     const vencidos = time.filter((p) => p.pendencia === "vencido").length;
     const decidir = time.reduce((s, p) => s + p.aDecidir, 0);
 
-    return el("div", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Férias" }),
-          el("p", {
-            classe: "muted",
-            texto: "Quem está de férias, quem precisa tirar e o que cada pessoa já tirou.",
-          }),
-        ]),
-        el("div", { classe: "reserva-acoes" }, [
-          vencidos ? etiqueta(`${vencidos} com férias vencidas`, "etiqueta-perigo") : null,
-          decidir ? etiqueta(`${decidir} a decidir`, "etiqueta-alerta") : null,
+    // Lançar férias é a ação da aba: vai para o cabeçalho da página.
+    ctx.definirAcoes?.(
+      el(
+        "button",
+        { classe: "btn btn-primario", type: "button", "aria-expanded": String(lancando), onclick: () => { lancando = !lancando; desenhar(); } },
+        lancando ? [document.createTextNode("Fechar")] : comIcone(ICONES.mais, "Lançar férias"),
+      ),
+    );
+
+    const OLHARES = [
+      ["pessoas", "Pessoas"],
+      ["prazos", "Prazos"],
+      ["alertas", "Alertas"],
+    ];
+    return el("div", { classe: "barra-periodo" }, [
+      // Três olhares sobre o mesmo dado: chaves lado a lado, e não outra
+      // fileira de abas debaixo das abas do RH.
+      el("div", { classe: "seletor-de-visao", role: "group", "aria-label": "Como ver as férias" },
+        OLHARES.map(([id, rotulo]) =>
           el("button", {
-            classe: "btn btn-primario btn-peq",
             type: "button",
-            texto: lancando ? "Fechar" : "Lançar férias",
-            onclick: () => { lancando = !lancando; desenhar(); },
-          }),
-        ]),
-      ]),
-      el("div", { classe: "abas", style: "margin-top:14px;border-bottom:0" },
-        [
-          ["pessoas", "Pessoas"],
-          ["prazos", "Prazos"],
-          ["alertas", "Alertas"],
-        ].map(([id, rotulo]) =>
-          el("button", {
-            classe: `aba ${aba === id ? "aba-ativa" : ""}`.trim(),
-            type: "button",
+            "aria-pressed": String(aba === id),
             texto: rotulo,
             onclick: () => { aba = id; desenhar(); },
           }),
         ),
       ),
+      el("div", { classe: "cel-etiquetas" }, [
+        vencidos ? etiqueta(`${vencidos} com férias vencidas`, "etiqueta-perigo") : null,
+        decidir ? etiqueta(`${decidir} a decidir`, "etiqueta-alerta") : null,
+        !vencidos && !decidir ? etiqueta("ninguém com férias vencidas", "etiqueta-ok") : null,
+      ]),
     ]);
   }
 
@@ -251,16 +254,16 @@ export function criarFerias(corpo, ctx) {
   function panoramaDoTime(time) {
     const segmentos = [
       { chave: "em_ferias", rotulo: "de férias agora", cor: CORES.em_gozo.fundo, texto: CORES.em_gozo.texto, valor: time.filter((p) => p.emGozo).length },
-      { chave: "vencido", rotulo: "com férias vencidas", cor: "#c1121f", texto: "#ffffff", valor: time.filter((p) => p.pendencia === "vencido" && !p.emGozo).length },
-      { chave: "a_tirar", rotulo: "com dias a tirar", cor: "#f4a100", texto: "#221714", valor: time.filter((p) => p.pendencia === "a_tirar" && !p.emGozo).length },
-      { chave: "em_dia", rotulo: "em dia", cor: "#1a7a4a", texto: "#ffffff", valor: time.filter((p) => (["em_dia", "primeiro_ano", "sem_periodo"].includes(p.pendencia)) && !p.emGozo).length },
+      { chave: "vencido", rotulo: "com férias vencidas", cor: "var(--ferias-vencida)", texto: "var(--ferias-texto)", valor: time.filter((p) => p.pendencia === "vencido" && !p.emGozo).length },
+      { chave: "a_tirar", rotulo: "com dias a tirar", cor: "var(--ferias-agendada)", texto: "var(--ferias-texto)", valor: time.filter((p) => p.pendencia === "a_tirar" && !p.emGozo).length },
+      { chave: "em_dia", rotulo: "em dia", cor: "var(--ferias-tirada)", texto: "var(--ferias-texto)", valor: time.filter((p) => (["em_dia", "primeiro_ano", "sem_periodo"].includes(p.pendencia)) && !p.emGozo).length },
     ];
     const total = segmentos.reduce((s, x) => s + x.valor, 0) || 1;
 
     return el("section", { classe: "cartao" }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("h3", { texto: "O time hoje" }),
-        el("span", { classe: "muted", texto: `${total} pessoa(s) · clique numa cor para filtrar` }),
+        el("span", { classe: "muted", texto: `${total} ${total === 1 ? "pessoa" : "pessoas"} · clique numa cor para filtrar` }),
       ]),
       el("div", { classe: "ferias-barra-time" },
         segmentos.filter((s) => s.valor > 0).map((s) =>
@@ -335,7 +338,7 @@ export function criarFerias(corpo, ctx) {
                     return el("div", {
                       classe: "ferias-bloco",
                       style: `left:${esq}%;width:${larg}%;background:${cor.fundo};color:${cor.texto}`,
-                      title: `${diaBr(f.inicio)} a ${diaBr(f.fim)} · ${f.dias} dia(s) · ${cor.nome}`,
+                      title: `${diaBr(f.inicio)} a ${diaBr(f.fim)} · ${nDias(f.dias)} · ${cor.nome}`,
                       texto: larg > 7 ? `${f.dias}d` : "",
                     });
                   }),
@@ -352,20 +355,9 @@ export function criarFerias(corpo, ctx) {
   /* ================= Pessoas: a lista ================= */
 
   function filtrosDaLista() {
-    const campo = el("input", {
-      classe: "input",
-      type: "search",
-      placeholder: "Procurar pessoa…",
-      value: busca,
-      oninput: (e) => {
-        busca = e.target.value;
-        // Redesenhar só a lista: refazer a tela toda tiraria o foco do campo.
-        const antiga = corpo.querySelector(".ferias-lista");
-        if (antiga) antiga.replaceWith(listaDePessoas(equipe()));
-      },
-    });
     const escolha = el("select", {
-      classe: "input",
+      classe: "select",
+      "aria-label": "Mostrar quem",
       onchange: (e) => { filtro = e.target.value; desenhar(); },
     }, [
       ["todos", "Todas as pessoas"],
@@ -375,9 +367,19 @@ export function criarFerias(corpo, ctx) {
       ["em_dia", "Em dia"],
     ].map(([v, t]) => el("option", { value: v, texto: t, selected: filtro === v })));
 
-    return el("div", { classe: "grade", style: "margin-top:14px" }, [
-      el("div", { classe: "campo" }, [el("label", { texto: "Procurar" }), campo]),
-      el("div", { classe: "campo" }, [el("label", { texto: "Mostrar" }), escolha]),
+    return el("div", { classe: "barra-filtros" }, [
+      campoDeBusca({
+        rotulo: "Procurar pessoa pelo nome",
+        placeholder: "Procurar pessoa…",
+        valor: busca,
+        aoMudar: (texto) => {
+          busca = texto;
+          // Redesenhar só a lista: refazer a tela toda tiraria o foco do campo.
+          const antiga = corpo.querySelector(".ferias-lista");
+          if (antiga) antiga.replaceWith(listaDePessoas(equipe()));
+        },
+      }),
+      escolha,
     ]);
   }
 
@@ -397,26 +399,25 @@ export function criarFerias(corpo, ctx) {
       return el("div", { classe: "ferias-lista" }, [vazio("Ninguém com esse filtro", "Troque a busca ou volte para todas as pessoas.")]);
     }
 
-    return el("div", { classe: "tabela ferias-lista", style: "margin-top:12px" },
-      visiveis.map((pes) =>
-        el("button", {
-          classe: `linha-tabela ${pes.pendencia === "vencido" ? "linha-atencao" : ""}`.trim(),
-          type: "button",
-          onclick: () => abrir(pes.atendente_id),
-        }, [
-          el("div", { classe: "linha-principal", style: "flex:1;min-width:190px" }, [
-            el("strong", { texto: pes.nome }),
-            el("span", {
-              classe: "muted",
-              texto: [pes.funcao, pes.admissao ? `na casa desde ${diaBr(pes.admissao)}` : null].filter(Boolean).join(" · "),
-            }),
-          ]),
-          el("span", { classe: "reserva-acoes", style: "flex-wrap:wrap;justify-content:flex-end" },
-            resumo(pes).map(([texto, cor]) => etiqueta(texto, cor)),
-          ),
-        ]),
-      ),
-    );
+    return el("div", { classe: "ferias-lista" }, [
+      tabelaDeDados({
+        colunas: [
+          { rotulo: "Pessoa", principal: true },
+          { rotulo: "Na casa desde", largura: "150px" },
+          { rotulo: "Situação das férias", largura: "46%", quebra: true, larga: true },
+        ],
+        larguraMinima: "680px",
+        linhas: visiveis.map((pes) => ({
+          aoClicar: () => abrir(pes.atendente_id),
+          classe: pes.pendencia === "vencido" ? "linha-perigo" : "",
+          celulas: [
+            comSigla(pes.nome, pes.funcao || null),
+            pes.admissao ? diaBr(pes.admissao) : el("span", { classe: "muted", texto: "—" }),
+            el("span", { classe: "cel-etiquetas" }, resumo(pes).map(([texto, cor]) => etiqueta(texto, cor))),
+          ],
+        })),
+      }),
+    ]);
   }
 
   /* ================= Prazos: a casa inteira ================= */
@@ -446,10 +447,10 @@ export function criarFerias(corpo, ctx) {
 
     const conta = (teste) => linhas.filter(teste).length;
     const cartoes = [
-      { rotulo: "Passaram do prazo", valor: conta((l) => l.maisUrgente < 0), cor: "#c1121f" },
-      { rotulo: "Vencem em 60 dias", valor: conta((l) => l.maisUrgente >= 0 && l.maisUrgente <= 60), cor: "#e06c00" },
-      { rotulo: "Vencem em 120 dias", valor: conta((l) => l.maisUrgente > 60 && l.maisUrgente <= 120), cor: "#f4a100" },
-      { rotulo: "Com folga", valor: conta((l) => l.maisUrgente > 120 && l.maisUrgente !== Infinity), cor: "#1a7a4a" },
+      { rotulo: "Passaram do prazo", valor: conta((l) => l.maisUrgente < 0), cor: "var(--ferias-vencida)" },
+      { rotulo: "Vencem em 60 dias", valor: conta((l) => l.maisUrgente >= 0 && l.maisUrgente <= 60), cor: "var(--ferias-perto)" },
+      { rotulo: "Vencem em 120 dias", valor: conta((l) => l.maisUrgente > 60 && l.maisUrgente <= 120), cor: "var(--ferias-agendada)" },
+      { rotulo: "Com folga", valor: conta((l) => l.maisUrgente > 120 && l.maisUrgente !== Infinity), cor: "var(--ferias-tirada)" },
       { rotulo: "Ainda acumulando", valor: conta((l) => l.maisUrgente === Infinity), cor: "var(--borda-forte)" },
     ];
 
@@ -468,7 +469,7 @@ export function criarFerias(corpo, ctx) {
       el("section", { classe: "cartao" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("h3", { texto: "Prazo para conceder, pessoa por pessoa" }),
-          el("span", { classe: "muted", texto: `${linhas.length} pessoa(s) · quem vence primeiro no topo` }),
+          el("span", { classe: "muted", texto: `${linhas.length} ${linhas.length === 1 ? "pessoa" : "pessoas"} · quem vence primeiro no topo` }),
         ]),
         el("p", {
           classe: "muted",
@@ -510,9 +511,9 @@ export function criarFerias(corpo, ctx) {
             classe: "muted",
             texto: proximo
               ? maisUrgente < 0
-                ? `${vencidos} vencido(s) desde ${diaCurto(proximo.p.limite)}`
+                ? `${vencidos} ${vencidos === 1 ? "vencido" : "vencidos"} desde ${diaCurto(proximo.p.limite)}`
                   + (saldo > vencidos ? ` · mais ${saldo - vencidos} no prazo` : "")
-                : `${saldo} dia(s) até ${diaCurto(proximo.p.limite)} (${maisUrgente}d)`
+                : `${nDias(saldo)} até ${diaCurto(proximo.p.limite)} (${maisUrgente}d)`
               : pes.emCurso ? `fecha o ano em ${diaCurto(pes.emCurso.fim)}` : "",
           }),
         ]),
@@ -531,7 +532,7 @@ export function criarFerias(corpo, ctx) {
           return el("div", {
             classe: "ferias-faixa",
             style: `left:${esq}%;width:${Math.max(0.7, janela.pct(somarDias(f.fim, 1)) - esq)}%;background:${cor.fundo}`,
-            title: `${cor.nome}: ${diaBr(f.inicio)} a ${diaBr(f.fim)} · ${f.dias} dia(s)`,
+            title: `${cor.nome}: ${diaBr(f.inicio)} a ${diaBr(f.fim)} · ${nDias(f.dias)}`,
           });
         }),
       ]),
@@ -571,14 +572,14 @@ export function criarFerias(corpo, ctx) {
     // Vencido: a barra vai da data-limite até hoje, para o atraso ter tamanho.
     const de = dias < 0 ? per.limite : somarDias(per.fim, 1);
     const ate = dias < 0 ? dados.hoje : per.limite;
-    const titulo = `Período ${diaBr(per.inicio)} a ${diaBr(per.fim)}: ${per.dias_restantes} dia(s) a conceder até ${diaBr(per.limite)}`
+    const titulo = `Período ${diaBr(per.inicio)} a ${diaBr(per.fim)}: ${nDias(per.dias_restantes)} a conceder até ${diaBr(per.limite)}`
       + (dias < 0 ? ` — passou há ${-dias} dias` : ` — faltam ${dias} dias`);
 
     if (ate < janela.de) {
       // Venceu antes da janela: marca no canto esquerdo para não sumir.
       return el("div", {
         classe: "ferias-bloco",
-        style: `left:0;width:9%;background:${u.cor};color:#ffffff;${faixa}`,
+        style: `left:0;width:9%;background:${u.cor};color:var(--ferias-texto);${faixa}`,
         title: titulo,
         texto: `◀ ${per.dias_restantes}d`,
       });
@@ -587,7 +588,7 @@ export function criarFerias(corpo, ctx) {
     const larg = Math.max(1, janela.pct(ate) - esq);
     return el("div", {
       classe: "ferias-bloco",
-      style: `left:${esq}%;width:${larg}%;background:${u.cor};color:${u.cor === "#f4a100" ? "#221714" : "#ffffff"};${faixa}`,
+      style: `left:${esq}%;width:${larg}%;background:${u.cor};color:var(--ferias-texto);${faixa}`,
       title: titulo,
       texto: larg > 9
         ? (dias < 0 ? `${per.dias_restantes}d · vencido há ${-dias}d` : `${per.dias_restantes}d · até ${diaCurto(per.limite)}`)
@@ -616,19 +617,19 @@ export function criarFerias(corpo, ctx) {
         if (per.situacao === "vencido") {
           lista.push({
             pes, nivel: 0, rotulo: "urgente",
-            titulo: `${pes.nome}: ${per.dias_restantes} dia(s) vencidos do período ${anoDe(per.inicio)}→${anoDe(per.fim)}`,
+            titulo: `${pes.nome}: ${nDias(per.dias_restantes)} vencidos do período ${anoDe(per.inicio)}→${anoDe(per.fim)}`,
             texto: `O período de ${diaBr(per.inicio)} a ${diaBr(per.fim)} tinha de ser concedido até ${diaBr(per.limite)} — passou há ${-per.dias_para_vencer} dias. A partir daqui a lei manda pagar em dobro; fale com a contabilidade e marque as férias.`,
           });
         } else if (per.situacao === "a_vencer") {
           lista.push({
             pes, nivel: 1, rotulo: "alta",
             titulo: `${pes.nome}: o período ${anoDe(per.inicio)}→${anoDe(per.fim)} vence em ${per.dias_para_vencer} dias`,
-            texto: `Faltam ${per.dias_restantes} dia(s) do período de ${diaBr(per.inicio)} a ${diaBr(per.fim)}, e o prazo é ${diaBr(per.limite)}. Marcar agora ainda dá para combinar com a escala.`,
+            texto: `Faltam ${nDias(per.dias_restantes)} do período de ${diaBr(per.inicio)} a ${diaBr(per.fim)}, e o prazo é ${diaBr(per.limite)}. Marcar agora ainda dá para combinar com a escala.`,
           });
         } else if (per.situacao === "a_conceder" && per.dias_para_vencer <= 120 && per.dias_restantes > 0) {
           lista.push({
             pes, nivel: 2, rotulo: "média",
-            titulo: `${pes.nome}: ${per.dias_restantes} dia(s) para conceder do período ${anoDe(per.inicio)}→${anoDe(per.fim)}`,
+            titulo: `${pes.nome}: ${nDias(per.dias_restantes)} para conceder do período ${anoDe(per.inicio)}→${anoDe(per.fim)}`,
             texto: `Prazo em ${diaBr(per.limite)}, daqui a ${per.dias_para_vencer} dias. Ainda dá para escolher a melhor época para a casa.`,
           });
         }
@@ -644,7 +645,7 @@ export function criarFerias(corpo, ctx) {
           lista.push({
             pes, nivel: 2, rotulo: "média",
             titulo: `${pes.nome}: pedido esperando decisão`,
-            texto: `${diaBr(f.inicio)} a ${diaBr(f.fim)}, ${f.dias} dia(s). Aprovar já marca os dias na escala.`,
+            texto: `${diaBr(f.inicio)} a ${diaBr(f.fim)}, ${nDias(f.dias)}. Aprovar já marca os dias na escala.`,
           });
         }
       }
@@ -656,7 +657,7 @@ export function criarFerias(corpo, ctx) {
     return el("section", { classe: "cartao" }, [
       el("div", { classe: "cabecalho-secao" }, [
         el("h3", { texto: "Alertas de férias" }),
-        el("span", { classe: "muted", texto: `${lista.length} recado(s)` }),
+        el("span", { classe: "muted", texto: `${lista.length} ${lista.length === 1 ? "recado" : "recados"}` }),
       ]),
       lista.length === 0
         ? vazio("Nada pendente", "Nenhum período vencendo, nenhum pedido esperando decisão.")
@@ -690,13 +691,8 @@ export function criarFerias(corpo, ctx) {
   }
 
   function paginaDaPessoa(pes) {
-    return el("div", {}, [
-      el("button", {
-        classe: "btn btn-peq",
-        type: "button",
-        texto: "← Todas as pessoas",
-        onclick: () => { pessoaAberta = null; desenhar(); },
-      }),
+    return el("div", { classe: "pilha" }, [
+      el("div", {}, [botaoVoltar(() => { pessoaAberta = null; desenhar(); }, "Todas as pessoas")]),
       fichaDoTopo(pes),
       pes.periodos.length === 0
         ? vazio(
@@ -726,13 +722,13 @@ export function criarFerias(corpo, ctx) {
       {
         rotulo: "Dias já tirados",
         valor: pes.diasTirados,
-        nota: pes.diasVendidos > 0 ? `mais ${pes.diasVendidos} dia(s) vendido(s)` : `em ${pes.periodos.filter((p) => p.dias_gozados > 0).length} período(s)`,
+        nota: pes.diasVendidos > 0 ? `mais ${nDias(pes.diasVendidos)} ${pes.diasVendidos === 1 ? "vendido" : "vendidos"}` : `em ${pes.periodos.filter((p) => p.dias_gozados > 0).length} períodos`,
       },
       {
         rotulo: "Próximas férias",
         valor: pes.emGozo ? "agora" : pes.proximaAgendada ? diaCurto(pes.proximaAgendada.inicio) : "—",
         nota: pes.emGozo ? `volta ${diaCurto(somarDias(pes.emGozo.fim, 1))}`
-          : pes.proximaAgendada ? `${pes.proximaAgendada.dias} dia(s) · até ${diaCurto(pes.proximaAgendada.fim)}` : "nada marcado",
+          : pes.proximaAgendada ? `${nDias(pes.proximaAgendada.dias)} · até ${diaCurto(pes.proximaAgendada.fim)}` : "nada marcado",
       },
     ];
 
@@ -816,7 +812,7 @@ export function criarFerias(corpo, ctx) {
           return el("div", {
             classe: "ferias-tempo-bloco",
             style: `left:${esq}%;width:${larg}%;background:${cor.fundo}`,
-            title: `${diaBr(f.inicio)} a ${diaBr(f.fim)} · ${f.dias} dia(s) · ${cor.nome}${atrasada ? " · tiradas depois do prazo" : ""}`,
+            title: `${diaBr(f.inicio)} a ${diaBr(f.fim)} · ${nDias(f.dias)} · ${cor.nome}${atrasada ? " · tiradas depois do prazo" : ""}`,
           });
         }),
         hojeDentro ? el("div", { classe: "ferias-hoje", style: `left:${pct(dados.hoje)}%`, title: "Hoje" }) : null,
@@ -868,22 +864,22 @@ export function criarFerias(corpo, ctx) {
     if (per.situacao === "gozado") {
       return el("span", {
         classe: "ferias-frase-ok",
-        texto: `✓ Tirou tudo — ${per.dias_gozados} dia(s), último em ${diaBr(per.gozado_em)}.`,
+        texto: `Tirou tudo — ${nDias(per.dias_gozados)}, último em ${diaBr(per.gozado_em)}.`,
       });
     }
     if (meus.length === 0) {
       return el("span", {
         classe: per.situacao === "vencido" ? "ferias-frase-alerta" : "muted",
         texto: per.situacao === "vencido"
-          ? `Ainda não tirou: ${per.dias_restantes} dia(s) vencidos desde ${diaBr(per.limite)}.`
-          : `Ainda não tirou: ${per.dias_restantes} dia(s) a conceder até ${diaBr(per.limite)} (${per.dias_para_vencer} dias).`,
+          ? `Ainda não tirou: ${nDias(per.dias_restantes)} vencidos desde ${diaBr(per.limite)}.`
+          : `Ainda não tirou: ${nDias(per.dias_restantes)} a conceder até ${diaBr(per.limite)} (${per.dias_para_vencer} dias).`,
       });
     }
     return el("span", {
       classe: per.situacao === "vencido" ? "ferias-frase-alerta" : "muted",
       texto: `Tirou ${per.dias_gozados} de 30 dias · ${per.situacao === "vencido"
-        ? `${per.dias_restantes} dia(s) vencidos desde ${diaBr(per.limite)}`
-        : `faltam ${per.dias_restantes} dia(s) até ${diaBr(per.limite)}`}.`,
+        ? `${nDias(per.dias_restantes)} vencidos desde ${diaBr(per.limite)}`
+        : `faltam ${nDias(per.dias_restantes)} até ${diaBr(per.limite)}`}.`,
     });
   }
 
@@ -894,7 +890,7 @@ export function criarFerias(corpo, ctx) {
       ordem ? el("span", { classe: "ferias-chip-ordem", texto: ordem }) : null,
       el("span", { classe: "ferias-cor", style: `background:${cor.fundo}` }),
       el("strong", { texto: `${diaBr(f.inicio)} a ${diaBr(f.fim)}` }),
-      el("span", { classe: "muted", texto: `${f.dias} dia(s)${f.abono_dias ? ` + ${f.abono_dias} vendido(s)` : ""} · ${NOME_DA_SITUACAO[f.situacao] ?? f.situacao}` }),
+      el("span", { classe: "muted", texto: `${nDias(f.dias)}${f.abono_dias ? ` + ${f.abono_dias} ${f.abono_dias === 1 ? "vendido" : "vendidos"}` : ""} · ${NOME_DA_SITUACAO[f.situacao] ?? f.situacao}` }),
       f.situacao === "pedido"
         ? el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "Aprovar", onclick: (e) => decidir(f.id, "aprovar", e.target) })
         : null,
@@ -964,8 +960,8 @@ export function criarFerias(corpo, ctx) {
       }
       const dias = diasEntre(inicio.value, fim.value);
       previa.textContent = fim.value < dados.hoje
-        ? `${dias} dia(s) — as datas já passaram, então entra direto como tiradas e quita o período.`
-        : `${dias} dia(s) — fica como pedido até alguém aprovar; ao aprovar, os dias entram na escala.`;
+        ? `${nDias(dias)} — as datas já passaram, então entra direto como tiradas e quita o período.`
+        : `${nDias(dias)} — fica como pedido até alguém aprovar; ao aprovar, os dias entram na escala.`;
     };
     inicio.addEventListener("change", recalcular);
     fim.addEventListener("change", recalcular);
@@ -1146,6 +1142,12 @@ function tempoDeCasa(admissao, hoje) {
   meses = Math.max(0, meses);
   const anos = Math.floor(meses / 12);
   const resto = meses % 12;
-  if (anos === 0) return `${resto} mês(es)`;
-  return resto === 0 ? `${anos} ano(s)` : `${anos} ano(s) e ${resto} mês(es)`;
+  if (anos === 0) return `${resto} ${resto === 1 ? "mês" : "meses"}`;
+  const emAnos = `${anos} ${anos === 1 ? "ano" : "anos"}`;
+  return resto === 0 ? emAnos : `${emAnos} e ${resto} ${resto === 1 ? "mês" : "meses"}`;
+}
+
+/** "1 dia", "30 dias": o número com a palavra no singular ou no plural. */
+function nDias(n) {
+  return `${n} ${Number(n) === 1 ? "dia" : "dias"}`;
 }

@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo } from "../api.js";
-import { avisar, dataHora, dinheiro, el, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, comSigla, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { criarEscala } from "./rhEscala.js";
 import { criarFerias } from "./rhFerias.js";
 import { criarFechamento } from "./rhFechamento.js";
@@ -85,27 +85,39 @@ export async function rh(raiz, ctx) {
   const indicadores = criarIndicadores(corpo, ctx);
   const contratacao = criarContratacao(corpo, ctx);
 
+  const ABAS = [
+    ["equipe", "Equipe"],
+    ["escala", "Escala"],
+    ["ferias", "Férias"],
+    ["fechamento", "Gorjeta"],
+    ["treinamentos", "Treinamentos"],
+    ["indicadores", "Indicadores"],
+    ["contratacao", "Contratação"],
+  ];
   const barra = el(
     "div",
-    { classe: "abas" },
-    [
-      ["equipe", "Equipe"],
-      ["escala", "Escala"],
-      ["ferias", "Férias"],
-      ["fechamento", "Gorjeta"],
-      ["treinamentos", "Treinamentos"],
-      ["indicadores", "Indicadores"],
-      ["contratacao", "Contratação"],
-    ].map(([id, rotulo]) =>
+    { classe: "abas", role: "tablist", "aria-label": "RH" },
+    ABAS.map(([id, rotulo]) =>
       el("button", {
         classe: `aba ${id === abaAtiva ? "aba-ativa" : ""}`.trim(),
         type: "button",
+        role: "tab",
+        "aria-selected": String(id === abaAtiva),
+        tabindex: id === abaAtiva ? "0" : "-1",
         "data-aba": id,
         texto: rotulo,
         onclick: () => trocarAba(id),
       }),
     ),
   );
+  // Setas trocam de aba, como em qualquer grupo de abas.
+  barra.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const ids = ABAS.map(([id]) => id);
+    const proxima = ids[(ids.indexOf(abaAtiva) + (e.key === "ArrowRight" ? 1 : ids.length - 1)) % ids.length];
+    e.preventDefault();
+    void trocarAba(proxima).then(() => barra.querySelector(`[data-aba="${proxima}"]`)?.focus());
+  });
 
   raiz.append(el("div", { classe: "pilha" }, [barra, cabecalho, corpo]));
   await trocarAba(abaAtiva);
@@ -113,7 +125,14 @@ export async function rh(raiz, ctx) {
   async function trocarAba(id) {
     abaAtiva = id;
     sessionStorage.setItem("brasa.rh.aba", id);
-    for (const b of barra.querySelectorAll(".aba")) b.classList.toggle("aba-ativa", b.dataset.aba === id);
+    for (const b of barra.querySelectorAll(".aba")) {
+      const ativa = b.dataset.aba === id;
+      b.classList.toggle("aba-ativa", ativa);
+      b.setAttribute("aria-selected", String(ativa));
+      b.tabIndex = ativa ? 0 : -1;
+    }
+    // As ações do cabeçalho são de cada aba: a que entra põe as dela.
+    ctx.definirAcoes?.();
     // Os indicadores falam da equipe, não da semana: na escala eles só
     // empurrariam a grade para baixo.
     cabecalho.hidden = id !== "equipe";
@@ -127,17 +146,15 @@ export async function rh(raiz, ctx) {
   }
 
   async function recarregar() {
+    if (!dados) limpar(corpo).append(esqueleto({ linhas: 6 }));
     try {
       dados = await get(`/v1/venues/${ctx.venue}/rh${verDesligados ? "?desligados=1" : ""}`);
     } catch (e) {
-      limpar(corpo).append(
-        el("div", { classe: "cartao" }, [
-          el("h2", { texto: "Não deu para carregar o RH" }),
-          el("p", { classe: "muted", texto: e.message }),
-        ]),
-      );
+      cabecalho.hidden = true;
+      limpar(corpo).append(estadoDeErro("Não deu para carregar a equipe", e.message, recarregar));
       return;
     }
+    cabecalho.hidden = abaAtiva !== "equipe";
     desenharCabecalho();
     if (abertaId) await abrirFicha(abertaId);
     else desenharLista();
@@ -156,18 +173,36 @@ export async function rh(raiz, ctx) {
       indicador({
         rotulo: "Na casa",
         valor: r.ativos,
-        nota: r.desligados ? `${r.desligados} desligado(s) no histórico` : null,
+        nota: r.desligados ? `${r.desligados} ${r.desligados === 1 ? "desligado" : "desligados"} no histórico` : "pessoas na equipe hoje",
+        iconePath: ICONES.pessoas,
+        cor: "areia",
       }),
       indicador({
         rotulo: "Salários combinados",
         valor: dinheiro(folha),
+        iconePath: ICONES.cifrao,
+        cor: "musgo",
         // Sem encargos de propósito: quem calcula FGTS, INSS e férias é a
         // contabilidade. Dizer "folha" aqui faria o dono planejar por um
         // número que não é o que ele paga.
         nota: semSalario ? `${semSalario} sem salário anotado` : "sem encargos",
       }),
-      indicador({ rotulo: "Com pendência", valor: r.com_pendencia, destaque: r.com_pendencia > 0 }),
-      indicador({ rotulo: "Documento vencendo", valor: r.documentos_em_alerta, destaque: r.documentos_em_alerta > 0 }),
+      indicador({
+        rotulo: "Com pendência",
+        valor: r.com_pendencia,
+        nota: r.com_pendencia > 0 ? "falta dado ou documento na ficha" : "todas as fichas completas",
+        iconePath: ICONES.alerta,
+        cor: "marca",
+        tom: r.com_pendencia > 0 ? "alerta" : undefined,
+      }),
+      indicador({
+        rotulo: "Documento vencendo",
+        valor: r.documentos_em_alerta,
+        nota: r.documentos_em_alerta > 0 ? "vencidos ou perto de vencer" : "nenhum perto de vencer",
+        iconePath: ICONES.calendario,
+        cor: "pinho",
+        tom: r.documentos_em_alerta > 0 ? "alerta" : undefined,
+      }),
     );
   }
 
@@ -220,7 +255,7 @@ export async function rh(raiz, ctx) {
           e.target.disabled = true;
           try {
             const r = await post(`/v1/venues/${ctx.venue}/rh/documentos/${a.documento_id}/atestado`, { aceitar, inicio: inicio.value, dias: dias.value });
-            avisar(aceitar ? `Atestado confirmado: ${r.dias} dia(s) marcados na escala de ${a.nome}.` : "Atestado não aceito. A escala não mudou.", "ok");
+            avisar(aceitar ? `Atestado confirmado: ${plural(r.dias, "dia marcado", "dias marcados")} na escala de ${a.nome}.` : "Atestado não aceito. A escala não mudou.", "ok");
             await recarregar();
           } catch (err) {
             avisar(err.message, "erro");
@@ -233,7 +268,7 @@ export async function rh(raiz, ctx) {
             el("span", {
               classe: "muted",
               texto: a.inicio && a.dias
-                ? ` · lido da foto: ${a.dias} dia(s) a partir de ${diaBr(a.inicio)}`
+                ? ` · lido da foto: ${plural(a.dias, "dia", "dias")} a partir de ${diaBr(a.inicio)}`
                 : " · não deu para ler o período: preencha olhando o documento",
             }),
           ]),
@@ -278,82 +313,19 @@ export async function rh(raiz, ctx) {
       classe: "input",
       type: "month",
       value: mesPassado.toISOString().slice(0, 7),
+      "aria-label": "Mês do resumo para a contabilidade",
       title: "Mês do resumo para a contabilidade",
-      style: "max-width:160px",
     });
 
-    const campoBusca = el("input", {
-      classe: "input",
-      type: "search",
-      placeholder: "Buscar por nome, função ou telefone…",
-      value: busca,
-      style: "max-width:320px",
-      oninput: (e) => {
-        busca = e.target.value;
-        desenharLista();
-        // Redesenhar troca o campo por um novo: sem devolver o cursor, quem
-        // digita a segunda letra digita no vazio.
-        const novo = corpo.querySelector('input[type="search"]');
-        if (novo) {
-          novo.focus();
-          novo.setSelectionRange(novo.value.length, novo.value.length);
-        }
-      },
-    });
-
-    corpo.append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Equipe" }),
-          el("p", {
-            classe: "muted",
-            texto: "Quem trabalha na casa, desde quando, quanto ganha e o que falta de documento. Clique numa linha para abrir a ficha.",
-          }),
-        ]),
-        el("div", { classe: "reserva-acoes" }, [
-          campoBusca,
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: verDesligados ? "Esconder desligados" : "Ver desligados",
-            onclick: async () => {
-              verDesligados = !verDesligados;
-              await recarregar();
-            },
-          }),
-          el("button", {
-            classe: "btn btn-peq",
-            type: "button",
-            texto: "Mapa DISC",
-            title: "O perfil comportamental de cada um, e o que falta na equipe",
-            onclick: async (e) => {
-              e.target.disabled = true;
-              try {
-                const mapa = await get(`/v1/venues/${ctx.venue}/rh/disc-equipe`);
-                const cartao = cartaoDoMapaDisc(mapa);
-                corpo.querySelector(".disc-mapa")?.closest("section")?.remove();
-                corpo.querySelector(".cabecalho-secao")?.after(cartao);
-                cartao.scrollIntoView({ behavior: "smooth", block: "start" });
-              } catch (err) {
-                avisar(err.message, "erro");
-              } finally {
-                e.target.disabled = false;
-              }
-            },
-          }),
-          seletorDoMes,
-          botaoDePdf(() => resumoDoMesEmPdf(seletorDoMes.value), "Resumo do mês"),
-          el("button", {
-            classe: "btn btn-primario",
-            type: "button",
-            texto: "Admitir alguém",
-            onclick: () => formularioDeAdmissao(),
-          }),
-        ]),
-      ]),
+    // No cabeçalho, o que se faz com a equipe inteira: o resumo do mês para
+    // o contador e a admissão, que é a ação principal desta tela.
+    ctx.definirAcoes?.(
+      seletorDoMes,
+      botaoDePdf(() => resumoDoMesEmPdf(seletorDoMes.value), "Resumo do mês"),
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => formularioDeAdmissao() }, comIcone(ICONES.mais, "Admitir alguém")),
     );
 
-    if (dados.pessoas.length === 0) {
+    if (dados.pessoas.length === 0 && !verDesligados) {
       corpo.append(
         vazio(
           "Ninguém cadastrado ainda",
@@ -363,112 +335,150 @@ export async function rh(raiz, ctx) {
       return;
     }
 
-    const pessoas = pessoasNaTela();
-    if (pessoas.length === 0) {
-      corpo.append(vazio("Ninguém com esse nome", "Tente outro pedaço do nome, da função ou do telefone."));
-      return;
-    }
-
-    const naTela = pessoas.filter((p) => !p.ficha?.desligamento);
-    const desligadosNaTela = pessoas.length - naTela.length;
-    const somaVisivel = naTela.reduce((soma, p) => soma + (Number(p.ficha?.salario) || 0), 0);
+    // A tabela mora numa caixa própria: a busca redesenha só as linhas, e o
+    // cursor de quem está digitando não sai do lugar.
+    const tabela = el("div", {});
+    const areaDoMapa = el("div", {});
 
     corpo.append(
-      el("div", {}, [
-        el("div", { classe: "rolagem-x" }, [
-          el("table", { classe: "planilha" }, [
-            el("thead", {}, [
-              el("tr", {}, [
-                colunaOrdenavel("Nome", "nome"),
-                colunaOrdenavel("Função", "funcao"),
-                colunaOrdenavel("Vínculo", "vinculo"),
-                colunaOrdenavel("Admissão", "admissao"),
-                colunaOrdenavel("Salário", "salario", "col-num"),
-                el("th", { texto: "Telefone" }),
-                el("th", { texto: "Situação" }),
-              ]),
-            ]),
-            el(
-              "tbody",
-              {},
-              pessoas.map((pessoa) => linhaDaPessoa(pessoa)),
-            ),
-            el("tfoot", {}, [
-              el("tr", {}, [
-                el("td", {
-                  colspan: 4,
-                  // O total soma só quem está na casa: somar salário de quem
-                  // saiu daria um número que não existe.
-                  texto: `${naTela.length} na casa${desligadosNaTela ? ` · ${desligadosNaTela} desligado(s)` : ""}`,
-                }),
-                el("td", { classe: "col-num", texto: dinheiro(somaVisivel) }),
-                el("td", { colspan: 2, classe: "muted", texto: "soma de quem está na casa, sem encargos" }),
-              ]),
-            ]),
-          ]),
+      el("div", { classe: "pilha" }, [
+        el("div", { classe: "barra-filtros" }, [
+          campoDeBusca({
+            rotulo: "Buscar na equipe por nome, função ou telefone",
+            placeholder: "Buscar por nome, função ou telefone…",
+            valor: busca,
+            atalho: true,
+            aoMudar: (texto) => {
+              busca = texto;
+              desenharTabela();
+            },
+          }),
+          el("button", {
+            classe: "btn",
+            type: "button",
+            "aria-pressed": String(verDesligados),
+            texto: verDesligados ? "Esconder desligados" : "Ver desligados",
+            onclick: async () => {
+              verDesligados = !verDesligados;
+              await recarregar();
+            },
+          }),
+          el("button", {
+            classe: "btn",
+            type: "button",
+            texto: "Mapa DISC",
+            title: "O perfil comportamental de cada um, e o que falta na equipe",
+            onclick: async (e) => {
+              e.target.disabled = true;
+              try {
+                const mapa = await get(`/v1/venues/${ctx.venue}/rh/disc-equipe`);
+                const cartao = cartaoDoMapaDisc(mapa);
+                limpar(areaDoMapa).append(cartao);
+                cartao.scrollIntoView({ behavior: "smooth", block: "start" });
+              } catch (err) {
+                avisar(err.message, "erro");
+              } finally {
+                e.target.disabled = false;
+              }
+            },
+          }),
         ]),
+        areaDoMapa,
+        tabela,
       ]),
     );
-  }
+    desenharTabela();
 
-  function colunaOrdenavel(rotulo, campo, classe = "") {
-    const ativa = ordem.campo === campo;
-    return el("th", {
-      classe: `${classe} coluna-ordenavel`.trim(),
-      style: "cursor:pointer;user-select:none",
-      texto: ativa ? `${rotulo} ${ordem.desc ? "▼" : "▲"}` : rotulo,
-      title: "Clique para ordenar por esta coluna",
-      onclick: () => {
-        // Clicar de novo na mesma coluna inverte; coluna nova começa de cima.
-        ordem = ativa ? { campo, desc: !ordem.desc } : { campo, desc: false };
-        desenharLista();
-      },
-    });
+    function desenharTabela() {
+      const pessoas = pessoasNaTela();
+      if (pessoas.length === 0) {
+        limpar(tabela).append(
+          dados.pessoas.length === 0
+            ? vazio("Ninguém na lista", "Não há pessoas na casa nem desligados no histórico.")
+            : vazio("Ninguém com esse nome", "Tente outro pedaço do nome, da função ou do telefone."),
+        );
+        return;
+      }
+
+      const naTela = pessoas.filter((p) => !p.ficha?.desligamento);
+      const desligadosNaTela = pessoas.length - naTela.length;
+      const somaVisivel = naTela.reduce((soma, p) => soma + (Number(p.ficha?.salario) || 0), 0);
+      // Clicar de novo na mesma coluna inverte; coluna nova começa de cima.
+      const ordenar = (campo) => ({
+        ativa: ordem.campo === campo,
+        desc: ordem.campo === campo && ordem.desc,
+        aoClicar: () => {
+          ordem = ordem.campo === campo ? { campo, desc: !ordem.desc } : { campo, desc: false };
+          desenharTabela();
+        },
+      });
+
+      limpar(tabela).append(
+        tabelaDeDados({
+          colunas: [
+            { rotulo: "Nome", principal: true, ordem: ordenar("nome") },
+            { rotulo: "Função", largura: "12%", ordem: ordenar("funcao") },
+            { rotulo: "Vínculo", largura: "104px", ordem: ordenar("vinculo") },
+            { rotulo: "Admissão", largura: "136px", ordem: ordenar("admissao") },
+            { rotulo: "Salário", largura: "128px", num: true, ordem: ordenar("salario") },
+            { rotulo: "Telefone", largura: "158px" },
+            { rotulo: "Situação", largura: "21%", quebra: true, larga: true },
+          ],
+          larguraMinima: "1000px",
+          linhas: pessoas.map(linhaDaPessoa),
+          rodape: [
+            // O total soma só quem está na casa: somar salário de quem saiu
+            // daria um número que não existe.
+            `${naTela.length} na casa${desligadosNaTela ? ` · ${desligadosNaTela} ${desligadosNaTela === 1 ? "desligado" : "desligados"}` : ""}`,
+            null,
+            null,
+            null,
+            dinheiro(somaVisivel),
+            null,
+            el("span", { classe: "muted", texto: "soma de quem está na casa, sem encargos" }),
+          ],
+        }),
+      );
+    }
   }
 
   function linhaDaPessoa(pessoa) {
     const f = pessoa.ficha;
     const desligado = Boolean(f?.desligamento);
+    const traco = () => el("span", { classe: "muted", texto: "—" });
 
-    return el(
-      "tr",
-      {
-        style: "cursor:pointer",
-        classe: !desligado && pessoa.pendencias.length ? "linha-atencao" : "",
-        onclick: () => abrirFicha(pessoa.id),
-      },
-      [
-        el("td", {}, [
-          el("strong", { texto: pessoa.nome }),
-          pessoa.apelido ? el("small", { classe: "muted", texto: pessoa.apelido }) : null,
-        ]),
-        el("td", { texto: f?.cargo || pessoa.funcao || "—" }),
-        el("td", { texto: f?.vinculo ? NOME_DO_VINCULO[f.vinculo] ?? f.vinculo : "—" }),
-        el("td", {}, [
-          document.createTextNode(f?.admissao ? diaBr(f.admissao) : "—"),
-          f?.admissao && !desligado ? el("small", { classe: "muted", texto: tempoDeCasa(f.admissao) }) : null,
-          desligado ? el("small", { classe: "muted", texto: `saiu ${diaBr(f.desligamento)}` }) : null,
-        ]),
-        el("td", { classe: "col-num", texto: f?.salario ? dinheiro(f.salario) : "—" }),
-        el("td", { texto: telefoneBr(f?.telefone) }),
-        el("td", {}, [
+    return {
+      aoClicar: () => abrirFicha(pessoa.id),
+      classe: !desligado && pessoa.pendencias.length ? "linha-atencao" : "",
+      celulas: [
+        comSigla(pessoa.nome, pessoa.apelido || null),
+        f?.cargo || pessoa.funcao || traco(),
+        f?.vinculo ? NOME_DO_VINCULO[f.vinculo] ?? f.vinculo : traco(),
+        f?.admissao
+          ? el("span", {}, [
+              document.createTextNode(diaBr(f.admissao)),
+              el("small", { texto: desligado ? `saiu ${diaBr(f.desligamento)}` : tempoDeCasa(f.admissao) }),
+            ])
+          : desligado
+            ? el("span", {}, [traco(), el("small", { texto: `saiu ${diaBr(f.desligamento)}` })])
+            : traco(),
+        f?.salario ? dinheiro(f.salario) : traco(),
+        f?.telefone ? telefoneBr(f.telefone) : traco(),
+        el("span", { classe: "cel-etiquetas" }, [
           desligado
             ? etiqueta("desligado", "")
             : pessoa.pendencias.length
-              ? // A lista inteira alargaria a coluna (a planilha não quebra
-                // linha): a primeira pendência conta a história, o resto vira
-                // número, e a ficha mostra tudo.
+              ? // A lista inteira alargaria a coluna: a primeira pendência
+                // conta a história, o resto vira número, e a ficha mostra tudo.
                 etiqueta(
-                  `falta ${pessoa.pendencias[0].toLowerCase()}${
-                    pessoa.pendencias.length > 1 ? ` +${pessoa.pendencias.length - 1}` : ""
-                  }`,
+                  `${rotuloDaPendencia(pessoa.pendencias[0])}${pessoa.pendencias.length > 1 ? ` +${pessoa.pendencias.length - 1}` : ""}`,
                   "etiqueta-alerta",
                 )
               : etiqueta("completo", "etiqueta-ok"),
           pessoa.documentos_alerta ? etiqueta(`${pessoa.documentos_alerta} vencendo`, "etiqueta-alerta") : null,
         ]),
       ],
-    );
+    };
   }
 
   /**
@@ -521,6 +531,8 @@ export async function rh(raiz, ctx) {
 
   function formularioDeAdmissao() {
     limpar(corpo);
+    ctx.definirAcoes?.();
+    cabecalho.hidden = true;
 
     const nome = campo("Nome completo", el("input", { classe: "input", type: "text", placeholder: "Como está no documento" }));
     const apelido = campo("Como a equipe chama", el("input", { classe: "input", type: "text", placeholder: "Zé do Bar" }));
@@ -540,7 +552,7 @@ export async function rh(raiz, ctx) {
               texto: "O básico agora; o resto (documentos, pagamento, endereço) você completa na ficha depois.",
             }),
           ]),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Cancelar", onclick: () => desenharLista() }),
+          botaoVoltar(() => voltarParaALista(), "Equipe"),
         ]),
         el("div", { classe: "grade grade-2" }, [nome.caixa, apelido.caixa, funcao.caixa, vinculo.caixa]),
         el("div", { classe: "grade" }, [admissao.caixa, telefone.caixa, cpf.caixa]),
@@ -586,9 +598,17 @@ export async function rh(raiz, ctx) {
 
   /* ================= A ficha ================= */
 
+  /** Da admissão ou da ficha de volta para a lista, com os indicadores. */
+  function voltarParaALista() {
+    cabecalho.hidden = false;
+    desenharLista();
+  }
+
   async function abrirFicha(id) {
     abertaId = id;
-    limpar(corpo).append(el("p", { classe: "muted", texto: "Abrindo a ficha…" }));
+    ctx.definirAcoes?.();
+    cabecalho.hidden = true;
+    limpar(corpo).append(esqueleto({ linhas: 5 }));
 
     let visao;
     let visao360 = null;
@@ -600,7 +620,7 @@ export async function rh(raiz, ctx) {
         get(`/v1/venues/${ctx.venue}/rh/${id}/360`).catch(() => null),
       ]);
     } catch (e) {
-      limpar(corpo).append(vazio("Não deu para abrir a ficha", e.message));
+      limpar(corpo).append(botaoVoltar(() => voltarParaALista(), "Voltar para a equipe"), estadoDeErro("Não deu para abrir a ficha", e.message, () => abrirFicha(id)));
       return;
     }
 
@@ -656,7 +676,7 @@ export async function rh(raiz, ctx) {
                 : "Sem data de admissão",
           }),
         ]),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: () => desenharLista() }),
+        botaoVoltar(() => voltarParaALista(), "Equipe"),
       ]),
     );
 
@@ -862,9 +882,9 @@ export async function rh(raiz, ctx) {
           dias === null
             ? null
             : dias < 0
-              ? etiqueta(`venceu há ${Math.abs(dias)} dia(s)`, "etiqueta-alerta")
+              ? etiqueta(`venceu há ${plural(Math.abs(dias), "dia", "dias")}`, "etiqueta-alerta")
               : dias <= 30
-                ? etiqueta(`vence em ${dias} dia(s)`, "etiqueta-alerta")
+                ? etiqueta(`vence em ${plural(dias, "dia", "dias")}`, "etiqueta-alerta")
                 : etiqueta(`vale até ${diaBr(doc.validade)}`, "etiqueta-ok"),
           el("div", { classe: "reserva-acoes" }, [
             el("button", {
@@ -986,6 +1006,18 @@ function tempoDeCasa(admissao) {
 }
 
 /** "65999990000" vira "(65) 99999-0000". */
+/**
+ * "CPF" → "falta CPF"; "Data de admissão" → "falta data de admissão". Sigla
+ * continua em maiúscula, e frase pronta ("Ficha ainda não preenchida") fica
+ * como veio.
+ */
+function rotuloDaPendencia(texto) {
+  const t = String(texto ?? "");
+  if (/^ficha\b/i.test(t)) return t;
+  const sigla = /^[A-ZÀ-Ú]{2,}(\s|$)/.test(t);
+  return `falta ${sigla ? t : t.charAt(0).toLowerCase() + t.slice(1)}`;
+}
+
 function telefoneBr(digitos) {
   const d = String(digitos ?? "").replace(/\D/g, "");
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;

@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { avisar, el, preencher, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, el, esqueleto, estadoDeErro, preencher, vazio } from "../ui.js";
 
 /**
  * RH — Treinamentos: vídeo curto e até cinco perguntas, por função.
@@ -15,14 +15,15 @@ export function criarTreinamentos(corpo, ctx) {
   return { recarregar };
 
   async function recarregar() {
-    preencher(corpo, el("p", { classe: "muted", texto: "Carregando…" }));
+    preencher(corpo, esqueleto({ linhas: 4 }));
     try {
       [lista, modelos] = await Promise.all([
         get(`/v1/venues/${ctx.venue}/rh/treinamentos`),
         get(`/v1/venues/${ctx.venue}/rh/treinamentos/modelos`).catch(() => []),
       ]);
     } catch (e) {
-      preencher(corpo, vazio("Treinamentos indisponíveis", e.message));
+      ctx.definirAcoes?.();
+      preencher(corpo, estadoDeErro("Não deu para carregar os treinamentos", e.message, recarregar));
       return;
     }
     desenharLista();
@@ -30,14 +31,11 @@ export function criarTreinamentos(corpo, ctx) {
 
   function desenharLista() {
     const titulos = new Set(lista.map((t) => t.titulo.toLowerCase()));
-    preencher(corpo, 
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Treinamentos" }),
-          el("p", { classe: "muted", texto: "Vídeo curto e perguntas rápidas. A equipe faz pelo espaço do funcionário (o link fica na ficha de cada um)." }),
-        ]),
-        el("button", { classe: "btn btn-primario", type: "button", texto: "+ Novo treinamento", onclick: () => editor(null) }),
-      ]),
+    ctx.definirAcoes?.(
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => editor(null) }, comIcone(ICONES.mais, "Novo treinamento")),
+    );
+    preencher(corpo, el("div", { classe: "pilha" }, [
+      el("p", { classe: "muted", texto: "Vídeo curto e perguntas rápidas. A equipe faz pelo espaço do funcionário (o link fica na ficha de cada um)." }),
       lista.length
         ? el("div", { classe: "pilha" }, lista.map(cartao))
         : vazio("Nenhum treinamento ainda", "Comece por um modelo pronto abaixo: as perguntas já vêm feitas."),
@@ -56,7 +54,7 @@ export function criarTreinamentos(corpo, ctx) {
             }),
           ]))),
       ]),
-    );
+    ]));
   }
 
   function cartao(t) {
@@ -64,16 +62,15 @@ export function criarTreinamentos(corpo, ctx) {
       el("div", { classe: "cabecalho-secao" }, [
         el("div", {}, [
           el("h3", { texto: t.titulo }),
-          el("p", { classe: "muted", texto: `${t.funcao ? `Para: ${t.funcao}` : "Para a equipe toda"} · ${t.perguntas.length} pergunta(s)${t.video_url ? " · com vídeo" : " · sem vídeo ainda"}` }),
+          el("p", { classe: "muted", texto: `${t.funcao ? `Para: ${t.funcao}` : "Para a equipe toda"} · ${t.perguntas.length} ${t.perguntas.length === 1 ? "pergunta" : "perguntas"}${t.video_url ? " · com vídeo" : " · sem vídeo ainda"}` }),
         ]),
         el("div", { classe: "reserva-acoes" }, [
-          el("button", { classe: "btn btn-peq", type: "button", texto: "Editar", onclick: () => editor(t) }),
-          el("button", {
-            classe: "btn-icone",
-            type: "button",
-            title: "Tirar este treinamento",
-            texto: "🗑",
-            onclick: async () => {
+          acaoIcone({ iconePath: ICONES.editar, rotulo: "Editar este treinamento", aoClicar: () => editor(t) }),
+          acaoIcone({
+            iconePath: ICONES.lixeira,
+            rotulo: "Tirar este treinamento",
+            variante: "perigo",
+            aoClicar: async () => {
               if (!confirm(`Tirar "${t.titulo}"? Quem já fez continua registrado.`)) return;
               try {
                 await del(`/v1/venues/${ctx.venue}/rh/treinamentos/${t.id}`);
@@ -127,10 +124,11 @@ export function criarTreinamentos(corpo, ctx) {
     };
     desenharPerguntas();
 
+    ctx.definirAcoes?.();
     preencher(corpo, 
       el("div", { classe: "cabecalho-secao" }, [
         el("h2", { texto: existente?.id ? `Editar: ${existente.titulo}` : "Novo treinamento" }),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenharLista }),
+        botaoVoltar(desenharLista, "Treinamentos"),
       ]),
       el("section", { classe: "cartao pilha" }, [
         el("div", { classe: "grade grade-2" }, [

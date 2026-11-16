@@ -49,7 +49,10 @@ Para trocar uma cor: mude o tom na rampa ou o papel em `colors.json`, repita no 
 | Componente | Função | Uso |
 |---|---|---|
 | Indicador | `indicador({ rotulo, valor, nota, iconePath, tom, cor })` | `tom` = situação (`alerta`, `perigo`); `cor` = tom do cartão (`areia`, `musgo`, `marca`, `pinho`) |
-| Tabela de dados | `tabelaDeDados({ colunas, linhas, grupos, rodape, estreita, larguraMinima })` | `<table>` real; vira ficha no celular; grupos que abrem e fecham |
+| Tabela de dados | `tabelaDeDados({ colunas, linhas, grupos, rodape, estreita, larguraMinima })` | `<table>` real; vira ficha no celular; grupos que abrem e fecham; coluna com `ordem: { ativa, desc, aoClicar }` ganha título que ordena (`aria-sort`) |
+| Navegador de período | `navegadorDePeriodo({ titulo, detalhe, aoVoltar, aoAvancar, rotuloAtual, aoIrParaAtual })` | semana ou mês com setas e "Esta semana"; fica numa `.barra-periodo` |
+| Nome com iniciais | `comSigla(nome, detalhe)` | célula principal de pessoa ou fornecedor (as iniciais somem em tela estreita) |
+| Plural | `plural(n, um, varios)` | "1 dia", "30 dias" — nada de "dia(s)" na tela |
 | Campo de busca | `campoDeBusca({ rotulo, placeholder, valor, aoMudar, espera })` | lupa, limpar e rótulo acessível |
 | Ação em ícone | `acaoIcone({ iconePath, rotulo, aoClicar, variante })` | `aria-label` + dica; variantes `principal`, `perigo` |
 | Botão com ícone | `comIcone(iconePath, texto)` | conteúdo de um `.btn` |
@@ -61,7 +64,9 @@ Para trocar uma cor: mude o tom na rampa ou o papel em `colors.json`, repita no 
 | Carregando | `esqueleto({ cartoes, linhas })` | ocupa o lugar do que vem |
 | Ações da tela | `ctx.definirAcoes(...botoes)` | ações principais no cabeçalho, ao lado do título |
 
-Classes de apoio: `.btn`, `.btn-primario`, `.btn-peq`, `.abas`/`.aba`, `.abas-com-acoes`, `.chip`, `.barra-filtros`, `.cartao`, `.painel-analise`.
+Classes de apoio: `.btn`, `.btn-primario`, `.btn-peq`, `.abas`/`.aba`, `.abas-com-acoes`, `.chip`, `.barra-filtros`, `.barra-periodo`, `.seletor-de-visao` (duas ou três visões do mesmo dado, com `aria-pressed`), `.cel-etiquetas`, `.regra-em-linha`, `.cartao`, `.painel-analise`.
+
+Aviso em cartão (`.cartao.alerta`, `.cartao.linha-perigo`): fio de cor à esquerda e véu de 7%, nunca bloco de fundo carregado. Cores de gráfico de situação (férias) saem dos tokens `--ferias-*`, que apontam para as rampas do kit.
 
 ## Acabamento
 
@@ -93,5 +98,5 @@ Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (J
 1. ~~Estoque, Contagem, Produção e Vendas~~ (feito).
 2. ~~Itens e fornecedores; Receitas e custo do prato~~ (feito: visão principal). Etapas internas do módulo usam `botaoVoltar()`, `acaoIcone()` e limpam as ações do cabeçalho ao entrar; os formulários ainda têm a estrutura antiga.
 3. ~~Financeiro~~ (feito: Painel, Fluxo de caixa agrupado por semana, Contas a pagar e a receber, Cadastros).
-4. RH e Checklist.
+4. ~~RH e Checklist~~ (feito: Equipe, Escala, Férias, Gorjeta, Treinamentos, Indicadores, Contratação, Modelos de checklist e Checklists feitos). Em telas com abas, cada aba põe as próprias ações no cabeçalho e a troca de aba limpa as anteriores. Ainda com a estrutura antiga: a ficha da pessoa, os formulários (admissão, lançar venda, regras da gorjeta, lançar férias, editor de checklist e de treinamento) e as visões "Prazos" e "Alertas" das férias.
 5. Clientes, Cardápio, Atendente e Ajustes.

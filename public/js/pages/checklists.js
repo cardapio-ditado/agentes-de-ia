@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { MODELOS_DE_CHECKLIST } from "../modelosProntos.js";
 
 const DIAS = [
@@ -33,26 +33,24 @@ export async function checklists(raiz, ctx) {
   // ============ Lista ============
 
   async function mostrarLista() {
-    limpar(area).append(el("p", { classe: "muted", texto: "Carregando…" }));
-    const lista = await get(`/v1/venues/${ctx.venue}/checklists`);
+    limpar(area).append(esqueleto({ linhas: 4 }));
+    let lista;
+    try {
+      lista = await get(`/v1/venues/${ctx.venue}/checklists`);
+    } catch (e) {
+      ctx.definirAcoes?.();
+      limpar(area).append(estadoDeErro("Não deu para carregar os modelos", e.message, mostrarLista));
+      return;
+    }
 
+    ctx.definirAcoes?.(
+      el("button", { classe: "btn btn-primario", type: "button", onclick: () => mostrarEditor(null) }, comIcone(ICONES.mais, "Novo checklist")),
+    );
     limpar(area).append(
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", {}, [
-          el("h2", { texto: "Modelos de checklist" }),
-          el("p", {
-            classe: "muted",
-            texto:
-              "No horário agendado, quem executa recebe o link no WhatsApp — abre no celular, sem instalar nada.",
-          }),
-        ]),
-        el("button", {
-          classe: "btn btn-primario",
-          type: "button",
-          texto: "Novo checklist",
-          onclick: () => mostrarEditor(null),
-        }),
-      ]),
+      el("p", {
+        classe: "muted",
+        texto: "No horário agendado, quem executa recebe o link no WhatsApp — abre no celular, sem instalar nada.",
+      }),
     );
 
     if (lista.length === 0) {
@@ -62,10 +60,45 @@ export async function checklists(raiz, ctx) {
           "Comece por um modelo pronto abaixo, ou clique em “Novo checklist” e deixe a IA montar as perguntas.",
         ),
       );
+    } else {
+      area.append(tabelaDosModelos(lista));
     }
-
-    for (const c of lista) area.append(cartao(c));
     area.append(modelosProntos(lista));
+  }
+
+  /**
+   * Um modelo por linha: o que é, quando dispara, para quem — e as ações à
+   * direita. Em cartão, três modelos já enchiam a tela; em linha, dá para
+   * conferir a casa inteira de uma vez.
+   */
+  function tabelaDosModelos(lista) {
+    return tabelaDeDados({
+      colunas: [
+        { rotulo: "Checklist", principal: true },
+        { rotulo: "Perguntas", largura: "96px", num: true },
+        { rotulo: "Agenda", largura: "27%", quebra: true, larga: true },
+        { rotulo: "Situação", largura: "110px" },
+        { rotulo: "Ações", largura: "304px", acoes: true },
+      ],
+      larguraMinima: "1000px",
+      linhas: lista.map((c) => ({
+        aoClicar: () => mostrarEditor(c),
+        celulas: [
+          el("span", {}, [document.createTextNode(c.name), c.description ? el("small", { texto: c.description }) : null]),
+          String((c.items ?? []).length),
+          el("span", {}, [
+            document.createTextNode(resumoAgenda(c.schedule)),
+            // Vários números aparecem separados por "·": o gestor confere de
+            // bate-pronto se esqueceu de incluir alguém.
+            c.schedule?.avisar_telefone
+              ? el("small", { texto: `Resumo da IA vai para ${c.schedule.avisar_telefone.split(/[,;/\n]+/).map((t) => t.trim()).filter(Boolean).join(" · ")}` })
+              : null,
+          ]),
+          etiqueta(c.active ? "Ativo" : "Pausado", c.active ? "etiqueta-ok" : ""),
+          acoesDoModelo(c),
+        ],
+      })),
+    });
   }
 
   /**
@@ -99,7 +132,7 @@ export async function checklists(raiz, ctx) {
       .map((d) => DIAS.find(([v]) => v === d)?.[1] ?? d)
       .join(", ");
     if (!dias) return "Sem agenda — só disparo manual";
-    const quem = agenda.responsavel_nome ? ` → ${agenda.responsavel_nome}` : "";
+    const quem = agenda.responsavel_nome ? ` · para ${agenda.responsavel_nome}` : "";
     // Checklist de rodadas: a janela e o intervalo são a agenda, não só a
     // hora do envio. "18:00–02:00 a cada 45 min" é o que o gestor confere.
     const quando = agenda.a_cada_minutos && agenda.ate
@@ -108,94 +141,69 @@ export async function checklists(raiz, ctx) {
     return `${dias} · ${quando}${quem}`;
   }
 
-  function cartao(c) {
-    const btnDisparar = el("button", {
-      classe: "btn btn-primario btn-peq",
-      type: "button",
-      texto: "Disparar agora",
-      onclick: async (e) => {
-        e.target.disabled = true;
-        try {
-          const r = await post(`/v1/checklists/${c.id}/disparar?venue=${encodeURIComponent(ctx.venue)}`, {});
-          avisar(
-            r.criada_agora
-              ? "Link enviado para o WhatsApp do responsável."
-              : "A execução de hoje já existia — o link é o mesmo.",
-            "ok",
-          );
-        } catch (err) {
-          avisar(err.message, "erro");
-        } finally {
-          e.target.disabled = false;
-        }
-      },
-    });
-
-    return el("article", { classe: "cartao" }, [
-      el("div", { classe: "cabecalho-secao" }, [
-        el("div", { style: "min-width:0" }, [
-          el("h3", { texto: c.name }),
-          el("p", { classe: "muted", texto: c.description ?? "" }),
-        ]),
-        etiqueta(c.active ? "Ativo" : "Pausado", c.active ? "etiqueta-ok" : ""),
-      ]),
-      linha("Perguntas", String((c.items ?? []).length)),
-      linha("Agenda", resumoAgenda(c.schedule)),
-      // Vários números aparecem separados por "·": o gestor confere de
-      // bate-pronto se esqueceu de incluir alguém.
-      c.schedule?.avisar_telefone
-        ? linha(
-            "Resumo da IA vai para",
-            c.schedule.avisar_telefone
-              .split(/[,;/\n]+/)
-              .map((t) => t.trim())
-              .filter(Boolean)
-              .join("  ·  "),
-          )
-        : null,
-      el("div", { classe: "reserva-acoes" }, [
-        btnDisparar,
-        el("button", {
+  function acoesDoModelo(c) {
+    const daCasa = `?venue=${encodeURIComponent(ctx.venue)}`;
+    return el("span", { classe: "grupo-acoes" }, [
+      // Disparar é a ação do dia a dia: vem com nome, e não só com ícone.
+      el(
+        "button",
+        {
           classe: "btn btn-peq",
           type: "button",
-          texto: "Editar",
-          onclick: () => mostrarEditor(c),
-        }),
-        el("button", {
-          classe: "btn btn-peq",
-          type: "button",
-          texto: c.active ? "Pausar" : "Reativar",
           onclick: async (e) => {
-            e.target.disabled = true;
+            const botao = e.currentTarget;
+            botao.disabled = true;
             try {
-              await patch(`/v1/checklists/${c.id}?venue=${encodeURIComponent(ctx.venue)}`, {
-                active: !c.active,
-              });
-              await mostrarLista();
+              const r = await post(`/v1/checklists/${c.id}/disparar${daCasa}`, {});
+              avisar(
+                r.criada_agora
+                  ? "Link enviado para o WhatsApp do responsável."
+                  : "A execução de hoje já existia — o link é o mesmo.",
+                "ok",
+              );
             } catch (err) {
               avisar(err.message, "erro");
-              e.target.disabled = false;
+            } finally {
+              botao.disabled = false;
             }
           },
-        }),
-        el("button", {
-          classe: "btn btn-perigo btn-peq",
-          type: "button",
-          texto: "Excluir",
-          onclick: async (e) => {
-            if (!confirm(`Excluir "${c.name}"? As execuções antigas somem junto.`)) return;
-            e.target.disabled = true;
-            try {
-              await del(`/v1/checklists/${c.id}?venue=${encodeURIComponent(ctx.venue)}`);
-              avisar("Checklist excluído.", "ok");
-              await mostrarLista();
-            } catch (err) {
-              avisar(err.message, "erro");
-              e.target.disabled = false;
-            }
-          },
-        }),
-      ]),
+        },
+        comIcone(ICONES.enviar, "Disparar agora"),
+      ),
+      acaoIcone({ iconePath: ICONES.editar, rotulo: `Editar ${c.name}`, aoClicar: () => mostrarEditor(c) }),
+      acaoIcone({
+        iconePath: c.active ? "M10 5v14M14 5v14" : "M7 4l13 8-13 8z",
+        rotulo: c.active ? "Pausar: deixa de disparar na agenda" : "Reativar: volta a disparar na agenda",
+        aoClicar: async (e) => {
+          const botao = e.currentTarget;
+          botao.disabled = true;
+          try {
+            await patch(`/v1/checklists/${c.id}${daCasa}`, { active: !c.active });
+            await mostrarLista();
+          } catch (err) {
+            avisar(err.message, "erro");
+            botao.disabled = false;
+          }
+        },
+      }),
+      acaoIcone({
+        iconePath: ICONES.lixeira,
+        rotulo: `Excluir ${c.name}`,
+        variante: "perigo",
+        aoClicar: async (e) => {
+          if (!confirm(`Excluir "${c.name}"? As execuções antigas somem junto.`)) return;
+          const botao = e.currentTarget;
+          botao.disabled = true;
+          try {
+            await del(`/v1/checklists/${c.id}${daCasa}`);
+            avisar("Checklist excluído.", "ok");
+            await mostrarLista();
+          } catch (err) {
+            avisar(err.message, "erro");
+            botao.disabled = false;
+          }
+        },
+      }),
     ]);
   }
 
@@ -294,14 +302,13 @@ export async function checklists(raiz, ctx) {
             obrigatoria,
             el("span", { texto: "obrigatória" }),
           ]),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "↑", title: "Subir", onclick: () => mover(-1) }),
-          el("button", { classe: "btn btn-peq", type: "button", texto: "↓", title: "Descer", onclick: () => mover(1) }),
-          el("button", {
-            classe: "btn btn-perigo btn-peq",
-            type: "button",
-            texto: "✕",
-            title: "Remover",
-            onclick: () => {
+          acaoIcone({ iconePath: "M12 19V5M5 12l7-7 7 7", rotulo: "Subir esta pergunta", aoClicar: () => mover(-1) }),
+          acaoIcone({ iconePath: "M12 5v14M5 12l7 7 7-7", rotulo: "Descer esta pergunta", aoClicar: () => mover(1) }),
+          acaoIcone({
+            iconePath: ICONES.lixeira,
+            rotulo: "Remover esta pergunta",
+            variante: "perigo",
+            aoClicar: () => {
               itens.splice(i, 1);
               desenharItens();
             },
@@ -396,11 +403,11 @@ export async function checklists(raiz, ctx) {
           itens = itens.concat(r.itens);
           desenharItens();
           dialogo.append(
-            balao("ia", `Pronto: ${r.itens.length} pergunta(s) adicionadas abaixo. Revise e ajuste o que quiser.`),
+            balao("ia", `Pronto: ${plural(r.itens.length, "pergunta adicionada", "perguntas adicionadas")} abaixo. Revise e ajuste o que quiser.`),
           );
           btnGerarJa.hidden = true;
           descricaoIA.placeholder = "Quer ajustar? Peça outra rodada aqui.";
-          avisar(`${r.itens.length} pergunta(s) geradas. Revise, ajuste e salve.`, "ok");
+          avisar(`${plural(r.itens.length, "pergunta gerada", "perguntas geradas")}. Revise, ajuste e salve.`, "ok");
         }
       } catch (e) {
         avisar(e.message, "erro");
@@ -535,12 +542,5 @@ export async function checklists(raiz, ctx) {
 
   function campo(rotulo, controle) {
     return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
-  }
-
-  function linha(rotulo, valor) {
-    return el("div", { classe: "linha-dado" }, [
-      el("span", { texto: rotulo }),
-      el("strong", { texto: String(valor) }),
-    ]);
   }
 }

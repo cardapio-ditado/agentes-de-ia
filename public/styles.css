@@ -5336,12 +5336,12 @@ a.btn { text-decoration: none; }
    de texto e fundo cair abaixo do contraste da WCAG 2.2 AA.
    Por ser o último bloco do arquivo, é ele que vale. */
 :root {
-  --terracota-50: #fff2ea; --terracota-100: #ffe6dd; --terracota-200: #ffcebb; --terracota-300: #fea989; --terracota-400: #e87c53; --terracota-500: #b64f25; --terracota-600: #9a3500; --terracota-700: #801a00; --terracota-800: #620000; --terracota-900: #3a0000; --terracota-950: #270000;
-  --neutro-50: #f7f6f6; --neutro-100: #edecec; --neutro-200: #dcdad9; --neutro-300: #c3c0be; --neutro-400: #a19d9b; --neutro-500: #767270; --neutro-600: #5e5a58; --neutro-700: #484442; --neutro-800: #302d2b; --neutro-900: #1a1816; --neutro-950: #0f0e0d;
-  --musgo-50: #f4f8f2; --musgo-100: #eaefe7; --musgo-200: #d5ded0; --musgo-300: #b7c7ae; --musgo-400: #91a687; --musgo-500: #677a5c; --musgo-600: #4f6145; --musgo-700: #394b30; --musgo-800: #233319; --musgo-900: #111c0b; --musgo-950: #091105;
-  --ambar-50: #fff5e6; --ambar-100: #f8ebd8; --ambar-200: #f2d6b1; --ambar-300: #e7b877; --ambar-400: #cd9130; --ambar-500: #9e6500; --ambar-600: #844c00; --ambar-700: #6b3600; --ambar-800: #511c00; --ambar-900: #2f0d00; --ambar-950: #1f0600;
-  --verde-50: #edfbf1; --verde-100: #e1f2e6; --verde-200: #c3e5cd; --verde-300: #95d1a9; --verde-400: #61b380; --verde-500: #328656; --verde-600: #106c3e; --verde-700: #005529; --verde-800: #003c11; --verde-900: #002207; --verde-950: #001503;
-  --vermelho-50: #fff0ec; --vermelho-100: #ffe5e0; --vermelho-200: #ffcac2; --vermelho-300: #ffa196; --vermelho-400: #f27166; --vermelho-500: #bf433c; --vermelho-600: #a12623; --vermelho-700: #860009; --vermelho-800: #680000; --vermelho-900: #3e0000; --vermelho-950: #2a0000;
+  --terracota-50: #fff2ea; --terracota-100: #ffe6dd; --terracota-200: #ffcebb; --terracota-300: #fea989; --terracota-400: #e87c53; --terracota-500: #b64f25; --terracota-600: #9a3500; --terracota-700: #762803; --terracota-800: #4d1d09; --terracota-900: #2a1007; --terracota-950: #1a0904;
+  --neutro-50: #f7f6f6; --neutro-100: #edecec; --neutro-200: #dcdad9; --neutro-300: #c3c0be; --neutro-400: #a19d9b; --neutro-500: #767270; --neutro-600: #5e5a58; --neutro-700: #474443; --neutro-800: #2f2d2c; --neutro-900: #191817; --neutro-950: #0f0e0e;
+  --musgo-50: #f4f8f2; --musgo-100: #eaefe7; --musgo-200: #d5ded0; --musgo-300: #b7c7ae; --musgo-400: #91a687; --musgo-500: #677a5c; --musgo-600: #4f6145; --musgo-700: #3c4a34; --musgo-800: #283123; --musgo-900: #151a13; --musgo-950: #0c0f0b;
+  --ambar-50: #fff5e6; --ambar-100: #f8ebd8; --ambar-200: #f2d6b1; --ambar-300: #e7b877; --ambar-400: #cd9130; --ambar-500: #9e6500; --ambar-600: #844c00; --ambar-700: #653a00; --ambar-800: #422700; --ambar-900: #231501; --ambar-950: #160c02;
+  --verde-50: #edfbf1; --verde-100: #e1f2e6; --verde-200: #c3e5cd; --verde-300: #95d1a9; --verde-400: #61b380; --verde-500: #328656; --verde-600: #106c3e; --verde-700: #0e522f; --verde-800: #0f3620; --verde-900: #0a1d11; --verde-950: #06110a;
+  --vermelho-50: #fff0ec; --vermelho-100: #ffe5e0; --vermelho-200: #ffcac2; --vermelho-300: #ffa196; --vermelho-400: #f27166; --vermelho-500: #bf433c; --vermelho-600: #a12623; --vermelho-700: #7c1e1b; --vermelho-800: #511714; --vermelho-900: #2c0d0b; --vermelho-950: #1b0806;
 
   --fundo: var(--neutro-50);
   --superficie: #ffffff;
@@ -5528,3 +5528,113 @@ a.btn { text-decoration: none; }
   .app .grade:has(> .indicador) .indicador-icone { display: none; }
   .app .indicador-valor { font-size: clamp(15px, 10cqi, 22px); }
 }
+
+/* ---------------------------------------------------------------
+   13. RH e Checklist
+   --------------------------------------------------------------- */
+
+/* Título de coluna que ordena: botão sem cara de botão, com a seta ao lado. */
+.app .planilha-ordenar {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: -4px -6px; padding: 4px 6px;
+  border: 0; border-radius: 6px; background: none;
+  font: inherit; color: inherit; letter-spacing: inherit; cursor: pointer;
+  transition: background-color var(--mov-rapido) ease, color var(--mov-rapido) ease;
+}
+.app .planilha-ordenar:hover { background: var(--superficie-2); color: var(--texto); }
+.app .planilha-ordenar-seta { font-size: 12px; color: var(--texto-3); }
+.app th[aria-sort="ascending"] .planilha-ordenar,
+.app th[aria-sort="descending"] .planilha-ordenar { color: var(--texto); }
+.app th[aria-sort="ascending"] .planilha-ordenar-seta,
+.app th[aria-sort="descending"] .planilha-ordenar-seta { color: var(--marca-forte); }
+.app th.col-num .planilha-ordenar { flex-direction: row-reverse; }
+
+/* Etiquetas de uma célula: lado a lado, quebrando sem encostar uma na outra. */
+.cel-etiquetas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.cel-etiquetas .etiqueta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+/* Botão que liga e desliga uma visão ("Ver desligados"). */
+.app .btn[aria-pressed="true"] { background: var(--marca-suave); color: var(--marca-forte); box-shadow: inset 0 0 0 1px var(--marca-borda); }
+
+/* A faixa do período: de que semana se fala, à esquerda; o que sai dela, à direita. */
+.barra-periodo { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3) var(--esp-4); flex-wrap: wrap; }
+.navegador-periodo { display: inline-flex; align-items: center; gap: var(--esp-2); flex-wrap: wrap; }
+.navegador-periodo-texto { display: flex; flex-direction: column; min-width: 150px; padding: 0 var(--esp-1); line-height: 1.3; }
+.navegador-periodo-texto strong { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.navegador-periodo-texto span { font-size: 13px; font-variant-numeric: tabular-nums; }
+.navegador-periodo > .btn { margin-left: var(--esp-1); }
+
+/* Duas ou três visões do mesmo dado: chaves lado a lado, e não outra fileira de abas. */
+.seletor-de-visao { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--superficie-2); box-shadow: inset 0 0 0 1px var(--borda); }
+.seletor-de-visao button {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 32px; padding: 0 14px;
+  border: 0; border-radius: 8px; background: none;
+  font: inherit; font-size: 14px; font-weight: 500; color: var(--texto-2); cursor: pointer;
+  transition: background-color var(--mov-rapido) ease, color var(--mov-rapido) ease, box-shadow var(--mov-rapido) ease;
+}
+.seletor-de-visao button:hover { color: var(--texto); }
+.seletor-de-visao button[aria-pressed="true"] { background: var(--superficie); color: var(--texto); box-shadow: var(--contorno-controle); }
+.seletor-de-visao .aba-contador { margin: 0; }
+
+/* A regra da casa numa linha, acima dos números que ela explica. */
+.regra-em-linha { display: flex; align-items: flex-start; gap: var(--esp-3); padding: var(--esp-3) var(--esp-4); border-radius: var(--raio-cartao); background: var(--superficie-2); }
+.regra-em-linha-icone { display: inline-grid; place-items: center; flex: 0 0 28px; height: 28px; border-radius: 8px; background: var(--superficie); color: var(--texto-2); box-shadow: var(--contorno-controle); }
+.regra-em-linha > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.regra-em-linha strong { font-weight: 500; font-size: 14px; line-height: 1.45; }
+.regra-em-linha span.muted { font-size: 13px; }
+
+/* Escala: a célula é o botão de lançar; hoje ganha uma marca discreta. */
+.app .planilha td.escala-celula { cursor: pointer; transition: background-color var(--mov-rapido) ease; }
+.app .planilha td.escala-celula:hover { background: var(--superficie-2); }
+.app .planilha td.escala-celula:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
+.app .planilha td.escala-celula-aberta { box-shadow: inset 0 0 0 2px var(--marca); background: var(--marca-suave); }
+.app .planilha th.coluna-hoje { color: var(--marca-forte); box-shadow: inset 0 -2px 0 var(--marca); }
+.app .planilha th.coluna-hoje small { color: inherit; }
+.app .planilha td.coluna-hoje { background: color-mix(in srgb, var(--marca) 5%, transparent); }
+
+/* Férias: as cores dos gráficos saem do kit de marca. No claro, tons 500/600
+   com texto branco; no escuro, tons 400 com texto escuro — nos dois, o número
+   dentro da barra passa de 4,5:1. "Fora agora" é neutro de propósito: não é
+   bom nem ruim, é ausência. */
+:root {
+  --ferias-fora: var(--neutro-500);
+  --ferias-agendada: var(--ambar-500);
+  --ferias-perto: var(--terracota-500);
+  --ferias-tirada: var(--verde-600);
+  --ferias-vencida: var(--vermelho-500);
+  --ferias-texto: #ffffff;
+}
+[data-tema="escuro"] {
+  --ferias-fora: var(--neutro-400);
+  --ferias-agendada: var(--ambar-400);
+  --ferias-perto: var(--terracota-400);
+  --ferias-tirada: var(--verde-400);
+  --ferias-vencida: var(--vermelho-400);
+  --ferias-texto: var(--neutro-950);
+}
+.app .ferias-lista .rolagem-x { margin: 0; }
+
+@media (max-width: 820px) {
+  .barra-periodo { align-items: stretch; }
+  .navegador-periodo { width: 100%; }
+  .navegador-periodo-texto { flex: 1 1 auto; min-width: 0; }
+  .seletor-de-visao { width: 100%; }
+  .seletor-de-visao button { flex: 1 1 0; justify-content: center; padding: 0 8px; min-height: 40px; }
+}
+
+/* Aviso em cartão: um fio de cor à esquerda e um véu leve, em vez de um
+   bloco de fundo carregado. Vale para "ponto de atenção" e "ninguém fez". */
+.app .cartao.alerta,
+.app .cartao.cartao-atencao,
+.app .cartao.linha-atencao {
+  background: color-mix(in srgb, var(--alerta) 7%, var(--superficie));
+  border: 0;
+  box-shadow: var(--contorno), inset 3px 0 0 var(--alerta);
+}
+.app .cartao.linha-perigo {
+  background: color-mix(in srgb, var(--perigo) 7%, var(--superficie));
+  border: 0;
+  box-shadow: var(--contorno), inset 3px 0 0 var(--perigo);
+}
+.app .cartao.alerta > strong:first-child { color: var(--texto); }

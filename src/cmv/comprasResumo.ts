@@ -17,6 +17,8 @@ import { ErroDoEstoque, traduzir } from "./estoque.js";
  *  - o dia do recebimento é o do carimbo gravado, como na coluna "Recebido".
  */
 
+// O cliente do banco não tem tipos gerados para estas tabelas (como nos vizinhos).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cliente = () => db() as any;
 
 /** O que a conta precisa de cada compra — e nada além disso. */
