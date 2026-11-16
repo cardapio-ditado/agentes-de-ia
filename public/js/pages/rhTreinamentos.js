@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, el, esqueleto, estadoDeErro, preencher, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeFormulario, comIcone, el, esqueleto, estadoDeErro, preencher, vazio } from "../ui.js";
 
 /**
  * RH — Treinamentos: vídeo curto e até cinco perguntas, por função.
@@ -132,11 +132,11 @@ export function criarTreinamentos(corpo, ctx) {
       ]),
       el("section", { classe: "cartao pilha" }, [
         el("div", { classe: "grade grade-2" }, [
-          el("div", { classe: "campo" }, [el("label", { texto: "Título" }), titulo]),
-          el("div", { classe: "campo" }, [el("label", { texto: "Para quem (função)" }), funcao]),
+          campoDeFormulario("Título", titulo),
+          campoDeFormulario("Para quem (função)", funcao),
         ]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Do que se trata" }), descricao]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Link do vídeo" }), video, el("small", { classe: "muted", texto: "YouTube (pode ser não listado), Google Drive ou Loom. Grave no celular mesmo: 2 a 5 minutos bastam." })]),
+        campoDeFormulario("Do que se trata", descricao),
+        campoDeFormulario("Link do vídeo", video, el("small", { classe: "muted", texto: "YouTube (pode ser não listado), Google Drive ou Loom. Grave no celular mesmo: 2 a 5 minutos bastam." })),
       ]),
       el("section", { classe: "pilha" }, [el("h3", { texto: "Perguntas (até 5)" }), area]),
       el("div", { classe: "reserva-acoes" }, [

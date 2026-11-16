@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeFormulario, comIcone, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { MODELOS_DE_CHECKLIST } from "../modelosProntos.js";
 
 const DIAS = [
@@ -210,6 +210,7 @@ export async function checklists(raiz, ctx) {
   // ============ Editor ============
 
   function mostrarEditor(existente) {
+    ctx.definirAcoes?.();
     let itens = (existente?.items ?? []).map((i) => ({ ...i }));
     const agenda = existente?.schedule ?? {};
 
@@ -421,7 +422,7 @@ export async function checklists(raiz, ctx) {
     limpar(area).append(
       el("div", { classe: "cabecalho-secao" }, [
         el("h2", { texto: existente?.id ? `Editar: ${existente.name}` : "Novo checklist" }),
-        el("button", { classe: "btn btn-peq", type: "button", texto: "← Voltar", onclick: mostrarLista }),
+        botaoVoltar(mostrarLista, "Modelos"),
       ]),
 
       el("section", { classe: "cartao" }, [
@@ -541,6 +542,6 @@ export async function checklists(raiz, ctx) {
   }
 
   function campo(rotulo, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+    return campoDeFormulario(rotulo, controle);
   }
 }

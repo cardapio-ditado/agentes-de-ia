@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, campoDeFormulario, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, tabelaDeDados, vazio } from "../ui.js";
 import { fornecedores } from "./fornecedores.js";
 
 /**
@@ -213,14 +213,10 @@ export async function cadastros(raiz, ctx) {
       }
 
       const linha = (rotulo, campo, ajuda) =>
-        el("label", { classe: "campo-rotulado" }, [
-          el("span", { texto: rotulo }),
-          campo,
-          ajuda ? el("small", { classe: "muted", texto: ajuda }) : null,
-        ].filter(Boolean));
+        campoDeFormulario(rotulo, campo, { ajuda });
 
       corpo.append(
-        el("section", { classe: "cartao pilha" }, [
+        el("section", { classe: "cartao formulario pilha" }, [
           el("div", { classe: "cabecalho-secao" }, [
             el("h2", { texto: existente ? `Editar ${existente.nome}` : "Novo item" }),
             botaoVoltar(desenhar),
@@ -239,10 +235,10 @@ export async function cadastros(raiz, ctx) {
           el("label", { classe: "campo-caixa" }, [
             campos.entraNoCmv,
             el("span", {}, [
-              el("strong", { texto: " Entra no CMV" }),
+              el("strong", { texto: "Entra no CMV" }),
               el("small", {
                 classe: "muted",
-                texto: " — desmarque para limpeza, descartáveis e escritório: passam pelo estoque, mas não são custo de mercadoria.",
+                texto: "Desmarque para limpeza, descartáveis e escritório: passam pelo estoque, mas não são custo de mercadoria.",
               }),
             ]),
           ]),

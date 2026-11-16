@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo } from "../api.js";
-import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, comSigla, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, campoDeFormulario, comIcone, comSigla, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { criarEscala } from "./rhEscala.js";
 import { criarFerias } from "./rhFerias.js";
 import { criarFechamento } from "./rhFechamento.js";
@@ -543,7 +543,7 @@ export async function rh(raiz, ctx) {
     const cpf = campo("CPF", el("input", { classe: "input", type: "text", placeholder: "000.000.000-00" }));
 
     corpo.append(
-      el("div", { classe: "cartao" }, [
+      el("div", { classe: "cartao formulario" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
             el("h2", { texto: "Admitir alguém" }),
@@ -816,8 +816,8 @@ export async function rh(raiz, ctx) {
         texto: "A ficha e os documentos ficam guardados — obrigação trabalhista se guarda por anos. A pessoa só sai das listas do dia a dia.",
       }),
       el("div", { classe: "grade grade-2" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Data do desligamento" }), data]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Motivo" }), motivo]),
+        campoDeFormulario("Data do desligamento", data),
+        campoDeFormulario("Motivo", motivo),
       ]),
       el("div", { classe: "reserva-acoes" }, [
         el("button", {
@@ -933,10 +933,10 @@ export async function rh(raiz, ctx) {
       }),
       lista,
       el("div", { classe: "grade", style: "margin-top:12px" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Tipo" }), tipo]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Descrição (opcional)" }), titulo]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Vence em (opcional)" }), validade]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Arquivo (PDF ou foto)" }), arquivo]),
+        campoDeFormulario("Tipo", tipo),
+        campoDeFormulario("Descrição (opcional)", titulo),
+        campoDeFormulario("Vence em (opcional)", validade),
+        campoDeFormulario("Arquivo (PDF ou foto)", arquivo),
       ]),
       el("div", { classe: "reserva-acoes" }, [
         el("button", {
@@ -970,7 +970,7 @@ export async function rh(raiz, ctx) {
   /* ================= Miudezas ================= */
 
   function campo(rotulo, campoEl) {
-    return { campo: campoEl, caixa: el("div", { classe: "campo" }, [el("label", { texto: rotulo }), campoEl]) };
+    return { campo: campoEl, caixa: campoDeFormulario(rotulo, campoEl) };
   }
 
   function seletorDeVinculo(atual) {

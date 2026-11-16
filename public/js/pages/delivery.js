@@ -1,5 +1,5 @@
 import { get, patch, post, put } from "../api.js";
-import { avisar, dataHora, el, etiqueta, indicador, limpar, preencher, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, dataHora, el, etiqueta, indicador, limpar, preencher, vazio } from "../ui.js";
 
 /**
  * Delivery: a fila de pedidos, os cupons, os números e como a casa entrega.
@@ -19,7 +19,7 @@ const paraCentavos = (texto) => {
 };
 const noCampo = (centavos) => ((centavos ?? 0) / 100).toFixed(2).replace(".", ",");
 const campo = (rotulo, controle, ajuda) =>
-  el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle, ajuda ? el("small", { classe: "muted", texto: ajuda }) : null]);
+  campoDeFormulario(rotulo, controle, { ajuda });
 
 // Uma fileira que quebra antes de estourar a tela. Estilo próprio porque
 // `.linha-campos` empilha o rótulo em cima do controle — bom para campo de

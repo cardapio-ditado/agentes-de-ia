@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { ICONES, acaoIcone, avisar, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, SVG_LIXEIRA, acaoIcone, avisar, campoDeFormulario, dataHora, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, nomeAproximadoDaCasa, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 import { contarSituacoes, seloDoEnvio, tilesDeSituacao } from "../envios.js";
 
@@ -153,7 +153,7 @@ function blocoCriar(ctx, recarregar, categorias) {
     }),
   ];
 
-  return el("section", { classe: "cartao" }, [
+  return el("section", { classe: "cartao formulario" }, [
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h3", { texto: "Criar uma pesquisa" }),
@@ -324,7 +324,7 @@ function revisarProposta(ctx, itens, categorias, recarregar) {
   const nome = el("input", { value: "Pesquisa da casa", required: true });
   const editor = editorDeItens(itens, categorias);
 
-  return el("div", { classe: "cartao", style: "margin-top:14px;background:var(--fundo)" }, [
+  return el("div", { classe: "cartao formulario", style: "margin-top:14px;background:var(--fundo)" }, [
     el("h4", { texto: "Confira antes de valer" }),
     el("p", { classe: "muted", texto: "Mude o que quiser. Nada vai para a mesa antes de você salvar." }),
     el("div", { classe: "campo", style: "margin-top:10px;max-width:360px" }, [
@@ -361,7 +361,7 @@ function editorDaPesquisa(ctx, pesquisa, categorias, recarregar) {
   const nome = el("input", { value: pesquisa.nome, required: true });
   const editor = editorDeItens(pesquisa.itens, categorias);
 
-  return el("section", { classe: "cartao" }, [
+  return el("section", { classe: "cartao formulario" }, [
     el("div", { classe: "cabecalho-secao" }, [
       el("div", {}, [
         el("h3", { texto: "A pesquisa que está no ar" }),
@@ -638,7 +638,7 @@ function editorDeItens(itens, categorias) {
           classe: "btn-icone",
           type: "button",
           title: "Remover",
-          texto: "🗑️",
+          html: SVG_LIXEIRA,
           onclick: () => {
             tr.remove();
             desenharQuando();
@@ -732,7 +732,7 @@ function listaDeModelos(ctx, pesquisas, recarregar) {
                     classe: "btn-icone",
                     type: "button",
                     title: "Apagar",
-                    texto: "🗑️",
+                    html: SVG_LIXEIRA,
                     onclick: async () => {
                       if (!confirm(`Apagar "${p.nome}"? As respostas já recebidas continuam no painel.`)) return;
                       try {
@@ -840,7 +840,7 @@ async function telaEquipe(ctx, recarregar) {
   const funcao = el("input", { placeholder: "Salão, bar, cozinha…" });
 
   const form = el("form", {
-    classe: "cartao",
+    classe: "cartao formulario",
     onsubmit: async (e) => {
       e.preventDefault();
       const botao = form.querySelector("button[type=submit]");
@@ -917,7 +917,7 @@ async function telaEquipe(ctx, recarregar) {
                       classe: "btn-icone",
                       type: "button",
                       title: "Excluir",
-                      texto: "🗑️",
+                      html: SVG_LIXEIRA,
                       onclick: async () => {
                         if (!confirm(`Excluir ${a.nome}? Se já tiver avaliações, ela só sai da lista e o histórico fica.`)) return;
                         try {
@@ -987,7 +987,7 @@ async function telaPremio(ctx, recarregar) {
   };
 
   const form = el("form", {
-    classe: "cartao",
+    classe: "cartao formulario",
     onsubmit: async (e) => {
       e.preventDefault();
       const botao = form.querySelector("button[type=submit]");
@@ -1461,7 +1461,7 @@ async function telaConvites(ctx, recarregar) {
       return Boolean(m) && !m.botao_url_dinamico && !lacunas().some((v) => v.tipo === "link");
     };
 
-    return el("section", { classe: "cartao pilha" }, [
+    return el("section", { classe: "cartao formulario pilha" }, [
       el("h3", { texto: "Pelo número oficial (Meta)" }),
       el("p", {
         classe: "muted",
@@ -1502,7 +1502,7 @@ async function telaConvites(ctx, recarregar) {
   })();
 
   const form = el("form", {
-    classe: "cartao",
+    classe: "cartao formulario",
     onsubmit: async (e) => {
       e.preventDefault();
       const botao = form.querySelector("button[type=submit]");
@@ -1574,7 +1574,7 @@ async function telaConvites(ctx, recarregar) {
     });
   };
 
-  const cartaoZig = el("section", { classe: "cartao" }, [
+  const cartaoZig = el("section", { classe: "cartao formulario" }, [
     el("h3", { texto: "Buscar clientes na Zig" }),
     el("p", {
       classe: "muted",
@@ -1593,7 +1593,7 @@ async function telaConvites(ctx, recarregar) {
           el("div", { classe: "grade" }, [
             campo("No máximo por dia", zigTeto),
             campo("Não repetir por (dias)", zigRepetir),
-            el("div", { classe: "campo" }, [el("label", { texto: " " }), zigAtivo]),
+            campoDeFormulario(" ", zigAtivo),
           ]),
           zig.ultimo_dia
             ? el("p", { classe: "muted", texto: `Último dia buscado: ${zig.ultimo_dia}.` })
@@ -1983,7 +1983,7 @@ async function telaConvites(ctx, recarregar) {
 /* ============ peças ============ */
 
 function campo(rotulo, controle) {
-  return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+  return campoDeFormulario(rotulo, controle);
 }
 
 /**

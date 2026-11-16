@@ -1,5 +1,5 @@
 import { get, post, put } from "../api.js";
-import { avisar, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, vazio } from "../ui.js";
 
 /**
  * Integrações: os sistemas que a casa já usa e que o Brasa Food pode ler.
@@ -248,6 +248,6 @@ export async function integracoes(raiz, ctx) {
   }
 
   function campo(rotulo, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+    return campoDeFormulario(rotulo, controle);
   }
 }

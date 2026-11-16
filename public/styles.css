@@ -5674,3 +5674,134 @@ a.btn { text-decoration: none; }
   .app .planilha-grupo-titulo { min-width: 0; overflow-wrap: anywhere; }
   .app .planilha-grupo-resumo { margin-left: 22px; flex-basis: 100%; text-align: left; font-weight: 500; color: var(--texto-2); }
 }
+
+/* ---------------------------------------------------------------
+   15. Formulários
+   ---------------------------------------------------------------
+   Um formulário é uma coluna de leitura: no máximo 960 px, campos em duas
+   colunas, rótulo em cima, ajuda embaixo, e as ações no pé — sempre no mesmo
+   lugar e do mesmo tamanho, em qualquer módulo. */
+.app .formulario { max-width: 960px; }
+.app .formulario-estreito { max-width: 640px; }
+/* Toda etapa interna com "Voltar" que só tem campos é um formulário, mesmo
+   sem a classe: os cartões dela ganham a mesma largura de leitura. Etapa com
+   tabela, lista ou gráfico (um detalhe, uma conferência) continua larga. */
+.app .cabecalho-secao:has(> .btn-voltar) ~ .cartao:not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)),
+.app .cartao:has(> .cabecalho-secao > .btn-voltar):not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)),
+.app .cabecalho-secao:has(> .btn-voltar) ~ .reserva-acoes,
+.app .cabecalho-secao:has(> .btn-voltar) ~ .formulario-acoes { max-width: 960px; }
+
+/* O campo: rótulo, controle e ajuda, um embaixo do outro. */
+.app .campo { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.app .campo > label,
+.app .campo-rotulado > span,
+.app .linha-campos > label > span { font-size: 13px; font-weight: 500; line-height: 1.3; color: var(--texto-2); }
+.app .campo-rotulado { gap: 6px; min-width: 0; font-size: inherit; }
+.app .campo-ajuda,
+.app .campo > small,
+.app .campo-rotulado > small { font-size: 12.5px; line-height: 1.45; color: var(--texto-3); margin: 0; }
+.campo-obrigatorio { color: var(--perigo); font-weight: 600; }
+
+/* Todo controle dentro de um campo tem a mesma altura e ocupa a coluna —
+   em qualquer tela, com ou sem a classe de formulário. */
+.app :is(.campo, .campo-rotulado) > :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select),
+.app .formulario :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select) { width: 100%; height: 40px; }
+.app :is(.campo, .campo-rotulado) > textarea,
+.app .formulario textarea { width: 100%; min-height: 84px; resize: vertical; }
+
+/* A grade: duas colunas no computador, uma no celular. */
+.form-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--esp-4); align-items: start; }
+.form-grade-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.form-grade > .campo-inteiro,
+.form-grade > .campo-largo,
+.form-grade > .campo-caixa,
+.form-grade > .formulario-acoes { grid-column: 1 / -1; }
+.app .formulario .grade,
+.app .formulario .grade-2 { gap: var(--esp-4); align-items: start; }
+.app .formulario .linha-campos { gap: var(--esp-4); margin: 0; align-items: flex-start; }
+.app .formulario .linha-campos > .campo,
+.app .formulario .linha-campos > .campo-rotulado,
+.app .formulario .linha-campos > label { flex: 1 1 220px; }
+.app .formulario .cartao > h3,
+.app .formulario.cartao > h3 { margin: 0; }
+.app .formulario .cartao > h3 + p.muted { margin-top: 2px; }
+
+/* Caixa de marcar: a caixa à esquerda, o título e a explicação à direita. */
+.app .campo-caixa { display: flex; align-items: flex-start; gap: var(--esp-3); font-size: 14px; line-height: 1.45; cursor: pointer; }
+.app .campo-caixa input { flex: 0 0 auto; width: 18px; height: 18px; margin: 2px 0 0; }
+.app .campo-caixa > span { min-width: 0; }
+.app .campo-caixa strong { font-weight: 500; }
+.app .campo-caixa small { display: block; font-size: 12.5px; color: var(--texto-3); margin-top: 2px; }
+
+/* As ações, no pé: mesma altura de botão em qualquer formulário. */
+.formulario-acoes,
+.app .formulario .reserva-acoes,
+.app .cabecalho-secao:has(> .btn-voltar) ~ .reserva-acoes,
+.app .cartao:has(> .cabecalho-secao > .btn-voltar) > .reserva-acoes {
+  display: flex; align-items: center; gap: var(--esp-2); flex-wrap: wrap;
+  margin: 0; padding-top: var(--esp-4);
+  border-top: 1px solid var(--borda);
+}
+.formulario-acoes .btn,
+.app .formulario .reserva-acoes .btn,
+.app .cabecalho-secao:has(> .btn-voltar) ~ .reserva-acoes .btn,
+.app .cartao:has(> .cabecalho-secao > .btn-voltar) > .reserva-acoes .btn { height: 40px; padding: 0 var(--esp-4); font-size: 14px; }
+.formulario-acoes .formulario-acoes-fim { margin-left: auto; }
+
+@media (max-width: 720px) {
+  .form-grade, .form-grade-3 { grid-template-columns: minmax(0, 1fr); }
+  .formulario-acoes .btn,
+  .app .formulario .reserva-acoes .btn { flex: 1 1 auto; height: 44px; }
+  .formulario-acoes .btn-primario,
+  .app .formulario .reserva-acoes .btn-primario { flex-basis: 100%; order: -1; }
+  .formulario-acoes .formulario-acoes-fim { margin-left: 0; }
+}
+
+/* O cartão de formulário é uma grade de duas colunas: cada campo solto ocupa
+   uma coluna, e tudo o mais (título, linha de campos, texto longo, ações)
+   ocupa a linha inteira. Assim nenhum campo estica pela tela, e as bordas dos
+   campos alinham de um formulário para o outro. */
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)):not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-4);
+  align-items: start;
+}
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)):not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)) > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)):not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)) > :is(.campo, .campo-rotulado):not(:has(textarea)):not(.campo-inteiro):not(.campo-largo) {
+  grid-column: auto;
+}
+/* Título de seção e a explicação dele andam juntos. */
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)):not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)) > :is(h2, h3) + p { margin-top: calc(var(--esp-3) * -1); }
+/* Dentro do formulário, linha de campos e grade seguem o mesmo espaçamento. */
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)) :is(.grade, .grade-2, .linha-campos) { gap: var(--esp-4); margin: 0; align-items: start; }
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)) .linha-campos > :is(.campo, .campo-rotulado, label) { flex: 1 1 220px; }
+/* A ação principal de um formulário tem sempre o mesmo tamanho. */
+.app :is(.cartao.formulario, .formulario, .cabecalho-secao:has(> .btn-voltar) ~ *, .cartao:has(> .cabecalho-secao > .btn-voltar)) .btn-primario:not(.btn-grande) { height: 40px; padding: 0 var(--esp-4); font-size: 14px; }
+/* Linha só de botões no fim do cartão é a barra de ações. */
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)) > :is(.linha-campos, .reserva-acoes):last-child:has(> .btn-primario) {
+  padding-top: var(--esp-4); border-top: 1px solid var(--borda); align-items: center; gap: var(--esp-2);
+}
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)) > :is(.linha-campos, .reserva-acoes):last-child:has(> .btn-primario) > .btn { flex: 0 0 auto; height: 40px; padding: 0 var(--esp-4); font-size: 14px; }
+/* Botão de ação solto no fim do cartão não estica pela coluna. */
+.app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)) > .btn { justify-self: start; }
+
+@media (max-width: 720px) {
+  .app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)):not(:has(.planilha, .tabela, .rolagem-x, .indicador, .grafico, .modelos)) { grid-template-columns: minmax(0, 1fr); }
+  .app :is(.cartao.formulario, .formulario .cartao, .cabecalho-secao:has(> .btn-voltar) ~ .cartao, .cartao:has(> .cabecalho-secao > .btn-voltar)) > .btn-primario { justify-self: stretch; height: 44px; }
+}
+/* Caixa de marcar dentro de uma linha de campos continua deitada. */
+.app .linha-campos > label.campo-caixa { flex-direction: row; flex: 0 1 auto; }
+/* Um campo de texto, um seletor: 40 px em qualquer lugar da página (os de
+   linha de tabela, pequenos de propósito, ficam de fora). */
+.app .pagina :is(input.campo, input.input, .buscador input, select.select:not(.select-peq), select.input) { height: 40px; }
+.app :is(input, textarea, select).campo { display: block; }
+/* Campo sem classe nenhuma também tem 40 px. Ficam de fora os que são
+   pequenos de propósito: os de linha de tabela, os numéricos de meio de
+   frase e a busca, que tem a medida dela. */
+.app .pagina :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]), select):not(.select-peq):not(.campo-numero):not(.planilha *):not(.campo-busca *):not(.pagina-cabecalho *) { min-height: 40px; }

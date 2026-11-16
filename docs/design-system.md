@@ -101,6 +101,21 @@ Seção 10 do bloco de CSS. Vem de "Details that make interfaces feel better" (J
 4. ~~RH e Checklist~~ (feito: Equipe, Escala, Férias, Gorjeta, Treinamentos, Indicadores, Contratação, Modelos de checklist e Checklists feitos). Em telas com abas, cada aba põe as próprias ações no cabeçalho e a troca de aba limpa as anteriores. Ainda com a estrutura antiga: a ficha da pessoa, os formulários (admissão, lançar venda, regras da gorjeta, lançar férias, editor de checklist e de treinamento) e as visões "Prazos" e "Alertas" das férias.
 5. ~~Clientes, Cardápio, Atendente e Ajustes~~ (feito: base de clientes, pesquisa, respostas, avaliações do Google, cardápio, painel, conversas, reservas, programação, jogos, atendentes virtuais, implantação, pessoas e acessos, integrações e estabelecimentos). Avaliações do Google deixou de ser uma página só: são quatro abas (fila, histórico, responder à mão, tom). Ainda com a estrutura antiga: os formulários e editores (ficha do cliente, novo disparo, parabéns, item do cardápio, banner, promoção, editor do atendente, "O que ele sabe", "A casa"), as telas de WhatsApp e Instagram e os Ajustes da pesquisa (só ganharam abas acessíveis e estados de carregando e erro), e o módulo Delivery, que não entrou nesta rodada.
 
+## Formulários
+
+O padrão vale para qualquer formulário, de qualquer módulo:
+
+- **Largura de leitura:** no máximo 960 px. Campo não estica pela tela.
+- **Grade de duas colunas:** cada campo solto ocupa uma coluna; título, linha de campos, texto longo e ações ocupam a linha inteira. No celular, uma coluna.
+- **Campo:** rótulo em cima (13 px), controle de 40 px de altura, ajuda embaixo (12,5 px). Use `campoDeFormulario(rotulo, controle, { ajuda, obrigatorio, tamanho })`, que liga o rótulo ao controle (`for`/`id`) e a ajuda ao campo (`aria-describedby`).
+- **Caixa de marcar:** `caixaDeMarcar(controle, titulo, descricao)` — caixa à esquerda, título e explicação à direita.
+- **Ações:** `acoesDoFormulario(principal, ...outras)` no pé, com fio acima; a ação principal tem sempre 40 px.
+- **Como um cartão vira formulário:** com a classe `formulario` (`cartao formulario`), ou sozinho, quando é uma etapa interna com `botaoVoltar()` e só tem campos. Etapa com tabela, lista ou gráfico (um detalhe, uma conferência) continua larga.
+- **Nome acessível garantido:** o painel roda `ligarRotulos()` a cada mudança da tela (ver `app.js`): rótulo solto é ligado ao controle dele, e campo só com texto de exemplo ganha esse texto como nome. Tela nova não precisa lembrar.
+- **Ícone no lugar de emoji:** botão antigo de lixeira usa `html: SVG_LIXEIRA`; botão novo usa `acaoIcone()`.
+
+Ainda fora do padrão, de propósito: os campos pequenos dentro de linhas de tabela e as telas de WhatsApp e Instagram, que são painéis de conexão e não formulários de cadastro.
+
 ## Cuidados ao converter uma tela
 
 - Estado e funções que o primeiro desenho usa ficam declarados ANTES do primeiro `await` (ou como `function`), senão a tela abre em branco.

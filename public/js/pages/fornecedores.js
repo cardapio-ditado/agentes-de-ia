@@ -1,5 +1,5 @@
 import { get, patch, post } from "../api.js";
-import { avisar, buscador, el, limpar, vazio } from "../ui.js";
+import { avisar, botaoVoltar, buscador, campoDeFormulario, el, limpar, vazio } from "../ui.js";
 import { abrirKardex } from "./kardex.js";
 
 /**
@@ -83,11 +83,7 @@ export async function fornecedores(raiz, ctx) {
         obs: el("input", { classe: "campo", value: existente?.observacoes ?? "", placeholder: "Pedido mínimo, prazo, contato…" }),
       };
       const linha = (rotulo, campo, ajuda) =>
-        el("label", { classe: "campo-rotulado" }, [
-          el("span", { texto: rotulo }),
-          campo,
-          ajuda ? el("small", { classe: "muted", texto: ajuda }) : null,
-        ].filter(Boolean));
+        campoDeFormulario(rotulo, campo, { ajuda });
 
       // Amarrar os insumos ao fornecedor aqui, na mesma tela: é agora que a
       // pessoa está pensando "o que eu compro dele?".
@@ -117,7 +113,7 @@ export async function fornecedores(raiz, ctx) {
       };
 
       conteudo.append(
-        el("section", { classe: "cartao pilha" }, [
+        el("section", { classe: "cartao formulario pilha" }, [
           el("h2", { texto: existente ? `Editar ${existente.nome}` : "Novo fornecedor" }),
           linha("Nome", campos.nome),
           linha("Entrega a cada quantos dias", campos.ciclo, "É este número que diz para quantos dias a sugestão de compra pede."),
@@ -169,7 +165,7 @@ export async function fornecedores(raiz, ctx) {
                 } catch (e) { avisar(e.message, "erro"); }
               },
             }),
-            el("button", { classe: "btn btn-peq", type: "button", texto: "Voltar", onclick: desenhar }),
+            botaoVoltar(desenhar),
           ]),
         ].filter(Boolean)),
       );

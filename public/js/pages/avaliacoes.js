@@ -1,5 +1,5 @@
 import { get, post, put } from "../api.js";
-import { ICONES, avisar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, vazio } from "../ui.js";
+import { ICONES, avisar, campoDeFormulario, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, vazio } from "../ui.js";
 
 /**
  * Avaliações do Google.
@@ -56,7 +56,7 @@ export async function avaliacoes(raiz, ctx) {
   const fila = el("div", { classe: "lista" });
   const prontas = el("div", { classe: "lista" });
   const aviso = el("div", { classe: "cartao alerta" });
-  const regras = el("div", { classe: "cartao" });
+  const regras = el("div", { classe: "cartao formulario" });
   const numeros = el("div", { classe: "grade" });
   const filtros = el("div", { classe: "chips", role: "group", "aria-label": "Recorte do histórico" });
   const historico = el("div", { classe: "lista" });
@@ -684,6 +684,6 @@ export async function avaliacoes(raiz, ctx) {
   }
 
   function campo(rotulo, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+    return campoDeFormulario(rotulo, controle);
   }
 }

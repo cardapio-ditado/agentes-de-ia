@@ -1,5 +1,5 @@
 import { del, post, put } from "../api.js";
-import { avisar, dinheiro, el, etiqueta, limpar } from "../ui.js";
+import { SVG_LIXEIRA, avisar, campoDeFormulario, dinheiro, el, etiqueta, limpar } from "../ui.js";
 import { botaoDePdf, dataBr, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -218,7 +218,7 @@ export function secaoDeOcorrencias({ ctx, id, pessoa, ficha, visao, aoMudar }) {
             classe: "btn-icone",
             type: "button",
             title: "Apagar este registro",
-            texto: "🗑",
+            html: SVG_LIXEIRA,
             onclick: async () => {
               if (!confirm("Apagar este registro? Ele some da linha do tempo.")) return;
               try {
@@ -234,18 +234,18 @@ export function secaoDeOcorrencias({ ctx, id, pessoa, ficha, visao, aoMudar }) {
     );
   }
 
-  return el("section", { classe: "cartao pilha" }, [
+  return el("section", { classe: "cartao formulario pilha" }, [
     el("div", {}, [
       el("h3", { texto: "Linha do tempo" }),
       el("p", { classe: "muted", texto: "Elogios, feedbacks, atrasos, faltas e registros formais. O elogio que o cliente deixa na pesquisa entra sozinho." }),
     ]),
     el("div", { classe: "grade" }, [
-      el("div", { classe: "campo" }, [el("label", { texto: "O quê" }), tipo]),
-      el("div", { classe: "campo" }, [el("label", { texto: "Dia" }), dia]),
+      campoDeFormulario("O quê", tipo),
+      campoDeFormulario("Dia", dia),
       campoMinutos,
       campoDias,
     ]),
-    el("div", { classe: "campo" }, [el("label", { texto: "Descrição" }), descricao]),
+    campoDeFormulario("Descrição", descricao),
     ajuda,
     el("div", { classe: "reserva-acoes" }, [
       el("button", {
@@ -384,8 +384,8 @@ export function camposDaExperiencia(ficha) {
   const p1 = el("input", { classe: "input", type: "number", min: "0", max: "90", value: ficha?.experiencia_primeiro ?? 45 });
   const p2 = el("input", { classe: "input", type: "number", min: "0", max: "90", value: ficha?.experiencia_segundo ?? 45 });
   const caixa = el("div", { classe: "grade grade-2" }, [
-    el("div", { classe: "campo" }, [el("label", { texto: "Experiência — 1º período (dias)" }), p1]),
-    el("div", { classe: "campo" }, [el("label", { texto: "Experiência — 2º período (dias)" }), p2]),
+    campoDeFormulario("Experiência — 1º período (dias)", p1),
+    campoDeFormulario("Experiência — 2º período (dias)", p2),
   ]);
   return { caixa, valores: () => ({ experiencia_primeiro: p1.value, experiencia_segundo: p2.value }) };
 }
@@ -513,18 +513,18 @@ export function secaoDeAvaliacoes({ ctx, id, pessoa, ficha, visao, aoMudar }) {
     const combinados = [1, 2, 3].map((n) => el("input", { classe: "input", placeholder: `Combinado ${n} (ex.: chegar 10 min antes no fim de semana)` }));
     const v = visao;
     limpar(area).append(
-      el("div", { classe: "cartao pilha", style: "padding:14px" }, [
+      el("div", { classe: "cartao formulario pilha", style: "padding:14px" }, [
         el("div", { classe: "grade" }, [
-          el("div", { classe: "campo" }, [el("label", { texto: "Momento" }), momento]),
-          el("div", { classe: "campo" }, [el("label", { texto: "Dia" }), dia]),
+          campoDeFormulario("Momento", momento),
+          campoDeFormulario("Dia", dia),
         ]),
         el("p", { classe: "muted", style: "margin:0", texto:
           `Os números do período: nota do cliente ${v.cliente.media ?? "—"} · ${v.escala_30d.faltas} falta(s) e ${v.escala_30d.atrasos} atraso(s) em 30 dias · ` +
           `${v.contagem.elogios} elogio(s) · ${v.contagem.advertencias} advertência(s). Use para conversar sobre fatos.` }),
         ...linhas,
-        el("div", { classe: "campo" }, [el("label", { texto: "Pontos fortes" }), fortes]),
-        el("div", { classe: "campo" }, [el("label", { texto: "A melhorar" }), melhorar]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Até 3 combinados para o próximo período" }), ...combinados]),
+        campoDeFormulario("Pontos fortes", fortes),
+        campoDeFormulario("A melhorar", melhorar),
+        campoDeFormulario("Até 3 combinados para o próximo período", ...combinados),
         el("div", { classe: "reserva-acoes" }, [
           el("button", {
             classe: "btn btn-primario",
@@ -585,7 +585,7 @@ export function secaoDeAvaliacoes({ ctx, id, pessoa, ficha, visao, aoMudar }) {
           classe: "btn-icone",
           type: "button",
           title: "Apagar esta avaliação",
-          texto: "🗑",
+          html: SVG_LIXEIRA,
           onclick: async () => {
             if (!confirm("Apagar esta avaliação?")) return;
             try {
@@ -690,7 +690,7 @@ export function secaoDaIntegracao({ ctx, id, pessoa, visao, equipe, aoMudar }) {
         el("h3", { texto: `Integração · ${i.feitas} de ${i.total}` }),
         el("p", { classe: "muted", texto: `Os primeiros 90 dias de ${nome} na casa. Quem é bem recebido fica — a conversa do dia 30 é quando o novato decide.` }),
       ]),
-      el("div", { classe: "campo" }, [el("label", { texto: "Padrinho (quem acompanha)" }), padrinho]),
+      campoDeFormulario("Padrinho (quem acompanha)", padrinho),
     ]),
     el("div", { classe: "trilha-barra" }, [el("span", { style: `width:${Math.round((i.feitas / i.total) * 100)}%` })]),
     el("div", { classe: "tabela" }, i.etapas.map((e) =>

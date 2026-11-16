@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { ICONES, acaoIcone, avisar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, campoDeFormulario, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -220,7 +220,7 @@ export async function reservas(raiz, ctx) {
   }
 
   function cartaoReserva(r) {
-    const motivo = el("input", { placeholder: "Motivo (obrigatório para recusar)" });
+    const motivo = el("input", { placeholder: "Motivo (obrigatório para recusar)", "aria-label": "Motivo da recusa (obrigatório para recusar)" });
     const areaEdicao = el("div", {});
 
     const btnAprovar = el("button", {
@@ -341,7 +341,7 @@ export async function reservas(raiz, ctx) {
     const obs = el("input", { value: r.notes ?? "", placeholder: "Observações (opcional)" });
 
     area.append(
-      el("div", { classe: "pilha", style: "margin-top:12px;gap:8px" }, [
+      el("div", { classe: "form-grade formulario", style: "margin-top:12px" }, [
         campo("Nome", nome),
         campo("Telefone", telefone),
         campo("Pessoas", pessoas),
@@ -389,7 +389,7 @@ export async function reservas(raiz, ctx) {
   }
 
   function campo(rotulo, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+    return campoDeFormulario(rotulo, controle);
   }
 
   /** ISO (UTC) → valor de <input type="datetime-local"> no fuso do navegador. */

@@ -1,5 +1,5 @@
 import { api, get } from "../api.js";
-import { avisar, el } from "../ui.js";
+import { avisar, campoDeFormulario, el } from "../ui.js";
 
 /**
  * A casa: a identidade do estabelecimento.
@@ -88,18 +88,18 @@ export async function empresa(raiz, ctx) {
 
   raiz.append(
     el("div", { classe: "pilha" }, [
-      el("form", { classe: "cartao", onsubmit: salvar }, [
+      el("form", { classe: "cartao formulario", onsubmit: salvar }, [
         el("h3", { texto: "A casa" }),
         el("p", {
           classe: "muted",
           texto: "A identidade do estabelecimento. Todos os módulos usam estes dados.",
         }),
-        el("div", { classe: "grade", style: "margin-top:12px" }, [
+        el("div", { classe: "form-grade" }, [
           campo("Nome", campos.name),
           campo("Telefone", campos.phone),
           campo("WhatsApp", campos.whatsapp),
           campo("E-mail", campos.email),
-          el("div", { classe: "campo campo-largo" }, [
+          el("div", { classe: "campo" }, [
             el("label", { texto: "Fuso horário" }),
             campos.timezone,
             el("small", {
@@ -108,7 +108,7 @@ export async function empresa(raiz, ctx) {
                 "É o relógio da casa: define a hora em que o checklist dispara, quando a promoção do cardápio vale e em que dia o consumo entra no CMV.",
             }),
           ]),
-          el("div", { classe: "campo campo-largo" }, [
+          el("div", { classe: "campo" }, [
             el("label", { texto: "O dia da casa vira às" }),
             campos.virada_do_dia,
             el("small", {
@@ -118,7 +118,7 @@ export async function empresa(raiz, ctx) {
             }),
           ]),
         ]),
-        el("div", { style: "margin-top:14px" }, [btnSalvar]),
+        el("div", { classe: "formulario-acoes" }, [btnSalvar]),
       ]),
 
       // O caminho para o resto, para quem vier procurar aqui o endereço e os
@@ -155,6 +155,6 @@ export async function empresa(raiz, ctx) {
   }
 
   function campo(nome, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: nome }), controle]);
+    return campoDeFormulario(nome, controle);
   }
 }

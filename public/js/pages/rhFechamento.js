@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { ICONES, acaoIcone, avisar, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, icone, indicador, limpar, navegadorDePeriodo, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, campoDeFormulario, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, icone, indicador, limpar, navegadorDePeriodo, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -177,7 +177,7 @@ export function criarFechamento(corpo, ctx) {
     const explicacaoDoMetodo = el("small", { classe: "muted" });
     const servico = el("input", { classe: "input", type: "number", min: "0", max: "100", step: "0.01", value: String(r.percentual_servico) });
     const repasse = el("input", { classe: "input", type: "number", min: "0", max: "100", step: "0.01", value: String(r.percentual_repasse) });
-    const criterio = el("select", { classe: "input" },
+    const criterio = el("select", { classe: "input", "aria-label": "Como o bolo é repartido" },
       dados.criterios.map((c) => el("option", { value: c.id, texto: c.nome, selected: r.criterio_rateio === c.id })));
     const apoio = el("input", { classe: "input", type: "number", min: "0", max: "100", step: "0.01", value: String(r.percentual_da_casa_para_apoio) });
 
@@ -216,14 +216,14 @@ export function criarFechamento(corpo, ctx) {
 
     const metas = editorDeMetas(r);
 
-    return el("section", { classe: "cartao" }, [
+    return el("section", { classe: "cartao formulario" }, [
       el("h3", { texto: "Como esta casa paga a gorjeta" }),
       el("p", {
         classe: "muted",
         texto: "Vale para os lançamentos daqui para frente. O que já foi pago continua como foi pago.",
       }),
       el("div", { classe: "grade" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Método" }), metodo, explicacaoDoMetodo]),
+        campoDeFormulario("Método", metodo, explicacaoDoMetodo),
         el("div", { classe: "campo" }, [
           el("label", { texto: "Serviço sobre a venda (%)" }),
           servico,
@@ -409,8 +409,8 @@ export function criarFechamento(corpo, ctx) {
           ))
         : null,
       el("div", { classe: "grade" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Função" }), funcao]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Peso" }), peso]),
+        campoDeFormulario("Função", funcao),
+        campoDeFormulario("Peso", peso),
       ]),
       el("div", { classe: "reserva-acoes" }, [
         el("button", {
@@ -684,15 +684,15 @@ export function criarFechamento(corpo, ctx) {
     }
     atualizarPrevia();
 
-    return el("section", { classe: "cartao" }, [
+    return el("section", { classe: "cartao formulario" }, [
       el("h3", { texto: "Lançar venda", style: "margin:0 0 2px" }),
       previa,
       el("div", { classe: "grade" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Quem" }), quem]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Dia" }), dia]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Turno" }), turno]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Quanto vendeu (R$)" }), valor]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Comandas" }), comandas]),
+        campoDeFormulario("Quem", quem),
+        campoDeFormulario("Dia", dia),
+        campoDeFormulario("Turno", turno),
+        campoDeFormulario("Quanto vendeu (R$)", valor),
+        campoDeFormulario("Comandas", comandas),
       ]),
       el("p", {
         classe: "muted",
@@ -748,7 +748,7 @@ export function criarFechamento(corpo, ctx) {
     });
     const valor = el("input", { classe: "input", type: "number", min: "0", step: "0.01", value: f.valor, oninput: (e) => { f.valor = e.target.value; } });
 
-    return el("section", { classe: "cartao" }, [
+    return el("section", { classe: "cartao formulario" }, [
       el("h3", { texto: adicional ? "Adicional" : "Desconto", style: "margin:0 0 2px" }),
       el("p", {
         classe: "muted",
@@ -760,10 +760,10 @@ export function criarFechamento(corpo, ctx) {
       // precisa ter em mãos, e o motivo deixa de ser opcional.
       adicional ? null : el("p", { classe: "aviso aviso-alerta", style: "margin:8px 0", texto: dados.aviso_do_desconto ?? AVISO_DO_DESCONTO }),
       el("div", { classe: "grade" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Quem" }), quem]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Dia" }), dia]),
-        el("div", { classe: "campo" }, [el("label", { texto: adicional ? "Descrição" : "Motivo (obrigatório)" }), descricao]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Valor (R$)" }), valor]),
+        campoDeFormulario("Quem", quem),
+        campoDeFormulario("Dia", dia),
+        campoDeFormulario(adicional ? "Descrição" : "Motivo (obrigatório)", descricao),
+        campoDeFormulario("Valor (R$)", valor),
       ]),
       el("div", { classe: "reserva-acoes" }, [
         el("button", {

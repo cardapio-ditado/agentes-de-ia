@@ -432,10 +432,105 @@ export function navegadorDePeriodo({ titulo, detalhe, aoVoltar, aoAvancar, rotul
   ]);
 }
 
+let proximoIdDeCampo = 0;
+
+/**
+ * Um campo de formulário: rótulo em cima, controle, e uma linha de ajuda.
+ *
+ * O rótulo fica LIGADO ao controle (`for`/`id`): clicar no nome leva o cursor
+ * ao campo, e o leitor de tela anuncia o nome ao entrar nele. A ajuda entra
+ * como descrição do campo (`aria-describedby`).
+ *
+ *   tamanho: "inteiro" ocupa a linha toda da grade; "curto" é para número,
+ *            data e hora, que não precisam de meia tela.
+ */
+export function campoDeFormulario(rotulo, controle, ...resto) {
+  // Depois do controle pode vir um objeto de opções e/ou mais nós (uma ajuda
+  // já montada, uma prévia): os nós entram embaixo do controle, na ordem.
+  const opcoes = resto.find((r) => r && !(r instanceof Node) && typeof r === "object") ?? {};
+  const extras = resto.filter((r) => r instanceof Node);
+  const { ajuda = null, obrigatorio = false, tamanho = null } = opcoes;
+  const alvo = controle?.matches?.("input, select, textarea") ? controle : controle?.querySelector?.("input, select, textarea") ?? null;
+  if (alvo && !alvo.id) alvo.id = `campo-${++proximoIdDeCampo}`;
+  const idDaAjuda = ajuda && alvo ? `${alvo.id}-ajuda` : null;
+  if (idDaAjuda) alvo.setAttribute("aria-describedby", idDaAjuda);
+  if (obrigatorio && alvo) alvo.setAttribute("aria-required", "true");
+  const etiquetaDoCampo = el("label", {}, [
+    document.createTextNode(rotulo),
+    obrigatorio ? el("span", { classe: "campo-obrigatorio", title: "Obrigatório", texto: " *" }) : null,
+  ]);
+  if (alvo) etiquetaDoCampo.htmlFor = alvo.id;
+  return el("div", { classe: `campo${tamanho ? ` campo-${tamanho}` : ""}` }, [
+    etiquetaDoCampo,
+    controle,
+    ajuda ? el("small", { classe: "campo-ajuda", id: idDaAjuda, texto: ajuda }) : null,
+    ...extras,
+  ]);
+}
+
+/**
+ * Liga cada rótulo solto ao controle que ele nomeia.
+ *
+ * Campo montado à mão (`div.campo` com um `<label>` e um controle lado a
+ * lado) aparece certo na tela, mas o rótulo não está ligado a nada: clicar
+ * nele não leva o cursor ao campo, e o leitor de tela entra num campo sem
+ * nome. Esta função conserta o que já está na página — e campo só com texto
+ * de exemplo (placeholder) ganha esse texto como nome acessível.
+ *
+ * O painel chama isto sozinho a cada mudança da tela (ver app.js); tela nova
+ * não precisa lembrar.
+ */
+export function ligarRotulos(raiz) {
+  const CONTROLES = "input:not([type=hidden]), select, textarea";
+  for (const rotulo of raiz.querySelectorAll(".campo > label:not([for]), .campo-rotulado > span:not([data-ligado])")) {
+    const caixa = rotulo.parentElement;
+    if (rotulo.tagName === "LABEL" && rotulo.querySelector(CONTROLES)) continue;
+    const controles = [...caixa.querySelectorAll(CONTROLES)];
+    // Um rótulo, um controle: com dois, não dá para saber de qual ele fala.
+    if (controles.length !== 1) continue;
+    const alvo = controles[0];
+    if (rotulo.tagName === "LABEL") {
+      if (alvo.labels?.length) continue;
+      if (!alvo.id) alvo.id = `campo-${++proximoIdDeCampo}`;
+      rotulo.htmlFor = alvo.id;
+    } else {
+      rotulo.dataset.ligado = "1";
+    }
+  }
+  for (const alvo of raiz.querySelectorAll(CONTROLES)) {
+    if (alvo.type === "checkbox" || alvo.type === "radio" || alvo.type === "file") continue;
+    if (alvo.labels?.length || alvo.getAttribute("aria-label") || alvo.getAttribute("aria-labelledby") || alvo.closest("label")) continue;
+    const nome = alvo.getAttribute("placeholder") || alvo.getAttribute("title");
+    if (nome) alvo.setAttribute("aria-label", nome.replace(/…$/, "").trim());
+  }
+}
+
+/** Caixa de marcar com título e, se precisar, uma linha explicando o efeito. */
+export function caixaDeMarcar(controle, titulo, descricao = null) {
+  return el("label", { classe: "campo-caixa" }, [
+    controle,
+    el("span", {}, [el("strong", { texto: titulo }), descricao ? el("small", { texto: descricao }) : null]),
+  ]);
+}
+
+/**
+ * A barra de ações de um formulário: a principal primeiro, depois as outras.
+ * Fica no pé do formulário, sempre com a mesma altura e o mesmo espaçamento.
+ */
+export function acoesDoFormulario(...botoes) {
+  return el("div", { classe: "formulario-acoes" }, botoes.flat().filter(Boolean));
+}
+
 /** "1 aviso", "5 avisos": o número com a palavra certa. */
 export function plural(n, um, varios) {
   return `${n} ${Number(n) === 1 ? um : varios}`;
 }
+
+/**
+ * A lixeira em SVG, pronta para o `html` de um botão antigo (`btn-icone`):
+ * troca o emoji, que cada sistema desenha de um jeito, pelo ícone da casa.
+ */
+export const SVG_LIXEIRA = icone(ICONES.lixeira, 16).outerHTML;
 
 /** Texto com ícone à esquerda, para o conteúdo de um botão. */
 export function comIcone(iconePath, texto) {

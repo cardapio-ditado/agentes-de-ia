@@ -1,5 +1,5 @@
 import { get, patch, post, put } from "../api.js";
-import { avisar, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, dataHora, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Carteira de clientes — só para a equipe Brasa Food.
@@ -462,7 +462,7 @@ export async function clientes(raiz, ctx) {
     const numero = digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
     const nomesDosModulos = (c.modulos ?? []).map((id) => MODULOS_VENDAVEIS.find(([m]) => m === id)?.[1] ?? id);
     conteudo.append(
-      el("section", { classe: "cartao pontos-borda-atencao" }, [
+      el("section", { classe: "cartao formulario pontos-borda-atencao" }, [
         el("h2", { texto: `${c.organizacao.nome} está no ar 🔥` }),
         el("p", {
           classe: "muted",
@@ -551,7 +551,7 @@ export async function clientes(raiz, ctx) {
   }
 
   function campo(nome, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: nome }), controle]);
+    return campoDeFormulario(nome, controle);
   }
 
   function linha(rotulo, valor) {

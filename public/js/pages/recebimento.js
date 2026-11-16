@@ -96,7 +96,7 @@ export async function recebimento(raiz, ctx) {
           ]),
         ]),
 
-        el("div", { classe: "cartao" }, [
+        el("div", { classe: "cartao formulario" }, [
           el("label", { texto: "Onde vai guardar" }),
           seletorLocal,
 

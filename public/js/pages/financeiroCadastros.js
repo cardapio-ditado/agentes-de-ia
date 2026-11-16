@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeBusca, campoDeFormulario, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 import { nomeDaCategoria, seletorDeCategoria } from "./financeiroConta.js";
 
@@ -14,7 +14,7 @@ const NOME_DA_CONTA = { corrente: "Conta corrente", poupanca: "Poupança", caixa
 const NOME_DA_FORMA = { dinheiro: "Dinheiro", pix: "Pix", debito: "Débito", credito: "Crédito", boleto: "Boleto", transferencia: "Transferência", cheque: "Cheque", voucher: "Vale-refeição", outro: "Outro" };
 
 const campo = (rotulo, controle, ajuda) =>
-  el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle, ajuda ? el("small", { classe: "muted", texto: ajuda }) : null]);
+  campoDeFormulario(rotulo, controle, { ajuda });
 const opcoes = (mapa, atual) => Object.entries(mapa).map(([v, t]) => el("option", { value: v, texto: t, selected: v === atual }));
 const valorNoCampo = (n) => (n === null || n === undefined ? "" : Number(n).toFixed(2).replace(".", ","));
 

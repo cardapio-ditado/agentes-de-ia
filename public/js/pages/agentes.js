@@ -1,6 +1,6 @@
 import { api, del, get, post, postArquivo } from "../api.js";
 import { avisoDeMotor, extrato } from "../pontos.js";
-import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, limpar, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeFormulario, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, limpar, vazio } from "../ui.js";
 import { MODELOS_DE_ATENDENTE } from "../modelosProntos.js";
 
 const MODELOS = [
@@ -238,7 +238,7 @@ export async function agentes(raiz, ctx) {
       })
       .catch(() => {});
 
-    const form = el("form", { classe: "cartao", onsubmit: salvar }, [
+    const form = el("form", { classe: "cartao formulario", onsubmit: salvar }, [
       el("div", { classe: "grade" }, [
         campo("Nome", campos.name),
         campo("Identificador", campos.slug),
@@ -506,7 +506,7 @@ export async function agentes(raiz, ctx) {
   }
 
   function campo(nome, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: nome }), controle]);
+    return campoDeFormulario(nome, controle);
   }
 
   function rotulo(pares, valor) {

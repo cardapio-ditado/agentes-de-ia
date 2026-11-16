@@ -440,7 +440,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
             el("h2", { texto: "Alterar dados da compra" }),
             botaoVoltar(() => detalheCompra(c.id)),
           ]),
-          el("div", { classe: "cartao pilha" }, [
+          el("div", { classe: "cartao formulario pilha" }, [
             el("label", { classe: "campo-rotulado" }, [
               el("span", { texto: "Fornecedor (do cadastro)" }),
               lupaFornecedor,
@@ -1099,7 +1099,7 @@ async function paginaPedidos(raiz, ctx, { aoContarPendentes, definirAcoes } = {}
             el("h2", { texto: "Novo pedido" }),
             el("button", { classe: "btn btn-peq", type: "button", texto: "Cancelar", onclick: desenhar }),
           ]),
-          el("div", { classe: "cartao pilha" }, [
+          el("div", { classe: "cartao formulario pilha" }, [
             el("label", { classe: "campo-rotulado" }, [
               el("span", { texto: "Fornecedor (do cadastro)" }),
               lupaFornecedor,

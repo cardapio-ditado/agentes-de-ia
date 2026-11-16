@@ -290,7 +290,7 @@ export async function estoque(raiz, ctx) {
               ]);
             }),
           ),
-          el("div", { classe: "cartao pilha" }, [
+          el("div", { classe: "cartao formulario pilha" }, [
             el("h3", { texto: "Novo local" }),
             el("div", { classe: "linha-campos" }, [
               nomeNovo,
@@ -339,7 +339,7 @@ export async function estoque(raiz, ctx) {
             el("h2", { texto: modo === "transferir" ? "Transferir entre estoques" : "Registrar perda" }),
             el("button", { classe: "btn btn-peq", type: "button", texto: "Cancelar", onclick: desenhar }),
           ]),
-          el("div", { classe: "cartao pilha" }, [
+          el("div", { classe: "cartao formulario pilha" }, [
             el("label", { classe: "campo-rotulado" }, [
               el("span", { texto: "Item" }),
               buscador(

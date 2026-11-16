@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, comSigla, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, campoDeFormulario, comIcone, comSigla, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * RH — Fase 4: férias.
@@ -966,15 +966,15 @@ export function criarFerias(corpo, ctx) {
     inicio.addEventListener("change", recalcular);
     fim.addEventListener("change", recalcular);
 
-    return el("section", { classe: "cartao" }, [
+    return el("section", { classe: "cartao formulario" }, [
       el("h4", { texto: pessoaFixa ? `Lançar férias de ${pessoaFixa.nome}` : "Lançar férias", style: "margin:0 0 4px" }),
       previa,
       el("div", { classe: "grade" }, [
-        pessoaFixa ? null : el("div", { classe: "campo" }, [el("label", { texto: "Quem" }), quem]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Começa" }), inicio]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Termina" }), fim]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Dias vendidos (abono)" }), abono]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Observação" }), observacao]),
+        pessoaFixa ? null : campoDeFormulario("Quem", quem),
+        campoDeFormulario("Começa", inicio),
+        campoDeFormulario("Termina", fim),
+        campoDeFormulario("Dias vendidos (abono)", abono),
+        campoDeFormulario("Observação", observacao),
       ]),
       el("div", { classe: "reserva-acoes" }, [
         el("button", {

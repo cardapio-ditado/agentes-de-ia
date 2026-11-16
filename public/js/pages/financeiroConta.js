@@ -1,5 +1,5 @@
 import { del, post, put } from "../api.js";
-import { avisar, botaoVoltar, dinheiro, el, hojeNaCasa, limpar, preencher } from "../ui.js";
+import { avisar, botaoVoltar, campoDeFormulario, dinheiro, el, hojeNaCasa, limpar, preencher } from "../ui.js";
 import { dataBr } from "../relatorio.js";
 
 /**
@@ -60,7 +60,7 @@ const seletor = (lista, atual, vazio = "—") =>
   ]);
 
 const campo = (rotulo, controle, ajuda) =>
-  el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle, ajuda ? el("small", { classe: "muted", texto: ajuda }) : null]);
+  campoDeFormulario(rotulo, controle, { ajuda });
 
 /**
  * Abre o formulário dentro de `corpo`. `existente` = editar UMA parcela.

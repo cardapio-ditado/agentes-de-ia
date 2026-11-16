@@ -1,5 +1,5 @@
 import { ErroApi, chaveSalva, esquecerChave, get, post, salvarChave, salvarSessao } from "./api.js";
-import { ICONES, avisar, definirFusoDaCasa, el, icone, limpar, estadoDeErro } from "./ui.js";
+import { ICONES, avisar, definirFusoDaCasa, el, icone, limpar, estadoDeErro, ligarRotulos } from "./ui.js";
 import { painel } from "./pages/painel.js";
 import { hoje } from "./pages/hoje.js";
 import { trilha } from "./pages/trilha.js";
@@ -449,6 +449,21 @@ const nav = document.getElementById("nav");
 // As telas desenham no CORPO; o cabeçalho (título, descrição, ações) fica
 // acima dele e é do roteador.
 const main = document.getElementById("corpo-pagina");
+
+// Todo campo que entra na tela ganha nome acessível: o rótulo solto é ligado
+// ao controle dele. Num observador, e não em cada página, porque as telas
+// redesenham pedaços a toda hora — e tela nova não precisa lembrar de chamar.
+{
+  let agendado = false;
+  new MutationObserver(() => {
+    if (agendado) return;
+    agendado = true;
+    requestAnimationFrame(() => {
+      agendado = false;
+      ligarRotulos(main);
+    });
+  }).observe(main, { childList: true, subtree: true });
+}
 const acoesDaPagina = document.getElementById("acoes-pagina");
 const seletorVenue = document.getElementById("seletor-venue");
 

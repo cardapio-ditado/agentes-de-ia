@@ -1,5 +1,5 @@
 import { api, del, get, post } from "../api.js";
-import { avisar, el, limpar, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, el, limpar, vazio } from "../ui.js";
 
 const DIAS = [
   ["seg", "Segunda"],
@@ -82,7 +82,7 @@ export async function agenteSabe(raiz, ctx) {
     texto: "Salvar",
   });
 
-  const form = el("form", { classe: "cartao", onsubmit: salvar }, [
+  const form = el("form", { classe: "cartao formulario", onsubmit: salvar }, [
     el("h3", { texto: "O que o atendente virtual responde sobre a casa" }),
     el("p", {
       classe: "muted",
@@ -261,6 +261,6 @@ export async function agenteSabe(raiz, ctx) {
   }
 
   function campo(nome, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: nome }), controle]);
+    return campoDeFormulario(nome, controle);
   }
 }

@@ -168,7 +168,7 @@ export async function cmvPainel(raiz, ctx) {
           linhaDado("÷ Faturamento", dinheiro(Number(p.faturamento ?? 0)), "líquido, sem gorjeta"),
         ]),
 
-        el("div", { classe: "cartao" }, [
+        el("div", { classe: "cartao formulario" }, [
           el("h3", { texto: "Lançar faturamento do dia" }),
           el("p", { classe: "muted", texto: "Valor líquido, sem gorjeta e sem taxa de serviço. Relançar corrige — não soma." }),
           el("div", { classe: "linha-campos" }, [

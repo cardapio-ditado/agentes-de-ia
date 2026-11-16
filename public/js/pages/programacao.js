@@ -1,6 +1,6 @@
 import { del, get, post } from "../api.js";
 import { blocoAgendaRapida } from "./agendaRapida.js";
-import { ICONES, acaoIcone, avisar, dataHora, diaNaCasa, dinheiro, el, esqueleto, estadoDeErro, etiqueta, horaNaCasa, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, campoDeFormulario, dataHora, diaNaCasa, dinheiro, el, esqueleto, estadoDeErro, etiqueta, horaNaCasa, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 
 const TIPOS = [
   ["musica", "Música"],
@@ -94,7 +94,7 @@ export async function programacao(raiz, ctx) {
     campoAte.hidden = !temDataFinal.checked;
   });
 
-  const form = el("form", { classe: "cartao", onsubmit: criar }, [
+  const form = el("form", { classe: "cartao formulario", onsubmit: criar }, [
     el("h3", { texto: "Novo item na programação" }),
     el("div", { classe: "grade", style: "margin-top:12px" }, [
       campo("Título", campos.titulo),
@@ -546,7 +546,7 @@ export async function programacao(raiz, ctx) {
   }
 
   function campo(rotulo, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+    return campoDeFormulario(rotulo, controle);
   }
 
   function linha(rotulo, valor) {

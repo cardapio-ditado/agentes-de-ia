@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { avisar, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, limpar, navegadorDePeriodo, plural, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, el, esqueleto, estadoDeErro, etiqueta, hojeNaCasa, limpar, navegadorDePeriodo, plural, vazio } from "../ui.js";
 
 /**
  * RH — Fase 2: a grade da semana.
@@ -388,7 +388,7 @@ export function criarEscala(corpo, ctx) {
     });
     const observacao = el("input", { classe: "input", type: "text", placeholder: "Recado do dia (opcional)" });
 
-    const linhaDoTurno = el("div", { classe: "campo" }, [el("label", { texto: "Turno" }), turno]);
+    const linhaDoTurno = campoDeFormulario("Turno", turno);
 
     return el("section", { classe: "cartao editor-escala" }, [
       el("div", { classe: "cabecalho-secao" }, [
@@ -447,10 +447,10 @@ export function criarEscala(corpo, ctx) {
         : null,
 
       el("div", { classe: "grade" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Situação" }), situacao]),
+        campoDeFormulario("Situação", situacao),
         linhaDoTurno,
-        el("div", { classe: "campo" }, [el("label", { texto: "Função no dia" }), funcao]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Observação" }), observacao]),
+        campoDeFormulario("Função no dia", funcao),
+        campoDeFormulario("Observação", observacao),
       ]),
 
       el("div", { classe: "reserva-acoes" }, [
@@ -549,9 +549,9 @@ export function criarEscala(corpo, ctx) {
           )
         : null,
       el("div", { classe: "grade" }, [
-        el("div", { classe: "campo" }, [el("label", { texto: "Nome" }), nome]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Começa" }), inicio]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Termina" }), fim]),
+        campoDeFormulario("Nome", nome),
+        campoDeFormulario("Começa", inicio),
+        campoDeFormulario("Termina", fim),
       ]),
       el("div", { classe: "reserva-acoes" }, [
         el("button", {

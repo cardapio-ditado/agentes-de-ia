@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, avisar, botaoVoltar, campoDeBusca, campoDeFormulario, comIcone, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { editorDeLacunas, modeloEscolhido, renderizarPrevia, seletorDeModelo } from "../modelosMeta.js";
 import { CAMPANHAS_PRONTAS, publicoDaCampanha } from "../modelosProntos.js";
 import { SITUACOES, contarSituacoes, horaCurta, seloDoEnvio, tilesDeSituacao } from "../envios.js";
@@ -659,14 +659,10 @@ export async function clientesDaCasa(raiz, ctx) {
     };
 
     const linha = (rotulo, campo, ajuda) =>
-      el("label", { classe: "campo-rotulado" }, [
-        el("span", { texto: rotulo }),
-        campo,
-        ajuda ? el("small", { classe: "muted", texto: ajuda }) : null,
-      ].filter(Boolean));
+      campoDeFormulario(rotulo, campo, { ajuda });
 
     corpo.append(
-      el("section", { classe: "cartao pilha" }, [
+      el("section", { classe: "cartao formulario pilha" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("h2", { texto: existente ? (existente.nome || telefoneLegivel(existente.telefone)) : "Novo cliente" }),
           botaoVoltar(() => trocarAba("lista"), "Clientes"),
@@ -688,10 +684,10 @@ export async function clientesDaCasa(raiz, ctx) {
         el("label", { classe: "campo-caixa" }, [
           campos.descadastrado,
           el("span", {}, [
-            el("strong", { texto: " Não quer receber mensagens" }),
+            el("strong", { texto: "Não quer receber mensagens" }),
             el("small", {
               classe: "muted",
-              texto: " — marque quando a pessoa pedir para sair. Ela some de todo envio, e insistir com quem pediu para sair é o que derruba o WhatsApp da casa.",
+              texto: "Marque quando a pessoa pedir para sair. Ela some de todo envio, e insistir com quem pediu para sair é o que derruba o WhatsApp da casa.",
             }),
           ]),
         ]),
@@ -1856,7 +1852,7 @@ export async function clientesDaCasa(raiz, ctx) {
         }
       };
 
-      return el("section", { classe: "cartao pilha" }, [
+      return el("section", { classe: "cartao formulario pilha" }, [
         el("h2", { texto: "Novo disparo" }),
         el("p", {
           classe: "muted",
@@ -2046,11 +2042,7 @@ export async function clientesDaCasa(raiz, ctx) {
     };
 
     const linha = (rotulo, campo, ajuda) =>
-      el("label", { classe: "campo-rotulado" }, [
-        el("span", { texto: rotulo }),
-        campo,
-        ajuda ? el("small", { classe: "muted", texto: ajuda }) : null,
-      ].filter(Boolean));
+      campoDeFormulario(rotulo, campo, { ajuda });
 
     /**
      * A prévia enquanto se escreve.
@@ -2163,7 +2155,7 @@ export async function clientesDaCasa(raiz, ctx) {
 
     limpar(corpo);
     corpo.append(
-      el("section", { classe: "cartao pilha" }, [
+      el("section", { classe: "cartao formulario pilha" }, [
         el("div", {}, [
           el("h2", { texto: "Parabéns de aniversário" }),
           el("p", {
@@ -2174,10 +2166,10 @@ export async function clientesDaCasa(raiz, ctx) {
         el("label", { classe: "campo-caixa" }, [
           campos.ativo,
           el("span", {}, [
-            el("strong", { texto: " Mandar o parabéns automaticamente" }),
+            el("strong", { texto: "Mandar o parabéns automaticamente" }),
             el("small", {
               classe: "muted",
-              texto: " — cada pessoa recebe uma vez por ano, e quem pediu para sair nunca recebe.",
+              texto: "Cada pessoa recebe uma vez por ano, e quem pediu para sair nunca recebe.",
             }),
           ]),
         ]),
@@ -2294,5 +2286,5 @@ function quandoLegivel(iso) {
 }
 
 function campoDaTela(rotulo, controle) {
-  return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+  return campoDeFormulario(rotulo, controle);
 }

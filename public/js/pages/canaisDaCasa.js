@@ -1,5 +1,5 @@
 import { ErroApi, del, get, post, put } from "../api.js";
-import { avisar, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, el, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * WhatsApp e Instagram da casa, organizados pela TAREFA — e não pela
@@ -332,7 +332,7 @@ export async function canaisDaCasa(raiz, ctx) {
       : "Os DMs do Instagram do bar atendidos pelo atendente virtual, direto na nuvem: sem QR, sem computador ligado, sem risco de banimento. Clique em conectar e entre com a conta do bar.";
 
     limpar(areaInstagram).append(
-      el("section", { classe: "cartao" }, [
+      el("section", { classe: "cartao formulario" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
             el("h2", { texto: "Instagram" }),
@@ -494,7 +494,7 @@ export async function canaisDaCasa(raiz, ctx) {
         : "Parabéns de aniversário, convite da pesquisa e mensagens em massa saem pelo número oficial da Meta: sem QR, sem computador ligado e sem risco de banimento.";
 
     limpar(areaOficial).append(
-      el("section", { classe: "cartao" }, [
+      el("section", { classe: "cartao formulario" }, [
         el("div", { classe: "cabecalho-secao" }, [
           el("div", {}, [
             el("h2", { texto: "Aniversário e campanhas" }),
@@ -908,5 +908,5 @@ export async function canaisDaCasa(raiz, ctx) {
 }
 
 function campo(rotulo, controle) {
-  return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+  return campoDeFormulario(rotulo, controle);
 }

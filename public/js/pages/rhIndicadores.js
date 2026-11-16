@@ -1,5 +1,5 @@
 import { del, get, post, put } from "../api.js";
-import { ICONES, acaoIcone, avisar, botaoVoltar, comIcone, comSigla, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, botaoVoltar, campoDeFormulario, comIcone, comSigla, dinheiro, el, esqueleto, estadoDeErro, etiqueta, indicador, preencher, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -279,17 +279,17 @@ export function criarContratacao(corpo, ctx) {
         el("h2", { texto: c ? c.nome : extra ? "Novo extra" : "Novo candidato" }),
         botaoVoltar(recarregar, "Contratação"),
       ]),
-      el("section", { classe: "cartao pilha" }, [
+      el("section", { classe: "cartao formulario pilha" }, [
         el("div", { classe: "grade grade-2" }, [
-          el("div", { classe: "campo" }, [el("label", { texto: "Nome" }), nome]),
-          el("div", { classe: "campo" }, [el("label", { texto: "WhatsApp" }), telefone]),
-          el("div", { classe: "campo" }, [el("label", { texto: "Função" }), funcao]),
-          el("div", { classe: "campo" }, [el("label", { texto: "Situação" }), situacao]),
-          extra ? el("div", { classe: "campo" }, [el("label", { texto: "Como foi da última vez" }), nota]) : null,
-          extra ? el("div", { classe: "campo" }, [el("label", { texto: "Última vez que trabalhou" }), ultima]) : null,
+          campoDeFormulario("Nome", nome),
+          campoDeFormulario("WhatsApp", telefone),
+          campoDeFormulario("Função", funcao),
+          campoDeFormulario("Situação", situacao),
+          extra ? campoDeFormulario("Como foi da última vez", nota) : null,
+          extra ? campoDeFormulario("Última vez que trabalhou", ultima) : null,
         ]),
         c?.experiencia ? el("p", { classe: "muted", texto: `Experiência (contada por ele): ${c.experiencia}` }) : null,
-        el("div", { classe: "campo" }, [el("label", { texto: "Observações" }), obs]),
+        campoDeFormulario("Observações", obs),
         el("div", { classe: "reserva-acoes" }, [
           el("button", {
             classe: "btn btn-primario",

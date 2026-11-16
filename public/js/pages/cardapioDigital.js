@@ -1,5 +1,5 @@
 import { del, get, patch, post, postArquivo, put } from "../api.js";
-import { ICONES, avisar, botaoVoltar, campoDeBusca, comIcone, dataHora, desde, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, SVG_LIXEIRA, avisar, botaoVoltar, campoDeBusca, campoDeFormulario, comIcone, dataHora, desde, dinheiro, el, esqueleto, estadoDeErro, etiqueta, limpar, tabelaDeDados, vazio } from "../ui.js";
 
 /**
  * O cardápio digital, como a casa o mexe.
@@ -329,7 +329,7 @@ export async function cardapioDigital(raiz, ctx) {
         el("div", { classe: "linha-campos", style: "margin-top:10px;flex-wrap:wrap" }, [novoNome, novoApelido, novaFuncao, cadastrar]),
         equipeCaixa,
       ]),
-      el("div", { classe: "cartao" }, [
+      el("div", { classe: "cartao formulario" }, [
         el("h3", { texto: "Mesas" }),
         el("div", { classe: "linha-campos", style: "align-items:center;flex-wrap:wrap;margin-top:10px" }, [
           el("span", { texto: "Criar mesas de" }), de, el("span", { texto: "até" }), ate, criar,
@@ -364,7 +364,7 @@ export async function cardapioDigital(raiz, ctx) {
             el("button", {
               classe: "btn-icone",
               type: "button",
-              texto: "🗑️",
+              html: SVG_LIXEIRA,
               title: "Remover",
               onclick: async () => {
                 if (!confirm(`Remover ${a.nome} da equipe?`)) return;
@@ -451,7 +451,7 @@ export async function cardapioDigital(raiz, ctx) {
         el("button", {
           classe: "btn-icone",
           type: "button",
-          texto: "🗑️",
+          html: SVG_LIXEIRA,
           title: "Apagar mesa",
           onclick: async () => {
             if (!confirm(`Apagar a mesa ${m.numero}?`)) return;
@@ -867,7 +867,7 @@ export async function cardapioDigital(raiz, ctx) {
               el("div", { classe: "linha-campos" }, [
                 n,
                 v,
-                el("button", { classe: "btn-icone", type: "button", texto: "🗑️", title: "Remover opção", onclick: () => { g.opcoes.splice(oi, 1); desenharOpcoes(); } }),
+                el("button", { classe: "btn-icone", type: "button", html: SVG_LIXEIRA, title: "Remover opção", onclick: () => { g.opcoes.splice(oi, 1); desenharOpcoes(); } }),
               ]),
             );
           });
@@ -879,7 +879,7 @@ export async function cardapioDigital(raiz, ctx) {
             el("div", { classe: "linha-campos" }, [
               nome,
               el("label", { classe: "campo-caixa", style: "align-items:center" }, [obrig, el("span", { texto: "obrigatório (escolhe 1)" })]),
-              el("button", { classe: "btn-icone", type: "button", texto: "🗑️", title: "Remover grupo", onclick: () => { grupos.splice(gi, 1); desenhar(); } }),
+              el("button", { classe: "btn-icone", type: "button", html: SVG_LIXEIRA, title: "Remover grupo", onclick: () => { grupos.splice(gi, 1); desenhar(); } }),
             ]),
             opcoes,
           ]),
@@ -993,7 +993,7 @@ export async function cardapioDigital(raiz, ctx) {
         el("button", {
           classe: "btn-icone",
           type: "button",
-          texto: "🗑️",
+          html: SVG_LIXEIRA,
           title: "Apagar categoria",
           onclick: async () => {
             if (!confirm(`Apagar "${c.nome}"? Os ${quantos} itens dela ficam, sem categoria.`)) return;
@@ -1205,7 +1205,7 @@ export async function cardapioDigital(raiz, ctx) {
         el("button", {
           classe: "btn-icone",
           type: "button",
-          texto: "🗑️",
+          html: SVG_LIXEIRA,
           title: "Apagar banner",
           onclick: async () => {
             if (!confirm(`Apagar o banner "${b.titulo}"?`)) return;
@@ -1293,7 +1293,7 @@ export async function cardapioDigital(raiz, ctx) {
           el("div", { classe: "linha-campos" }, [
             el("span", { style: "flex:2", texto: item ? `${item.nome} (de ${dinheiro(item.preco)})` : "item apagado" }),
             preco,
-            el("button", { classe: "btn-icone", type: "button", texto: "🗑️", onclick: () => { itens.splice(n, 1); desenharItens(); } }),
+            el("button", { classe: "btn-icone", type: "button", html: SVG_LIXEIRA, title: "Remover", "aria-label": "Remover", onclick: () => { itens.splice(n, 1); desenharItens(); } }),
           ]),
         );
       });
@@ -1361,7 +1361,7 @@ export async function cardapioDigital(raiz, ctx) {
       ]),
       el("div", { classe: "cartao" }, [
         el("div", { classe: "grade grade-2" }, [campo("Nome (vira o selo no item)", nome), campo("Descrição", descricao)]),
-        el("div", { classe: "campo" }, [el("label", { texto: "Dias da semana (nenhum marcado = todos)" }), chips]),
+        campoDeFormulario("Dias da semana (nenhum marcado = todos)", chips),
         el("div", { classe: "grade grade-2" }, [campo("Vale de (opcional)", inicio), campo("Até (opcional)", fim)]),
         el("label", { classe: "campo-caixa" }, [ativa, el("span", { texto: "Ativa" })]),
         el("h3", { style: "margin-top:14px", texto: "Itens e preço na promoção" }),
@@ -1472,7 +1472,7 @@ export async function cardapioDigital(raiz, ctx) {
       el("div", { classe: "pilha" }, [
         el("p", { classe: "muted", style: "margin:0", texto: "Como a página do cliente se apresenta. Muda na hora para quem abrir o QR." }),
         opcoes,
-        el("div", { classe: "campo" }, [el("label", { texto: "Frase da casa (aparece no topo)" }), slogan]),
+        campoDeFormulario("Frase da casa (aparece no topo)", slogan),
         el("div", { classe: "reserva-acoes" }, [
           el("button", {
             classe: "btn btn-primario",
@@ -1565,7 +1565,7 @@ export async function cardapioDigital(raiz, ctx) {
   /* ================= miúdos ================= */
 
   function campo(rotulo, controle) {
-    return el("div", { classe: "campo" }, [el("label", { texto: rotulo }), controle]);
+    return campoDeFormulario(rotulo, controle);
   }
 }
 

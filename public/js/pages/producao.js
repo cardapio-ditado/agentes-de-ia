@@ -75,7 +75,7 @@ export async function producao(raiz, ctx) {
 
   conteudo.append(
     el("section", { classe: "pilha" }, [
-      el("div", { classe: "cartao pilha", style: "max-width:760px" }, [
+      el("div", { classe: "cartao formulario pilha", style: "max-width:760px" }, [
         el("div", {}, [
           el("h2", { texto: "Registrar produção" }),
           el("p", { classe: "muted", texto: "Escolha a receita feita e quantas vezes: os ingredientes saem do estoque pela ficha." }),
