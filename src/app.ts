@@ -361,6 +361,15 @@ import { db } from "./supabase.js";
 import { rodarCiclo } from "./ciclos.js";
 import { chamadaLocal } from "./origemLocal.js";
 import { LIMITES_DURAVEIS, type LimiteDuravel } from "./limiteDeRitmo.js";
+import {
+  PedidoInvalido,
+  chaveDoLinkConfere,
+  gerarChaveDoLink,
+  lerPedidoDoLink,
+  receberDoLink,
+  revogarChaveDoLink,
+  situacaoDoLink,
+} from "./reservasDoLink.js";
 import { cicloValido, segredoDoCronConfere, ultimasBatidas } from "./rotinas.js";
 import { engenhariaDoCardapio } from "./cmv/engenharia.js";
 import {
@@ -943,7 +952,7 @@ function exigirQuemConfigura(acesso: Acesso): void {
 }
 
 /** Recursos da casa cuja escrita é configuração, e não operação. */
-const RECURSOS_DE_CONFIGURAR = new Set(["whatsapp-oficial", "instagram", "integracoes", "canais", "trilha"]);
+const RECURSOS_DE_CONFIGURAR = new Set(["whatsapp-oficial", "instagram", "integracoes", "canais", "trilha", "reservas-link"]);
 
 async function exigirModulo(acesso: Acesso, modulo: string, venueId: string): Promise<void> {
   // Suporte da Brasa Food enxerga o que o cliente enxerga — é como se
@@ -5301,6 +5310,30 @@ async function roteasApi(
       return ok(res, await hojeDaCasa({ venue, podeVer }));
     }
 
+    // ---- Reservas pelo formulário da casa: a chave e a situação ----
+    //
+    // GET    /v1/venues/:slug/reservas-link        — endereço, se há chave, o que já chegou
+    // POST   /v1/venues/:slug/reservas-link/chave  — gera (ou troca) a chave; mostra UMA vez
+    // DELETE /v1/venues/:slug/reservas-link/chave  — fecha a porta
+    if (recurso === "reservas-link") {
+      const chave = await exigirChave(req, metodo === "GET" ? "reservations:read" : "reservations:write");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      const endereco = `${enderecoBase()}/v1/integracoes/reservas/${venue.slug}`;
+      if (metodo === "GET" && p.length === 3) {
+        return ok(res, { endereco, cabecalho: "x-brasa-segredo", ...(await situacaoDoLink(venue)) });
+      }
+      if (metodo === "POST" && p.length === 4 && p[3] === "chave") {
+        const nova = await gerarChaveDoLink(venue.id);
+        console.log(`[reservas-link] ${venue.slug}: chave gerada por ${chave.name ?? "alguém da casa"}.`);
+        return ok(res, { endereco, cabecalho: "x-brasa-segredo", chave: nova }, 201);
+      }
+      if (metodo === "DELETE" && p.length === 4 && p[3] === "chave") {
+        await revogarChaveDoLink(venue.id);
+        console.log(`[reservas-link] ${venue.slug}: chave revogada por ${chave.name ?? "alguém da casa"}.`);
+        return ok(res, { revogada: true });
+      }
+    }
+
     // GET /v1/venues/:slug/trilha — o roteiro da implantação, com o que o
     // sistema já viu feito e o que o mentor marcou à mão.
     if (metodo === "GET" && recurso === "trilha" && p.length === 3) {
@@ -5710,6 +5743,39 @@ async function roteasApi(
     const venue = await findVenueBySlugInOrg(chave.org_id, slug);
     await deleteVenueEvent(p[1]!, venue.id);
     return ok(res, { removido: true });
+  }
+
+  // ---- Reservas vindas do formulário da própria casa ----
+  //
+  // Sem chave de API: quem chama é o outro sistema (um gatilho no banco
+  // dele), e ele se identifica pela chave da casa no cabeçalho
+  // x-brasa-segredo. Casa desconhecida, sem chave gerada ou com chave errada
+  // dão a mesma resposta — quem tenta adivinhar não descobre qual foi.
+  //
+  // POST /v1/integracoes/reservas/:slug
+  //   { evento: "criada" | "confirmada" | "cancelada", id, nome, telefone,
+  //     dia: "AAAA-MM-DD", horario: "HH:MM", pessoas, ambiente?, observacao? }
+  if (metodo === "POST" && p[0] === "integracoes" && p[1] === "reservas" && p.length === 3) {
+    await exigirRitmo("Muitos avisos em pouco tempo. Tente de novo em um minuto.", [LIMITES_DURAVEIS.reservasDoLinkPorIp, ipDe(req)]);
+    const venue: Venue | null = await findVenueBySlug(p[2]!).catch(() => null);
+    if (!venue || !chaveDoLinkConfere(venue.settings ?? null, req.headers["x-brasa-segredo"])) {
+      throw erro(403, "forbidden", "Chave inválida para esta casa.");
+    }
+    await exigirRitmo("Muitos avisos em pouco tempo. Tente de novo em um minuto.", [LIMITES_DURAVEIS.reservasDoLinkPorCasa, venue.id]);
+
+    const corpo = await lerJson(req, 20_000);
+    let pedido;
+    try {
+      pedido = lerPedidoDoLink(corpo, venue.timezone);
+    } catch (e) {
+      if (e instanceof PedidoInvalido) throw erro(400, "invalid_request", e.message);
+      throw e;
+    }
+    const recebido = await receberDoLink(venue, pedido);
+    console.log(`[reservas-link] ${venue.slug}: ${pedido.evento} ${pedido.id} → ${recebido.situacao}`);
+    // "desconhecida" e "nao_cabe" são respostas, não falhas de entrega: 200
+    // faz o gatilho de lá não repetir para sempre um aviso que não vai mudar.
+    return ok(res, recebido, recebido.situacao === "criada" ? 201 : 200);
   }
 
   // POST /v1/reservations/:id/approve | /reject | /cancel

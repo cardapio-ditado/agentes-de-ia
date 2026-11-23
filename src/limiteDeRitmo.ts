@@ -144,4 +144,9 @@ export const LIMITES_DURAVEIS = {
   // token da casa. Folgado para um sábado cheio, apertado para enxurrada.
   mercadoPagoPorIp: new LimiteDuravel("mercadopago:ip", 120, 60_000),
   mercadoPagoPorCasa: new LimiteDuravel("mercadopago:casa", 600, 60_000),
+  // Reservas vindas do formulário da casa (outro sistema avisa por webhook).
+  // O formulário de lá já limita por telefone; aqui é a trava contra
+  // enxurrada e contra quem fica tentando adivinhar a chave.
+  reservasDoLinkPorIp: new LimiteDuravel("reservas-link:ip", 60, 60_000),
+  reservasDoLinkPorCasa: new LimiteDuravel("reservas-link:casa", 240, 60_000),
 };

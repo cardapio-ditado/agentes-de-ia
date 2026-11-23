@@ -5805,3 +5805,10 @@ a.btn { text-decoration: none; }
    pequenos de propósito: os de linha de tabela, os numéricos de meio de
    frase e a busca, que tem a medida dela. */
 .app .pagina :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]), select):not(.select-peq):not(.campo-numero):not(.planilha *):not(.campo-busca *):not(.pagina-cabecalho *) { min-height: 40px; }
+
+/* ---------- 16. Valor para copiar ----------
+   Campo só de leitura com o botão "Copiar" ao lado: endereço de integração,
+   chave gerada na hora. O campo ocupa o que sobra; o botão não encolhe. */
+.app .campo-com-botao { display: flex; gap: var(--esp-2); align-items: stretch; min-width: 0; }
+.app .campo-com-botao > input { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.app .campo-com-botao > .btn { flex: 0 0 auto; height: 40px; }

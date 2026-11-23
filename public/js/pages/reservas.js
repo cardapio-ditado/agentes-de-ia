@@ -1,5 +1,5 @@
 import { del, get, patch, post } from "../api.js";
-import { ICONES, acaoIcone, avisar, campoDeFormulario, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
+import { ICONES, acaoIcone, avisar, campoDeFormulario, comIcone, dataHora, el, esqueleto, estadoDeErro, etiqueta, faixaDeAviso, indicador, limpar, plural, tabelaDeDados, vazio } from "../ui.js";
 import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
 
 /**
@@ -68,7 +68,7 @@ export async function reservas(raiz, ctx) {
   raiz.append(
     el("section", { classe: "pilha" }, [
       numeros,
-      titulo("Fila de aprovação", "Reservas anotadas pelo atendente virtual, aguardando decisão."),
+      titulo("Fila de aprovação", "Reservas anotadas pelo atendente virtual ou pedidas no site da casa, aguardando decisão."),
       lista,
       titulo("Confirmadas — próximas", "O que a casa tem para receber: reservas aprovadas que ainda vão acontecer."),
       edicaoDaConfirmada,
@@ -76,6 +76,8 @@ export async function reservas(raiz, ctx) {
       // Os avisos automáticos se configuram uma vez: ficam por último, para
       // não empurrar a fila de todo dia para baixo.
       await blocoDeAvisos(ctx),
+      // A porta por onde entram as reservas do formulário da própria casa.
+      ctx.podeConfigurar === false ? null : await blocoDoSite(ctx),
     ]),
   );
 
@@ -242,7 +244,10 @@ export async function reservas(raiz, ctx) {
           el("h3", { texto: r.customer_name }),
           el("p", { classe: "muted", texto: r.customer_phone }),
         ]),
-        etiqueta(plural(r.party_size, "pessoa", "pessoas"), "etiqueta-info"),
+        el("div", { classe: "cel-etiquetas" }, [
+          r.source_channel === "link" ? etiqueta("Pelo site") : null,
+          etiqueta(plural(r.party_size, "pessoa", "pessoas"), "etiqueta-info"),
+        ]),
       ]),
       linha("Para", dataHora(r.reserved_for)),
       r.area_preference ? linha("Área", r.area_preference) : null,
@@ -518,6 +523,145 @@ async function blocoDeAvisos(ctx) {
     ]),
     corpo,
   ]);
+}
+
+/**
+ * Reservas que chegam pelo formulário do site da casa.
+ *
+ * O formulário mora em outro sistema; ele avisa este endereço a cada
+ * pré-reserva, e daí em diante ela é uma reserva como as outras: cai na fila,
+ * a gerência recebe o aviso, o cliente recebe a confirmação e o lembrete.
+ *
+ * A chave aparece UMA vez, na hora em que é gerada — aqui só se guarda o
+ * resumo dela. Quem a perde gera outra, e a antiga para de valer.
+ */
+async function blocoDoSite(ctx) {
+  let dados;
+  try {
+    dados = await get(`/v1/venues/${ctx.venue}/reservas-link`);
+  } catch {
+    // Sem isto a fila continua funcionando; é ela que importa nesta tela.
+    return null;
+  }
+
+  const resumo = el("p", { classe: "muted" });
+  const corpo = el("div", { hidden: true, style: "margin-top:12px" });
+  const alternar = el("button", {
+    classe: "btn btn-peq",
+    type: "button",
+    texto: "Ajustar",
+    "aria-expanded": "false",
+    onclick: () => {
+      corpo.hidden = !corpo.hidden;
+      alternar.textContent = corpo.hidden ? "Ajustar" : "Fechar";
+      alternar.setAttribute("aria-expanded", String(!corpo.hidden));
+    },
+  });
+
+  /** Um valor para copiar: campo só de leitura com o botão ao lado. */
+  function copiavel(rotulo, valor, ajuda, oQue) {
+    const campo = el("input", { type: "text", value: valor, readonly: true, onfocus: (e) => e.target.select() });
+    const botao = el("button", {
+      classe: "btn",
+      type: "button",
+      texto: "Copiar",
+      "aria-label": `Copiar ${oQue}`,
+      onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(valor);
+          avisar(`${oQue[0].toUpperCase()}${oQue.slice(1)} copiado.`, "ok");
+        } catch {
+          campo.focus();
+          avisar("Não deu para copiar sozinho. O texto está selecionado: copie à mão.", "erro");
+        }
+      },
+    });
+    return campoDeFormulario(rotulo, el("div", { classe: "campo-com-botao" }, [campo, botao]), { ajuda });
+  }
+
+  function desenhar(chaveNova = null) {
+    resumo.textContent = resumoDoSite(dados);
+    const gerar = el("button", {
+      classe: dados.tem_chave ? "btn" : "btn btn-primario",
+      type: "button",
+      texto: dados.tem_chave ? "Trocar a chave" : "Gerar chave",
+      onclick: async () => {
+        if (dados.tem_chave && !confirm("Trocar a chave? A chave atual para de valer na hora: o formulário do site só volta a avisar depois que a nova for cadastrada lá.")) return;
+        gerar.disabled = true;
+        try {
+          const r = await post(`/v1/venues/${ctx.venue}/reservas-link/chave`, {});
+          dados = { ...dados, tem_chave: true, chave_criada_em: new Date().toISOString() };
+          desenhar(r.chave);
+        } catch (e) {
+          avisar(e.message, "erro");
+          gerar.disabled = false;
+        }
+      },
+    });
+    const desligar = dados.tem_chave
+      ? el("button", {
+          classe: "btn btn-perigo",
+          type: "button",
+          texto: "Desligar",
+          onclick: async () => {
+            if (!confirm("Desligar o recebimento? As reservas feitas no site deixam de chegar aqui, e ninguém é avisado delas pelo WhatsApp, até uma nova chave ser gerada e cadastrada lá.")) return;
+            desligar.disabled = true;
+            try {
+              await del(`/v1/venues/${ctx.venue}/reservas-link/chave`);
+              dados = { ...dados, tem_chave: false, chave_criada_em: null };
+              desenhar();
+              avisar("Recebimento desligado.", "ok");
+            } catch (e) {
+              avisar(e.message, "erro");
+              desligar.disabled = false;
+            }
+          },
+        })
+      : null;
+
+    limpar(corpo).append(
+      chaveNova
+        ? el("div", { classe: "pilha-fina", style: "margin-bottom:12px" }, [
+            faixaDeAviso({
+              tom: "alerta",
+              titulo: "Copie a chave agora",
+              detalhe: "Ela aparece só desta vez. Cadastre no sistema do site e não mande por mensagem nem cole em conversa: quem tem a chave consegue criar reserva em nome da casa.",
+            }),
+            copiavel("Chave", chaveNova, "Se perder, é só trocar: a antiga para de valer.", "chave"),
+          ])
+        : null,
+      el("div", { classe: "grade-2" }, [
+        copiavel("Endereço que recebe o aviso", dados.endereco, "O sistema do site envia para cá a cada pré-reserva (método POST, corpo em JSON).", "endereço"),
+        copiavel("Nome do cabeçalho da chave", dados.cabecalho, "A chave vai neste cabeçalho, em toda chamada.", "nome do cabeçalho"),
+      ]),
+      el("div", { classe: "linha-campos", style: "margin-top:12px" }, [gerar, desligar]),
+      el("p", {
+        classe: "muted",
+        style: "margin-top:6px",
+        texto:
+          "A reserva do site entra na fila de aprovação como as outras. Quem analisa recebe o aviso, e o cliente recebe a confirmação e o lembrete — tudo pelos números da casa.",
+      }),
+    );
+  }
+
+  desenhar();
+  return el("section", { classe: "cartao" }, [
+    el("div", { classe: "cabecalho-secao" }, [el("div", {}, [el("h3", { texto: "Reservas pelo site da casa" }), resumo]), alternar]),
+    corpo,
+  ]);
+}
+
+/** O estado em uma frase — para saber se está ligado sem abrir. */
+function resumoDoSite(dados) {
+  if (!dados.tem_chave) return "Desligado. As reservas feitas no formulário do site não chegam aqui.";
+  const partes = ["Ligado"];
+  if (dados.recebidas > 0) {
+    partes.push(`${plural(dados.recebidas, "reserva recebida", "reservas recebidas")}`);
+    if (dados.ultima_recebida_em) partes.push(`a última em ${dataHora(dados.ultima_recebida_em)}`);
+  } else {
+    partes.push("nenhuma reserva recebida ainda");
+  }
+  return `${partes.join(" · ")}.`;
 }
 
 /** O estado atual em uma frase — para não precisar abrir para saber. */

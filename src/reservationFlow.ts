@@ -170,6 +170,17 @@ function payloadDaReserva(reserva: Reservation, venue: Venue): Record<string, Js
     notes: reserva.notes,
     review_reason: reserva.review_reason,
     source_channel: reserva.source_channel,
+    // Reserva que nasceu noutro sistema (o formulário da casa) leva o id de
+    // lá: é com ele que quem recebe este aviso ATUALIZA o registro que já
+    // tem, em vez de criar outro. Nas demais, vem nulo.
+    external_id: idDeFora(reserva),
     created_at: reserva.created_at,
   };
+}
+
+function idDeFora(reserva: Reservation): string | null {
+  const meta = reserva.metadata;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
+  const id = (meta as Record<string, Json | undefined>).id_externo;
+  return typeof id === "string" && id ? id : null;
 }
