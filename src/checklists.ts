@@ -390,36 +390,74 @@ export async function dispararChecklist(
     return { run: existente, criadaAgora: false };
   }
 
-  if (agenda.responsavel_telefone) {
-    const nome = agenda.responsavel_nome ? `${agenda.responsavel_nome.split(/\s+/)[0]}, ` : "";
-    const corpo = [
-      `${nome}chegou a hora do checklist! 📋`,
-      ``,
-      `${checklist.name} — ${venue.name}`,
-      // Quem recebe o link de rodadas precisa saber que é UM link para a
-      // noite inteira — senão vai esperar doze mensagens, e a segunda
-      // rodada nunca acontece.
-      ...(rodadas.length > 0
-        ? [
-            `São ${rodadas.length} rodadas hoje: das ${agenda.hora} às ${agenda.ate}, a cada ${agenda.a_cada_minutos} min.`,
-            `O link é o mesmo a noite toda — abra, faça a rodada, e volte na próxima.`,
-          ]
-        : [`Preencha por aqui (abre direto no navegador):`]),
-      linkDaExecucao(criada!.token),
-    ].join("\n");
-
-    const { error: erroNotif } = await inserirAvisos({
-      venue_id: venue.id,
-      channel: "whatsapp",
-      destination: agenda.responsavel_telefone,
-      template: "checklist_link",
-      papel: "administrativo",
-      body: corpo,
-    });
-    if (erroNotif) console.error(`[checklists] não enfileirou o link: ${erroNotif.message}`);
-  }
+  await enviarLinkDaExecucao(checklist, venue, criada!);
 
   return { run: criada!, criadaAgora: true };
+}
+
+/**
+ * Enfileira no WhatsApp de quem executa a mensagem com o link da execução.
+ * Devolve false quando não há telefone cadastrado ou a fila recusou — o
+ * agendador só registra; quem pediu pelo painel recebe o aviso.
+ */
+async function enviarLinkDaExecucao(
+  checklist: Checklist,
+  venue: Pick<Venue, "id" | "name" | "timezone">,
+  run: ChecklistRun,
+  lembrete = false,
+): Promise<boolean> {
+  const agenda = agendaDe(checklist);
+  const rodadas = rodadasDe(run);
+  if (!agenda.responsavel_telefone) return false;
+  const nome = agenda.responsavel_nome ? `${agenda.responsavel_nome.split(/\s+/)[0]}, ` : "";
+  const corpo = [
+    lembrete ? `${nome}o checklist de hoje ainda não foi preenchido. 📋` : `${nome}chegou a hora do checklist! 📋`,
+    ``,
+    `${checklist.name} — ${venue.name}`,
+    // Quem recebe o link de rodadas precisa saber que é UM link para a
+    // noite inteira — senão vai esperar doze mensagens, e a segunda
+    // rodada nunca acontece.
+    ...(rodadas.length > 0
+      ? [
+          `São ${rodadas.length} rodadas hoje: das ${agenda.hora} às ${agenda.ate}, a cada ${agenda.a_cada_minutos} min.`,
+          `O link é o mesmo a noite toda — abra, faça a rodada, e volte na próxima.`,
+        ]
+      : [`Preencha por aqui (abre direto no navegador):`]),
+    linkDaExecucao(run.token),
+  ].join("\n");
+
+  const { error: erroNotif } = await inserirAvisos({
+    venue_id: venue.id,
+    channel: "whatsapp",
+    destination: agenda.responsavel_telefone,
+    template: "checklist_link",
+    papel: "administrativo",
+    body: corpo,
+  });
+  if (erroNotif) {
+    console.error(`[checklists] não enfileirou o link: ${erroNotif.message}`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * "Mandar de novo": cria a execução de hoje se ainda não existe; se já
+ * existe e não foi concluída, manda o MESMO link outra vez, como lembrete.
+ * Concluída, não manda nada — seria cobrar quem já fez.
+ */
+export async function reenviarChecklist(
+  checklist: Checklist,
+  venue: Pick<Venue, "id" | "name" | "timezone">,
+): Promise<{ run: ChecklistRun | null; enviado: boolean; motivo: string | null }> {
+  if (!agendaDe(checklist).responsavel_telefone) {
+    return { run: null, enviado: false, motivo: "Cadastre o WhatsApp de quem faz este checklist (em Modelos de checklist)." };
+  }
+  const { run, criadaAgora } = await dispararChecklist(checklist, venue);
+  if (!criadaAgora && run.status === "concluida") return { run, enviado: false, motivo: "O checklist de hoje já foi feito." };
+  // Recém-criada, o link já foi na criação; senão vai agora, como lembrete.
+  const enviado = criadaAgora ? true : await enviarLinkDaExecucao(checklist, venue, run, true);
+  return { run, enviado, motivo: enviado ? null : "Não deu para mandar o link agora. Tente de novo em instantes." };
 }
 
 /**

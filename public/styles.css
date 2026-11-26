@@ -6333,3 +6333,107 @@ a.btn { text-decoration: none; }
 :root[data-visual="novo"]:not([data-tema="escuro"]) :is(#tela-hub, #tela-acesso) { background-attachment: fixed, scroll; }
 /* E o texto tem sempre a altura de três linhas, para a colmeia não pular. */
 :root[data-visual="novo"] .hub-desc { min-height: 4.5em; }
+
+/* ---------- 25. Checklists: um cartão por checklist ----------
+   Cada dia vira um quadradinho com a cor do que aconteceu. A cor nunca está
+   sozinha: o quadradinho tem a frase no title e a faixa inteira tem a conta
+   no aria-label; no calendário, o dia escreve quem fez ou o que faltou. */
+.chk-feito { --chk-cor: var(--ok); --chk-fundo: var(--ok-suave); }
+.chk-com_problema { --chk-cor: #b7791f; --chk-fundo: var(--alerta-suave); }
+.chk-nao_feito, .chk-nao_saiu { --chk-cor: var(--perigo); --chk-fundo: var(--perigo-suave); }
+.chk-aguardando { --chk-cor: var(--texto-3); --chk-fundo: var(--superficie-2); }
+.chk-folga { --chk-cor: transparent; --chk-fundo: transparent; }
+
+.chk-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.chk-filtros-selects { display: flex; flex-wrap: wrap; gap: 8px; }
+.app .pagina .chk-filtros-selects select.select { height: 34px; min-width: 0; padding: 0 30px 0 12px; font-size: 13.5px; border-radius: 999px; }
+@media (max-width: 560px) {
+  .chk-filtros-selects { width: 100%; }
+  /* 16px no celular: abaixo disso o iPhone dá zoom ao tocar. */
+  .app .pagina .chk-filtros-selects select.select { flex: 1 1 0; height: 38px; font-size: 16px; }
+}
+.chk-filtros-periodo { margin: 0 0 0 auto; font-size: 13px; }
+
+.chk-ponto { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--chk-cor); }
+.chk-ponto.chk-folga { background: transparent; box-shadow: inset 0 0 0 1.5px var(--borda-controle); }
+.chk-ponto.chk-aguardando { background: transparent; box-shadow: inset 0 0 0 2px var(--texto-3); }
+
+.chk-link { padding: 0; border: 0; background: none; color: var(--texto); font: inherit; font-weight: 700; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--borda-forte); text-underline-offset: 3px; }
+.chk-link:hover { color: var(--marca-forte); text-decoration-color: currentColor; }
+.chk-link:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; border-radius: 4px; }
+
+/* Hoje: uma linha por checklist, na ordem do relógio. */
+.chk-hoje { display: grid; gap: 10px; }
+.chk-hoje-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.chk-hoje-topo h2 { margin: 0; font-size: 20px; }
+.chk-hoje-lista { list-style: none; margin: 0; padding: 0; display: grid; }
+.chk-hoje-linha { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--borda); }
+.chk-hoje-linha:first-child { border-top: 0; }
+.chk-hoje-texto { display: grid; gap: 1px; min-width: 0; }
+.chk-hoje-texto .muted { font-size: 13.5px; }
+.chk-hoje-hora { font-variant-numeric: tabular-nums; color: var(--texto-2); font-size: 13.5px; }
+.chk-hoje-linha > .btn:last-child { grid-column: auto; }
+@media (max-width: 560px) {
+  .chk-hoje-linha { grid-template-columns: 10px minmax(0, 1fr) auto; }
+  .chk-hoje-linha > .btn { grid-column: 2 / -1; justify-self: start; }
+  .chk-filtros-periodo { margin-left: 0; width: 100%; }
+}
+
+.chk-legenda { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--texto-2); }
+.chk-legenda li { display: inline-flex; align-items: center; gap: 6px; }
+
+/* A faixa: 14 quadradinhos do mesmo tamanho, de ponta a ponta. */
+.chk-quadro { display: block; aspect-ratio: 1; min-width: 0; border-radius: 5px; background: var(--chk-cor); }
+.chk-legenda .chk-quadro { width: 12px; height: 12px; border-radius: 3px; }
+.chk-quadro.chk-aguardando { background: var(--superficie-2); box-shadow: inset 0 0 0 1.5px var(--texto-3); }
+.chk-quadro.chk-folga { background: transparent; box-shadow: inset 0 0 0 1px var(--borda-forte); }
+.chk-quadro.chk-nao_saiu { background: repeating-linear-gradient(135deg, var(--perigo) 0 3px, var(--perigo-suave) 3px 6px); }
+.chk-quadro.chk-de-outro { opacity: 0.28; }
+
+.chk-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: var(--esp-3, 16px); align-items: start; }
+.chk-cartao { display: grid; gap: 12px; align-content: start; }
+.chk-cartao-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.chk-cartao-nome { min-width: 0; }
+.chk-cartao-nome h3 { margin: 0; font-size: 18px; line-height: 1.25; text-wrap: balance; }
+.chk-cartao-nome p { margin: 3px 0 0; font-size: 13px; }
+.chk-pct { display: grid; justify-items: end; flex: none; text-align: right; }
+.chk-pct strong { font-family: var(--fonte-display, inherit); font-size: 28px; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.chk-pct span { font-size: 12px; color: var(--texto-3); white-space: nowrap; }
+.chk-pct-ok strong { color: var(--ok); }
+.chk-pct-alerta strong { color: var(--alerta); }
+.chk-pct-perigo strong { color: var(--perigo); }
+.chk-faixa-bloco { display: grid; gap: 4px; }
+.chk-faixa { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 4px; }
+.chk-faixa-datas { display: flex; justify-content: space-between; font-size: 12px; }
+.chk-linha { margin: 0; font-size: 14px; color: var(--texto-2); }
+.chk-repete { margin: 0; padding: 10px 12px 10px 30px; border-radius: var(--raio, 12px); background: var(--alerta-suave); color: var(--texto); font-size: 13.5px; line-height: 1.45; display: grid; gap: 4px; }
+.chk-cartao-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* O mês do checklist. */
+.chk-historico { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: var(--esp-3, 16px); align-items: start; }
+@media (max-width: 900px) { .chk-historico { grid-template-columns: minmax(0, 1fr); } }
+.chk-calendario-cartao { display: grid; gap: 14px; }
+.chk-calendario { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.chk-semana { text-align: center; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; padding-bottom: 2px; }
+.chk-dia { display: grid; align-content: space-between; gap: 2px; min-height: 64px; min-width: 0; padding: 6px 7px; border: 0; border-radius: 10px; background: var(--chk-fundo, transparent); color: var(--texto); font: inherit; text-align: left; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chk-cor, var(--borda)) 35%, transparent); }
+button.chk-dia { cursor: pointer; }
+button.chk-dia:hover { box-shadow: inset 0 0 0 2px var(--chk-cor); }
+button.chk-dia:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.chk-dia-vazio { background: transparent; box-shadow: none; }
+.chk-dia-futuro, .chk-dia.chk-folga { background: transparent; box-shadow: inset 0 0 0 1px var(--borda); color: var(--texto-3); }
+.chk-dia-hoje { box-shadow: inset 0 0 0 2px var(--marca); }
+.chk-dia-numero { font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.chk-dia-texto { font-size: 11.5px; line-height: 1.2; color: var(--texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chk-dia.chk-feito .chk-dia-texto { color: var(--ok); }
+.chk-dia.chk-nao_feito .chk-dia-texto, .chk-dia.chk-nao_saiu .chk-dia-texto { color: var(--perigo); font-weight: 600; }
+@media (max-width: 560px) {
+  .chk-calendario { gap: 4px; }
+  .chk-dia { min-height: 48px; padding: 4px; border-radius: 8px; }
+  .chk-dia-texto { display: none; }
+}
+.chk-quem, .chk-ruins { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+.chk-quem li { display: flex; justify-content: space-between; gap: 12px; }
+.chk-quem strong { font-variant-numeric: tabular-nums; }
+.chk-ruins li { display: grid; grid-template-columns: 10px auto minmax(0, 1fr); align-items: center; gap: 4px 10px; }
+.chk-ruins .muted { grid-column: 3; }
+.chk-cartao h3, .chk-historico h3 { margin: 0; }

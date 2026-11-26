@@ -205,7 +205,7 @@ const PAGINAS = [
   },
 
   // O que se olha todo dia vem primeiro; o modelo se monta uma vez.
-  { id: "execucoes", modulo: "checklist", rotulo: "Checklists feitos", icone: ICONES.relogio, render: execucoes, subtitulo: "Quem fez, quando, e o que a IA encontrou" },
+  { id: "execucoes", modulo: "checklist", rotulo: "Checklists feitos", icone: ICONES.relogio, render: execucoes, subtitulo: "Cada checklist num cartão: o que foi feito, por quem e o que se repete" },
   { id: "checklists", modulo: "checklist", grupo: "configurar", rotulo: "Modelos de checklist", icone: ICONES.checklist, render: checklists, subtitulo: "Rotinas da equipe: monte, agende e dispare" },
 
   // UM FAVO SÓ: o cliente, e tudo que ele diz da casa.

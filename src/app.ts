@@ -323,6 +323,7 @@ import {
   processarWebhookWhatsapp,
   verificarWebhookWhatsapp,
 } from "./channels/whatsappCloud.js";
+import { nomesDaEquipeParaChecklist, painelDosChecklists } from "./checklistPainel.js";
 import {
   LIMITE_FOTO_BYTES,
   concluirRun,
@@ -330,6 +331,7 @@ import {
   createChecklist,
   deleteChecklist,
   dispararChecklist,
+  reenviarChecklist,
   getChecklistInVenue,
   getRunByToken,
   getRunInVenue,
@@ -1792,6 +1794,7 @@ async function roteasApi(
       "avaliacoes-perfil": "avaliacoes",
       checklists: "checklist",
       "checklist-runs": "checklist",
+      "checklists-painel": "checklist",
       insumos: "cmv",
       categorias: "cmv",
       "estoque-locais": "cmv",
@@ -5246,6 +5249,24 @@ async function roteasApi(
       }
     }
 
+    // GET /v1/venues/:slug/checklists-painel?de=&ate=&checklist= — um
+    // cartão por checklist: cada dia do período, cumprimento, quem fez, o
+    // que se repete e o que é para hoje.
+    if (metodo === "GET" && recurso === "checklists-painel" && p.length === 3) {
+      const chave = await exigirChave(req, "reservations:read");
+      const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      return ok(
+        res,
+        await painelDosChecklists({
+          venue,
+          checklists: await listChecklists(venue.id),
+          de: url.searchParams.get("de"),
+          ate: url.searchParams.get("ate"),
+          checklistId: url.searchParams.get("checklist"),
+        }),
+      );
+    }
+
     // GET /v1/venues/:slug/checklist-runs — histórico de execuções
     if (metodo === "GET" && recurso === "checklist-runs" && p.length === 3) {
       const chave = await exigirChave(req, "reservations:read");
@@ -6080,6 +6101,14 @@ async function roteasApi(
     const venue = await findVenueBySlugInOrg(chave.org_id, slug);
     const checklist = await getChecklistInVenue(p[1]!, venue.id);
     if (!checklist) throw erro(404, "not_found", "Checklist não encontrado.");
+    // "Mandar de novo": a execução de hoje já existe e ninguém terminou —
+    // o mesmo link sai outra vez, como lembrete.
+    const corpo = await lerJson(req).catch(() => ({}) as Record<string, unknown>);
+    if (corpo.reenviar === true) {
+      const { run, enviado, motivo } = await reenviarChecklist(checklist, venue);
+      if (!enviado) throw erro(409, "conflict", motivo ?? "Não deu para mandar o link.");
+      return ok(res, { run_id: run?.id ?? null, enviado });
+    }
     const { run, criadaAgora } = await dispararChecklist(checklist, venue);
     return ok(res, { run_id: run.id, criada_agora: criadaAgora, token: run.token });
   }
@@ -6164,6 +6193,9 @@ async function roteasApi(
         status: run.status,
         executor: run.executor_nome,
         itens: itensDe(checklist),
+        // Para escolher o nome em vez de digitar: "Lili", "Lilian" e
+        // "Liliam" eram a mesma pessoa em três jeitos de escrever.
+        equipe: concluida ? [] : await nomesDaEquipeParaChecklist(run.venue_id, checklist).catch(() => []),
         ...daNoite,
         ...(concluida
           ? {

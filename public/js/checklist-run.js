@@ -15,6 +15,45 @@ const barra = document.getElementById("barra");
 const rodape = document.getElementById("rodape");
 const btnEnviar = document.getElementById("btn-enviar");
 const campoExecutor = document.getElementById("executor");
+const listaExecutor = document.getElementById("executor-lista");
+const OUTRO_NOME = "__outro__";
+
+/**
+ * Escolher o nome numa lista em vez de digitar. Digitado, o mesmo nome vinha
+ * de três jeitos ("Lili", "Lilian", "Liliam") e o painel não tinha como
+ * dizer quem faz. A lista traz o responsável, quem já preencheu antes e a
+ * equipe; quem não está nela escolhe "Outro nome" e digita, como antes.
+ *
+ * O campo de texto continua sendo o valor que vai para o servidor — a lista
+ * só o preenche. Sem equipe cadastrada, fica só o campo, como sempre foi.
+ */
+function montarEscolhaDeNome(nomes) {
+  if (!Array.isArray(nomes) || nomes.length === 0 || listaExecutor.options.length > 0) return;
+  listaExecutor.replaceChildren(
+    new Option("Quem está fazendo? Toque para escolher", ""),
+    ...nomes.map((n) => new Option(n, n)),
+    new Option("Outro nome…", OUTRO_NOME),
+  );
+  listaExecutor.options[0].disabled = true;
+  const atual = campoExecutor.value.trim();
+  const achado = nomes.find((n) => n.toLocaleLowerCase("pt-BR") === atual.toLocaleLowerCase("pt-BR"));
+  listaExecutor.value = achado ?? (atual ? OUTRO_NOME : "");
+  if (achado) campoExecutor.value = achado;
+  listaExecutor.hidden = false;
+  campoExecutor.hidden = listaExecutor.value !== OUTRO_NOME;
+  campoExecutor.placeholder = "Escreva seu nome";
+  listaExecutor.addEventListener("change", () => {
+    if (listaExecutor.value === OUTRO_NOME) {
+      campoExecutor.value = "";
+      campoExecutor.hidden = false;
+      campoExecutor.focus();
+    } else {
+      campoExecutor.value = listaExecutor.value;
+      campoExecutor.hidden = true;
+    }
+    guardarRascunho();
+  });
+}
 
 /** item.id -> {valor, foto, observacao} */
 const respostas = new Map();
@@ -313,8 +352,8 @@ function cartaoDoItem(item, indice) {
 async function concluir() {
   const executor = campoExecutor.value.trim();
   if (!executor) {
-    avisar("Escreva seu nome antes de concluir — é o registro de quem fez.");
-    campoExecutor.focus();
+    avisar(listaExecutor.hidden ? "Escreva seu nome antes de concluir — é o registro de quem fez." : "Escolha seu nome antes de concluir — é o registro de quem fez.");
+    (campoExecutor.hidden ? listaExecutor : campoExecutor).focus();
     return;
   }
   for (const item of itens) {
@@ -673,6 +712,7 @@ async function iniciar() {
     // vai fazer a das 21:00, e digitar o nome doze vezes é pedir apelido.
     const rascunho = lerRascunho();
     if (rascunho?.executor) campoExecutor.value = rascunho.executor;
+    montarEscolhaDeNome(dados.equipe);
     desenharRodada(dados);
     return;
   }
@@ -686,6 +726,7 @@ async function iniciar() {
   }
 
   for (const [i, item] of itens.entries()) conteudo.append(cartaoDoItem(item, i));
+  montarEscolhaDeNome(dados.equipe);
   rodape.hidden = false;
   campoExecutor.addEventListener("input", guardarRascunho);
   btnEnviar.addEventListener("click", concluir);
