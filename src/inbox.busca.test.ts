@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { termoDeBusca } from "./inbox.js";
+import { emLotes, termoDeBusca } from "./inbox.js";
 
 test("nome vira termo de texto, sem mexer em acento nem em @", () => {
   assert.deepEqual(termoDeBusca("  Roberta Laila "), { texto: "Roberta Laila", digitos: null });
@@ -29,4 +29,12 @@ test("busca curta demais não vira consulta", () => {
 
 test("termo enorme é cortado", () => {
   assert.equal(termoDeBusca("a".repeat(200))?.texto.length, 60);
+});
+
+test("lotes: nenhum id fica de fora e nenhum lote passa do tamanho", () => {
+  const ids = Array.from({ length: 205 }, (_, i) => `c${i}`);
+  const lotes = emLotes(ids, 80);
+  assert.deepEqual(lotes.map((l) => l.length), [80, 80, 45]);
+  assert.deepEqual(lotes.flat(), ids);
+  assert.deepEqual(emLotes([], 80), []);
 });

@@ -640,6 +640,18 @@ export function diaLocal(iso: string, timezone: string): string {
   }).format(new Date(iso));
 }
 
+/** Quantas linhas o banco entrega por pedido, no máximo. */
+const PAGINA_DO_BANCO = 1000;
+/** Quantos ids cabem com folga no endereço de um pedido. */
+const LOTE_DE_IDS = 80;
+
+/** Parte uma lista em pedaços de até `tamanho`. Pura. */
+export function emLotes<T>(lista: T[], tamanho: number): T[][] {
+  const lotes: T[][] = [];
+  for (let i = 0; i < lista.length; i += tamanho) lotes.push(lista.slice(i, i + tamanho));
+  return lotes;
+}
+
 export async function metricasDoVenue(venueId: string, timezone: string): Promise<Metricas> {
   const agora = new Date();
   const seteDias = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -704,40 +716,63 @@ export async function metricasDoVenue(venueId: string, timezone: string): Promis
     ]);
 
   // As mensagens não têm venue_id: chega-se a elas pelas conversas do local.
-  const { data: idsConversas, error: erroIds } = await db()
-    .from("conversations")
-    .select("id, metadata")
-    .eq("venue_id", venueId);
+  //
+  // Página por página: o banco entrega no máximo mil linhas por pedido, e uma
+  // casa passa de mil conversas em poucos meses — a partir daí a conta parava
+  // no meio sem avisar.
+  const idsConversas: Array<{ id: string; metadata: Json | null; updated_at: string }> = [];
+  for (let de = 0; ; de += PAGINA_DO_BANCO) {
+    const { data, error } = await db()
+      .from("conversations")
+      .select("id, metadata, updated_at")
+      .eq("venue_id", venueId)
+      .order("id", { ascending: true })
+      .range(de, de + PAGINA_DO_BANCO - 1);
+    if (error) throw new Error(`Falha ao listar conversas: ${error.message}`);
+    idsConversas.push(...(data ?? []));
+    if ((data ?? []).length < PAGINA_DO_BANCO) break;
+  }
 
-  if (erroIds) throw new Error(`Falha ao listar conversas: ${erroIds.message}`);
-
-  const ids = (idsConversas ?? []).map((c) => c.id);
-  const comHumano = (idsConversas ?? []).filter(
+  const comHumano = idsConversas.filter(
     (c) => ((c.metadata ?? {}) as Record<string, unknown>).atendimento_por === "humano",
   ).length;
+  // Só conversa que mexeu nos últimos sete dias pode ter mensagem dos últimos
+  // sete dias (o banco carimba a conversa a cada mensagem). Pedir as
+  // mensagens de TODAS as conversas punha centenas de ids no endereço do
+  // pedido, e com 700 conversas o banco passou a recusar: era o "erro
+  // interno" do Painel.
+  const corte = new Date(seteDias).getTime();
+  const ids = idsConversas.filter((c) => new Date(c.updated_at).getTime() >= corte).map((c) => c.id);
 
   let totalMsgs = 0;
   let doAgente = 0;
   const tokens = { entrada: 0, saida: 0, cache_lido: 0 };
   const porDia = new Map<string, number>();
 
-  if (ids.length > 0) {
-    const { data: msgs, error: erroMsgs } = await db()
-      .from("messages")
-      .select("role, created_at, input_tokens, output_tokens, cache_read_tokens")
-      .in("conversation_id", ids)
-      .gte("created_at", seteDias);
+  // Em lotes: o endereço do pedido tem limite, e semana movimentada tem
+  // muita conversa. E cada lote página por página, pelo teto de mil linhas.
+  for (const lote of emLotes(ids, LOTE_DE_IDS)) {
+    for (let de = 0; ; de += PAGINA_DO_BANCO) {
+      const { data: msgs, error: erroMsgs } = await db()
+        .from("messages")
+        .select("role, created_at, input_tokens, output_tokens, cache_read_tokens")
+        .in("conversation_id", lote)
+        .gte("created_at", seteDias)
+        .order("created_at", { ascending: true })
+        .range(de, de + PAGINA_DO_BANCO - 1);
 
-    if (erroMsgs) throw new Error(`Falha ao somar mensagens: ${erroMsgs.message}`);
+      if (erroMsgs) throw new Error(`Falha ao somar mensagens: ${erroMsgs.message}`);
 
-    for (const m of msgs ?? []) {
-      totalMsgs += 1;
-      if (m.role === "assistant") doAgente += 1;
-      tokens.entrada += m.input_tokens ?? 0;
-      tokens.saida += m.output_tokens ?? 0;
-      tokens.cache_lido += m.cache_read_tokens ?? 0;
-      const dia = diaLocal(m.created_at, timezone);
-      porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+      for (const m of msgs ?? []) {
+        totalMsgs += 1;
+        if (m.role === "assistant") doAgente += 1;
+        tokens.entrada += m.input_tokens ?? 0;
+        tokens.saida += m.output_tokens ?? 0;
+        tokens.cache_lido += m.cache_read_tokens ?? 0;
+        const dia = diaLocal(m.created_at, timezone);
+        porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+      }
+      if ((msgs ?? []).length < PAGINA_DO_BANCO) break;
     }
   }
 
