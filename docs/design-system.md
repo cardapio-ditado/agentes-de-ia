@@ -121,3 +121,26 @@ Ainda fora do padrão, de propósito: os campos pequenos dentro de linhas de tab
 - Estado e funções que o primeiro desenho usa ficam declarados ANTES do primeiro `await` (ou como `function`), senão a tela abre em branco.
 - Ao trocar um bloco inteiro por outro, confira as funções removidas no `git diff`: é fácil levar junto uma vizinha que não era do bloco.
 - O lint do projeto não acusa nome indefinido nos arquivos do painel; o que acusa é abrir a tela e clicar. Toda tela convertida passa por foto e clique antes de publicar.
+
+## Menu único
+
+A lateral é a mesma em todas as telas (`montarNavUnico` em `public/js/app.js`):
+
+- **Hoje** em cima, com o número do que pede atenção.
+- **Seções por tarefa** — Atendimento, Clientes, Equipe, Estoque e compras,
+  Dinheiro — uma aberta por vez. Cada seção diz de quais módulos puxa as telas
+  (`SECOES`), então tela nova num módulo já aparece na seção certa.
+- **Configurar** fixo no rodapé: uma página só com tudo que se ajusta uma vez
+  (`GRUPOS_DE_CONFIGURAR`). Tela com `grupo: "configurar"` ou do módulo
+  `ajustes` mora lá, e não numa seção.
+- **Busca** no topo (Ctrl+K), que acha telas e abas pelo nome ou pela
+  explicação, sem depender de acento.
+- **No celular**, a barra de baixo é Hoje, as duas telas mais usadas da casa e
+  "Mais", que abre o menu inteiro.
+
+Os números do menu vêm das pendências da tela Hoje (`ctx.definirPendencias`).
+Seção fechada mostra a soma do que tem dentro.
+
+O menu por módulo continua existindo: "Menu antigo", no rodapé da lateral,
+troca na hora, e a escolha fica guardada no navegador (`brasa.menu`). A mesa
+da equipe Brasa Food (módulo `plataforma`) usa sempre o menu por módulo.

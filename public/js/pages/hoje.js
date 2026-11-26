@@ -44,6 +44,9 @@ export async function hoje(raiz, ctx) {
       return;
     }
 
+    // Os números do menu saem daqui: quem já buscou a lista é esta tela.
+    ctx.definirPendencias?.(dados.pendencias, dados.saude);
+
     const problemas = dados.saude.filter((s) => s.estado === "problema");
     const urgentes = dados.pendencias.filter((p) => p.urgente);
     const quantas = problemas.length + urgentes.length;

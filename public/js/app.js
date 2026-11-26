@@ -67,7 +67,7 @@ import { financeiroCategorias, financeiroContas, financeiroFormas, financeiroFor
  * anterior pelo mesmo caminho de sempre.
  */
 function comAbas(paginaId, abas) {
-  return async (raiz, ctx) => {
+  const desenhar = async (raiz, ctx) => {
     const atual = abas.find((a) => a.id === ctx.aba) ?? abas[0];
     if (atual.subtitulo) document.getElementById("subtitulo-pagina").textContent = atual.subtitulo;
     const corpo = el("div", {});
@@ -104,6 +104,10 @@ function comAbas(paginaId, abas) {
       );
     }
   };
+  // As abas ficam à vista de quem monta o menu: a busca acha "Jogos na TV"
+  // mesmo sendo uma aba de Programação.
+  desenhar.abas = abas;
+  return desenhar;
 }
 
 /**
@@ -135,7 +139,7 @@ const PAGINAS = [
   // Fora de qualquer módulo, como os Ajustes — junta todos eles.
   { id: "hoje", modulo: "hoje", rotulo: "Hoje", icone: SOL, render: hoje, subtitulo: "O que precisa de você e se está tudo funcionando" },
 
-  { id: "painel", modulo: "agentes-ia", rotulo: "Painel", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
+  { id: "painel", modulo: "agentes-ia", rotulo: "Painel", rotuloMenu: "Painel do atendimento", icone: ICONES.painel, render: painel, subtitulo: "Visão geral do movimento" },
   { id: "conversas", modulo: "agentes-ia", rotulo: "Conversas", icone: ICONES.conversas, render: conversas, subtitulo: "O que o atendente virtual conversou com cada cliente" },
   { id: "reservas", modulo: "agentes-ia", rotulo: "Reservas", icone: ICONES.reservas, render: reservas, subtitulo: "Fila de aprovação" },
   {
@@ -173,6 +177,9 @@ const PAGINAS = [
   // uso tem a sua chave, e a casa sem integração nenhuma usa o painel igual.
   { id: "integracoes", modulo: "ajustes", rotulo: "Integrações", icone: ICONES.plugue, render: integracoes, subtitulo: "Zig e os outros sistemas que a casa já usa — ligue só o que tiver" },
   { id: "organizacao", modulo: "ajustes", rotulo: "Estabelecimentos e chaves", icone: ICONES.painel, render: organizacao, subtitulo: "Unidades da rede, atendentes virtuais e chaves de acesso" },
+  // A porta única de tudo que se ajusta uma vez. Só existe no menu único:
+  // no menu por módulo, cada módulo tem o seu grupo "Configurar".
+  { id: "configurar", modulo: "ajustes", soMenuUnico: true, rotulo: "Configurar", icone: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6", render: configurar, subtitulo: "Tudo o que se ajusta uma vez, num lugar só" },
 
   // O cardápio mora DENTRO do painel agora: era um deploy à parte, com link
   // externo por cliente. Uma tela só, com abas — é o que a casa mexe todo dia.
@@ -442,6 +449,73 @@ const FAVOS_VAZIOS = [
   { x: 1.5, y: 0 },
 ];
 
+// ============ Menu único ============
+//
+// O menu por módulo obrigava a voltar à colmeia para trocar de assunto, e a
+// cada módulo a lateral virava outra. No menu único ela é sempre a mesma: as
+// telas ficam agrupadas pelo que a pessoa vai FAZER (atender, cuidar da
+// equipe, do estoque, do dinheiro), e tudo que se configura uma vez mora
+// numa página só. Nenhuma tela some — muda só o caminho até ela.
+//
+// Quem preferir o menu de antes troca no rodapé da lateral; a escolha fica
+// guardada neste navegador.
+const MODO_DO_MENU = "brasa.menu";
+let menuUnico = localStorage.getItem(MODO_DO_MENU) !== "antigo";
+/** A seção aberta na lateral — uma por vez, para o menu não virar lista. */
+let secaoAberta = sessionStorage.getItem("brasa.secao");
+/** As pendências do Hoje, para os números do menu. { quando, lista } */
+let pendenciasDoMenu = null;
+
+/**
+ * As seções do menu único. `modulos` diz de onde vêm as telas (uma tela nova
+ * num módulo já cai na seção certa); `ordem` põe as mais usadas em cima.
+ */
+const SECOES = [
+  { id: "atendimento", rotulo: "Atendimento", icone: ICONES.conversas, modulos: ["agentes-ia", "cardapio-digital", "delivery"], ordem: ["conversas", "reservas", "programacao", "cardapio", "delivery", "painel"] },
+  { id: "clientes", rotulo: "Clientes", icone: ICONES.estrela, modulos: ["clientes"], ordem: ["clientes-casa", "pesquisa", "avaliacoes"] },
+  { id: "equipe", rotulo: "Equipe", icone: ICONES.pessoa, modulos: ["checklist", "rh"], ordem: ["execucoes", "rh"] },
+  { id: "estoque", rotulo: "Estoque e compras", icone: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", modulos: ["cmv"], ordem: ["compras", "producao", "vendas", "contagem", "estoque", "cmv-painel", "engenharia-cardapio"] },
+  { id: "dinheiro", rotulo: "Dinheiro", icone: "M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6", modulos: ["financeiro"], ordem: ["fin-pagar", "fin-receber", "fin-fluxo", "fin-painel"] },
+];
+
+/**
+ * A página Configurar, em grupos. Cada item é o id de uma tela, "tela:aba",
+ * ou um objeto quando o destino é um pedaço de outra tela.
+ */
+const GRUPOS_DE_CONFIGURAR = [
+  { titulo: "A casa", itens: ["empresa", "pessoas", "organizacao", "trilha"] },
+  {
+    titulo: "Canais e integrações",
+    itens: [
+      "canais-casa",
+      "integracoes",
+      { pagina: "reservas", aba: "avisos", rotulo: "Avisos de reserva", detalhe: "Quem é avisado da reserva nova e quando o cliente é lembrado" },
+    ],
+  },
+  { titulo: "Atendente virtual", itens: ["atendente:agentes", "atendente:sabe", "atendente:testar"] },
+  { titulo: "Cadastros", itens: ["cadastros", "fichas", "fin-cadastros", "checklists", "pesquisa-ajustes"] },
+];
+
+/** O menu único vale em todo lugar, menos na mesa da equipe Brasa Food. */
+const usandoMenuUnico = () => menuUnico && moduloAtual !== "plataforma";
+/** Tela que se ajusta uma vez: mora em Configurar, e não numa seção. */
+const ehDeConfigurar = (p) => p.grupo === "configurar" || p.modulo === "ajustes";
+const rotuloNoMenu = (p) => p.rotuloMenu ?? p.rotulo;
+const semAcento = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function secaoDaPagina(p) {
+  return ehDeConfigurar(p) ? null : (SECOES.find((s) => s.modulos.includes(p.modulo)) ?? null);
+}
+
+/** As telas de uma seção, na ordem dela; as que a ordem não cita vêm depois. */
+function paginasDaSecao(secao, visiveis) {
+  const lugar = (p) => {
+    const i = secao.ordem.indexOf(p.id);
+    return i < 0 ? 999 : i;
+  };
+  return visiveis.filter((p) => !ehDeConfigurar(p) && secao.modulos.includes(p.modulo)).sort((a, b) => lugar(a) - lugar(b));
+}
+
 const app = document.getElementById("app");
 const telaAcesso = document.getElementById("tela-acesso");
 const telaHub = document.getElementById("tela-hub");
@@ -515,6 +589,21 @@ const ctx = {
     if (!alvo) return;
     alvo.textContent = String(valor);
     alvo.hidden = !valor;
+    atualizarTotaisDoMenu();
+  },
+  /**
+   * As pendências do Hoje viram os números do menu: a lateral diz onde tem
+   * coisa esperando, sem precisar abrir tela nenhuma. Quem chama é a tela
+   * Hoje, que já buscou a lista.
+   */
+  definirPendencias(lista, saude = []) {
+    pendenciasDoMenu = {
+      quando: Date.now(),
+      lista: Array.isArray(lista) ? lista : [],
+      // O que está parado (um número que caiu) também pede atenção hoje.
+      problemas: Array.isArray(saude) ? saude.filter((s) => s.estado === "problema").length : 0,
+    };
+    aplicarPendenciasNoMenu();
   },
 };
 
@@ -544,6 +633,8 @@ document.getElementById("btn-recolher").addEventListener("click", () => {
   if (recolhida) app.removeAttribute("data-recolhida");
   else app.setAttribute("data-recolhida", "1");
   localStorage.setItem(RECOLHIDA, recolhida ? "0" : "1");
+  // Recolhida, a lateral só tem ícones: uma busca aberta ficaria sem tela.
+  if (!recolhida) limparBuscaDoMenu();
 });
 
 document.getElementById("btn-menu").addEventListener("click", () => {
@@ -571,21 +662,56 @@ const ITENS_DA_BARRA = [
   { id: "ajustes", rotulo: "Ajustes", icone: MODULOS.find((m) => m.id === "ajustes").icone, acao: () => entrarNoModulo("ajustes") },
   { id: "ajuda", rotulo: "Ajuda", icone: "M12 22a10 10 0 100-20 10 10 0 000 20zM9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01", acao: () => ajudaDaTela() },
 ];
-for (const item of ITENS_DA_BARRA) {
-  barra.append(
-    el("button", { classe: "barra-item", type: "button", "data-barra": item.id, onclick: item.acao }, [
-      icone(item.icone, 22),
-      el("span", { texto: item.rotulo }),
-    ]),
-  );
+/** Vai para uma tela — mesmo quando o endereço já é o dela. */
+function navegar(id) {
+  if (location.hash === `#${id}`) irPara(id, { podeTrocarDeModulo: true });
+  else location.hash = `#${id}`;
 }
 
-/** Acende na barra o lugar onde a pessoa está (Hoje ou Ajustes). */
+/**
+ * A barra de baixo. No menu único são os destinos do dia a dia: Hoje, as
+ * duas telas que a casa mais usa e "Mais", que abre o menu inteiro. Ajustes
+ * e Ajuda, que ocupavam metade do polegar, saíram daqui.
+ */
+function montarBarra() {
+  limpar(barra);
+  let itens;
+  if (usandoMenuUnico()) {
+    const visiveis = paginasVisiveis().filter((p) => p.id !== "hoje" && !ehDeConfigurar(p));
+    const preferidas = ["reservas", "conversas"].map((id) => visiveis.find((p) => p.id === id)).filter(Boolean);
+    const outras = SECOES.flatMap((s) => paginasDaSecao(s, visiveis)).filter((p) => !preferidas.includes(p));
+    itens = [
+      { id: "hoje", rotulo: "Hoje", icone: SOL, acao: () => navegar("hoje") },
+      ...[...preferidas, ...outras].slice(0, 2).map((p) => ({ id: p.id, rotulo: p.rotulo, icone: p.icone, acao: () => navegar(p.id) })),
+      { id: "mais", rotulo: "Mais", icone: "M3 6h18M3 12h18M3 18h18", acao: () => app.setAttribute("data-menu", "1") },
+    ];
+  } else {
+    itens = ITENS_DA_BARRA.filter((i) => i.id !== "ajustes" || podeConfigurar);
+  }
+  for (const item of itens) {
+    barra.append(
+      el("button", { classe: "barra-item", type: "button", "data-barra": item.id, onclick: item.acao }, [
+        icone(item.icone, 22),
+        el("span", { classe: "barra-rotulo", texto: item.rotulo }),
+        el("span", { classe: "barra-contador", hidden: true }),
+      ]),
+    );
+  }
+}
+
+/** Acende na barra o lugar onde a pessoa está. */
 function marcarBarra() {
+  const unico = usandoMenuUnico();
+  const atual = unico ? paginaAtual?.id : moduloAtual;
+  let achou = false;
   for (const b of barra.querySelectorAll(".barra-item")) {
-    if (b.dataset.barra === moduloAtual) b.setAttribute("aria-current", "page");
+    const aqui = b.dataset.barra === atual;
+    achou = achou || aqui;
+    if (aqui) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   }
+  // Tela que não está na barra foi alcançada pelo "Mais".
+  if (unico && !achou && paginaAtual) barra.querySelector('[data-barra="mais"]')?.setAttribute("aria-current", "page");
 }
 
 /** A ajuda da tela aberta — o "?" do topo e o "Ajuda" da barra de baixo. */
@@ -604,9 +730,22 @@ function montarNav() {
   seletorVenue.closest(".topo-acoes").hidden = moduloAtual === "plataforma" || !variasCasas;
   // Com uma casa só, o nome dela ocupa o lugar do seletor.
   document.getElementById("topo-unidade").hidden = moduloAtual === "plataforma" || variasCasas;
+  montarBarra();
   marcarBarra();
 
+  // O "Hoje" do rodapé é o caminho de volta no menu por módulo; no menu
+  // único ele já é a primeira linha.
+  document.getElementById("btn-hoje-lateral").hidden = usandoMenuUnico();
+  const trocarMenu = document.getElementById("btn-modo-menu");
+  trocarMenu.hidden = moduloAtual === "plataforma";
+  trocarMenu.title = menuUnico ? "Voltar ao menu separado por módulo" : "Um menu só, igual em todas as telas";
+  document.getElementById("rotulo-modo-menu").textContent = menuUnico ? "Menu antigo" : "Usar o menu novo";
+  // O CSS arruma o rodapé de outro jeito no menu único (ver seção 17).
+  app.toggleAttribute("data-menu-unico", usandoMenuUnico());
+  document.getElementById("link-configurar").hidden = !usandoMenuUnico() || !paginasVisiveis().some((p) => p.id === "configurar");
+
   limpar(nav);
+  if (usandoMenuUnico()) return montarNavUnico();
   const atalhos = (MODULOS.find((m) => m.id === moduloAtual)?.atalhos ?? []).filter((a) => podeConfigurar || a.grupo !== "configurar").map((a) => ({
     id: a.destino,
     rotulo: a.rotulo,
@@ -688,6 +827,12 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   // volta para a colmeia em vez de quebrar.
   if (!pagina) return mostrarHub();
   ctx.aba = pagina.id === id ? (aba ?? null) : null;
+  // No menu único o "módulo atual" é só o da tela aberta: é ele que o F5
+  // devolve e que as telas consultam.
+  if (usandoMenuUnico() && moduloAtual !== pagina.modulo) {
+    moduloAtual = pagina.modulo;
+    sessionStorage.setItem("brasa.modulo", moduloAtual);
+  }
 
   // A tela anterior pode ter deixado timers rodando.
   for (const fn of limpezas) {
@@ -699,15 +844,19 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   }
   limpezas = [];
 
-  for (const a of nav.querySelectorAll(".nav-item")) {
-    if (a.dataset.pagina === pagina.id) a.setAttribute("aria-current", "page");
-    else a.removeAttribute("aria-current");
+  if (usandoMenuUnico()) {
+    marcarNavUnico(pagina);
+  } else {
+    for (const a of nav.querySelectorAll(".nav-item")) {
+      if (a.dataset.pagina === pagina.id) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    }
   }
 
   document.getElementById("titulo-pagina").textContent = pagina.rotulo;
   // O módulo acima do título ("Custos e estoque" › Compras e recebimento) e
   // a casa no topo: em sistema grande, é o que diz onde a pessoa está.
-  const nomeDoModulo = MODULOS.find((m) => m.id === pagina.modulo)?.nome;
+  const nomeDoModulo = usandoMenuUnico() ? lugarNoMenu(pagina) : MODULOS.find((m) => m.id === pagina.modulo)?.nome;
   const moduloDaPagina = document.getElementById("modulo-pagina");
   moduloDaPagina.textContent = nomeDoModulo && nomeDoModulo !== pagina.rotulo ? nomeDoModulo : "";
   moduloDaPagina.hidden = !moduloDaPagina.textContent;
@@ -715,6 +864,7 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   document.getElementById("topo-unidade-nome").textContent = nomeDaCasa;
   ctx.definirAcoes();
   paginaAtual = pagina;
+  marcarBarra();
   document.getElementById("subtitulo-pagina").textContent = pagina.subtitulo ?? "";
   app.removeAttribute("data-menu");
 
@@ -737,6 +887,8 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
       ]),
     );
   }
+  // Depois de desenhar: se a tela foi o Hoje, ela já trouxe as pendências.
+  atualizarPendenciasDoMenu();
 }
 
 addEventListener("hashchange", () => irPara(location.hash.slice(1), { podeTrocarDeModulo: true }));
@@ -754,6 +906,348 @@ document.addEventListener("click", (e) => {
     irPara(destino.slice(1), { podeTrocarDeModulo: true });
   }
 });
+
+// ============ Menu único: a lateral ============
+
+const SETA_DIREITA = "M9 6l6 6-6 6";
+
+function montarNavUnico() {
+  const visiveis = paginasVisiveis();
+  const busca = el("input", {
+    id: "nav-busca",
+    type: "search",
+    placeholder: "Buscar tela…",
+    "aria-label": "Buscar tela",
+    autocomplete: "off",
+    oninput: () => buscarNoMenu(busca.value),
+    onkeydown: (e) => {
+      if (e.key === "Escape") {
+        limparBuscaDoMenu();
+        busca.blur();
+      }
+      if (e.key === "Enter") {
+        const primeiro = nav.querySelector(".nav-achados a");
+        if (primeiro) {
+          e.preventDefault();
+          primeiro.click();
+        }
+      }
+    },
+  });
+  const arvore = el("div", { classe: "nav-arvore" });
+  nav.append(
+    el("div", { classe: "nav-busca" }, [icone("M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35", 16), busca, el("kbd", { "aria-hidden": "true", texto: "Ctrl K" })]),
+    el("div", { classe: "nav-achados", hidden: true }),
+    arvore,
+  );
+
+  const linha = (p, classe = "") =>
+    el("a", { classe: `nav-item ${classe}`.trim(), href: `#${p.id}`, "data-pagina": p.id, title: rotuloNoMenu(p) }, [
+      classe.includes("nav-subitem") ? null : icone(p.icone),
+      el("span", { classe: "nav-rotulo", texto: rotuloNoMenu(p) }),
+      el("span", { classe: "nav-contador", hidden: true, texto: "0" }),
+    ]);
+
+  const hoje = visiveis.find((p) => p.id === "hoje");
+  if (hoje) arvore.append(linha(hoje, "nav-item-topo"), el("div", { classe: "nav-divisor", "aria-hidden": "true" }));
+
+  for (const secao of SECOES) {
+    const paginas = paginasDaSecao(secao, visiveis);
+    if (paginas.length === 0) continue;
+    // Seção de uma tela só não merece uma linha a mais para abrir.
+    if (paginas.length === 1) {
+      arvore.append(linha(paginas[0], "nav-item-topo"));
+      continue;
+    }
+    const idDaLista = `nav-secao-${secao.id}`;
+    arvore.append(
+      el("div", { classe: "nav-secao", "data-secao": secao.id }, [
+        el(
+          "button",
+          {
+            classe: "nav-item nav-secao-titulo",
+            type: "button",
+            title: secao.rotulo,
+            "aria-expanded": "false",
+            "aria-controls": idDaLista,
+            onclick: () => {
+              // Recolhida, a lateral não tem onde mostrar as telas: abre.
+              if (app.hasAttribute("data-recolhida") && matchMedia("(min-width: 821px)").matches) {
+                app.removeAttribute("data-recolhida");
+                localStorage.setItem(RECOLHIDA, "0");
+                return abrirSecao(secao.id);
+              }
+              abrirSecao(secaoAberta === secao.id ? null : secao.id);
+            },
+          },
+          [
+            icone(secao.icone),
+            el("span", { classe: "nav-rotulo", texto: secao.rotulo }),
+            el("span", { classe: "nav-contador nav-secao-total", hidden: true, texto: "0" }),
+            el("span", { classe: "nav-seta" }, [icone(SETA_DIREITA, 15)]),
+          ],
+        ),
+        el("div", { classe: "nav-secao-itens", id: idDaLista, hidden: true }, paginas.map((p) => linha(p, "nav-subitem"))),
+      ]),
+    );
+  }
+
+  abrirSecao(secaoAberta);
+  if (paginaAtual) marcarNavUnico(paginaAtual);
+  aplicarPendenciasNoMenu();
+}
+
+/** Abre uma seção e fecha as outras. `null` fecha todas. */
+function abrirSecao(id) {
+  secaoAberta = id ?? null;
+  if (secaoAberta) sessionStorage.setItem("brasa.secao", secaoAberta);
+  else sessionStorage.removeItem("brasa.secao");
+  for (const secao of nav.querySelectorAll(".nav-secao")) {
+    const aberta = secao.dataset.secao === secaoAberta;
+    secao.toggleAttribute("data-aberta", aberta);
+    secao.querySelector(".nav-secao-titulo").setAttribute("aria-expanded", String(aberta));
+    secao.querySelector(".nav-secao-itens").hidden = !aberta;
+  }
+  atualizarTotaisDoMenu();
+}
+
+/** Acende a tela aberta, e abre a seção dela. */
+function marcarNavUnico(pagina) {
+  // Uma tela de configurar acende "Configurar": é por ali que se chegou nela.
+  const acesa = ehDeConfigurar(pagina) ? "configurar" : pagina.id;
+  for (const a of document.querySelectorAll("#lateral .nav-item[data-pagina]")) {
+    if (a.dataset.pagina === acesa) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+  const secao = secaoDaPagina(pagina);
+  if (secao && nav.querySelector(`.nav-secao[data-secao="${secao.id}"]`) && secaoAberta !== secao.id) abrirSecao(secao.id);
+}
+
+/** O que vai acima do título: a seção da tela, ou "Configurar". */
+function lugarNoMenu(pagina) {
+  if (pagina.id === "hoje" || pagina.id === "configurar") return "";
+  return ehDeConfigurar(pagina) ? "Configurar" : (secaoDaPagina(pagina)?.rotulo ?? "");
+}
+
+/**
+ * Seção fechada mostra a soma do que está dentro dela — senão a pendência
+ * some junto com a lista. A barra de baixo copia os mesmos números.
+ */
+function atualizarTotaisDoMenu() {
+  for (const secao of nav.querySelectorAll(".nav-secao")) {
+    let soma = 0;
+    let urgente = false;
+    for (const c of secao.querySelectorAll(".nav-secao-itens .nav-contador")) {
+      if (c.hidden) continue;
+      soma += Number(c.textContent) || 0;
+      urgente = urgente || !c.classList.contains("nav-contador-leve");
+    }
+    const total = secao.querySelector(".nav-secao-total");
+    total.textContent = String(soma);
+    total.classList.toggle("nav-contador-leve", !urgente);
+    total.hidden = soma === 0 || secao.hasAttribute("data-aberta");
+  }
+  for (const b of barra.querySelectorAll(".barra-item")) {
+    const origem = nav.querySelector(`[data-pagina="${b.dataset.barra}"] .nav-contador`);
+    const alvo = b.querySelector(".barra-contador");
+    if (!alvo) continue;
+    alvo.textContent = origem?.textContent ?? "";
+    alvo.hidden = !origem || origem.hidden;
+  }
+}
+
+/** Põe no menu os números das pendências guardadas. */
+function aplicarPendenciasNoMenu() {
+  if (!usandoMenuUnico() || !pendenciasDoMenu) return;
+  const porTela = new Map();
+  // O mesmo número da manchete da tela Hoje: o que caiu e o que é urgente.
+  let urgentes = pendenciasDoMenu.problemas ?? 0;
+  for (const p of pendenciasDoMenu.lista) {
+    const quantidade = Number(p.quantidade) || 0;
+    if (!quantidade) continue;
+    if (p.urgente) urgentes++;
+    const id = String(p.destino ?? "").split(":")[0];
+    const antes = porTela.get(id) ?? { n: 0, urgente: false };
+    porTela.set(id, { n: antes.n + quantidade, urgente: antes.urgente || p.urgente === true });
+  }
+  for (const alvo of nav.querySelectorAll(".nav-item[data-pagina] > .nav-contador")) {
+    const id = alvo.parentElement.dataset.pagina;
+    const dado = id === "hoje" ? { n: urgentes, urgente: true } : porTela.get(id);
+    alvo.textContent = String(dado?.n ?? 0);
+    alvo.hidden = !dado?.n;
+    alvo.classList.toggle("nav-contador-leve", Boolean(dado) && !dado.urgente);
+  }
+  atualizarTotaisDoMenu();
+}
+
+/**
+ * Busca as pendências quando ninguém as trouxe há pouco. O número do menu é
+ * um aviso, não a fonte: se falhar, a tela Hoje continua mostrando a lista.
+ */
+async function atualizarPendenciasDoMenu() {
+  if (!usandoMenuUnico() || !ctx.venue) return;
+  if (pendenciasDoMenu && Date.now() - pendenciasDoMenu.quando < 120_000) return aplicarPendenciasNoMenu();
+  // Marca antes de buscar: duas telas abertas em seguida não pedem duas vezes.
+  pendenciasDoMenu = { quando: Date.now(), lista: pendenciasDoMenu?.lista ?? [], problemas: pendenciasDoMenu?.problemas ?? 0 };
+  try {
+    const dados = await get(`/v1/venues/${encodeURIComponent(ctx.venue)}/hoje`);
+    ctx.definirPendencias(dados.pendencias, dados.saude);
+  } catch {
+    /* sem os números, o menu continua levando a todas as telas */
+  }
+}
+
+/** Tudo que a busca do menu enxerga: as telas visíveis e as abas delas. */
+function indiceDaBusca() {
+  const itens = [];
+  for (const p of paginasVisiveis()) {
+    const onde = p.id === "hoje" || p.id === "configurar" ? "" : ehDeConfigurar(p) ? "Configurar" : (secaoDaPagina(p)?.rotulo ?? "");
+    itens.push({ href: `#${p.id}`, rotulo: rotuloNoMenu(p), onde, texto: `${p.rotulo} ${p.rotuloMenu ?? ""} ${p.subtitulo ?? ""} ${onde}` });
+    for (const a of p.render?.abas ?? []) {
+      itens.push({ href: `#${p.id}:${a.id}`, rotulo: a.rotulo, onde: rotuloNoMenu(p), texto: `${a.rotulo} ${a.subtitulo ?? ""}` });
+    }
+  }
+  return itens;
+}
+
+function buscarNoMenu(valor) {
+  const achados = nav.querySelector(".nav-achados");
+  const arvore = nav.querySelector(".nav-arvore");
+  if (!achados || !arvore) return;
+  const termo = semAcento(valor).trim();
+  achados.hidden = !termo;
+  arvore.hidden = Boolean(termo);
+  limpar(achados);
+  if (!termo) return;
+  // O nome da tela pesa mais do que a explicação dela.
+  // Palavra por palavra: "numero avisos" acha a tela que fala de "número" e
+  // de "avisos", mesmo sem as duas estarem juntas.
+  const palavras = termo.split(/\s+/);
+  const temTodas = (texto) => palavras.every((palavra) => texto.includes(palavra));
+  const todos = indiceDaBusca();
+  const noNome = todos.filter((i) => temTodas(semAcento(i.rotulo)));
+  const noResto = todos.filter((i) => !noNome.includes(i) && temTodas(semAcento(i.texto)));
+  const lista = [...noNome, ...noResto].slice(0, 8);
+  if (lista.length === 0) {
+    achados.append(el("p", { classe: "nav-vazio", role: "status", texto: "Nenhuma tela com esse nome." }));
+    return;
+  }
+  for (const i of lista) {
+    achados.append(
+      el("a", { classe: "nav-item nav-achado", href: i.href, onclick: () => limparBuscaDoMenu() }, [
+        el("span", { classe: "nav-rotulo", texto: i.rotulo }),
+        i.onde ? el("small", { texto: i.onde }) : null,
+      ]),
+    );
+  }
+}
+
+function limparBuscaDoMenu() {
+  const campo = document.getElementById("nav-busca");
+  if (!campo || !campo.value) return;
+  campo.value = "";
+  buscarNoMenu("");
+}
+
+/** Ctrl+K (ou ⌘K) põe o cursor na busca do menu, de qualquer tela. */
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "k") return;
+  if (app.hidden || !usandoMenuUnico()) return;
+  const campo = document.getElementById("nav-busca");
+  if (!campo) return;
+  e.preventDefault();
+  if (matchMedia("(max-width: 820px)").matches) app.setAttribute("data-menu", "1");
+  else if (app.hasAttribute("data-recolhida")) {
+    app.removeAttribute("data-recolhida");
+    localStorage.setItem(RECOLHIDA, "0");
+  }
+  campo.focus();
+  campo.select();
+});
+
+document.getElementById("btn-modo-menu").addEventListener("click", () => {
+  menuUnico = !menuUnico;
+  localStorage.setItem(MODO_DO_MENU, menuUnico ? "unico" : "antigo");
+  montarNav();
+  irPara(location.hash.slice(1), { podeTrocarDeModulo: true });
+  avisar(menuUnico ? "Menu novo ligado: um menu só, em todas as telas." : "Menu antigo de volta: um menu por módulo.", "ok");
+});
+
+/**
+ * Entrar "num módulo" com o menu único é ir para a primeira tela dele: a
+ * colmeia e os botões de sempre continuam funcionando, e a lateral é a mesma.
+ */
+function entrarPeloMenuUnico(moduloId) {
+  moduloAtual = PAGINAS.some((p) => p.modulo === moduloId) ? moduloId : "hoje";
+  sessionStorage.setItem("brasa.hub.visto", "1");
+  sessionStorage.setItem("brasa.modulo", moduloAtual);
+  montarNav();
+  telaHub.hidden = true;
+  app.hidden = false;
+
+  const visiveis = paginasVisiveis();
+  // F5: o endereço já é de uma tela deste módulo — fica nela.
+  const pedido = location.hash.slice(1).split(":")[0];
+  const base = (APELIDOS[pedido] ?? pedido).split(":")[0];
+  if (visiveis.some((p) => p.id === base && p.modulo === moduloAtual)) return irPara(location.hash.slice(1));
+
+  const secao = SECOES.find((s) => s.modulos.includes(moduloAtual));
+  const primeira =
+    (moduloAtual === "ajustes" ? visiveis.find((p) => p.id === "configurar") : null) ??
+    (secao ? paginasDaSecao(secao, visiveis).find((p) => p.modulo === moduloAtual) : null) ??
+    visiveis.find((p) => p.modulo === moduloAtual) ??
+    visiveis[0];
+  if (!primeira) return mostrarHub();
+  navegar(primeira.id);
+}
+
+// ============ Menu único: a página Configurar ============
+
+/**
+ * Tudo que se ajusta uma vez, numa página só. Antes estava em três lugares:
+ * nos Ajustes da casa, no grupo "Configurar" de cada módulo e em cartões
+ * dentro das telas. Só aparece o que esta pessoa, nesta casa, pode abrir.
+ */
+async function configurar(raiz) {
+  const visiveis = paginasVisiveis();
+  const usadas = new Set(["configurar"]);
+  const resolver = (item) => {
+    if (typeof item === "object") {
+      return visiveis.some((p) => p.id === item.pagina) ? { href: `#${item.pagina}:${item.aba}`, rotulo: item.rotulo, detalhe: item.detalhe } : null;
+    }
+    const [id, aba] = item.split(":");
+    const pagina = visiveis.find((p) => p.id === id);
+    if (!pagina) return null;
+    usadas.add(id);
+    if (!aba) return { href: `#${id}`, rotulo: pagina.rotulo, detalhe: pagina.subtitulo ?? "" };
+    const daAba = (pagina.render?.abas ?? []).find((a) => a.id === aba);
+    return daAba ? { href: `#${id}:${aba}`, rotulo: daAba.rotulo, detalhe: daAba.subtitulo ?? pagina.subtitulo ?? "" } : null;
+  };
+  const grupos = GRUPOS_DE_CONFIGURAR.map((g) => ({ titulo: g.titulo, itens: g.itens.map(resolver).filter(Boolean) }));
+  // Tela de configurar que ninguém listou não pode ficar sem porta.
+  const sobras = visiveis.filter((p) => ehDeConfigurar(p) && !usadas.has(p.id));
+  if (sobras.length) grupos.push({ titulo: "Outros ajustes", itens: sobras.map((p) => ({ href: `#${p.id}`, rotulo: p.rotulo, detalhe: p.subtitulo ?? "" })) });
+
+  raiz.append(
+    el(
+      "div",
+      { classe: "config-grade" },
+      grupos
+        .filter((g) => g.itens.length)
+        .map((g) =>
+          el("section", { classe: "cartao config-grupo" }, [
+            el("h2", { texto: g.titulo }),
+            ...g.itens.map((i) =>
+              el("a", { classe: "config-linha", href: i.href }, [
+                el("span", { classe: "config-texto" }, [el("strong", { texto: i.rotulo }), i.detalhe ? el("span", { classe: "muted", texto: i.detalhe }) : null]),
+                icone(SETA_DIREITA, 16),
+              ]),
+            ),
+          ]),
+        ),
+    ),
+  );
+}
 
 // ============ Acesso ============
 
@@ -833,16 +1327,26 @@ function moduloAceso(m) {
  * esconder aqui é para não mostrar tela que vai abrir em 403.
  */
 function paginasVisiveis() {
-  return PAGINAS.filter((p) => {
-    if (p.modulo !== moduloAtual) return false;
-    if (p.plataforma && !souPlataforma) return false;
-    if (p.grupo === "configurar" && !podeConfigurar) return false;
-    if (p.requer) {
-      if (modulosDoCliente.get(p.requer)?.ativo !== true) return false;
-      if (meusModulos !== null && !meusModulos.includes(p.requer)) return false;
-    }
-    return true;
-  });
+  if (usandoMenuUnico()) {
+    // Todas as telas de todos os módulos acesos — o menu é um só.
+    return PAGINAS.filter((p) => {
+      if (p.modulo === "plataforma") return false;
+      const modulo = MODULOS.find((m) => m.id === p.modulo);
+      return Boolean(modulo) && moduloAceso(modulo) && paginaLiberada(p);
+    });
+  }
+  return PAGINAS.filter((p) => p.modulo === moduloAtual && !p.soMenuUnico && paginaLiberada(p));
+}
+
+/** Os filtros que não dependem do módulo aberto: a pessoa e o contrato. */
+function paginaLiberada(p) {
+  if (p.plataforma && !souPlataforma) return false;
+  if (p.grupo === "configurar" && !podeConfigurar) return false;
+  if (p.requer) {
+    if (modulosDoCliente.get(p.requer)?.ativo !== true) return false;
+    if (meusModulos !== null && !meusModulos.includes(p.requer)) return false;
+  }
+  return true;
 }
 
 /**
@@ -1039,6 +1543,8 @@ function entrarNoModulo(moduloId = "agentes-ia") {
     mostrarHub();
     return avisar(`${definicao.nome} não faz parte do seu plano.`, "info");
   }
+
+  if (menuUnico && moduloId !== "plataforma") return entrarPeloMenuUnico(moduloId);
 
   moduloAtual = PAGINAS.some((p) => p.modulo === moduloId) ? moduloId : "agentes-ia";
   // F5 dentro do módulo não deve voltar pro saguão — mas fechar o navegador
@@ -1343,6 +1849,10 @@ async function iniciar() {
     // Cada casa tem o seu contrato: trocar de estabelecimento sem recarregar
     // os módulos deixaria a colmeia mostrando o que a casa anterior comprou.
     await carregarModulos();
+    // Outra casa, outro contrato: o menu único mostra as telas de todos os
+    // módulos, e as desta casa podem ser outras.
+    pendenciasDoMenu = null;
+    montarNav();
     montarHub();
     irPara(location.hash.slice(1));
   });
@@ -1365,7 +1875,6 @@ async function iniciar() {
   ctx.souPlataforma = souPlataforma;
   document.getElementById("btn-plataforma").hidden = !souPlataforma;
   document.getElementById("btn-ajustes").hidden = !podeConfigurar;
-  barra.querySelector('[data-barra="ajustes"]').hidden = !podeConfigurar;
 
   await carregarModulos();
 
@@ -1400,7 +1909,7 @@ async function iniciar() {
   // colmeia continua a um clique ("Módulos"). F5 dentro de um módulo e o
   // atalho ?direto=1 voltam para onde estavam.
   const direto = busca.has("direto") || sessionStorage.getItem("brasa.hub.visto") === "1";
-  if (direto) entrarNoModulo(sessionStorage.getItem("brasa.modulo") ?? "agentes-ia");
+  if (direto) entrarNoModulo(sessionStorage.getItem("brasa.modulo") ?? (menuUnico ? "hoje" : "agentes-ia"));
   else entrarNoModulo("hoje");
 }
 

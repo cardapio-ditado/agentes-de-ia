@@ -198,11 +198,27 @@
             </svg>
             <span class="nav-rotulo">Hoje</span>
           </button>
+          <!-- No menu único, Configurar fica sempre à vista: a lista de
+               seções rola, o rodapé não. -->
+          <a id="link-configurar" class="nav-item nav-item-topo" href="#configurar" data-pagina="configurar" title="Configurar" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+            </svg>
+            <span class="nav-rotulo">Configurar</span>
+          </a>
+          <div class="rodape-grade">
           <button id="btn-hub" class="nav-item" type="button" title="Voltar aos módulos">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
             </svg>
             <span class="nav-rotulo">Módulos</span>
+          </button>
+          <!-- O menu único é o padrão; aqui se volta ao menu por módulo. -->
+          <button id="btn-modo-menu" class="nav-item" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18M3 12h12M3 18h18M19 9l3 3-3 3" />
+            </svg>
+            <span class="nav-rotulo" id="rotulo-modo-menu">Usar o menu antigo</span>
           </button>
           <button id="btn-tema" class="nav-item" type="button" title="Tema claro/escuro">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -218,6 +234,7 @@
             </svg>
             <span class="nav-rotulo">Sair</span>
           </button>
+          </div>
         </div>
       </aside>
 

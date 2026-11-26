@@ -13,6 +13,7 @@ import { avisar, el } from "./ui.js";
 
 const TEXTOS = {
   delivery: ["A fila de pedidos do delivery, os cupons, os números e como a casa entrega.", "Pedido só aparece como novo depois de pago. Toque no botão vermelho para avançar — o cliente é avisado a cada passo."],
+  configurar: ["Tudo o que se ajusta uma vez: os dados da casa, os números de WhatsApp, o atendente virtual e os cadastros.", "No dia a dia você não precisa voltar aqui — só quando algo da casa mudar."],
   hoje: ["A primeira tela do dia: o que espera por você e se os números de WhatsApp estão ligados.", "Comece pelo vermelho. Cada linha abre a tela onde se resolve."],
   trilha: ["O passo a passo da implantação. A maior parte o sistema marca sozinho quando fica pronto.", "Os passos com “marcar” são para o mentor confirmar: treino da equipe e o desmame."],
   empresa: ["Os dados da casa que todo módulo usa: nome, endereço, horário e fuso.", "O atendente virtual responde o cliente com o que está aqui — mantenha o horário em dia."],

@@ -5812,3 +5812,72 @@ a.btn { text-decoration: none; }
 .app .campo-com-botao { display: flex; gap: var(--esp-2); align-items: stretch; min-width: 0; }
 .app .campo-com-botao > input { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
 .app .campo-com-botao > .btn { flex: 0 0 auto; height: 40px; }
+
+/* ---------- 17. Menu único ----------
+   A lateral é a mesma em todas as telas: Hoje, as seções por tarefa (uma
+   aberta por vez) e Configurar. Em cima, a busca. */
+.app .nav-busca { display: flex; align-items: center; gap: 8px; height: 40px; margin: 0 0 8px; padding: 0 10px; border: 1px solid var(--borda-controle); border-radius: var(--raio); background: var(--superficie); }
+.app .nav-busca:focus-within { outline: 2px solid var(--foco); outline-offset: 1px; }
+.app .nav-busca svg { flex: none; color: var(--texto-3); }
+.app .nav-busca input:not([type="checkbox"]):not([type="radio"]),
+.app .nav-busca input:not([type="checkbox"]):not([type="radio"]):hover,
+.app .nav-busca input:not([type="checkbox"]):not([type="radio"]):focus { flex: 1 1 0; min-width: 0; width: 0; height: 36px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; color: var(--texto); font: inherit; font-size: 14px; }
+.app .nav-busca input::-webkit-search-cancel-button { display: none; }
+.app .nav-busca kbd { flex: none; padding: 0 5px; border: 1px solid var(--borda); border-radius: 5px; color: var(--texto-3); font: inherit; font-size: 11px; line-height: 18px; white-space: nowrap; }
+/* Coluna que encolhe: um nome comprido quebra a linha, não alarga o menu. */
+.app[data-menu-unico] .nav, .nav-arvore, .nav-achados, .nav-secao, .nav-secao-itens { grid-template-columns: minmax(0, 1fr); }
+.nav-arvore, .nav-achados, .nav-secao { display: grid; gap: 2px; align-content: start; }
+.nav-item-topo, .nav-secao-titulo { color: var(--texto); font-weight: 600; }
+.nav-secao-titulo .nav-rotulo, .nav-subitem .nav-rotulo, .nav-achado .nav-rotulo { flex: 1; min-width: 0; }
+.nav-secao-titulo { gap: 8px; }
+/* O menu único leva nome, número e seta na mesma linha: um pouco mais largo,
+   para "Estoque e compras" caber inteiro. */
+@media (min-width: 821px) { .app[data-menu-unico]:not([data-recolhida="1"]) { grid-template-columns: 272px 1fr; } }
+.nav-secao-titulo .nav-rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-secao-titulo .nav-contador { margin-left: 0; }
+.nav-seta { display: inline-flex; flex: none; color: var(--texto-3); transition: transform 0.15s ease; }
+.nav-seta svg { width: 15px; height: 15px; }
+.nav-secao[data-aberta] .nav-seta { transform: rotate(90deg); }
+.nav-secao-itens { display: grid; gap: 2px; margin: 0 0 6px 20px; padding-left: 9px; border-left: 1px solid var(--borda); }
+.nav-subitem { padding: 8px 11px; }
+.nav-divisor { height: 1px; margin: 6px 4px; background: var(--borda); }
+/* Pendência que pode esperar: o número aparece, mas não grita. */
+.nav-contador.nav-contador-leve { background: var(--superficie-2); color: var(--texto); box-shadow: inset 0 0 0 1px var(--borda-forte); }
+.nav-achado small { flex: none; color: var(--texto-3); font-size: 12px; }
+.nav-vazio { margin: 0; padding: 8px 11px; color: var(--texto-2); font-size: 13px; }
+/* O rodapé no menu único: Configurar em linha cheia, sempre à vista, e os
+   quatro botões de uso raro numa grade de dois por dois — sobra altura para
+   as seções. No menu por módulo a grade some e eles voltam a ser linhas. */
+.rodape-grade { display: contents; }
+.app[data-menu-unico] .rodape-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 2px; }
+.app[data-menu-unico] .rodape-grade .nav-item { gap: 8px; padding: 8px 9px; font-size: 13px; }
+.app[data-menu-unico] .rodape-grade .nav-item svg { width: 17px; height: 17px; }
+.app[data-menu-unico] .rodape-grade .nav-rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Recolhida, a lateral é só ícone: sem busca, sem lista dentro da seção. */
+@media (min-width: 821px) {
+  .app[data-recolhida="1"] .nav-busca,
+  .app[data-recolhida="1"] .nav-secao-itens,
+  .app[data-recolhida="1"] .nav-achados,
+  .app[data-recolhida="1"] .nav-seta { display: none; }
+  .app[data-recolhida="1"] .nav-divisor { margin: 6px 0; }
+  .app[data-recolhida="1"][data-menu-unico] .rodape-grade { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .nav-seta { transition: none; } }
+
+/* O número da pendência também na barra de baixo do celular. */
+.barra-item { position: relative; }
+.barra-rotulo { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-contador { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 16px; padding: 0 4px; border-radius: 999px; background: var(--cta); color: var(--cta-texto); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+
+/* A página Configurar: grupos de portas, e não mais um menu. */
+.config-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--esp-4); align-items: start; max-width: 1040px; }
+.app .cartao.config-grupo { display: grid; gap: 0; padding: 0; overflow: hidden; }
+.app .config-grupo > h2 { margin: 0; padding: 14px 18px 10px; font-size: 15px; }
+.config-linha { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 18px; border-top: 1px solid var(--borda); color: var(--texto); text-decoration: none; }
+.config-linha:hover { background: var(--superficie-2); }
+.config-linha:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
+.config-linha svg { flex: none; color: var(--texto-3); }
+.config-texto { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.config-texto .muted { font-size: 13px; }
+@media (max-width: 820px) { .config-grade { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 820px) { .app[data-menu-unico] .lateral { width: min(86vw, 300px); } }
