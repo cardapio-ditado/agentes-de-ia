@@ -239,6 +239,7 @@ import {
   definirStatusConversa,
   getConversationInOrg,
   listConversations,
+  caixaDeEntrada,
   metricasDoVenue,
   registrarMensagemHumana,
 } from "./inbox.js";
@@ -5278,6 +5279,21 @@ async function roteasApi(
     if (metodo === "GET" && recurso === "conversations") {
       const chave = await exigirChave(req, "reservations:read");
       const venue = await findVenueBySlugInOrg(chave.org_id, slug);
+      // A tela nova pede a caixa inteira (lista, contagem das filas e a marca
+      // de "mudou?"). Sem `caixa=1`, a lista simples de sempre.
+      if (url.searchParams.get("caixa") === "1") {
+        const fila = url.searchParams.get("fila");
+        const caixa = await caixaDeEntrada({
+          venueId: venue.id,
+          fila: fila === "esperando" || fila === "equipe" ? fila : "",
+          canal: url.searchParams.get("canal"),
+          status: url.searchParams.get("status"),
+          agente: url.searchParams.get("agente"),
+          busca: url.searchParams.get("busca"),
+          marca: url.searchParams.get("marca"),
+        });
+        return ok(res, caixa ?? { sem_mudanca: true });
+      }
       return ok(
         res,
         await listConversations({

@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, dataHora, desde, el, esqueleto, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, campoDeBusca, dataHora, desde, el, esqueleto, etiqueta, limpar, vazio } from "../ui.js";
 
 /**
  * Caixa de entrada: lista à esquerda, conversa à direita.
@@ -21,8 +21,35 @@ import { avisar, dataHora, desde, el, esqueleto, etiqueta, limpar, vazio } from 
 /** De quanto em quanto tempo perguntar se chegou coisa nova. */
 const INTERVALO_MS = 8000;
 
+/** O canal como a casa fala dele, e não como o banco guarda. */
+const CANAIS = { whatsapp: "WhatsApp", instagram: "Instagram", api: "Teste", painel: "Painel", cardapio: "Cardápio", delivery: "Delivery" };
+const nomeDoCanal = (canal) => CANAIS[canal] ?? canal;
+
+/**
+ * As três filas. A pergunta de quem abre esta tela é "alguém está esperando
+ * por mim?" — e ela não tinha resposta: eram quatro seletores, nenhum deles
+ * sobre quem ficou sem retorno.
+ */
+const FILAS = [
+  { id: "", rotulo: "Todas" },
+  { id: "esperando", rotulo: "Esperando resposta", vazio: ["Ninguém esperando resposta", "Toda conversa recente terminou com uma resposta da casa."] },
+  { id: "equipe", rotulo: "Com a equipe", vazio: ["Nenhuma conversa com a equipe", "O atendente virtual está respondendo todas."] },
+];
+
+/** O atendente parou sozinho nesta conversa (rajada ou mensagem repetida)? */
+const motivoDoFreio = (atendimento) => {
+  const por = atendimento?.assumido_por ?? "";
+  return por.startsWith("freio automático") ? por.split(":").slice(1).join(":").trim() || "movimento fora do comum" : null;
+};
+
 export async function conversas(raiz, ctx) {
-  const filtros = { canal: "", status: "", humanas: false, agente: "" };
+  const filtros = { fila: "", busca: "", canal: "", status: "", agente: "" };
+  /** Quantas há em cada fila, para os botões. */
+  const contagem = { esperando: null, equipe: null };
+  /** A marca da última lista recebida: o servidor diz "nada mudou" por ela. */
+  let marca = null;
+  /** Com mais de um atendente virtual, a linha diz qual respondeu. */
+  let variosAtendentes = false;
   let selecionada = null;
 
   /**
@@ -44,34 +71,22 @@ export async function conversas(raiz, ctx) {
 
   const selCanal = el(
     "select",
-    { classe: "select", "aria-label": "Canal", onchange: (e) => ((filtros.canal = e.target.value), carregarLista()) },
+    { classe: "select", "aria-label": "Canal", onchange: (e) => ((filtros.canal = e.target.value), aoFiltrar()) },
     [
       el("option", { value: "", texto: "Todos os canais" }),
       el("option", { value: "whatsapp", texto: "WhatsApp" }),
-      el("option", { value: "api", texto: "API / teste" }),
+      el("option", { value: "instagram", texto: "Instagram" }),
+      el("option", { value: "api", texto: "Teste" }),
     ],
   );
 
   const selStatus = el(
     "select",
-    { classe: "select", "aria-label": "Situação da conversa", onchange: (e) => ((filtros.status = e.target.value), carregarLista()) },
+    { classe: "select", "aria-label": "Situação da conversa", onchange: (e) => ((filtros.status = e.target.value), aoFiltrar()) },
     [
-      el("option", { value: "", texto: "Todos os status" }),
-      el("option", { value: "open", texto: "Abertas" }),
-      el("option", { value: "closed", texto: "Fechadas" }),
-    ],
-  );
-
-  const selQuem = el(
-    "select",
-    {
-      classe: "select",
-      "aria-label": "Quem está atendendo",
-      onchange: (e) => ((filtros.humanas = e.target.value === "1"), carregarLista()),
-    },
-    [
-      el("option", { value: "", texto: "Todas" }),
-      el("option", { value: "1", texto: "Assumidas" }),
+      el("option", { value: "", texto: "Abertas e encerradas" }),
+      el("option", { value: "open", texto: "Só as abertas" }),
+      el("option", { value: "closed", texto: "Só as encerradas" }),
     ],
   );
 
@@ -80,19 +95,80 @@ export async function conversas(raiz, ctx) {
   // uma pergunta diferente de "o que a Fernanda respondeu".
   const selAgente = el(
     "select",
-    { classe: "select", "aria-label": "Atendente virtual", onchange: (e) => ((filtros.agente = e.target.value), carregarLista()) },
+    { classe: "select", "aria-label": "Atendente virtual", hidden: true, onchange: (e) => ((filtros.agente = e.target.value), aoFiltrar()) },
     [el("option", { value: "", texto: "Todos os atendentes virtuais" })],
   );
   get("/v1/agents?all=1")
     .then((agentes) => {
       for (const a of agentes) selAgente.append(el("option", { value: a.slug, texto: a.name }));
+      // Com um atendente só, o seletor e a etiqueta em cada linha são ruído.
+      variosAtendentes = agentes.length > 1;
+      selAgente.hidden = !variosAtendentes;
     })
     .catch(() => undefined);
+
+  const busca = campoDeBusca({
+    rotulo: "Buscar conversa por nome ou telefone",
+    placeholder: "Buscar por nome ou telefone…",
+    espera: 350,
+    aoMudar: (valor) => {
+      filtros.busca = valor.trim();
+      carregarLista();
+    },
+  });
+
+  const botoesDeFila = FILAS.map((f) =>
+    el("button", { classe: "fila-botao", type: "button", "data-fila": f.id, "aria-pressed": String(f.id === filtros.fila), onclick: () => escolherFila(f.id) }, [
+      el("span", { texto: f.rotulo }),
+      f.id ? el("span", { classe: "fila-numero", hidden: true }) : null,
+    ]),
+  );
+
+  // Canal, atendente e situação são filtros de vez em quando: ficam atrás de
+  // um botão, que avisa quando algum está ligado.
+  const maisFiltros = el("div", { classe: "inbox-mais-filtros", id: "inbox-mais-filtros", hidden: true }, [selCanal, selAgente, selStatus]);
+  const btnFiltros = el("button", {
+    classe: "btn btn-peq",
+    type: "button",
+    "aria-expanded": "false",
+    "aria-controls": "inbox-mais-filtros",
+    texto: "Filtros",
+    onclick: () => {
+      maisFiltros.hidden = !maisFiltros.hidden;
+      btnFiltros.setAttribute("aria-expanded", String(!maisFiltros.hidden));
+    },
+  });
+
+  function aoFiltrar() {
+    const ligados = [filtros.canal, filtros.agente, filtros.status].filter(Boolean).length;
+    btnFiltros.textContent = ligados ? `Filtros (${ligados})` : "Filtros";
+    carregarLista();
+  }
+
+  function escolherFila(id) {
+    filtros.fila = id;
+    for (const b of botoesDeFila) b.setAttribute("aria-pressed", String(b.dataset.fila === id));
+    carregarLista();
+  }
+
+  function desenharContagem() {
+    for (const b of botoesDeFila) {
+      const numero = b.querySelector(".fila-numero");
+      if (!numero) continue;
+      const n = contagem[b.dataset.fila];
+      numero.textContent = n ?? "";
+      numero.hidden = !n;
+    }
+  }
 
   raiz.append(
     el("div", { classe: "inbox" }, [
       el("div", { classe: "inbox-lista" }, [
-        el("div", { classe: "inbox-filtros" }, [selAgente, selCanal, selStatus, selQuem]),
+        el("div", { classe: "inbox-topo" }, [
+          busca,
+          el("div", { classe: "inbox-filas", role: "group", "aria-label": "Qual conversa mostrar" }, [...botoesDeFila, btnFiltros]),
+          maisFiltros,
+        ]),
         itens,
       ]),
       painelThread,
@@ -191,18 +267,58 @@ export async function conversas(raiz, ctx) {
     ]);
   }
 
+  /**
+   * A lista de sempre, filtrada aqui mesmo. É o plano B da caixa: as cem
+   * conversas mais recentes, sem a busca no banco.
+   */
+  async function listaSimples() {
+    const pedido = new URLSearchParams();
+    for (const campo of ["canal", "status", "agente"]) {
+      if (filtros[campo]) pedido.set(campo, filtros[campo]);
+    }
+    const todas = await get(`/v1/venues/${ctx.venue}/conversations?${pedido}`);
+    const termo = filtros.busca.toLowerCase();
+    const achadas = termo ? todas.filter((c) => `${c.titulo ?? ""} ${c.contato ?? ""}`.toLowerCase().includes(termo)) : todas;
+    const esperando = (c) => c.ultima_mensagem?.papel === "user";
+    for (const c of achadas) c.esperando_desde = esperando(c) ? c.ultima_mensagem.em : null;
+    return {
+      conversas: achadas.filter((c) => (filtros.fila === "esperando" ? esperando(c) : filtros.fila === "equipe" ? c.atendimento.por === "humano" : true)),
+      contagem: { esperando: achadas.filter(esperando).length, equipe: achadas.filter((c) => c.atendimento.por === "humano").length },
+      marca: null,
+    };
+  }
+
   async function carregarLista({ silencioso = false } = {}) {
     if (!silencioso) {
       limpar(itens).append(esqueleto({ linhas: 5 }));
     }
 
-    const busca = new URLSearchParams();
-    if (filtros.canal) busca.set("canal", filtros.canal);
-    if (filtros.status) busca.set("status", filtros.status);
-    if (filtros.humanas) busca.set("humanas", "1");
-    if (filtros.agente) busca.set("agente", filtros.agente);
+    const pedido = new URLSearchParams({ caixa: "1" });
+    for (const campo of ["fila", "busca", "canal", "status", "agente"]) {
+      if (filtros[campo]) pedido.set(campo, filtros[campo]);
+    }
+    // Só a atualização automática manda a marca: quem mexeu num filtro quer
+    // a lista nova, mesmo que nenhuma conversa tenha mudado.
+    const filtrosDoPedido = JSON.stringify(filtros);
+    if (silencioso && marca) pedido.set("marca", marca);
 
-    const lista = await get(`/v1/venues/${ctx.venue}/conversations?${busca}`);
+    const caixa = await get(`/v1/venues/${ctx.venue}/conversations?${pedido}`).catch((e) => {
+      // Sessão vencida sobe para quem trata; qualquer outra falha cai na
+      // lista simples, para a caixa de entrada nunca ficar em branco.
+      if (e?.status === 401) throw e;
+      return listaSimples();
+    });
+    // Nada mudou desde a última vez: o servidor nem montou a lista.
+    if (caixa.sem_mudanca) return;
+    // Trocaram o filtro enquanto esta resposta vinha: ela já não serve.
+    if (filtrosDoPedido !== JSON.stringify(filtros)) return;
+
+    const lista = caixa.conversas;
+    marca = caixa.marca;
+    contagem.equipe = caixa.contagem.equipe;
+    // Na fila "Com a equipe" o servidor não conta quem espera: fica o que já havia.
+    if (caixa.contagem.esperando !== null) contagem.esperando = caixa.contagem.esperando;
+    desenharContagem();
 
     // O que faz a lista mudar de cara: ordem, última mensagem, quem está
     // atendendo, aberta ou fechada. Igual ao que já está na tela = não mexer,
@@ -219,11 +335,14 @@ export async function conversas(raiz, ctx) {
     limpar(itens);
 
     if (lista.length === 0) {
+      const daFila = FILAS.find((f) => f.id === filtros.fila)?.vazio;
+      const filtrando = filtros.busca || filtros.canal || filtros.agente || filtros.status;
       itens.append(
-        vazio(
-          "Nenhuma conversa",
-          "Quando alguém falar com o atendente virtual pelo WhatsApp ou pela aba Testar, aparece aqui.",
-        ),
+        filtrando
+          ? vazio("Nenhuma conversa encontrada", filtros.busca ? `Nada com “${filtros.busca}”. Tente o telefone, ou só o primeiro nome.` : "Nenhuma conversa com estes filtros.")
+          : daFila
+            ? vazio(daFila[0], daFila[1])
+            : vazio("Nenhuma conversa", "Quando alguém falar com o atendente virtual pelo WhatsApp, pelo Instagram ou pela aba Testar, aparece aqui."),
       );
       return;
     }
@@ -249,14 +368,20 @@ export async function conversas(raiz, ctx) {
           [
             el("div", { classe: "conversa-linha" }, [
               el("span", { classe: "conversa-nome", texto: rotulo }),
-              c.atendimento.por === "humano" ? etiqueta("você", "etiqueta-alerta") : null,
               el("span", { classe: "conversa-hora", texto: desde(c.atualizada_em) }),
             ]),
             el("div", { classe: "conversa-previa", texto: previa }),
-            el("div", { classe: "conversa-linha" }, [
-              etiqueta(c.canal === "whatsapp" ? "WhatsApp" : c.canal),
-              c.agente ? etiqueta(c.agente.nome, "etiqueta-info") : null,
-              c.status !== "open" ? etiqueta("fechada") : null,
+            el("div", { classe: "conversa-linha conversa-etiquetas" }, [
+              // Primeiro o que pede ação; o canal e o atendente vêm depois.
+              c.esperando_desde && c.status === "open" ? etiqueta(`Esperando há ${desde(c.esperando_desde).replace("agora", "instantes")}`, "etiqueta-alerta") : null,
+              c.atendimento.por !== "humano"
+                ? null
+                : motivoDoFreio(c.atendimento)
+                  ? el("span", { classe: "etiqueta etiqueta-perigo", title: `O atendente virtual parou sozinho: ${motivoDoFreio(c.atendimento)}.`, texto: "Parou sozinho" })
+                  : etiqueta("Com a equipe", "etiqueta-info"),
+              etiqueta(nomeDoCanal(c.canal)),
+              c.agente && variosAtendentes ? etiqueta(c.agente.nome) : null,
+              c.status !== "open" ? etiqueta("Encerrada") : null,
             ]),
           ],
         ),
@@ -336,20 +461,30 @@ export async function conversas(raiz, ctx) {
           el("p", {
             classe: "muted",
             // Nome no título, telefone aqui — os dois visíveis quando existem.
-            texto: [c.titulo && c.contato ? c.contato : null, c.canal, `${c.mensagens.length} mensagens`]
+            texto: [c.titulo && c.contato ? c.contato : null, nomeDoCanal(c.canal), `${c.mensagens.length} mensagens`]
               .filter(Boolean)
               .join(" · "),
           }),
         ]),
-        encerrada
-          ? etiqueta("encerrada")
-          : assumida
-            ? etiqueta("pessoa da equipe respondendo", "etiqueta-alerta")
-            : etiqueta("atendente virtual respondendo", "etiqueta-ok"),
+        // Com a equipe, quem explica é o aviso logo abaixo do cabeçalho.
+        encerrada ? etiqueta("encerrada") : assumida ? null : etiqueta("atendente virtual respondendo", "etiqueta-ok"),
         btnAssumir,
         btnEncerrar,
         btnApagar,
       ]),
+      // Conversa com a equipe: o atendente virtual está calado nela até
+      // alguém devolver. Diz desde quando e por quê — é o que faz uma
+      // conversa esquecida voltar a ser atendida.
+      assumida && !encerrada
+        ? el("p", { classe: "thread-aviso", role: "status" }, [
+            el("strong", { texto: motivoDoFreio(c.atendimento) ? "O atendente virtual parou sozinho nesta conversa. " : "O atendente virtual não responde nesta conversa. " }),
+            document.createTextNode(
+              motivoDoFreio(c.atendimento)
+                ? `Motivo: ${motivoDoFreio(c.atendimento)}${c.atendimento.assumido_em ? `, em ${dataHora(c.atendimento.assumido_em)}` : ""}. Se for um cliente de verdade, responda aqui ou devolva ao atendente virtual.`
+                : `Está com a equipe${c.atendimento.assumido_em ? ` desde ${dataHora(c.atendimento.assumido_em)}` : ""}. Quando terminar, devolva ao atendente virtual — senão o cliente fica sem resposta da próxima vez que escrever.`,
+            ),
+          ])
+        : null,
       corpo,
       el("div", { classe: "thread-rodape" }, [
         el("div", { classe: "linha-envio" }, [campo, btnEnviar]),

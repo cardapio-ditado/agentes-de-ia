@@ -50,8 +50,66 @@ export interface ConversaResumo {
   atendimento: Atendimento;
   agente: { slug: string; nome: string } | null;
   ultima_mensagem: { papel: string; texto: string | null; em: string } | null;
+  /**
+   * Desde quando o cliente espera: a hora da última mensagem, quando foi
+   * ele quem falou por último. Nulo quando a última palavra foi da casa.
+   */
+  esperando_desde: string | null;
   mensagens: number;
   atualizada_em: string;
+}
+
+/** Qual pedaço da caixa: tudo, quem espera resposta, ou o que está com a equipe. */
+export type FilaDaCaixa = "" | "esperando" | "equipe";
+
+export interface CaixaDeEntrada {
+  conversas: ConversaResumo[];
+  /**
+   * Quantas há em cada fila, dentro dos filtros de canal, agente e busca.
+   * `esperando` vem nulo quando a lista pedida não permite contar (a fila
+   * "equipe" traz só as assumidas) — quem lê mantém o número que já tinha.
+   */
+  contagem: { esperando: number | null; equipe: number };
+  /** Muda quando qualquer conversa da casa muda. Ver `marcaDaCaixa`. */
+  marca: string;
+}
+
+/**
+ * O que o usuário digitou na busca, pronto para o filtro do banco.
+ *
+ * Fica só o que um nome, um telefone ou um @ podem ter: o resto (vírgula,
+ * parêntese, aspas, %) é sintaxe de filtro e não entra. Telefone digitado
+ * com máscara — "(65) 99812-3344" — vira só os dígitos, que é como o número
+ * está guardado. Pura.
+ */
+export function termoDeBusca(texto: string | null | undefined): { texto: string; digitos: string | null } | null {
+  const bruto = String(texto ?? "").trim().slice(0, 60);
+  if (!bruto) return null;
+  const soTelefone = /^[\d\s()+.-]+$/.test(bruto);
+  const digitos = bruto.replace(/\D/g, "");
+  if (soTelefone) return digitos.length >= 3 ? { texto: digitos, digitos } : null;
+  const limpo = bruto.replace(/[^\p{L}\p{N} @._-]/gu, " ").replace(/\s+/g, " ").trim();
+  return limpo.length >= 2 ? { texto: limpo, digitos: null } : null;
+}
+
+/**
+ * Uma marca que muda quando qualquer conversa da casa muda.
+ *
+ * A tela pergunta a cada oito segundos se chegou coisa nova. Trazer a lista
+ * inteira, com as mensagens, para descobrir que nada mudou era o grosso do
+ * tráfego do painel. O banco já carimba `updated_at` na conversa a cada
+ * mensagem e a cada mudança (assumir, encerrar) — então a conversa mais
+ * recente e o total de conversas respondem "mudou?" com uma linha.
+ */
+export async function marcaDaCaixa(venueId: string): Promise<string> {
+  const { data, count, error } = await db()
+    .from("conversations")
+    .select("updated_at", { count: "exact" })
+    .eq("venue_id", venueId)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`Falha ao conferir as conversas: ${error.message}`);
+  return `${count ?? 0}|${data?.[0]?.updated_at ?? ""}`;
 }
 
 /**
@@ -68,6 +126,8 @@ export async function listConversations(params: {
   apenasHumanas?: boolean;
   /** Só as conversas deste agente (slug). Com dois números, cada um tem o seu. */
   agente?: string | null;
+  /** Nome, telefone ou @ do cliente. */
+  busca?: string | null;
 }): Promise<ConversaResumo[]> {
   let consulta = db()
     .from("conversations")
@@ -78,12 +138,27 @@ export async function listConversations(params: {
 
   if (params.canal) consulta = consulta.eq("channel", params.canal);
   if (params.status) consulta = consulta.eq("status", params.status);
+  // No banco, e não depois: a conversa que a equipe assumiu há três meses
+  // está fora das cem mais recentes, e filtrada em memória ela sumia da
+  // lista — o agente continuava calado nela sem ninguém ver.
+  if (params.apenasHumanas) consulta = consulta.eq("metadata->>atendimento_por", "humano");
   if (params.agente) {
     // No banco, e não depois: filtrar em memória cortaria as conversas do
     // agente pedido junto com o teto da lista.
     const { data: agente } = await db().from("agents").select("id").eq("slug", params.agente).maybeSingle();
     if (!agente) return [];
     consulta = consulta.eq("agent_id", agente.id);
+  }
+  const termo = termoDeBusca(params.busca);
+  if (termo) {
+    // Entre aspas: o termo já vem sem aspas nem vírgula, e assim um ponto ou
+    // um espaço dentro dele não é lido como parte da sintaxe do filtro.
+    const alvo = `"%${termo.texto}%"`;
+    consulta = consulta.or(
+      termo.digitos
+        ? `external_id.ilike.${alvo},metadata->>contato.ilike.${alvo}`
+        : `title.ilike.${alvo},external_id.ilike.${alvo},metadata->>contato.ilike.${alvo}`,
+    );
   }
 
   const { data, error } = await consulta;
@@ -105,10 +180,16 @@ export async function listConversations(params: {
 
   if (erroAgentes) throw new Error(`Falha ao carregar os agentes: ${erroAgentes.message}`);
   const porAgente = new Map((agentes ?? []).map((a) => [a.id, a]));
+  // Só o que aparece na conversa: a fala do cliente e a resposta em texto.
+  // As linhas de ferramenta e as respostas sem texto (o agente pedindo uma
+  // consulta) não são "a última mensagem" para quem lê a lista — e são boa
+  // parte das linhas.
   const { data: msgs, error: erroMsgs } = await db()
     .from("messages")
     .select("conversation_id, role, content, created_at")
     .in("conversation_id", ids)
+    .in("role", ["user", "assistant"])
+    .not("content", "is", null)
     .order("created_at", { ascending: false });
 
   if (erroMsgs) throw new Error(`Falha ao carregar as mensagens: ${erroMsgs.message}`);
@@ -137,15 +218,86 @@ export async function listConversations(params: {
       atendimento: atendimentoDe(c),
       agente: agente ? { slug: agente.slug, nome: agente.name } : null,
       ultima_mensagem: ultima.get(c.id) ?? null,
+      esperando_desde: ultima.get(c.id)?.papel === "user" ? (ultima.get(c.id)?.em ?? null) : null,
       mensagens: total.get(c.id) ?? 0,
       atualizada_em: c.updated_at,
     };
   });
 
-  if (params.apenasHumanas) {
-    return resumos.filter((c) => c.atendimento.por === "humano");
-  }
   return resumos;
+}
+
+/**
+ * A caixa de entrada como a tela mostra: a lista da fila pedida e quantas há
+ * em cada fila.
+ *
+ * Com `marca`, devolve nulo quando nada mudou desde aquela marca — é o que a
+ * atualização automática da tela usa para não trazer tudo de novo à toa.
+ */
+export async function caixaDeEntrada(params: {
+  venueId: string;
+  fila?: FilaDaCaixa;
+  canal?: string | null;
+  status?: string | null;
+  agente?: string | null;
+  busca?: string | null;
+  marca?: string | null;
+}): Promise<CaixaDeEntrada | null> {
+  const marca = await marcaDaCaixa(params.venueId);
+  if (params.marca && params.marca === marca) return null;
+
+  const filtros = { venueId: params.venueId, canal: params.canal, status: params.status, agente: params.agente, busca: params.busca };
+  const fila = params.fila ?? "";
+  const lista = await listConversations({ ...filtros, apenasHumanas: fila === "equipe" });
+
+  // Quantas a equipe tem em mãos: conta no banco, com os mesmos filtros —
+  // a lista para em cem, e a contagem não pode parar junto.
+  const equipe =
+    fila === "equipe" && lista.length < LIMITE_CONVERSAS
+      ? lista.length
+      : await contarComAEquipe(filtros);
+
+  return {
+    conversas: fila === "esperando" ? lista.filter((c) => c.esperando_desde !== null) : lista,
+    contagem: {
+      esperando: fila === "equipe" ? null : lista.filter((c) => c.esperando_desde !== null).length,
+      equipe,
+    },
+    marca,
+  };
+}
+
+async function contarComAEquipe(filtros: {
+  venueId: string;
+  canal?: string | null;
+  status?: string | null;
+  agente?: string | null;
+  busca?: string | null;
+}): Promise<number> {
+  let consulta = db()
+    .from("conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("venue_id", filtros.venueId)
+    .eq("metadata->>atendimento_por", "humano");
+  if (filtros.canal) consulta = consulta.eq("channel", filtros.canal);
+  if (filtros.status) consulta = consulta.eq("status", filtros.status);
+  if (filtros.agente) {
+    const { data: agente } = await db().from("agents").select("id").eq("slug", filtros.agente).maybeSingle();
+    if (!agente) return 0;
+    consulta = consulta.eq("agent_id", agente.id);
+  }
+  const termo = termoDeBusca(filtros.busca);
+  if (termo) {
+    const alvo = `"%${termo.texto}%"`;
+    consulta = consulta.or(
+      termo.digitos
+        ? `external_id.ilike.${alvo},metadata->>contato.ilike.${alvo}`
+        : `title.ilike.${alvo},external_id.ilike.${alvo},metadata->>contato.ilike.${alvo}`,
+    );
+  }
+  const { count, error } = await consulta;
+  if (error) throw new Error(`Falha ao contar as conversas com a equipe: ${error.message}`);
+  return count ?? 0;
 }
 
 /** Conversa com o histórico completo, já conferida contra a organização. */

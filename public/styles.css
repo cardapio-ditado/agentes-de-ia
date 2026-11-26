@@ -5872,3 +5872,24 @@ a.btn { text-decoration: none; }
 .barra-contador { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 16px; padding: 0 4px; border-radius: 999px; background: var(--cta); color: var(--cta-texto); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 
 @media (max-width: 820px) { .app[data-menu-unico] .lateral { width: min(86vw, 300px); } }
+
+/* ---------- 18. Conversas: a caixa de entrada ----------
+   Em cima da lista: a busca, as três filas (com quantas há em cada uma) e,
+   atrás de um botão, os filtros de vez em quando. */
+.app .inbox-topo { display: grid; gap: var(--esp-2); padding: var(--esp-3); border-bottom: 1px solid var(--borda); }
+.inbox-filas { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fila-botao { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 11px; border: 1px solid var(--borda-forte); border-radius: 999px; background: transparent; color: var(--texto-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.fila-botao:hover { background: var(--superficie-2); color: var(--texto); }
+.fila-botao[aria-pressed="true"] { border-color: var(--marca); background: var(--marca-suave); color: var(--marca-forte); }
+.fila-botao:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.fila-numero { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--cta); color: var(--cta-texto); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.inbox-filas > .btn { margin-left: auto; }
+.app .inbox-mais-filtros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--esp-2); }
+.app .inbox-mais-filtros[hidden] { display: none; }
+.app .inbox-mais-filtros .select { width: 100%; min-width: 0; height: 38px; font-size: 14px; padding: 0 var(--esp-3); }
+/* O nome do cliente não pode ser espremido pelos botões: eles descem. */
+.app .thread-topo { flex-wrap: wrap; row-gap: var(--esp-2); }
+.app .thread-topo > div:first-child { flex: 1 1 220px; }
+.conversa-etiquetas { flex-wrap: wrap; row-gap: 4px; }
+/* O aviso de conversa com a equipe, entre o cabeçalho e o histórico. */
+.thread-aviso { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--borda); background: var(--alerta-suave); color: var(--texto); font-size: 13px; line-height: 1.45; }
