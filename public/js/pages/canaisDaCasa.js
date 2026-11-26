@@ -1,5 +1,6 @@
 import { ErroApi, del, get, post, put } from "../api.js";
-import { avisar, campoDeFormulario, el, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, campoDeFormulario, el, etiqueta, iconeDeCanal, limpar, vazio } from "../ui.js";
+import { WHATSAPP_COMERCIAL } from "../contato.js";
 
 /**
  * WhatsApp e Instagram da casa, organizados pela TAREFA — e não pela
@@ -72,13 +73,53 @@ function guardarCelular(valor) {
   }
 }
 
+/** O link que abre o WhatsApp da Brasa Food com o pedido já escrito. */
+function linkDoSuporte(mensagem) {
+  const casa = document.getElementById("marca-org")?.textContent.trim();
+  const texto = `Olá! ${casa && casa !== "—" ? `Sou da casa ${casa}. ` : ""}${mensagem}`;
+  return `https://wa.me/${WHATSAPP_COMERCIAL}?text=${encodeURIComponent(texto)}`;
+}
+
 export async function canaisDaCasa(raiz, ctx) {
   const areaResumo = el("div", {});
   const areaAtendente = el("div", {});
   const areaConector = el("div", {});
   const areaOficial = el("div", {});
   const areaInstagram = el("div", {});
-  raiz.append(el("div", { classe: "pilha" }, [areaResumo, areaAtendente, areaConector, areaOficial, areaInstagram]));
+
+  // Os ajustes de cada canal ficam recolhidos: no dia a dia, a tela é só o
+  // quadro de cima. Quem precisa trocar o atendente, desconectar ou mexer no
+  // número oficial abre o canal aqui embaixo.
+  const situacaoDe = {};
+  const gaveta = (id, titulo, area) => {
+    situacaoDe[id] = el("span", { classe: "canal-gaveta-situacao muted" });
+    return el("details", { classe: "canal-gaveta", id: `canal-${id}` }, [el("summary", {}, [el("strong", { texto: titulo }), situacaoDe[id]]), area]);
+  };
+  raiz.append(
+    el("div", { classe: "pilha" }, [
+      areaResumo,
+      el("div", {}, [
+        el("h2", { texto: "Ajustes de cada canal" }),
+        el("p", { classe: "muted", texto: "Trocar quem responde, desconectar um número, e os dados do número oficial." }),
+      ]),
+      gaveta("atendente", "Atendimento ao cliente", areaAtendente),
+      gaveta("avisos", "Avisos para a equipe", areaConector),
+      gaveta("oficial", "Aniversário e campanhas", areaOficial),
+      gaveta("instagram", "Instagram", areaInstagram),
+    ]),
+  );
+
+  /** Abre os ajustes de um canal e leva a tela até eles. */
+  function abrirGaveta(id) {
+    const alvo = document.getElementById(`canal-${id}`);
+    if (!alvo) return;
+    alvo.open = true;
+    alvo.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    alvo.querySelector("summary")?.focus();
+  }
+
+  /** O passo a passo de conexão aberto agora, se houver. */
+  let assistente = null;
 
   areaAtendente.append(el("p", { classe: "muted", texto: "Consultando o número do atendimento…" }));
   areaConector.append(el("p", { classe: "muted", texto: "Consultando o número de avisos…" }));
@@ -119,8 +160,8 @@ export async function canaisDaCasa(raiz, ctx) {
   areaResumo.append(
     el("section", { classe: "cartao pilha" }, [
       el("div", {}, [
-        el("h2", { texto: "Quem faz o quê" }),
-        el("p", { classe: "muted", texto: "Cada tarefa e o número que cuida dela. Verde é que está funcionando; teste mandando uma mensagem para o seu celular." }),
+        el("h2", { texto: "Os canais da casa" }),
+        el("p", { classe: "muted", texto: "Verde está funcionando. O que não estiver, o botão ao lado resolve." }),
       ]),
       linhasDoResumo,
       el("div", { classe: "linha-campos", style: "align-items:center" }, [
@@ -200,18 +241,256 @@ export async function canaisDaCasa(raiz, ctx) {
       teste: null,
     });
 
+    // Uma ação por linha, a que resolve o estado em que o canal está.
+    const acaoDoWhatsapp = (papel, estado, tarefa) => {
+      if (estado === null) return null;
+      if (estado.status === "conectado") return null;
+      if (estado.status === "sem_conector") {
+        return el("a", { classe: "btn btn-peq", target: "_blank", rel: "noopener", href: linkDoSuporte(`O WhatsApp de ${tarefa} aparece como "servidor desligado" no painel. Podem religar?`), texto: "Chamar a Brasa Food" });
+      }
+      const esperando = estado.status === "aguardando_qr" || estado.status === "conectando";
+      return el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: esperando ? "Continuar a conexão" : "Conectar", onclick: () => abrirAssistente(papel) });
+    };
+    linhas[0].canal = "whatsapp";
+    linhas[0].gaveta = "atendente";
+    linhas[0].acao = linhas[0].ok ? null : acaoDoWhatsapp("agente", atendente, "atendimento ao cliente");
+    if (atendente?.status === "sem_conector" && !linhas[0].ok) linhas[0].detalhe = "O servidor que liga este número não está respondendo. Quem religa é a Brasa Food.";
+    linhas[1].canal = "whatsapp";
+    linhas[1].gaveta = "avisos";
+    linhas[1].acao = acaoDoWhatsapp("administrativo", avisos, "avisos para a equipe");
+    if (avisos?.status === "sem_conector") linhas[1].detalhe = "O servidor que liga este número não está respondendo. Quem religa é a Brasa Food.";
+    linhas[2].canal = "whatsapp";
+    linhas[2].gaveta = "oficial";
+    // O número oficial depende de dados da Meta: quem monta é a Brasa Food.
+    linhas[2].acao =
+      oficial === null || oficial.ativa
+        ? null
+        : el("a", { classe: "btn btn-peq", target: "_blank", rel: "noopener", href: linkDoSuporte("Quero ligar o número oficial para aniversário e campanhas."), texto: "Pedir à Brasa Food" });
+    linhas[3].canal = "instagram";
+    linhas[3].gaveta = "instagram";
+    linhas[3].acao =
+      instagram === null
+        ? null
+        : !instagram.conectado || instagram.vencido
+          ? el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: instagram.vencido ? "Conectar de novo" : "Conectar", onclick: (e) => entrarNoInstagram(e.currentTarget) })
+          : !instagram.agent_slug
+            ? el("button", { classe: "btn btn-primario btn-peq", type: "button", texto: "Escolher quem responde", onclick: () => abrirGaveta("instagram") })
+            : null;
+
+    // A mesma situação, em poucas palavras, no título de cada gaveta.
+    const emPalavras = (estado) => (estado === null ? "" : (ROTULOS[estado.status]?.[0] ?? estado.status));
+    situacaoDe.atendente.textContent = emPalavras(atendente);
+    situacaoDe.avisos.textContent = emPalavras(avisos);
+    situacaoDe.oficial.textContent = oficial === null ? "" : (SITUACOES[oficial.situacao]?.[0] ?? (oficial.ativa ? "Ativo" : "Não configurado"));
+    situacaoDe.instagram.textContent = instagram === null ? "" : !instagram.conectado ? "Não conectado" : instagram.vencido ? "Autorização vencida" : instagram.agent_slug ? "Ativo" : "Sem atendente virtual";
+
     limpar(linhasDoResumo).append(
       ...linhas.map((l) =>
         el("div", { classe: "linha-tabela linha-tarefa" }, [
-          el("span", { classe: `ponto-estado ${l.ok ? "ponto-ok" : "ponto-alerta"}`, "aria-hidden": "true" }),
+          iconeDeCanal(l.canal, 22),
           el("div", { classe: "linha-tarefa-texto" }, [
-            el("strong", { texto: l.tarefa }),
+            el("strong", {}, [el("span", { classe: `ponto-estado ${l.ok ? "ponto-ok" : "ponto-alerta"}`, "aria-hidden": "true" }), document.createTextNode(l.tarefa)]),
             el("span", { classe: "muted", texto: l.detalhe }),
           ]),
-          l.teste ? botaoDeTeste(l.teste) : el("span", {}),
+          el("div", { classe: "linha-tarefa-acoes" }, [
+            l.acao,
+            l.teste ? botaoDeTeste(l.teste) : null,
+            el("button", { classe: "btn btn-peq btn-fantasma", type: "button", texto: "Ajustar", "aria-label": `Ajustar ${l.tarefa}`, onclick: () => abrirGaveta(l.gaveta) }),
+          ]),
         ]),
       ),
     );
+    assistente?.atualizar();
+  }
+
+  /** Leva ao login do Instagram: o dono autoriza a conta do bar e volta para cá. */
+  async function entrarNoInstagram(botao) {
+    botao.disabled = true;
+    try {
+      const r = await post(`/v1/venues/${encodeURIComponent(ctx.venue)}/instagram/login`, {});
+      location.href = r.url;
+    } catch (err) {
+      avisar(err.message, "erro");
+      botao.disabled = false;
+    }
+  }
+
+  // ============================================================
+  // O passo a passo de conexão do WhatsApp
+  // ============================================================
+
+  /**
+   * Conectar um número, um passo de cada vez, numa janela na frente da tela.
+   *
+   * Antes o botão "Conectar" ficava no meio de um cartão comprido, o QR
+   * aparecia ali dentro dez segundos depois e a instrução era uma linha
+   * cinza. Quem implantava com alguém ao lado conseguia; o dono do bar,
+   * sozinho, não. Aqui cada momento ocupa a janela inteira: qual celular
+   * pegar, onde tocar no WhatsApp, o código para apontar, e a confirmação.
+   */
+  function abrirAssistente(papel) {
+    if (assistente) return;
+    const doAtendimento = papel === "agente";
+    const chave = doAtendimento ? "atendente" : "avisos";
+    const nome = doAtendimento ? "do atendimento" : "de avisos";
+
+    const corpo = el("div", { classe: "assistente-corpo" });
+    const janela = el("dialog", { classe: "assistente", "aria-labelledby": "assistente-titulo" }, [
+      el("div", { classe: "cabecalho-secao" }, [
+        el("h2", { id: "assistente-titulo", texto: `Conectar o WhatsApp ${nome}` }),
+        el("button", { classe: "btn-icone", type: "button", "aria-label": "Fechar", texto: "✕", onclick: () => janela.close() }),
+      ]),
+      corpo,
+    ]);
+
+    // O atendente escolhido aqui não pode ser desfeito pelo redesenho da tela.
+    const quemResponde = el("select", { classe: "select", id: "assistente-agente" }, agentes.map((a) => el("option", { value: a.slug, texto: a.name, selected: a.slug === seletorAtendente.value })));
+    const meuCelular = el("input", { inputmode: "tel", placeholder: "65 99999-9999", value: lerCelular(), "aria-label": "Seu celular, para o teste" });
+
+    let pedidoEm = 0;
+    let falha = null;
+    let faseNaTela = null;
+
+    const pedir = async () => {
+      pedidoEm = Date.now();
+      falha = null;
+      rapidoAte = Date.now() + 180_000;
+      desenhar();
+      try {
+        await post("/v1/whatsapp/conectar", doAtendimento ? { venue: ctx.venue, agent: quemResponde.value, papel } : { venue: ctx.venue, papel });
+        atualizarConectores();
+      } catch (err) {
+        falha = err.message;
+        desenhar();
+      }
+    };
+
+    const passos = (itens) => el("ol", { classe: "assistente-passos" }, itens.map((texto) => el("li", { texto })));
+
+    function desenhar() {
+      const estado = retrato[chave] ?? { status: "sem_conector" };
+      const outro = retrato[doAtendimento ? "avisos" : "atendente"];
+      const demorou = pedidoEm > 0 && Date.now() - pedidoEm > 45_000;
+      const fase =
+        estado.status === "sem_conector" ? "sem-servidor"
+        : estado.status === "conectado" ? `conectado:${estado.telefone}:${outro?.telefone ?? ""}`
+        : falha ? `falha:${falha}`
+        : estado.qr ? `qr:${estado.qr.length}:${estado.qr.slice(-24)}`
+        : pedidoEm === 0 && estado.status === "desconectado" ? "inicio"
+        : demorou ? "demorando"
+        : "gerando";
+      // Só redesenha quando o momento muda: a tela pergunta o estado a cada
+      // quatro segundos, e redesenhar sempre apagaria o que se está digitando.
+      if (fase === faseNaTela) return;
+      faseNaTela = fase;
+
+      if (fase === "sem-servidor") {
+        limpar(corpo).append(
+          el("p", { texto: "O servidor que liga este número não está respondendo agora. Não é nada que você fez, e não dá para resolver por aqui." }),
+          el("p", { classe: "muted", texto: "Quem religa é a Brasa Food. Assim que ele voltar, esta janela continua sozinha." }),
+          el("a", { classe: "btn btn-primario", target: "_blank", rel: "noopener", href: linkDoSuporte(`O WhatsApp ${nome} aparece como "servidor desligado" no painel. Podem religar?`), texto: "Chamar a Brasa Food no WhatsApp" }),
+        );
+        return;
+      }
+
+      if (fase.startsWith("conectado")) {
+        const mesmoChip = estado.telefone && outro?.telefone && estado.telefone === outro.telefone;
+        limpar(corpo).append(
+          el("p", { classe: "assistente-sucesso", role: "status" }, [el("strong", { texto: "Conectado. " }), document.createTextNode(estado.telefone ? `Este é o número ${telefoneBonito(estado.telefone)}.` : "O número está ligado.")]),
+          mesmoChip
+            ? el("p", { classe: "aviso aviso-perigo", texto: "Este é o MESMO número do outro canal. O atendimento ao cliente e os avisos da equipe precisam de chips diferentes: com um só, o funcionário que responder “ok” ao checklist é atendido como cliente. Desconecte um dos dois em “Ajustar”." })
+            : null,
+          el("p", { texto: "Para ter certeza de que ele também entrega, mande uma mensagem de teste para o seu celular:" }),
+          el("div", { classe: "linha-campos assistente-teste" }, [
+            meuCelular,
+            el("button", {
+              classe: "btn",
+              type: "button",
+              texto: "Mandar teste",
+              onclick: async (e) => {
+                const telefone = meuCelular.value.trim();
+                if (!telefone) return meuCelular.focus();
+                guardarCelular(telefone);
+                campoCelular.value = telefone;
+                e.currentTarget.disabled = true;
+                try {
+                  const r = await post(`/v1/venues/${encodeURIComponent(ctx.venue)}/canais/teste`, { numero: chave, telefone });
+                  avisar(r.na_fila ? "Teste na fila: deve chegar no seu celular em até um minuto." : "Teste enviado. Confira o celular.", "ok");
+                } catch (err) {
+                  avisar(err.message, "erro");
+                }
+                e.target.disabled = false;
+              },
+            }),
+          ]),
+          el("div", { classe: "assistente-rodape" }, [el("button", { classe: "btn btn-primario", type: "button", texto: "Concluir", onclick: () => janela.close() })]),
+        );
+        return;
+      }
+
+      if (fase.startsWith("falha")) {
+        limpar(corpo).append(
+          el("p", { classe: "aviso aviso-perigo", role: "alert", texto: `Não deu para começar a conexão: ${falha}` }),
+          el("div", { classe: "assistente-rodape" }, [el("button", { classe: "btn btn-primario", type: "button", texto: "Tentar de novo", onclick: pedir })]),
+        );
+        return;
+      }
+
+      if (fase === "inicio") {
+        limpar(corpo).append(
+          el("p", {
+            texto: doAtendimento
+              ? "Pegue o celular com o chip em que os clientes falam com a casa. Você vai apontar a câmera dele para um código que aparece aqui."
+              : "Pegue o celular com o chip que vai mandar os avisos para a equipe: o link do checklist, a reserva nova, os alertas.",
+          }),
+          doAtendimento
+            ? null
+            : el("p", { classe: "aviso aviso-alerta", texto: "Tem que ser um número diferente do atendimento ao cliente. Este só envia: ninguém responde por ele." }),
+          doAtendimento && agentes.length > 1 ? el("div", { classe: "campo" }, [el("label", { for: "assistente-agente", texto: "Quem vai responder os clientes neste número" }), quemResponde]) : null,
+          el("p", { classe: "muted", texto: "Use um chip só para isso, e não o seu número pessoal." }),
+          el("div", { classe: "assistente-rodape" }, [el("button", { classe: "btn btn-primario", type: "button", texto: "Estou com o celular na mão", onclick: pedir })]),
+        );
+        return;
+      }
+
+      if (fase.startsWith("qr")) {
+        limpar(corpo).append(
+          passos([
+            "Abra o WhatsApp nesse celular.",
+            "Toque nos três pontinhos (no iPhone, em Configurações) e depois em “Aparelhos conectados”.",
+            "Toque em “Conectar um aparelho” e aponte a câmera para o código abaixo.",
+          ]),
+          el("div", { classe: "area-qr" }, [el("img", { src: estado.qr, alt: `Código para conectar o WhatsApp ${nome}` })]),
+          el("p", { classe: "muted", role: "status", texto: "Esperando você apontar a câmera. O código se renova sozinho; quando conectar, esta janela avisa." }),
+        );
+        return;
+      }
+
+      limpar(corpo).append(
+        el("p", { role: "status" }, [el("strong", { texto: fase === "demorando" ? "Está demorando mais que o normal. " : "Gerando o código… " }), document.createTextNode(fase === "demorando" ? "Pode ser o servidor ocupado." : "Leva uns dez segundos. Deixe o WhatsApp aberto no celular.")]),
+        el("div", { classe: "area-qr assistente-espera", "aria-hidden": "true" }, [el("span", { classe: "assistente-giro" })]),
+        fase === "demorando"
+          ? el("div", { classe: "assistente-rodape" }, [
+              el("button", { classe: "btn btn-primario", type: "button", texto: "Tentar de novo", onclick: pedir }),
+              el("a", { classe: "btn", target: "_blank", rel: "noopener", href: linkDoSuporte(`Não consigo gerar o código para conectar o WhatsApp ${nome}.`), texto: "Chamar a Brasa Food" }),
+            ])
+          : null,
+      );
+    }
+
+    // O "demorando" depende do relógio, e não de resposta nenhuma.
+    const relogio = setInterval(desenhar, 5000);
+    janela.addEventListener("close", () => {
+      clearInterval(relogio);
+      assistente = null;
+      janela.remove();
+    });
+    ctx.aoSair(() => janela.open && janela.close());
+    document.body.append(janela);
+    assistente = { atualizar: desenhar };
+    rapidoAte = Date.now() + 180_000;
+    janela.showModal();
+    desenhar();
   }
 
   function botaoDeTeste(numero) {
@@ -457,7 +736,7 @@ export async function canaisDaCasa(raiz, ctx) {
       return;
     }
 
-    retrato.oficial = { ativa: conexao.situacao === "ativa", telefone: conexao.telefone, agent_slug: conexao.agent_slug };
+    retrato.oficial = { ativa: conexao.situacao === "ativa", situacao: conexao.situacao, telefone: conexao.telefone, agent_slug: conexao.agent_slug };
     desenharResumo();
     const [rotulo, variante] = SITUACOES[conexao.situacao] ?? [conexao.situacao, ""];
     const agenteAtual = agentes.find((a) => a.slug === conexao.agent_slug);

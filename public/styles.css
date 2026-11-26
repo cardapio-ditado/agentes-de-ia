@@ -5921,3 +5921,46 @@ a.btn { text-decoration: none; }
    lado, e cada cartão fica da largura do que tem dentro. */
 .app .fila-de-reservas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: var(--esp-3); align-items: start; }
 .app .fila-de-reservas > :not(.cartao) { grid-column: 1 / -1; }
+
+/* ---------- 20. Canais: o quadro, as gavetas e o passo a passo ---------- */
+.linha-tarefa { gap: 12px; align-items: center; }
+.linha-tarefa > .canal-icone { align-self: flex-start; margin-top: 2px; }
+.linha-tarefa-texto strong { display: inline-flex; align-items: center; gap: 8px; }
+.linha-tarefa-acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.app .btn.btn-fantasma { border-color: transparent; background: transparent; color: var(--texto-2); }
+.app .btn.btn-fantasma:hover { background: var(--superficie-2); color: var(--texto); }
+@media (max-width: 720px) {
+  .linha-tarefa { flex-wrap: wrap; }
+  .linha-tarefa-texto { flex: 1 1 0; }
+  .linha-tarefa > .linha-tarefa-acoes { flex: 1 1 100%; justify-content: flex-start; margin-left: 34px; }
+}
+/* Os ajustes de cada canal, recolhidos. */
+.canal-gaveta { border: 1px solid var(--borda); border-radius: var(--raio-g, 12px); background: var(--superficie); }
+.canal-gaveta > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 16px; cursor: pointer; list-style: none; }
+.canal-gaveta > summary::-webkit-details-marker { display: none; }
+.canal-gaveta > summary::after { content: ""; flex: none; width: 8px; height: 8px; margin-left: 4px; border-right: 2px solid var(--texto-3); border-bottom: 2px solid var(--texto-3); transform: rotate(-45deg); transition: transform 0.15s ease; }
+.canal-gaveta[open] > summary::after { transform: rotate(45deg); }
+.canal-gaveta > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; border-radius: 10px; }
+.canal-gaveta-situacao { margin-left: auto; font-size: 13px; }
+.canal-gaveta > div { padding: 0 12px 12px; }
+.canal-gaveta > div > .cartao, .canal-gaveta > div > section > .cartao { border-color: var(--borda); box-shadow: none; }
+/* O passo a passo de conexão, numa janela na frente da tela. */
+.assistente { width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); border: 1px solid var(--borda); border-radius: 14px; padding: 20px; background: var(--superficie); color: var(--texto); }
+.assistente::backdrop { background: rgba(20, 12, 8, 0.55); }
+.assistente h2 { margin: 0; font-size: 18px; }
+.assistente-corpo { display: grid; gap: 14px; margin-top: 14px; }
+.assistente-corpo p { margin: 0; line-height: 1.5; }
+.assistente-passos { margin: 0; padding: 0; list-style: none; counter-reset: passo; display: grid; gap: 10px; }
+.assistente-passos li { counter-increment: passo; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; line-height: 1.45; }
+.assistente-passos li::before { content: counter(passo); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--marca-suave); color: var(--marca-forte); font-size: 13px; font-weight: 700; }
+.assistente .area-qr img { width: min(260px, 70vw); height: auto; aspect-ratio: 1; }
+.assistente-espera { min-height: 180px; }
+.assistente-giro { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--borda-forte); border-top-color: var(--marca); animation: assistente-gira 0.9s linear infinite; }
+@keyframes assistente-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .assistente-giro { animation: none; } .canal-gaveta > summary::after { transition: none; } }
+.assistente-sucesso { padding: 10px 12px; border-radius: var(--raio); background: var(--ok-suave); }
+.assistente-teste { align-items: center; gap: 8px; }
+.assistente-teste input { flex: 1 1 160px; min-width: 0; }
+.assistente-rodape { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+/* O título e o "fechar" do passo a passo ficam na mesma linha também no celular. */
+.app .assistente .cabecalho-secao, .assistente .cabecalho-secao { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
