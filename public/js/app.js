@@ -590,10 +590,38 @@ function aplicarTema(tema) {
   localStorage.setItem(TEMA, tema);
 }
 
+// ============ Visual novo ============
+//
+// O desenho novo (areia, terracota e verde; cantos redondos; Bricolage e
+// Figtree) entra por módulo, para a casa ver com os dados dela antes de
+// valer no sistema inteiro. Por enquanto, as telas do Atendente virtual.
+//
+// Ele nasce claro — é o tema de quem trabalha de dia — e guarda a escolha
+// de claro/escuro numa chave própria: quem prefere o painel antigo escuro
+// não perde isso ao sair do módulo.
+const TELAS_DO_VISUAL_NOVO = new Set(["painel", "conversas", "reservas", "programacao", "atendente", "canais-casa"]);
+const TEMA_DO_VISUAL_NOVO = "brasa.tema.novo";
+
+function aplicarVisual(pagina) {
+  const raiz = document.documentElement;
+  if (TELAS_DO_VISUAL_NOVO.has(pagina.id)) {
+    raiz.setAttribute("data-visual", "novo");
+    raiz.setAttribute("data-tema", localStorage.getItem(TEMA_DO_VISUAL_NOVO) ?? "claro");
+  } else {
+    raiz.removeAttribute("data-visual");
+    raiz.setAttribute("data-tema", localStorage.getItem(TEMA) ?? "escuro");
+  }
+}
+
 aplicarTema(localStorage.getItem(TEMA) ?? "escuro");
 
 document.getElementById("btn-tema").addEventListener("click", () => {
-  aplicarTema(document.documentElement.getAttribute("data-tema") === "escuro" ? "claro" : "escuro");
+  const raiz = document.documentElement;
+  const outro = raiz.getAttribute("data-tema") === "escuro" ? "claro" : "escuro";
+  if (raiz.getAttribute("data-visual") === "novo") {
+    raiz.setAttribute("data-tema", outro);
+    localStorage.setItem(TEMA_DO_VISUAL_NOVO, outro);
+  } else aplicarTema(outro);
 });
 
 // ============ Menu ============
@@ -799,6 +827,7 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   // volta para a colmeia em vez de quebrar.
   if (!pagina) return mostrarHub();
   ctx.aba = pagina.id === id ? (aba ?? null) : null;
+  aplicarVisual(pagina);
   // No menu único o "módulo atual" é só o da tela aberta: é ele que o F5
   // devolve e que as telas consultam.
   if (usandoMenuUnico() && moduloAtual !== pagina.modulo) {

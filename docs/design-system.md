@@ -143,3 +143,23 @@ Seção fechada mostra a soma do que tem dentro.
 O menu por módulo continua existindo: "Menu antigo", no rodapé da lateral,
 troca na hora, e a escolha fica guardada no navegador (`brasa.menu`). A mesa
 da equipe Brasa Food (módulo `plataforma`) usa sempre o menu por módulo.
+
+## Visual novo (em implantação por módulo)
+
+Seção 21 de `public/styles.css`, valendo onde a raiz tem `data-visual="novo"`.
+Quem liga é `aplicarVisual` em `public/js/app.js`, pela lista
+`TELAS_DO_VISUAL_NOVO` — hoje, as telas do Atendente virtual. Para levar um
+módulo ao visual novo, basta pôr as telas dele nessa lista e conferir as fotos.
+
+- **Cores:** fundo areia (`#f4ece0`), cartão quase branco (`#fffbf5`), texto
+  marrom (`#2b1e16`). Terracota-laranja (`#c8491a`) só no que pede ação; verde
+  (`#1f6b40` / `#2e6b4e`) só para "está funcionando" e para a fala do atendente.
+- **Fontes:** Bricolage Grotesque nos títulos, Figtree no texto.
+- **Formas:** cartão com canto de 20 px, botão e busca em pílula, campo com
+  12 px. Elevação é sombra OU borda, nunca as duas.
+- **Vidro** só no menu lateral e na barra de baixo do celular, que flutuam.
+- **Fora:** etiqueta em cima do título, barra colorida na lateral de cartão,
+  cor de fundo diferente em cada cartão de número.
+- **Claro é o padrão** do visual novo; o botão Tema troca para o escuro e
+  guarda a escolha à parte (`brasa.tema.novo`), sem mexer no tema das telas
+  que ainda estão no visual antigo.
