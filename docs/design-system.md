@@ -127,14 +127,13 @@ Ainda fora do padrão, de propósito: os campos pequenos dentro de linhas de tab
 A lateral é a mesma em todas as telas (`montarNavUnico` em `public/js/app.js`):
 
 - **Hoje** em cima, com o número do que pede atenção.
-- **Seções por tarefa** — Atendimento, Clientes, Equipe, Estoque e compras,
-  Dinheiro — uma aberta por vez. Cada seção diz de quais módulos puxa as telas
-  (`SECOES`), então tela nova num módulo já aparece na seção certa.
-- **Configurar** fixo no rodapé: uma página só com tudo que se ajusta uma vez
-  (`GRUPOS_DE_CONFIGURAR`). Tela com `grupo: "configurar"` ou do módulo
-  `ajustes` mora lá, e não numa seção.
+- **Uma seção por módulo**, com o nome dele e na ordem da colmeia
+  (`secoesDoMenu`), uma aberta por vez. Dentro, as telas do módulo como
+  sempre foram: as do dia a dia primeiro, depois "Análise" e "Configurar" —
+  cada cadastro no seu módulo. Módulo de uma tela só é uma linha direta.
+- **Ajustes da casa** por último, como seção.
 - **Busca** no topo (Ctrl+K), que acha telas e abas pelo nome ou pela
-  explicação, sem depender de acento.
+  explicação, palavra por palavra e sem depender de acento.
 - **No celular**, a barra de baixo é Hoje, as duas telas mais usadas da casa e
   "Mais", que abre o menu inteiro.
 

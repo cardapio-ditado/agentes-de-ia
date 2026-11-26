@@ -65,7 +65,6 @@ export async function reservas(raiz, ctx) {
   );
 
   const titulo = (texto, detalhe) => el("div", {}, [el("h2", { texto }), el("p", { classe: "muted", texto: detalhe })]);
-  const avisos = await blocoDeAvisos(ctx);
   raiz.append(
     el("section", { classe: "pilha" }, [
       numeros,
@@ -76,21 +75,13 @@ export async function reservas(raiz, ctx) {
       listaConfirmadas,
       // Os avisos automáticos se configuram uma vez: ficam por último, para
       // não empurrar a fila de todo dia para baixo.
-      avisos,
+      await blocoDeAvisos(ctx),
       // A porta por onde entram as reservas do formulário da própria casa.
       ctx.podeConfigurar === false ? null : await blocoDoSite(ctx),
     ]),
   );
 
   await carregar();
-
-  // Quem veio de Configurar → "Avisos de reserva" quer o cartão dos avisos,
-  // que mora no fim desta tela: abre e leva até ele.
-  if (ctx.aba === "avisos" && avisos) {
-    const abrir = avisos.querySelector(".cabecalho-secao .btn");
-    if (abrir && abrir.textContent === "Ajustar") abrir.click();
-    avisos.scrollIntoView({ block: "start" });
-  }
 
   async function carregar() {
     limpar(lista).append(esqueleto({ linhas: 3 }));
