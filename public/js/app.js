@@ -581,47 +581,46 @@ const ctx = {
 };
 
 // ============ Tema ============
-// Chave nova (v2): o visual novo nasce no escuro, que é o desenho de
-// referência. Quem preferir o claro troca em "Tema" e a escolha fica guardada.
-const TEMA = "brasa.tema.v2";
-
-function aplicarTema(tema) {
-  document.documentElement.setAttribute("data-tema", tema);
-  localStorage.setItem(TEMA, tema);
-}
-
 // ============ Visual novo ============
 //
 // O desenho novo (areia, terracota e verde; cantos redondos; Bricolage e
-// Figtree) entra por módulo, para a casa ver com os dados dela antes de
-// valer no sistema inteiro. Por enquanto, as telas do Atendente virtual.
-//
-// Ele nasce claro — é o tema de quem trabalha de dia — e guarda a escolha
-// de claro/escuro numa chave própria: quem prefere o painel antigo escuro
-// não perde isso ao sair do módulo.
-const TELAS_DO_VISUAL_NOVO = new Set(["painel", "conversas", "reservas", "programacao", "atendente", "canais-casa"]);
+// Figtree) vale no sistema inteiro. Ele nasce claro — é o tema de quem
+// trabalha de dia — e guarda a escolha de claro/escuro numa chave própria:
+// quem tinha o painel antigo no escuro abre o novo no claro uma vez e
+// escolhe de novo, em vez de herdar um escuro que não foi desenhado para ele.
 const TEMA_DO_VISUAL_NOVO = "brasa.tema.novo";
 
-function aplicarVisual(pagina) {
+function aplicarVisual() {
   const raiz = document.documentElement;
-  if (TELAS_DO_VISUAL_NOVO.has(pagina.id)) {
-    raiz.setAttribute("data-visual", "novo");
-    raiz.setAttribute("data-tema", localStorage.getItem(TEMA_DO_VISUAL_NOVO) ?? "claro");
-  } else {
-    raiz.removeAttribute("data-visual");
-    raiz.setAttribute("data-tema", localStorage.getItem(TEMA) ?? "escuro");
+  raiz.setAttribute("data-visual", "novo");
+  let tema = null;
+  try {
+    tema = localStorage.getItem(TEMA_DO_VISUAL_NOVO);
+  } catch {
+    /* sem armazenamento, fica o claro */
   }
+  raiz.setAttribute("data-tema", tema === "escuro" ? "escuro" : "claro");
+  trocarLogo();
 }
 
-aplicarTema(localStorage.getItem(TEMA) ?? "escuro");
+/** No claro, o logo de letras escuras; no escuro, o de letras claras. */
+function trocarLogo() {
+  const logo = document.querySelector(".capa-logo-img");
+  if (!logo) return;
+  logo.src = document.documentElement.getAttribute("data-tema") === "escuro" ? "/img/logo-brasa-food.png" : "/img/logo-brasa-food-clara.png";
+}
+
+aplicarVisual();
 
 document.getElementById("btn-tema").addEventListener("click", () => {
-  const raiz = document.documentElement;
-  const outro = raiz.getAttribute("data-tema") === "escuro" ? "claro" : "escuro";
-  if (raiz.getAttribute("data-visual") === "novo") {
-    raiz.setAttribute("data-tema", outro);
+  const outro = document.documentElement.getAttribute("data-tema") === "escuro" ? "claro" : "escuro";
+  document.documentElement.setAttribute("data-tema", outro);
+  trocarLogo();
+  try {
     localStorage.setItem(TEMA_DO_VISUAL_NOVO, outro);
-  } else aplicarTema(outro);
+  } catch {
+    /* sem armazenamento, vale até recarregar */
+  }
 });
 
 // ============ Menu ============
@@ -827,7 +826,6 @@ async function irPara(endereco, { podeTrocarDeModulo = false } = {}) {
   // volta para a colmeia em vez de quebrar.
   if (!pagina) return mostrarHub();
   ctx.aba = pagina.id === id ? (aba ?? null) : null;
-  aplicarVisual(pagina);
   // No menu único o "módulo atual" é só o da tela aberta: é ele que o F5
   // devolve e que as telas consultam.
   if (usandoMenuUnico() && moduloAtual !== pagina.modulo) {

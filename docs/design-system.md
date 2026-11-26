@@ -144,12 +144,11 @@ O menu por módulo continua existindo: "Menu antigo", no rodapé da lateral,
 troca na hora, e a escolha fica guardada no navegador (`brasa.menu`). A mesa
 da equipe Brasa Food (módulo `plataforma`) usa sempre o menu por módulo.
 
-## Visual novo (em implantação por módulo)
+## Visual novo
 
-Seção 21 de `public/styles.css`, valendo onde a raiz tem `data-visual="novo"`.
-Quem liga é `aplicarVisual` em `public/js/app.js`, pela lista
-`TELAS_DO_VISUAL_NOVO` — hoje, as telas do Atendente virtual. Para levar um
-módulo ao visual novo, basta pôr as telas dele nessa lista e conferir as fotos.
+Seções 21 a 23 de `public/styles.css`, valendo onde a raiz tem
+`data-visual="novo"` — hoje, o sistema inteiro, incluindo o login e a colmeia
+(`aplicarVisual` em `public/js/app.js` liga ao abrir a página).
 
 - **Cores:** fundo areia (`#f4ece0`), cartão quase branco (`#fffbf5`), texto
   marrom (`#2b1e16`). Terracota-laranja (`#c8491a`) só no que pede ação; verde
@@ -160,6 +159,7 @@ módulo ao visual novo, basta pôr as telas dele nessa lista e conferir as fotos
 - **Vidro** só no menu lateral e na barra de baixo do celular, que flutuam.
 - **Fora:** etiqueta em cima do título, barra colorida na lateral de cartão,
   cor de fundo diferente em cada cartão de número.
-- **Claro é o padrão** do visual novo; o botão Tema troca para o escuro e
-  guarda a escolha à parte (`brasa.tema.novo`), sem mexer no tema das telas
-  que ainda estão no visual antigo.
+- **Claro é o padrão**; o botão Tema troca para o escuro e guarda a escolha em
+  `brasa.tema.novo`. No escuro, o login e a colmeia voltam à foto do braseiro.
+- **Nada de barra colorida na lateral** (seção 23): o que pede atenção ganha
+  o fundo tingido inteiro.

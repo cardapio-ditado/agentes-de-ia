@@ -6127,3 +6127,87 @@ a.btn { text-decoration: none; }
    sumia no fundo da conversa. */
 :root[data-visual="novo"][data-tema="escuro"] .app .balao-assistant { background: #1f4a37; color: #ffffff; }
 :root[data-visual="novo"][data-tema="escuro"] .app .balao-assistant .balao-meta { color: #c4dccf; }
+
+/* ---------- 22. Login e colmeia no visual novo ----------
+   No claro, as duas telas de fora do painel saem do carvão e vão para a
+   mesma areia do painel: a foto do braseiro e as fagulhas ficam para o
+   escuro, que continua sendo o desenho original delas. */
+.btn-hub-sair { display: inline-flex; align-items: center; gap: 6px; }
+.btn-hub-sair svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+:root[data-visual="novo"] .acesso { font-family: var(--fonte-ui); }
+:root[data-visual="novo"] :is(.hub-titulo, .hex-nome, .hex-wordmark, .hub-cartao-nome) { font-family: var(--fonte-display); letter-spacing: -0.02em; }
+:root[data-visual="novo"] .capa-tagline { font-family: var(--fonte-ui); font-style: normal; }
+
+:root[data-visual="novo"]:not([data-tema="escuro"]) :is(#tela-acesso, #tela-hub) {
+  background: radial-gradient(900px 520px at 50% 110%, rgba(232, 112, 58, 0.24), rgba(232, 112, 58, 0) 70%), radial-gradient(640px 420px at 100% 0%, rgba(74, 140, 104, 0.14), rgba(74, 140, 104, 0) 70%), #f4ece0;
+  color: #2b1e16;
+}
+:root[data-visual="novo"]:not([data-tema="escuro"]) .acesso .brasas { display: none; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .capa-logo-img { filter: none; width: min(230px, 60vw); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .capa-tagline { color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .capa-rodape { color: #8a7868; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .capa-rotulo { color: #8f2f0c; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .cartao-acesso { border: 0; border-radius: 22px; background: rgba(255, 251, 245, 0.78); backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2); box-shadow: 0 12px 40px rgba(74, 45, 20, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.8); padding: 24px; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .cartao-acesso label { color: #3b2c22; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .cartao-acesso input:not([type="checkbox"]) { border: 0; border-radius: 12px; background: #ffffff; color: #2b1e16; box-shadow: inset 0 0 0 1px #8a7868; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .cartao-acesso input::placeholder { color: #8a7868; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .cartao-acesso input:focus { outline: 2px solid #2e6b4e; outline-offset: 2px; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) :is(.acesso-nota, .acesso-lembrar, .acesso-lembrar small, .acesso-links, .acesso-links a, .acesso-links button) { color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .acesso .erro { color: #a3301f; }
+:root[data-visual="novo"] .btn-fogo { border-radius: 999px; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .btn-fogo { background: #c8491a; color: #ffffff; box-shadow: none; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .btn-fogo:hover { background: #ae3d13; filter: none; box-shadow: none; }
+
+/* A colmeia: favos de papel creme sobre a areia, o laranja só no ícone. */
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-org { color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .btn-hub-sair { border: 0; border-radius: 999px; background: #fffbf5; color: #3b2c22; box-shadow: inset 0 0 0 1px #d9c9b3; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .btn-hub-sair:hover { background: #ffffff; box-shadow: inset 0 0 0 1px #c8491a; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-titulo { color: #2b1e16; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .celula { background: #e6dac8; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .celula::before { background: #fffbf5; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-modulo { color: #2b1e16; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-modulo:hover:not(.hex-apagado),
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-modulo:focus-visible:not(.hex-apagado) { background: #c8491a; filter: drop-shadow(0 14px 22px rgba(200, 73, 26, 0.22)); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-icone { background: #c8491a; box-shadow: none; color: #ffffff; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-etiqueta { border-color: #d9c9b3; color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-etiqueta-ativa { border: 0; background: #fbe4d5; color: #8f2f0c; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-apagado { color: #8a7868; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-apagado .hex-icone { background: #efe4d4; color: #8a7868; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-centro { background: #c8491a; animation: brotar 0.5s ease both; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-centro::before { background: #2b1e16; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-vazio { background: rgba(43, 30, 22, 0.06); color: #b9a892; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hex-vazio::before { background: rgba(255, 251, 245, 0.5); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .linha { stroke: rgba(43, 30, 22, 0.14); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .linha-viva { stroke: rgba(200, 73, 26, 0.55); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .linha-apagada { stroke: rgba(43, 30, 22, 0.1); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) :is(.hub-desc, .hub-nota) { color: #5f4e42; }
+/* A lista do celular. */
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao { border: 0; border-radius: 20px; background: #fffbf5; color: #2b1e16; box-shadow: 0 6px 24px rgba(74, 45, 20, 0.08); }
+:root[data-visual="novo"]:not([data-tema="escuro"]) button.hub-cartao:active { background: #fbe4d5; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-resumo { color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-entrar { background: #c8491a; color: #ffffff; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-apagado { background: rgba(255, 251, 245, 0.55); box-shadow: inset 0 0 0 1px #d9c9b3; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-apagado .hub-cartao-nome { color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-apagado .hex-icone { background: #efe4d4; color: #8a7868; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-estado { color: #5f4e42; }
+:root[data-visual="novo"]:not([data-tema="escuro"]) .hub-cartao-conhecer { color: #8f2f0c; }
+/* No celular, os botões do topo da colmeia quebram linha em vez de sair da tela. */
+@media (max-width: 560px) {
+  .hub-topo { flex-wrap: wrap; justify-content: center; }
+  .hub-topo .capa-rotulo { display: none; }
+  .hub-topo-acoes { flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .hub-topo-acoes .hub-org { flex-basis: 100%; text-align: center; }
+}
+
+/* ---------- 23. Sem barra colorida na lateral ----------
+   No visual novo, o que pede atenção ganha o fundo tingido inteiro (ou um
+   ícone), e não uma faixa de cor numa das bordas. */
+:root[data-visual="novo"] .app :is(.alerta, .aviso, .pontos-aviso, .cartao-atencao, .linha-atencao, .linha-perigo, .citacao, .avaliacao-resposta, .avaliacao-aberta, .hoje-barra, .hoje-barra-ok, .conversa-item, .item-cal) { border-left: 0; }
+:root[data-visual="novo"] .app .planilha tr:is(.linha-perigo, .linha-atencao) td:first-child { box-shadow: none; }
+:root[data-visual="novo"] .app .cartao:is(.linha-atencao, .linha-perigo) { box-shadow: var(--sombra); border: 0; }
+:root[data-visual="novo"] .app :is(.alerta, .cartao-atencao, .linha-atencao) { background: var(--alerta-suave); }
+:root[data-visual="novo"] .app .linha-perigo { background: var(--perigo-suave); }
+:root[data-visual="novo"] .app .hoje-barra { background: var(--perigo-suave); box-shadow: none; }
+:root[data-visual="novo"] .app .hoje-barra-ok { background: var(--ok-suave); }
+:root[data-visual="novo"] .app :is(.citacao, .avaliacao-resposta) { background: var(--fundo); border-radius: var(--raio-g); padding: 10px 14px; }
+:root[data-visual="novo"] .app .item-cal { border-radius: 8px; }
