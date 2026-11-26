@@ -6327,3 +6327,9 @@ a.btn { text-decoration: none; }
 }
 :root[data-visual="novo"]:not([data-tema="escuro"]) .hub-desc { margin: 14px 0 0; }
 :root[data-visual="novo"]:not([data-tema="escuro"]) .hub-nota { margin-top: 4px; }
+/* O fundo da colmeia e do login fica preso à janela: o texto embaixo da
+   colmeia muda ao passar o mouse num favo, a tela muda de altura, e um
+   fundo que acompanhasse a altura se reajustava a cada favo — tremia. */
+:root[data-visual="novo"]:not([data-tema="escuro"]) :is(#tela-hub, #tela-acesso) { background-attachment: fixed, scroll; }
+/* E o texto tem sempre a altura de três linhas, para a colmeia não pular. */
+:root[data-visual="novo"] .hub-desc { min-height: 4.5em; }
