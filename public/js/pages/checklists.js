@@ -228,6 +228,13 @@ export async function checklists(raiz, ctx) {
       ate: el("input", { type: "time", value: agenda.ate ?? "02:00" }),
       respNome: el("input", { placeholder: "Quem executa", value: agenda.responsavel_nome ?? "" }),
       respFone: el("input", { placeholder: "WhatsApp de quem executa", value: agenda.responsavel_telefone ?? "" }),
+      // Quem pode preencher: os nomes aparecem para escolher no link. Fica
+      // aqui, e não no cadastro da Equipe, porque quem limpa o banheiro não
+      // deve aparecer na pesquisa de satisfação para o cliente avaliar.
+      quemPode: el("input", {
+        placeholder: "Ex.: Lucineide, Andrew, Lili",
+        value: Array.isArray(agenda.equipe) ? agenda.equipe.join(", ") : "",
+      }),
       // Mais de um número, separados por vírgula: quem cobra o checklist
       // numa casa de verdade não é uma pessoa só — o gerente responde pelo
       // turno e o líder está no salão.
@@ -474,6 +481,12 @@ export async function checklists(raiz, ctx) {
           campo("WhatsApp de quem executa", campos.respFone),
           campo("WhatsApp de quem recebe o resumo da IA", campos.avisarFone),
         ]),
+        el("div", { classe: "grade", style: "margin-top:10px" }, [
+          campoDeFormulario("Quem pode fazer (separe por vírgula)", campos.quemPode, {
+            tamanho: "inteiro",
+            ajuda: "Esses nomes aparecem para escolher no link, junto com quem já preencheu antes. Não entram na pesquisa de satisfação.",
+          }),
+        ]),
         el("label", { classe: "campo-caixa", style: "margin-top:14px" }, [
           campos.repetir,
           el("span", {}, [
@@ -513,6 +526,7 @@ export async function checklists(raiz, ctx) {
           responsavel_nome: campos.respNome.value.trim(),
           responsavel_telefone: campos.respFone.value.trim(),
           avisar_telefone: campos.avisarFone.value.trim(),
+          equipe: campos.quemPode.value.split(/[,;\n]+/).map((n) => n.trim()).filter(Boolean),
           ...(campos.repetir.checked
             ? { a_cada_minutos: Number(campos.aCada.value) || 45, ate: campos.ate.value || "02:00" }
             : {}),

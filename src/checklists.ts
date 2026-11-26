@@ -74,6 +74,25 @@ export interface AgendaChecklist {
   a_cada_minutos?: number;
   /** Fim da janela, "HH:MM". Menor que `hora` significa que vira a noite. */
   ate?: string;
+  /**
+   * Quem pode preencher: os nomes que aparecem para escolher no link.
+   * Separado do cadastro da Equipe de propósito — a Equipe é a lista que o
+   * cliente vê na pesquisa de satisfação, e quem limpa o banheiro ou vigia
+   * a casa à noite não atende mesa.
+   */
+  equipe?: string[];
+}
+
+/** Os nomes de "Quem pode fazer": sem vazios, sem repetidos, no máximo 30. */
+export function nomesDaAgenda(bruto: unknown): string[] {
+  if (!Array.isArray(bruto)) return [];
+  const vistos = new Map<string, string>();
+  for (const n of bruto) {
+    if (typeof n !== "string") continue;
+    const limpo = n.trim().replace(/\s+/g, " ").slice(0, 60);
+    if (limpo && !vistos.has(limpo.toLowerCase())) vistos.set(limpo.toLowerCase(), limpo);
+  }
+  return [...vistos.values()].slice(0, 30);
 }
 
 /** Checklist de rodadas, ou o comum de uma vez por dia? */
@@ -165,6 +184,8 @@ export function validarAgenda(bruto: unknown): AgendaChecklist {
     responsavel_telefone: texto(o.responsavel_telefone),
     avisar_telefone: texto(o.avisar_telefone),
   };
+  const equipe = nomesDaAgenda(o.equipe);
+  if (equipe.length > 0) agenda.equipe = equipe;
   if (dias.length > 0 && !agenda.responsavel_telefone) {
     throw new Error("Checklist agendado precisa do WhatsApp de quem vai executar.");
   }
@@ -203,6 +224,7 @@ function validarAgendaBranda(bruto: Json): AgendaChecklist {
       responsavel_telefone:
         typeof o.responsavel_telefone === "string" ? o.responsavel_telefone : "",
       avisar_telefone: typeof o.avisar_telefone === "string" ? o.avisar_telefone : "",
+      ...(nomesDaAgenda(o.equipe).length > 0 ? { equipe: nomesDaAgenda(o.equipe) } : {}),
       // As rodadas entram como estão: a execução de hoje já nasceu com elas
       // e não pode virar checklist comum por causa de um campo torto.
       ...(Number(o.a_cada_minutos) > 0 && typeof o.ate === "string"

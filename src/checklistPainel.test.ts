@@ -210,3 +210,13 @@ test("nomes para escolher: responsável, quem mais preencheu, depois a equipe, s
   });
   assert.deepEqual(nomes, ["Lucineide", "Andrew", "Lili", "André", "Joao", "Joel"]);
 });
+
+test("nomes para escolher: Quem pode fazer entra logo depois do responsável", () => {
+  const nomes = nomesParaEscolher({
+    responsavel: "Lucineide",
+    quemPode: ["Lili", "Seu Antônio", "lucineide"],
+    jaPreencheram: ["Andrew"],
+    equipe: [{ nome: "Joel", apelido: null }],
+  });
+  assert.deepEqual(nomes, ["Lucineide", "Lili", "Seu Antônio", "Andrew", "Joel"]);
+});

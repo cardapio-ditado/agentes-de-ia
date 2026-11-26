@@ -503,12 +503,14 @@ export async function painelDosChecklists(params: {
 
 /**
  * Os nomes que aparecem para escolher no link do checklist: o responsável
- * cadastrado, quem já preencheu nos últimos 60 dias (do mais frequente para
+ * cadastrado, "Quem pode fazer" do modelo, quem já preencheu nos últimos 60 dias (do mais frequente para
  * o menos) e a equipe ativa. Quem limpa o banheiro nem sempre está no
  * cadastro da equipe — mas já preencheu antes, e é o nome que vai escolher.
  */
 export function nomesParaEscolher(params: {
   responsavel: string | null;
+  /** "Quem pode fazer", do modelo do checklist. */
+  quemPode?: string[];
   jaPreencheram: (string | null)[];
   equipe: { nome: string; apelido: string | null }[];
 }): string[] {
@@ -520,6 +522,7 @@ export function nomesParaEscolher(params: {
     if (!vistos.has(chave)) vistos.set(chave, nome);
   };
   juntar(params.responsavel);
+  for (const n of params.quemPode ?? []) juntar(n);
   const frequencia = new Map<string, number>();
   for (const n of params.jaPreencheram) {
     const nome = nomeDeQuemFez(n);
@@ -550,6 +553,7 @@ export async function nomesDaEquipeParaChecklist(venueId: string, checklist: Che
   }
   return nomesParaEscolher({
     responsavel: agendaDe(checklist).responsavel_nome || null,
+    quemPode: agendaDe(checklist).equipe ?? [],
     jaPreencheram,
     equipe: (equipe.data ?? []).filter((p) => !fora.has(p.id)),
   });

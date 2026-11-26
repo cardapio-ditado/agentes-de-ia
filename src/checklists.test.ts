@@ -172,6 +172,15 @@ describe("jsonDaResposta", () => {
 // Rodadas — a agenda e o relógio da janela
 // ============================================================
 
+describe("validarAgenda: quem pode fazer", () => {
+  it("guarda os nomes limpos, sem repetir, e some quando vazio", () => {
+    const base = { dias: [], hora: "09:00", responsavel_nome: "", responsavel_telefone: "", avisar_telefone: "" };
+    assert.deepEqual(validarAgenda({ ...base, equipe: [" Lili ", "lili", "", 3, "Seu  Antônio"] }).equipe, ["Lili", "Seu Antônio"]);
+    assert.equal(validarAgenda({ ...base, equipe: [] }).equipe, undefined);
+    assert.equal(validarAgenda(base).equipe, undefined);
+  });
+});
+
 describe("validarAgenda com rodadas", () => {
   const base = { dias: ["sex"], hora: "18:00", responsavel_telefone: "65999999999" };
 
