@@ -122,6 +122,19 @@ export async function painel(raiz, ctx) {
           linha("Na fila agora", numero(m.reservas.pendentes)),
         ]),
       ]),
+      // Ao lado, e não embaixo: sozinho numa linha, um cartão de duas frases
+      // atravessava a tela inteira.
+      el("section", { classe: "cartao" }, [
+        el("h2", { texto: "Programação" }),
+        el("p", {
+          classe: "muted",
+          texto:
+            m.eventos_proximos > 0
+              ? `${plural(m.eventos_proximos, "evento futuro", "eventos futuros")} que o atendente virtual pode citar para os clientes.`
+              : "Nenhum evento futuro cadastrado. Sem isso o atendente virtual não tem o que contar sobre a casa.",
+        }),
+        el("a", { classe: "btn btn-peq", href: "#programacao", style: "margin-top:12px", texto: "Abrir a programação" }),
+      ]),
       // Token e cache são a conta da PLATAFORMA. O dono paga em pontos, e o
       // saldo dele já está no cartão do topo: mostrar isto a ele é um número
       // que não sabe ler e não tem o que fazer com ele. Só a equipe Brasa
@@ -142,19 +155,6 @@ export async function painel(raiz, ctx) {
             }),
           ])
         : null,
-    ]),
-  );
-
-  pilha.append(
-    el("section", { classe: "cartao" }, [
-      el("h2", { texto: "Programação" }),
-      el("p", {
-        classe: "muted",
-        texto:
-          m.eventos_proximos > 0
-            ? `${plural(m.eventos_proximos, "evento futuro", "eventos futuros")} que o atendente virtual pode citar para os clientes.`
-            : "Nenhum evento futuro cadastrado. Sem isso o atendente virtual não tem o que contar sobre a casa.",
-      }),
     ]),
   );
 

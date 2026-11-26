@@ -1,5 +1,5 @@
 import { del, get, post } from "../api.js";
-import { avisar, campoDeBusca, dataHora, desde, el, esqueleto, etiqueta, limpar, vazio } from "../ui.js";
+import { avisar, campoDeBusca, dataHora, desde, el, esqueleto, etiqueta, iconeDeCanal, limpar, nomeDoCanal, vazio } from "../ui.js";
 
 /**
  * Caixa de entrada: lista à esquerda, conversa à direita.
@@ -21,9 +21,8 @@ import { avisar, campoDeBusca, dataHora, desde, el, esqueleto, etiqueta, limpar,
 /** De quanto em quanto tempo perguntar se chegou coisa nova. */
 const INTERVALO_MS = 8000;
 
-/** O canal como a casa fala dele, e não como o banco guarda. */
-const CANAIS = { whatsapp: "WhatsApp", instagram: "Instagram", api: "Teste", painel: "Painel", cardapio: "Cardápio", delivery: "Delivery" };
-const nomeDoCanal = (canal) => CANAIS[canal] ?? canal;
+/** Os canais que viram botão em cima da lista. Os demais só aparecem em "todos". */
+const CANAIS_DO_FILTRO = ["whatsapp", "instagram", "api"];
 
 /**
  * As três filas. A pergunta de quem abre esta tela é "alguém está esperando
@@ -69,16 +68,22 @@ export async function conversas(raiz, ctx) {
   const itens = el("div", { classe: "inbox-itens" });
   const painelThread = el("div", { classe: "thread" });
 
-  const selCanal = el(
-    "select",
-    { classe: "select", "aria-label": "Canal", onchange: (e) => ((filtros.canal = e.target.value), aoFiltrar()) },
-    [
-      el("option", { value: "", texto: "Todos os canais" }),
-      el("option", { value: "whatsapp", texto: "WhatsApp" }),
-      el("option", { value: "instagram", texto: "Instagram" }),
-      el("option", { value: "api", texto: "Teste" }),
-    ],
-  );
+  // O canal é o filtro mais usado depois das filas: fica à vista, com o
+  // ícone de cada um, e não dentro de uma caixa de seleção.
+  const botoesDeCanal = [
+    el("button", { classe: "canal-botao canal-botao-texto", type: "button", "data-canal": "", "aria-pressed": "true", texto: "Todos", title: "Todos os canais", onclick: () => escolherCanal("") }),
+    ...CANAIS_DO_FILTRO.map((canal) =>
+      el("button", { classe: "canal-botao", type: "button", "data-canal": canal, "aria-pressed": "false", "aria-label": `Só ${nomeDoCanal(canal)}`, title: `Só ${nomeDoCanal(canal)}`, onclick: () => escolherCanal(canal) }, [
+        iconeDeCanal(canal, 18),
+      ]),
+    ),
+  ];
+
+  function escolherCanal(canal) {
+    filtros.canal = canal;
+    for (const b of botoesDeCanal) b.setAttribute("aria-pressed", String(b.dataset.canal === canal));
+    carregarLista();
+  }
 
   const selStatus = el(
     "select",
@@ -124,9 +129,9 @@ export async function conversas(raiz, ctx) {
     ]),
   );
 
-  // Canal, atendente e situação são filtros de vez em quando: ficam atrás de
-  // um botão, que avisa quando algum está ligado.
-  const maisFiltros = el("div", { classe: "inbox-mais-filtros", id: "inbox-mais-filtros", hidden: true }, [selCanal, selAgente, selStatus]);
+  // Atendente e situação são filtros de vez em quando: ficam atrás de um
+  // botão, que avisa quando algum está ligado.
+  const maisFiltros = el("div", { classe: "inbox-mais-filtros", id: "inbox-mais-filtros", hidden: true }, [selAgente, selStatus]);
   const btnFiltros = el("button", {
     classe: "btn btn-peq",
     type: "button",
@@ -140,7 +145,7 @@ export async function conversas(raiz, ctx) {
   });
 
   function aoFiltrar() {
-    const ligados = [filtros.canal, filtros.agente, filtros.status].filter(Boolean).length;
+    const ligados = [filtros.agente, filtros.status].filter(Boolean).length;
     btnFiltros.textContent = ligados ? `Filtros (${ligados})` : "Filtros";
     carregarLista();
   }
@@ -166,7 +171,8 @@ export async function conversas(raiz, ctx) {
       el("div", { classe: "inbox-lista" }, [
         el("div", { classe: "inbox-topo" }, [
           busca,
-          el("div", { classe: "inbox-filas", role: "group", "aria-label": "Qual conversa mostrar" }, [...botoesDeFila, btnFiltros]),
+          el("div", { classe: "inbox-filas", role: "group", "aria-label": "Qual conversa mostrar" }, botoesDeFila),
+          el("div", { classe: "inbox-canais" }, [el("div", { classe: "inbox-canais-botoes", role: "group", "aria-label": "Canal" }, botoesDeCanal), btnFiltros]),
           maisFiltros,
         ]),
         itens,
@@ -367,6 +373,9 @@ export async function conversas(raiz, ctx) {
           },
           [
             el("div", { classe: "conversa-linha" }, [
+              // De onde veio, antes de quem é: WhatsApp e Instagram se
+              // separam pela forma e pela cor, sem ler etiqueta.
+              iconeDeCanal(c.canal, 18),
               el("span", { classe: "conversa-nome", texto: rotulo }),
               el("span", { classe: "conversa-hora", texto: desde(c.atualizada_em) }),
             ]),
@@ -379,7 +388,6 @@ export async function conversas(raiz, ctx) {
                 : motivoDoFreio(c.atendimento)
                   ? el("span", { classe: "etiqueta etiqueta-perigo", title: `O atendente virtual parou sozinho: ${motivoDoFreio(c.atendimento)}.`, texto: "Parou sozinho" })
                   : etiqueta("Com a equipe", "etiqueta-info"),
-              etiqueta(nomeDoCanal(c.canal)),
               c.agente && variosAtendentes ? etiqueta(c.agente.nome) : null,
               c.status !== "open" ? etiqueta("Encerrada") : null,
             ]),
@@ -457,7 +465,7 @@ export async function conversas(raiz, ctx) {
     limpar(painelThread).append(
       el("div", { classe: "thread-topo" }, [
         el("div", { style: "min-width:0;flex:1" }, [
-          el("h2", { texto: c.titulo || c.contato || "Conversa" }),
+          el("h2", { classe: "thread-titulo" }, [iconeDeCanal(c.canal, 20), el("span", { texto: c.titulo || c.contato || "Conversa" })]),
           el("p", {
             classe: "muted",
             // Nome no título, telefone aqui — os dois visíveis quando existem.

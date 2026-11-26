@@ -13,7 +13,7 @@ import { botaoDePdf, imprimirRelatorio } from "../relatorio.js";
  * exceção (dado de teste, lançamento errado); cancelar preserva o histórico.
  */
 export async function reservas(raiz, ctx) {
-  const lista = el("div", { classe: "lista" });
+  const lista = el("div", { classe: "lista fila-de-reservas" });
   const listaConfirmadas = el("div", { classe: "pilha-fina" });
   const numeros = el("div", { classe: "grade" });
   // O editor de uma confirmada abre acima da tabela, e não dentro da linha.

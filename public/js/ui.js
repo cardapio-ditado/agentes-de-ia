@@ -150,6 +150,35 @@ export function tabelaDeDados({ colunas, linhas = [], grupos = null, rodape = nu
 }
 
 /** SVG por caminho: os ícones da interface vêm todos daqui. */
+/** Os canais por onde o cliente fala com a casa: nome e desenho. */
+const CANAIS = {
+  whatsapp: { nome: "WhatsApp", d: "M3 21l1.65-3.8a9 9 0 113.4 2.9L3 21M9 10a.5.5 0 001 0V9a.5.5 0 00-1 0v1a5 5 0 005 5h1a.5.5 0 000-1h-1a.5.5 0 000 1" },
+  instagram: { nome: "Instagram", d: "M7 2h10a5 5 0 015 5v10a5 5 0 01-5 5H7a5 5 0 01-5-5V7a5 5 0 015-5zM16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zM17.5 6.5h.01" },
+  api: { nome: "Teste", d: "M9 3h6M10 3v6l-5 9a2 2 0 001.8 3h10.4a2 2 0 001.8-3l-5-9V3M7.5 15h9" },
+  painel: { nome: "Painel", d: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z" },
+  cardapio: { nome: "Cardápio", d: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z" },
+  delivery: { nome: "Delivery", d: "M5 17a2 2 0 104 0 2 2 0 00-4 0zm10 0a2 2 0 104 0 2 2 0 00-4 0zM3 17V6h11v11M14 9h4l3 4v4h-2M9 17h6" },
+};
+
+/** O canal como a casa fala dele ("Instagram"), e não como o banco guarda. */
+export function nomeDoCanal(canal) {
+  return CANAIS[canal]?.nome ?? String(canal ?? "");
+}
+
+/**
+ * O ícone do canal de onde veio a conversa, com a cor dele.
+ *
+ * Substitui a etiqueta escrita: numa lista, o olho separa WhatsApp de
+ * Instagram pela forma e pela cor antes de ler qualquer palavra. O nome
+ * continua existindo para quem não vê — no rótulo acessível e na dica.
+ */
+export function iconeDeCanal(canal, tamanho = 18) {
+  const dados = CANAIS[canal];
+  return el("span", { classe: `canal-icone canal-${dados ? canal : "outro"}`, role: "img", "aria-label": nomeDoCanal(canal), title: nomeDoCanal(canal) }, [
+    icone(dados?.d ?? "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z", tamanho),
+  ]);
+}
+
 export function icone(d, tamanho = 19) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");

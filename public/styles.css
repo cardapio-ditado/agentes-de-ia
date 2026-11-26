@@ -5893,3 +5893,31 @@ a.btn { text-decoration: none; }
 .conversa-etiquetas { flex-wrap: wrap; row-gap: 4px; }
 /* O aviso de conversa com a equipe, entre o cabeçalho e o histórico. */
 .thread-aviso { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--borda); background: var(--alerta-suave); color: var(--texto); font-size: 13px; line-height: 1.45; }
+
+/* ---------- 19. Ícone do canal, linhas de dado e cartões estreitos ---------- */
+:root { --canal-whatsapp: #128c4b; --canal-instagram: #c13584; }
+[data-tema="escuro"] { --canal-whatsapp: #4ad98a; --canal-instagram: #f277b0; }
+.canal-icone { display: inline-flex; flex: none; color: var(--texto-2); }
+.canal-icone svg { stroke-width: 1.9; }
+.canal-whatsapp { color: var(--canal-whatsapp); }
+.canal-instagram { color: var(--canal-instagram); }
+.conversa-linha > .canal-icone { margin-right: -2px; }
+.thread-titulo { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.thread-titulo > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+/* Os canais em cima da lista: um botão por canal, com o ícone dele. */
+.inbox-canais { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.inbox-canais-botoes { display: flex; gap: 4px; }
+.canal-botao { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 34px; padding: 0 8px; border: 1px solid var(--borda-forte); border-radius: var(--raio); background: transparent; color: var(--texto-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.canal-botao:hover { background: var(--superficie-2); }
+.canal-botao[aria-pressed="true"] { border-color: var(--marca); background: var(--marca-suave); color: var(--marca-forte); }
+.canal-botao:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.inbox-filas > .btn { margin-left: 0; }
+
+/* Rótulo e valor lado a lado. Antes o valor ia para a ponta direita, e num
+   cartão largo o olho atravessava a tela para juntar "Para" com a data. */
+.app .linha-dado { display: grid; grid-template-columns: minmax(96px, 168px) minmax(0, 1fr); justify-content: start; align-items: baseline; column-gap: var(--esp-4); }
+.app .linha-dado > strong { min-width: 0; overflow-wrap: anywhere; }
+/* A fila de reservas em colunas: em tela larga cabem duas reservas lado a
+   lado, e cada cartão fica da largura do que tem dentro. */
+.app .fila-de-reservas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: var(--esp-3); align-items: start; }
+.app .fila-de-reservas > :not(.cartao) { grid-column: 1 / -1; }
